@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: Copyright 2026 Daniel Balparda <balparda@github.com>
+# SPDX-License-Identifier: Apache-2.0
+
+# Please see the documentation for all configuration options:
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+
+updates:
+  # Keep GitHub Actions versions fresh.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "03:00"
+    open-pull-requests-limit: 5
+
+  # Poetry projects are configured using the "pip" ecosystem in Dependabot.
+  #
+  # Important limitation (current GitHub docs):
+  # - Dependabot can update pyproject.toml for PEP 621 *in pip mode*,
+  #   but the PEP 621 [project] section is not currently supported for "poetry".
+  # - Practically, many Poetry repos see Dependabot update poetry.lock more reliably
+  #   than editing version constraints in pyproject.toml.
+  #
+  # This still provides value for lockfile refreshes + security update PRs.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "03:15"
+    open-pull-requests-limit: 5

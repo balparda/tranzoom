@@ -1,0 +1,26 @@
+// SPDX-FileCopyrightText: Copyright 2026 Daniel Balparda <balparda@github.com>
+// SPDX-License-Identifier: Apache-2.0
+
+{
+
+  "recommendations": [
+
+    "charliermarsh.ruff",
+    "davidanson.vscode-markdownlint",
+    "github.copilot-chat",
+    "gruntfuggly.todo-tree",
+    "ms-python.debugpy",
+    "ms-python.flake8",
+    "ms-python.mypy-type-checker",
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.vscode-python-envs",
+    "ms-vscode.makefile-tools",
+    "njpwerner.autodocstring",
+    "shd101wyy.markdown-preview-enhanced",
+    "streetsidesoftware.code-spell-checker",
+    "yzhang.markdown-all-in-one"
+
+  ]
+
+}

@@ -1,0 +1,89 @@
+# SPDX-FileCopyrightText: Copyright 2026 Daniel Balparda <balparda@github.com>
+# SPDX-License-Identifier: Apache-2.0
+
+name: ci
+
+permissions:
+  contents: read
+
+on:
+  push:
+  pull_request:
+
+jobs:
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.12', '3.13', '3.14']
+
+    steps:
+
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install deps
+        run: poetry install
+
+      - name: Lint
+        run: poetry run ruff check .
+
+      - name: Format
+        run: poetry run ruff format --check .
+
+      - name: Typecheck
+        run: poetry run mypy src tests tests_integration
+
+      - name: Tests w/ typeguard & Coverage
+        run: poetry run pytest --typeguard-packages=mycli --cov=src --cov-report=term-missing -q tests
+
+  integration:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.12', '3.13', '3.14']
+
+    env:
+      PIP_NO_CACHE_DIR: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+    steps:
+
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          # no pip cache in this job: keeps disk usage down
+
+      - name: Install Poetry
+        run: pip install --no-cache-dir poetry
+
+      - name: Install deps
+        run: poetry install --no-cache
+
+      - name: Free up disk space
+        run: |
+          df -h
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/share/dotnet
+          sudo docker system prune -a -f
+          df -h
+
+      - name: Build wheel
+        run: poetry build -f wheel
+
+      - name: Integration tests (installed CLI)
+        run: poetry run pytest -q tests_integration

@@ -1,0 +1,236 @@
+// SPDX-FileCopyrightText: Copyright 2026 Daniel Balparda <balparda@github.com>
+// SPDX-License-Identifier: Apache-2.0
+
+{
+
+  // --- Python / Poetry interpreter ---
+  // Prefer an in-project venv: `poetry config virtualenvs.in-project true`
+  "python.pythonPath": "${workspaceFolder}/.venv/bin/python",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+
+  // --- Pylance / type checking ---
+  // You can also (or instead) control this via [tool.pyright] in pyproject.toml.
+  "python.analysis.diagnosticsSource": "Pylance",
+  // "python.analysis.typeCheckingMode": "strict",  // not needed: pyptoject.toml
+  "python.analysis.languageServerMode": "full",
+  "python.analysis.supportDocstringTemplate": false,
+  "pylint.enabled": false,
+  "flake8.enabled": false,
+
+  // --- Mypy Type Checker (modern extension) to match pre-commit ---
+  // DEPRECATED: python.linting.mypy* settings no longer used
+  // Using ms-python.mypy-type-checker extension instead
+  // Configuration aligned with CLI: `poetry run mypy src tests tests_integration`
+  "mypy-type-checker.enabled": true,
+  "mypy-type-checker.importStrategy": "fromEnvironment",
+  "mypy-type-checker.path": ["${workspaceFolder}/.venv/bin/mypy"],
+  "mypy-type-checker.args": [
+    // No extra args - use pyproject.toml config exactly like CLI does
+    // This ensures VSCode sees the same errors as `make precommit`
+  ],
+  "mypy-type-checker.reportingScope": "workspace",
+  // Show ALL mypy errors immediately, including unused-ignore
+  "mypy-type-checker.severity": {
+    "error": "Error",
+    "warning": "Warning",
+    "note": "Information"
+  },
+  // Use daemon mode for better performance (matches incremental CLI behavior)
+  "mypy-type-checker.preferDaemon": true,
+  // Run mypy on file save and when typing
+  "mypy-type-checker.ignorePatterns": [],
+  "mypy-type-checker.cwd": "${workspaceFolder}",
+
+  // --- autoDocstring ---
+  // Use Google-style docstrings --- add "autoDocstring – Python Docstring Generator" extension.
+  "autoDocstring.docstringFormat": "google",
+  "autoDocstring.generateDocstringOnEnter": true,
+  "autoDocstring.includeExtendedSummary": true,
+  "autoDocstring.includeName": false,
+  "autoDocstring.guessTypes": true,
+
+  // --- Testing ---
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": [
+    "tests"
+  ],
+
+  // --- Formatting + linting (Ruff) ---
+  "editor.defaultFormatter": "charliermarsh.ruff",
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit"
+  },
+
+  // --- Formatting + linting (Ruff) ---
+  // Old python.linting.* / pylint / flake8 settings are deprecated in VS Code.
+  // Use the Ruff extension and configure behavior via pyproject.toml.
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+
+    // Let Ruff do: autofix + import sorting via code actions.
+    // "explicit" prevents unexpected bulk changes on every save; you can switch to true if you prefer.
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit",
+      "source.organizeImports": "explicit"
+    },
+
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2
+  },
+
+  // Ensure Ruff uses the project's environment (important with Poetry).
+  "ruff.importStrategy": "fromEnvironment",
+  "ruff.interpreter": ["${workspaceFolder}/.venv/bin/python"],
+
+  // keep files tidy
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.eol": "\n",
+
+  // cspell (custom dictionary)
+  "cSpell.words": [
+    "abstra",
+    "addopts",
+    "appdirs",
+    "argcomplete",
+    "argparse",
+    "armv",
+    "asyncio",
+    "autobuild",
+    "autodoc",
+    "autouse",
+    "Balparda",
+    "celerybeat",
+    "cffi",
+    "cfgv",
+    "charliermarsh",
+    "clibase",
+    "codz",
+    "colorama",
+    "commonmark",
+    "configpath",
+    "Connor",
+    "coolcli",
+    "copybutton",
+    "covdefaults",
+    "cursorignore",
+    "cursorindexingignore",
+    "Cython",
+    "davidanson",
+    "debugpy",
+    "distlib",
+    "dmypy",
+    "docstrings",
+    "ensurepath",
+    "envrc",
+    "filelock",
+    "flakefinder",
+    "footguns",
+    "furo",
+    "gmpy",
+    "gprof",
+    "grayscale",
+    "Gruntfuggly",
+    "gunicorn",
+    "hostedtoolcache",
+    "htmlcov",
+    "hyperscan",
+    "iniconfig",
+    "initlogging",
+    "ipykernel",
+    "ipynb",
+    "ipywidgets",
+    "isort",
+    "librt",
+    "linkify",
+    "litestar",
+    "lxml",
+    "manylinux",
+    "marimo",
+    "mdit",
+    "mdurl",
+    "mkdocs",
+    "musllinux",
+    "mycli",
+    "myconfig",
+    "myprog",
+    "mypy",
+    "mypyc",
+    "njpwerner",
+    "nodeenv",
+    "noqa",
+    "nosetests",
+    "numpy",
+    "orjson",
+    "panflute",
+    "pathspec",
+    "pipenv",
+    "Pipfile",
+    "pipx",
+    "platformdirs",
+    "pluggy",
+    "poetrycli",
+    "prefs",
+    "programoutput",
+    "psutil",
+    "pybuilder",
+    "pycache",
+    "pycodestyle",
+    "pycparser",
+    "pydocstyle",
+    "pyenv",
+    "pyflakes",
+    "pyflow",
+    "pygments",
+    "pyinstrument",
+    "pylint",
+    "pypa",
+    "pypackages",
+    "pypi",
+    "pypirc",
+    "pyproject",
+    "pyrs",
+    "pytest",
+    "pytests",
+    "pythonpath",
+    "pytype",
+    "pyupgrade",
+    "pyyaml",
+    "randbelow",
+    "randomcommand",
+    "richhandler",
+    "riscv",
+    "ropeproject",
+    "saferandom",
+    "scrapy",
+    "sdist",
+    "shellingham",
+    "sphinxcontrib",
+    "Spyder",
+    "spyderproject",
+    "spyproject",
+    "testpaths",
+    "testprog",
+    "towncrier",
+    "transcrypto",
+    "typeguard",
+    "typehints",
+    "typer",
+    "ukkonen",
+    "uvicorn",
+    "venv",
+    "virtualenv",
+    "virtualenvs",
+    "webassets",
+    "xdist",
+    "xmlschema",
+    "yourcli",
+    "yzhang",
+    "zstandard"
+  ]
+
+}
