@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 
 import click
@@ -95,22 +94,5 @@ def Markdown(*, ctx: click.Context) -> None:  # documentation is help/epilog/arg
   config.console.print(clibase.GenerateTyperHelpMarkdown(app, prog_name='zoom'))
 
 
-@app.command('configpath', help='Print the config file path.')  # create one per command
-@clibase.CLIErrorGuard
-def ConfigPath(*, ctx: click.Context) -> None:  # documentation is help/epilog/args # noqa: D103
-  config: TranZoomConfig = ctx.obj
-  config.console.print(str(config.appconfig.path))
-
-
-@app.command('hello', help='Say hello.')  # create one per command
-@clibase.CLIErrorGuard
-def Hello(  # documentation is help/epilog/args # noqa: D103
-  *, ctx: click.Context, name: str = typer.Argument('World')
-) -> None:
-  logging.info('Saying hello to %s', name)
-  config: TranZoomConfig = ctx.obj  # get application global config
-  config.console.print(f'{config.foo} times "Hello, {name}!"')
-
-
 # Import CLI modules to register their commands with the app
-from tranzoom.cli import randomcommand  # pyright: ignore[reportUnusedImport] # noqa: E402, F401
+from tranzoom.cli import imagecommand  # pyright: ignore[reportUnusedImport] # noqa: E402, F401
