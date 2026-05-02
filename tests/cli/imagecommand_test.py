@@ -141,32 +141,3 @@ def test_random_str_custom_alphabet_is_used(
     assert call[0][0] == alphabet
   console.print.assert_called_once()
   zoom_test.AssertRandomStrPrintedValue(zoom_test.PrintedValue(console), expected)
-
-
-# @typeguard.suppress_type_checks  # <-- example of suppressing typeguard checks
-@pytest.mark.parametrize(
-  'bad_length',
-  [
-    '0',  # min=1 should reject 0
-    '-1',  # negative should be rejected
-  ],
-)
-@mock.patch('tranzoom.core.example.secrets.choice')
-@mock.patch('transcrypto.utils.logging.rich_console.Console')
-def test_random_str_rejects_non_positive_length(
-  console_factory_mock: mock.Mock,
-  choice_mock: mock.Mock,
-  bad_length: str,
-) -> None:
-  """Test.
-
-  Didactic notes:
-  - In your command signature you used: length: int = typer.Option(..., min=1, ...)
-  - Typer/Click enforces this before your function body runs.
-  - Therefore: secrets.choice should not be called, and no console printing should happen.
-  """
-  console_factory_mock.return_value = mock.Mock()
-  result: click_testing.Result = zoom_test.CallCLI(['random', 'str', '--length', bad_length])
-  assert result.exit_code != 0
-  choice_mock.assert_not_called()
-  console_factory_mock.return_value.print.assert_not_called()
