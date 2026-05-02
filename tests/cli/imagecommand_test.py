@@ -21,60 +21,6 @@ def reset_cli() -> None:
   app_config.ResetConfig()
 
 
-# -------------------------------------------------------------------------------------------------
-# random num
-# -------------------------------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-  ('min_', 'max_', 'randbelow_return', 'expected'),
-  [
-    # min=0 max=10 -> range size 11
-    # if randbelow returns 0 => 0
-    (0, 10, 0, 0),
-    # min=0 max=10 -> if randbelow returns 10 => 10
-    (0, 10, 10, 10),
-    # min=10 max=20 -> range size 11
-    # if randbelow returns 0 => 10
-    (10, 20, 0, 10),
-    # min=10 max=20 -> if randbelow returns 10 => 20
-    (10, 20, 10, 20),
-  ],
-)
-@mock.patch('transcrypto.utils.saferandom.secrets.randbelow')
-@mock.patch('transcrypto.utils.logging.rich_console.Console')
-def test_random_num_prints_expected_integer(
-  console_factory_mock: mock.Mock,
-  randbelow_mock: mock.Mock,
-  min_: int,
-  max_: int,
-  randbelow_return: int,
-  expected: int,
-) -> None:
-  """Test.
-
-  Didactic notes:
-  - We patch secrets.randbelow so the test is deterministic.
-  - We patch cli_logging.Console so we can assert on console.print(...) without writing to stdout.
-  - We run the command through CliRunner to test the real CLI wiring.
-  """
-  # Arrange
-  console = mock.Mock()
-  console_factory_mock.return_value = console
-  randbelow_mock.return_value = randbelow_return
-  # Act
-  result: click_testing.Result = zoom_test.CallCLI(
-    ['random', 'num', '--min', str(min_), '--max', str(max_)],
-  )
-  # Assert
-  assert result.exit_code == 0, result.output
-  # Verify the randomness function was called correctly:
-  randbelow_mock.assert_called_once_with(max_ - min_ + 1)  # range_size = (max - min + 1)
-  # Verify we printed exactly the expected number
-  console.print.assert_called_once()
-  assert zoom_test.PrintedValue(console) == expected
-
-
 @pytest.mark.parametrize(
   ('min_', 'max_'),
   [
