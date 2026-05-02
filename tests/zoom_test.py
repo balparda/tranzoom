@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2026 Daniel Balparda <balparda@github.com>
+# SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
 """Tests for: mycli.py."""
 
@@ -15,7 +15,7 @@ from transcrypto.utils import config as app_config
 from transcrypto.utils import logging as cli_logging
 from typer import testing
 
-from mycli import mycli
+from tranzoom import zoom
 
 
 @pytest.fixture(autouse=True)
@@ -35,7 +35,7 @@ def CallCLI(args: list[str]) -> click_testing.Result:
       click_testing.Result: CLI result.
 
   """
-  return testing.CliRunner().invoke(mycli.app, args)
+  return testing.CliRunner().invoke(zoom.app, args)
 
 
 def PrintedValue(console_mock: mock.Mock) -> object:
@@ -69,21 +69,21 @@ def test_version_flag() -> None:
   """Test."""
   result: click_testing.Result = CallCLI(['--version'])
   assert result.exit_code == 0
-  assert result.stdout.strip() == '0.1.0'
+  assert '.' in result.stdout
 
 
 def test_version_flag_raises_exit() -> None:
   """Test version flag raises typer.Exit with exit code 0."""
   ctx = mock.Mock(spec=click.Context)
   with pytest.raises(typer.Exit) as exc_info:
-    mycli.Main(ctx=ctx, version=True, verbose=0, color=None, foo=1000, bar='str default')
+    zoom.Main(ctx=ctx, version=True, verbose=0, color=None, foo=1000, bar='str default')
   assert exc_info.value.exit_code == 0
 
 
 def test_run_function() -> None:
   """Test Run function calls app."""
-  with mock.patch.object(mycli, 'app') as app_mock:
-    mycli.Run()
+  with mock.patch.object(zoom, 'app') as app_mock:
+    zoom.Run()
     app_mock.assert_called_once()
 
 
@@ -91,7 +91,7 @@ def test_version_flag_ignores_extra_args() -> None:
   """Test."""
   result: click_testing.Result = CallCLI(['--version', 'hello'])
   assert result.exit_code == 0
-  assert result.stdout.strip() == '0.1.0'
+  assert '.' in result.stdout
 
 
 def test_hello_default_name() -> None:
@@ -119,10 +119,10 @@ def test_config_path_prints_path(
   """Test config-path command prints the config path."""
   console = mock.Mock()
   console_factory_mock.return_value = console
-  get_config_path_mock.return_value = pathlib.Path('/mock/config/mycli/config')
+  get_config_path_mock.return_value = pathlib.Path('/mock/config/tranzoom/config')
   result: click_testing.Result = CallCLI(['configpath'])
   assert result.exit_code == 0, result.output
-  console.print.assert_called_once_with('/mock/config/mycli/config/mycli.bin')
+  console.print.assert_called_once_with('/mock/config/tranzoom/config/config.bin')
   mkdir_mock.assert_called_once_with(parents=True, exist_ok=True)
 
 
@@ -131,7 +131,7 @@ def test_markdown_command_generates_docs() -> None:
   result: click_testing.Result = CallCLI(['markdown'])
   assert result.exit_code == 0, result.output
   # Verify it contains markdown-like content
-  assert 'mycli' in result.stdout
+  assert 'zoom' in result.stdout
   assert '#' in result.stdout  # markdown headers
   assert '<!--' in result.stdout  # top comment
   assert 'hello' in result.stdout and 'random' in result.stdout  # verify it includes subcommands

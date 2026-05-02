@@ -1,7 +1,5 @@
-# SPDX-FileCopyrightText: 2026 Daniel Balparda <balparda@github.com>
+# SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-
-# TODO: change `mycli` occurrences to the actual project name
 
 .PHONY: install fmt lint type test integration cov flakes precommit docs req ci
 
@@ -24,7 +22,7 @@ integration:
 	poetry run pytest -q tests_integration
 
 cov:
-	poetry run pytest --typeguard-packages=mycli --cov=src --cov-report=term-missing -q tests
+	poetry run pytest --typeguard-packages=tranzoom --cov=src --cov-report=term-missing -q tests
 
 flakes:
 	poetry run pytest --flake-finder --flake-runs=100 -q tests
@@ -33,8 +31,8 @@ precommit:
 	poetry run pre-commit run --all-files
 
 docs:
-	@echo "Generating mycli.md"
-	poetry run mycli markdown > mycli.md
+	@echo "Generating zoom.md"
+	poetry run zoom markdown > zoom.md
 
 req:
 	poetry export --format requirements.txt --without-hashes --output requirements.txt

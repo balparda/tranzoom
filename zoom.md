@@ -1,12 +1,12 @@
 <!-- cspell:disable -->
 <!-- auto-generated; DO NOT EDIT! see base.GenerateTyperHelpMarkdown() -->
 
-# `mycli` Command-Line Interface
+# `zoom` Command-Line Interface
 
 ```text
-Usage: mycli [OPTIONS] COMMAND [ARGS]...                                                                                                                  
+Usage: zoom [OPTIONS] COMMAND [ARGS]...                                                                                                                   
                                                                                                                                                            
- MyCLI does amazing things!                                                                                                                                
+ TranZoom does amazing things!                                                                                                                             
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --version                                                        Show version and exit.                                                                 │
@@ -27,10 +27,10 @@ Usage: mycli [OPTIONS] COMMAND [ARGS]...
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-## `mycli configpath` Command
+## `zoom configpath` Command
 
 ```text
-Usage: mycli configpath [OPTIONS]                                                                                                                         
+Usage: zoom configpath [OPTIONS]                                                                                                                          
                                                                                                                                                            
  Print the config file path.                                                                                                                               
                                                                                                                                                            
@@ -39,10 +39,10 @@ Usage: mycli configpath [OPTIONS]
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-## `mycli hello` Command
+## `zoom hello` Command
 
 ```text
-Usage: mycli hello [OPTIONS] [NAME]                                                                                                                       
+Usage: zoom hello [OPTIONS] [NAME]                                                                                                                        
                                                                                                                                                            
  Say hello.                                                                                                                                                
                                                                                                                                                            
@@ -54,10 +54,10 @@ Usage: mycli hello [OPTIONS] [NAME]
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-## `mycli markdown` Command
+## `zoom markdown` Command
 
 ```text
-Usage: mycli markdown [OPTIONS]                                                                                                                           
+Usage: zoom markdown [OPTIONS]                                                                                                                            
                                                                                                                                                            
  Emit Markdown docs for the CLI (see README.md section "Creating a New Version").                                                                          
                                                                                                                                                            
@@ -67,14 +67,14 @@ Usage: mycli markdown [OPTIONS]
                                                                                                                                                            
  Example:                                                                                                                                                  
                                                                                                                                                            
- $ poetry run mycli markdown > mycli.md                                                                                                                    
+ $ poetry run zoom markdown > zoom.md                                                                                                                      
  <<saves CLI doc>>
 ```
 
-## `mycli random` Command
+## `zoom random` Command
 
 ```text
-Usage: mycli random [OPTIONS] COMMAND [ARGS]...                                                                                                           
+Usage: zoom random [OPTIONS] COMMAND [ARGS]...                                                                                                            
                                                                                                                                                            
  Random utilities.                                                                                                                                         
                                                                                                                                                            
@@ -87,10 +87,10 @@ Usage: mycli random [OPTIONS] COMMAND [ARGS]...
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-### `mycli random num` Sub-Command
+### `zoom random num` Sub-Command
 
 ```text
-Usage: mycli random num [OPTIONS]                                                                                                                         
+Usage: zoom random num [OPTIONS]                                                                                                                          
                                                                                                                                                            
  Generate a random integer.                                                                                                                                
                                                                                                                                                            
@@ -101,10 +101,10 @@ Usage: mycli random num [OPTIONS]
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-### `mycli random str` Sub-Command
+### `zoom random str` Sub-Command
 
 ```text
-Usage: mycli random str [OPTIONS]                                                                                                                         
+Usage: zoom random str [OPTIONS]                                                                                                                          
                                                                                                                                                            
  Generate a random string.                                                                                                                                 
                                                                                                                                                            

@@ -1,4 +1,4 @@
-<!-- SPDX-FileCopyrightText: Copyright 2026 Daniel Balparda <balparda@github.com> -->
+<!-- SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com> -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Security Policy
 
@@ -28,7 +28,7 @@ Use one of the following options:
 
 2) **Email**
 
-   - Send a report to: ***TODO:*** *\<security contact email\>*
+   - Send a report to: **<balparda@github.com>** or **<BellaKeri@github.com>**
    - Suggested subject: `[SECURITY] <short summary>`
 
 ## What to include

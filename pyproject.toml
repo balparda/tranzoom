@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Daniel Balparda <balparda@github.com>
+# SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
 # pyproject.toml (preferred for new projects, PEP 621)
 
@@ -105,7 +105,7 @@ pytest = "^9.0"
 pytest-cov = "^7.1"
 pytest-flakefinder = "^1.1"
 pyright = "^1.1"
-pre-commit = "^4.5"
+pre-commit = "^4.6"
 pyinstrument = "^5.1"
 typeguard = "^4.5"
 

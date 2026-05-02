@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2026 Daniel Balparda <balparda@github.com>
+# SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
 """Tests for: mycli.py."""
 
@@ -11,7 +11,7 @@ from click import testing as click_testing
 from transcrypto.utils import config as app_config
 from transcrypto.utils import logging as cli_logging
 
-from tests import mycli_test
+from tests import zoom_test
 
 
 @pytest.fixture(autouse=True)
@@ -63,7 +63,7 @@ def test_random_num_prints_expected_integer(
   console_factory_mock.return_value = console
   randbelow_mock.return_value = randbelow_return
   # Act
-  result: click_testing.Result = mycli_test.CallCLI(
+  result: click_testing.Result = zoom_test.CallCLI(
     ['random', 'num', '--min', str(min_), '--max', str(max_)],
   )
   # Assert
@@ -72,7 +72,7 @@ def test_random_num_prints_expected_integer(
   randbelow_mock.assert_called_once_with(max_ - min_ + 1)  # range_size = (max - min + 1)
   # Verify we printed exactly the expected number
   console.print.assert_called_once()
-  assert mycli_test.PrintedValue(console) == expected
+  assert zoom_test.PrintedValue(console) == expected
 
 
 @pytest.mark.parametrize(
@@ -99,7 +99,7 @@ def test_random_num_rejects_invalid_range(
   - In this failure path, randbelow should never be called and we should not print anything.
   """
   console_factory_mock.return_value = mock.Mock()
-  result: click_testing.Result = mycli_test.CallCLI(
+  result: click_testing.Result = zoom_test.CallCLI(
     ['random', 'num', '--min', str(min_), '--max', str(max_)],
   )
   assert result.exit_code != 0
@@ -122,7 +122,7 @@ def test_random_num_rejects_invalid_range(
     pytest.param(8, list('ABCDEFGH'), 'ABCDEFGH', id='A to H'),
   ],
 )
-@mock.patch('mycli.core.example.secrets.choice')
+@mock.patch('tranzoom.core.example.secrets.choice')
 @mock.patch('transcrypto.utils.logging.rich_console.Console')
 def test_random_str_default_alphabet_prints_expected(
   console_factory_mock: mock.Mock,
@@ -142,7 +142,7 @@ def test_random_str_default_alphabet_prints_expected(
   console_factory_mock.return_value = console
   # Each call to secrets.choice returns the next item from choices
   choice_mock.side_effect = choices
-  result: click_testing.Result = mycli_test.CallCLI(['random', 'str', '--length', str(length)])
+  result: click_testing.Result = zoom_test.CallCLI(['random', 'str', '--length', str(length)])
   assert result.exit_code == 0, result.output
   # We should call choice exactly 'length' times
   assert choice_mock.call_count == length
@@ -155,7 +155,7 @@ def test_random_str_default_alphabet_prints_expected(
   for call in choice_mock.call_args_list:
     assert call[0][0] == first_call_arg
   console.print.assert_called_once()
-  mycli_test.AssertRandomStrPrintedValue(mycli_test.PrintedValue(console), expected)
+  zoom_test.AssertRandomStrPrintedValue(zoom_test.PrintedValue(console), expected)
 
 
 @pytest.mark.slow  # <-- example of marking a test as slow
@@ -166,7 +166,7 @@ def test_random_str_default_alphabet_prints_expected(
     ('01', 6, ['0', '1', '0', '1', '1', '0'], '010110'),
   ],
 )
-@mock.patch('mycli.core.example.secrets.choice')
+@mock.patch('tranzoom.core.example.secrets.choice')
 @mock.patch('transcrypto.utils.logging.rich_console.Console')
 def test_random_str_custom_alphabet_is_used(
   console_factory_mock: mock.Mock,
@@ -185,7 +185,7 @@ def test_random_str_custom_alphabet_is_used(
   console = mock.Mock()
   console_factory_mock.return_value = console
   choice_mock.side_effect = choices
-  result: click_testing.Result = mycli_test.CallCLI(
+  result: click_testing.Result = zoom_test.CallCLI(
     ['random', 'str', '--alphabet', alphabet, '--length', str(length)],
   )
   assert result.exit_code == 0, result.output
@@ -194,7 +194,7 @@ def test_random_str_custom_alphabet_is_used(
   for call in choice_mock.call_args_list:
     assert call[0][0] == alphabet
   console.print.assert_called_once()
-  mycli_test.AssertRandomStrPrintedValue(mycli_test.PrintedValue(console), expected)
+  zoom_test.AssertRandomStrPrintedValue(zoom_test.PrintedValue(console), expected)
 
 
 # @typeguard.suppress_type_checks  # <-- example of suppressing typeguard checks
@@ -205,7 +205,7 @@ def test_random_str_custom_alphabet_is_used(
     '-1',  # negative should be rejected
   ],
 )
-@mock.patch('mycli.core.example.secrets.choice')
+@mock.patch('tranzoom.core.example.secrets.choice')
 @mock.patch('transcrypto.utils.logging.rich_console.Console')
 def test_random_str_rejects_non_positive_length(
   console_factory_mock: mock.Mock,
@@ -220,7 +220,7 @@ def test_random_str_rejects_non_positive_length(
   - Therefore: secrets.choice should not be called, and no console printing should happen.
   """
   console_factory_mock.return_value = mock.Mock()
-  result: click_testing.Result = mycli_test.CallCLI(['random', 'str', '--length', bad_length])
+  result: click_testing.Result = zoom_test.CallCLI(['random', 'str', '--length', bad_length])
   assert result.exit_code != 0
   choice_mock.assert_not_called()
   console_factory_mock.return_value.print.assert_not_called()

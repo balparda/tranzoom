@@ -1,44 +1,6 @@
-# SPDX-FileCopyrightText: Copyright 2026 Daniel Balparda <balparda@github.com>
+# SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""CLI name / short purpose.
-
-Delete sections you don't need. Keep this docstring focused and truthful.
-
-Purpose
-- What this module does and what it does NOT do.
-- Key invariants / assumptions.
-
-Public API
-- Main entry points (functions/classes) intended for other modules to import.
-- Stability expectations (e.g., "internal/private", "public and stable").
-
-Usage
-- Typical usage patterns (short, runnable examples).
-- If CLI-related, show how other code calls into it (not necessarily shell commands).
-
-Inputs / Outputs
-- Expected inputs, types, constraints.
-- What gets printed to stdout vs stderr (if relevant).
-
-Errors and exit codes
-- Exceptions raised (and which are "user errors" vs "bugs").
-- For CLI-facing modules: mapping to exit codes (if applicable).
-
-Configuration
-- Environment variables (e.g., MYCLI_*), config files, defaults.
-- Where config is read from and precedence rules.
-
-Performance / limits
-- Any complexity notes, big-O, or known bottlenecks.
-
-Security
-- Handling of secrets, filesystem paths, command execution, input validation.
-
-Notes
------
-- Links to related modules, design decisions, TODOs.
-
-"""
+"""CLI name / short purpose."""
 
 from __future__ import annotations
 
@@ -56,15 +18,15 @@ from . import __version__
 
 
 @dataclass(kw_only=True, slots=True, frozen=True)
-class MyCLIConfig(clibase.CLIConfig):
-  """MyCLI global context, storing the configuration."""
+class TranZoomConfig(clibase.CLIConfig):
+  """TranZoom global context, storing the configuration."""
 
   foo: int
   bar: str
 
 
 # CLI app setup, this is an important object and can be imported elsewhere and called
-app = typer.Typer(add_completion=True, no_args_is_help=True, help='MyCLI does amazing things!')
+app = typer.Typer(add_completion=True, no_args_is_help=True, help='TranZoom does amazing things!')
 
 
 def Run() -> None:
@@ -109,11 +71,11 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     soft_wrap=False,  # decide if you want soft wrapping of long lines
   )
   # create context with the arguments we received
-  ctx.obj = MyCLIConfig(
+  ctx.obj = TranZoomConfig(
     console=console,
     verbose=verbose,
     color=color,
-    appconfig=app_config.InitConfig('mycli', 'mycli.bin'),  # TODO: change app & config name
+    appconfig=app_config.InitConfig('tranzoom', 'config.bin'),
     foo=foo,
     bar=bar,
   )
@@ -125,18 +87,18 @@ def Main(  # documentation is help/epilog/args # noqa: D103
 @app.command(
   'markdown',
   help='Emit Markdown docs for the CLI (see README.md section "Creating a New Version").',
-  epilog=('Example:\n\n\n\n$ poetry run mycli markdown > mycli.md\n\n<<saves CLI doc>>'),
+  epilog=('Example:\n\n\n\n$ poetry run zoom markdown > zoom.md\n\n<<saves CLI doc>>'),
 )
 @clibase.CLIErrorGuard
 def Markdown(*, ctx: click.Context) -> None:  # documentation is help/epilog/args # noqa: D103
-  config: MyCLIConfig = ctx.obj
-  config.console.print(clibase.GenerateTyperHelpMarkdown(app, prog_name='mycli'))
+  config: TranZoomConfig = ctx.obj
+  config.console.print(clibase.GenerateTyperHelpMarkdown(app, prog_name='zoom'))
 
 
 @app.command('configpath', help='Print the config file path.')  # create one per command
 @clibase.CLIErrorGuard
 def ConfigPath(*, ctx: click.Context) -> None:  # documentation is help/epilog/args # noqa: D103
-  config: MyCLIConfig = ctx.obj
+  config: TranZoomConfig = ctx.obj
   config.console.print(str(config.appconfig.path))
 
 
@@ -146,9 +108,9 @@ def Hello(  # documentation is help/epilog/args # noqa: D103
   *, ctx: click.Context, name: str = typer.Argument('World')
 ) -> None:
   logging.info('Saying hello to %s', name)
-  config: MyCLIConfig = ctx.obj  # get application global config
+  config: TranZoomConfig = ctx.obj  # get application global config
   config.console.print(f'{config.foo} times "Hello, {name}!"')
 
 
 # Import CLI modules to register their commands with the app
-from mycli.cli import randomcommand  # pyright: ignore[reportUnusedImport] # noqa: E402, F401
+from tranzoom.cli import randomcommand  # pyright: ignore[reportUnusedImport] # noqa: E402, F401

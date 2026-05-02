@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: Copyright 2026 Daniel Balparda <balparda@github.com>
+# SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
 """Script name / short purpose.
 
@@ -17,7 +17,7 @@ Notes
 
 from __future__ import annotations
 
-from mycli import mycli
+from tranzoom import zoom
 
 
 def Main() -> int:
@@ -27,7 +27,7 @@ def Main() -> int:
     int: Exit code
 
   """
-  mycli.app()
+  zoom.app()
   return 0
 
 

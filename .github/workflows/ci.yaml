@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright 2026 Daniel Balparda <balparda@github.com>
+# SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
 
 name: ci
@@ -44,7 +44,7 @@ jobs:
         run: poetry run mypy src tests tests_integration
 
       - name: Tests w/ typeguard & Coverage
-        run: poetry run pytest --typeguard-packages=mycli --cov=src --cov-report=term-missing -q tests
+        run: poetry run pytest --typeguard-packages=tranzoom --cov=src --cov-report=term-missing -q tests
 
   integration:
     needs: test
