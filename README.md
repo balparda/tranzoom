@@ -1,8 +1,8 @@
 <!-- SPDX-FileCopyrightText: Copyright 2026 Daniel Balparda <balparda@github.com> -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-# poetrycli - Python/Poetry/Typer/Rich CLI Template
+# tranZoom
 
-***TODO:*** *One-line description of what this CLI does and who it’s for. Change the title above.*
+Fractal manipulation with LLMs
 
 - **Primary use case:** *<e.g., bulk process files, manage deployments, query APIs>*
 - **Works with:** *<e.g., local files, Git repos, Kubernetes, AWS, JSON logs>*
@@ -34,7 +34,7 @@ The `poetrycli` repo is intentionally opinionated because it was built to help t
 
 ## Table of contents
 
-- [poetrycli - Python/Poetry/Typer/Rich CLI Template](#poetrycli---pythonpoetrytyperrich-cli-template)
+- [tranZoom](#tranzoom)
   - [Table of contents](#table-of-contents)
   - [License](#license)
     - [*Third-party notices (TODO)*](#third-party-notices-todo)
