@@ -1,6 +1,6 @@
 annotated-doc==0.0.4 ; python_version >= "3.12" and python_version < "4.0"
 cffi==2.0.0 ; python_version >= "3.12" and python_version < "4.0" and platform_python_implementation != "PyPy"
-click==8.3.2 ; python_version >= "3.12" and python_version < "4.0"
+click==8.3.3 ; python_version >= "3.12" and python_version < "4.0"
 colorama==0.4.6 ; python_version >= "3.12" and python_version < "4.0" and platform_system == "Windows"
 cryptography==46.0.7 ; python_version >= "3.12" and python_version < "4.0"
 gmpy2==2.3.0 ; python_version >= "3.12" and python_version < "4.0"
