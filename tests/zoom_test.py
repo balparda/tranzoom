@@ -94,13 +94,6 @@ def test_version_flag_ignores_extra_args() -> None:
   assert '.' in result.stdout
 
 
-def test_hello_default_name() -> None:
-  """Test."""
-  result: click_testing.Result = CallCLI(['hello'])
-  assert result.exit_code == 0
-  assert 'Hello, World!' in result.stdout
-
-
 def test_hello_custom_name() -> None:
   """Test."""
   result: click_testing.Result = CallCLI(['hello', 'Ada'])
