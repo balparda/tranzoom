@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import pathlib
 from unittest import mock
 
 import click
@@ -53,18 +52,6 @@ def PrintedValue(console_mock: mock.Mock) -> object:
   return args[0] if args else None
 
 
-def AssertRandomStrPrintedValue(printed: object, expected_prefix: str) -> None:
-  """Assert RandomStr output matches CLI behavior.
-
-  RandomStr prints the generated string plus a suffix that depends on whether color is enabled.
-  We don't want tests to depend on NO_COLOR env var or rich console internals, so accept either.
-  """
-  assert isinstance(printed, str)
-  assert printed.startswith(expected_prefix)
-  suffix: str = printed[len(expected_prefix) :]
-  assert suffix in {' - in color', ' - no colors'}
-
-
 def test_version_flag() -> None:
   """Test."""
   result: click_testing.Result = CallCLI(['--version'])
@@ -76,7 +63,7 @@ def test_version_flag_raises_exit() -> None:
   """Test version flag raises typer.Exit with exit code 0."""
   ctx = mock.Mock(spec=click.Context)
   with pytest.raises(typer.Exit) as exc_info:
-    zoom.Main(ctx=ctx, version=True, verbose=0, color=None, foo=1000, bar='str default')
+    zoom.Main(ctx=ctx, version=True, verbose=0, color=None, img_width=1000, img_height=1000)
   assert exc_info.value.exit_code == 0
 
 
@@ -89,41 +76,9 @@ def test_run_function() -> None:
 
 def test_version_flag_ignores_extra_args() -> None:
   """Test."""
-  result: click_testing.Result = CallCLI(['--version', 'hello'])
+  result: click_testing.Result = CallCLI(['--version', 'image'])
   assert result.exit_code == 0
   assert '.' in result.stdout
-
-
-def test_hello_default_name() -> None:
-  """Test."""
-  result: click_testing.Result = CallCLI(['hello'])
-  assert result.exit_code == 0
-  assert 'Hello, World!' in result.stdout
-
-
-def test_hello_custom_name() -> None:
-  """Test."""
-  result: click_testing.Result = CallCLI(['hello', 'Ada'])
-  assert result.exit_code == 0
-  assert 'Hello, Ada!' in result.stdout
-
-
-@mock.patch('transcrypto.utils.logging.rich_console.Console')
-@mock.patch('transcrypto.utils.config.GetConfigDir')
-@mock.patch('pathlib.Path.mkdir')
-def test_config_path_prints_path(
-  mkdir_mock: mock.Mock,
-  get_config_path_mock: mock.Mock,
-  console_factory_mock: mock.Mock,
-) -> None:
-  """Test config-path command prints the config path."""
-  console = mock.Mock()
-  console_factory_mock.return_value = console
-  get_config_path_mock.return_value = pathlib.Path('/mock/config/tranzoom/config')
-  result: click_testing.Result = CallCLI(['configpath'])
-  assert result.exit_code == 0, result.output
-  console.print.assert_called_once_with('/mock/config/tranzoom/config/config.bin')
-  mkdir_mock.assert_called_once_with(parents=True, exist_ok=True)
 
 
 def test_markdown_command_generates_docs() -> None:
@@ -134,4 +89,4 @@ def test_markdown_command_generates_docs() -> None:
   assert 'zoom' in result.stdout
   assert '#' in result.stdout  # markdown headers
   assert '<!--' in result.stdout  # top comment
-  assert 'hello' in result.stdout and 'random' in result.stdout  # verify it includes subcommands
+  assert 'image' in result.stdout and 'zoom' in result.stdout  # verify it includes subcommands
