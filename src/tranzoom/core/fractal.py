@@ -41,9 +41,9 @@ class Frame:
 
     """
     if self.top.real >= self.bottom.real:
-      raise Error(f'top.real ({self.top.real}) must be <= bottom.real ({self.bottom.real})')
+      raise Error(f'top.real ({self.top.real}) must be < bottom.real ({self.bottom.real})')
     if self.top.imag <= self.bottom.imag:
-      raise Error(f'top.imag ({self.top.imag}) must be >= bottom.imag ({self.bottom.imag})')
+      raise Error(f'top.imag ({self.top.imag}) must be > bottom.imag ({self.bottom.imag})')
 
   def __str__(self) -> str:
     """Get string representation of the frame.
