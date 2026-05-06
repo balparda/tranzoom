@@ -1,4 +1,3 @@
-# CODEOWNERS — every PR requires approval from the repo owner
+# CODEOWNERS — every PR requires approval from a code owner
 
-* @balparda
-* @BellaKeri
+* @balparda @BellaKeri
