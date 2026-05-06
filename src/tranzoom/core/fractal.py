@@ -10,6 +10,7 @@ import io
 import gmpy2
 import tqdm
 from PIL import Image
+from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 
 _MIN_ITER: int = 100
@@ -33,6 +34,7 @@ class Frame:
 
   top: gmpy2.mpc  # the top-left corner of the rectangle
   bottom: gmpy2.mpc  # the bottom-right corner of the rectangle
+  # TODO: migrate to gmpy2.mpq so the frame can be exactly represented by rational numbers
 
   def __post_init__(self) -> None:
     """Check rectangle has an area and top/bottom ordering.
@@ -53,8 +55,17 @@ class Frame:
       str: String representation of the frame.
 
     """
-    # TODO: center + size?
-    return f'[({self.top.real}, {self.top.imag}), ({self.bottom.real}, {self.bottom.imag})]'
+    with self.AutoPrecisionContext(1024, 1024, guard_bits=128):
+      # use high precision to avoid losing detail in the string representation; this is just for
+      # display, not for any of the actual math, so we can afford the overhead here and want to
+      # show as much detail as possible in the string representation; also, this way we don't have
+      # to worry about how the precision of the frame was set when it was created, we just show
+      # all the precision we can get out of it.
+      cx: gmpy2.mpfr = (self.top.real + self.bottom.real) / _MPFR_TWO
+      cy: gmpy2.mpfr = (self.top.imag + self.bottom.imag) / _MPFR_TWO
+      dx: gmpy2.mpfr = self.bottom.real - self.top.real
+      dy: gmpy2.mpfr = self.top.imag - self.bottom.imag
+      return f'[({cx}, {cy}) ± ({dx}, {dy})]'
 
   @staticmethod
   def FromCoords(re1: str | float, im1: str | float, re2: str | float, im2: str | float) -> Frame:
@@ -161,7 +172,7 @@ class Frame:
 
 def Mandelbrot(  # noqa: PLR0914
   frame: Frame, width: int, height: int, *, max_iter: int = DEFAULT_ITER, progress_bar: bool = True
-) -> bytes:
+) -> tuple[bytes, str]:
   """Render the frame rectangle to PNG bytes.
 
   Current palette:
@@ -178,7 +189,7 @@ def Mandelbrot(  # noqa: PLR0914
     progress_bar (bool, optional): Whether to show a progress bar. Defaults to True.
 
   Returns:
-    bytes: PNG image data.
+    tuple[bytes, str]: PNG image data and its internal data hash.
 
   Raises:
     Error: on error
@@ -255,7 +266,8 @@ def Mandelbrot(  # noqa: PLR0914
         pixels[out + 2] = b
         out += 3
     # done, convert the raw pixel data to a PNG using PIL
-    img: Image.Image = Image.frombytes('RGB', (width, height), bytes(pixels))
+    raw_img: bytes = bytes(pixels)
+    img: Image.Image = Image.frombytes('RGB', (width, height), raw_img)
     buf = io.BytesIO()
     img.save(buf, format='PNG')
-    return buf.getvalue()
+    return (buf.getvalue(), hashes.Hash256(raw_img).hex())
