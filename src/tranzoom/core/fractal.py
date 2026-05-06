@@ -15,6 +15,7 @@ from transcrypto.utils import base as tbase
 _MIN_ITER: int = 100
 DEFAULT_ITER: int = 1000
 
+_MPFR_ZERO = gmpy2.mpfr('0')
 _MPFR_SIXTEENTH = gmpy2.mpfr('0.0625')
 _MPFR_FOURTH = gmpy2.mpfr('0.25')
 _MPFR_ONE = gmpy2.mpfr('1')
@@ -158,7 +159,9 @@ class Frame:
     )
 
 
-def Mandelbrot(frame: Frame, width: int, height: int, *, max_iter: int = DEFAULT_ITER) -> bytes:  # noqa: PLR0914, PLR0915
+def Mandelbrot(  # noqa: PLR0914
+  frame: Frame, width: int, height: int, *, max_iter: int = DEFAULT_ITER, progress_bar: bool = True
+) -> bytes:
   """Render the frame rectangle to PNG bytes.
 
   Current palette:
@@ -172,6 +175,7 @@ def Mandelbrot(frame: Frame, width: int, height: int, *, max_iter: int = DEFAULT
     height (int): The height of the output image in pixels.
     max_iter (int, optional): The maximum number of iterations to determine escape.
         Defaults to DEFAULT_ITER.
+    progress_bar (bool, optional): Whether to show a progress bar. Defaults to True.
 
   Returns:
     bytes: PNG image data.
@@ -185,34 +189,17 @@ def Mandelbrot(frame: Frame, width: int, height: int, *, max_iter: int = DEFAULT
     raise Error(f'{width=} and {height=} must be >= 4')
   if max_iter < _MIN_ITER:
     raise Error(f'{max_iter=} must be >= {_MIN_ITER}')
-  x1: gmpy2.mpfr
-  y1: gmpy2.mpfr
-  x2: gmpy2.mpfr
-  y2: gmpy2.mpfr
-  dx: gmpy2.mpfr
-  dy: gmpy2.mpfr
-  zx: gmpy2.mpfr
-  zy: gmpy2.mpfr
-  zx2: gmpy2.mpfr
-  zy2: gmpy2.mpfr
-  cx: gmpy2.mpfr
-  cy: gmpy2.mpfr
-  v: int
-  r: int
-  g: int
-  b: int
   with frame.AutoPrecisionContext(width, height):  # noqa: PLR1702
     # compute pixel size in complex plane and check frame validity
-    x1, y1 = frame.top.real, frame.bottom.imag
-    x2, y2 = frame.bottom.real, frame.top.imag
-    dx = (x2 - x1) / gmpy2.mpfr(width - 1)
-    dy = (y2 - y1) / gmpy2.mpfr(height - 1)
-    assert dx > 0 and dy > 0, f'frame must have positive area {dx=}x{dy=}, should never happen'  # noqa: PT018, S101
+    dx: gmpy2.mpfr = (frame.bottom.real - frame.top.real) / gmpy2.mpfr(width - 1)
+    dy: gmpy2.mpfr = (frame.top.imag - frame.bottom.imag) / gmpy2.mpfr(height - 1)
+    if dx <= 0 or dy <= 0:
+      raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
     # use a single bytearray for the whole image to avoid PIL overhead
     pixels = bytearray(width * height * 3)
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
     # are relatively expensive and we can reuse the x values across rows ("inner for loop")
-    xs: list[gmpy2.mpfr] = [x1 + gmpy2.mpfr(i) * dx for i in range(width)]
+    xs: list[gmpy2.mpfr] = [frame.top.real + gmpy2.mpfr(i) * dx for i in range(width)]
     out: int = 0
     # iterate over pixels in row-major order, computing escape iterations in mpfr
     for py in tqdm.tqdm(
@@ -220,30 +207,35 @@ def Mandelbrot(frame: Frame, width: int, height: int, *, max_iter: int = DEFAULT
       desc='Img',
       unit='px',
       dynamic_ncols=True,
-      smoothing=0.001,
+      smoothing=0.1,
       colour='green',
+      disable=not progress_bar,
     ):
-      cy = y1 + gmpy2.mpfr(py) * dy  # this is the "outer for loop", no need to pre-compute y values
+      # Image.frombytes interprets the first row written as the top row of the image, so
+      # we iterate y inverted by starting at the top and going down;
+      # this is the "outer for loop", no benefit in pre-computing y values
+      cy: gmpy2.mpfr = frame.top.imag - gmpy2.mpfr(py) * dy
       # iterate over columns, reusing x values and doing the escape test in mpfr for correctness
       for px in range(width):
-        cx = xs[px]
+        cx: gmpy2.mpfr = xs[px]
         # fast interior tests, all in mpfr: main cardioid and period-2 bulb.
         x_minus_quarter: gmpy2.mpfr = cx - _MPFR_FOURTH
         q: gmpy2.mpfr = x_minus_quarter * x_minus_quarter + cy * cy
         in_cardioid: bool = q * (q + x_minus_quarter) <= _MPFR_FOURTH * cy * cy
         x_plus_one: gmpy2.mpfr = cx + _MPFR_ONE
         in_bulb: bool = x_plus_one * x_plus_one + cy * cy <= _MPFR_SIXTEENTH
-        if in_cardioid or in_bulb:
-          r = g = b = 0  # black interior point
-        else:
+        r: int = 0  # start with black "interior" point/color
+        g: int = 0
+        b: int = 0
+        if not in_cardioid and not in_bulb:
           # not in the main cardioid or period-2 bulb, do the full escape-time test in mpfr
-          zx = gmpy2.mpfr('0')
-          zy = gmpy2.mpfr('0')
+          zx: gmpy2.mpfr = _MPFR_ZERO
+          zy: gmpy2.mpfr = _MPFR_ZERO
           escaped_at: int = max_iter
           # escape-time loop, implemented with explicit zx/zy variables
           for n in range(max_iter):
-            zx2 = zx * zx
-            zy2 = zy * zy
+            zx2: gmpy2.mpfr = zx * zx
+            zy2: gmpy2.mpfr = zy * zy
             # avoid sqrt(abs(z)); compare squared magnitude to 2^2
             if zx2 + zy2 > _MPFR_FOUR:
               escaped_at = n
@@ -252,12 +244,10 @@ def Mandelbrot(frame: Frame, width: int, height: int, *, max_iter: int = DEFAULT
             zy = _MPFR_TWO * zx * zy + cy
             zx = zx2 - zy2 + cx
           # decide pixel color based on escape iteration
-          if escaped_at == max_iter:
-            # got to max_iter without escaping, treat as interior point
-            r = g = b = 0  # black interior point
-          else:
+          if escaped_at != max_iter:
+            # escaped before max_iter, so NOT an interior point
             # placeholder grayscale palette for escaped points: map escape iteration to 0-255
-            v = 255 - int(255 * escaped_at / max_iter)
+            v: int = 255 - int(255 * escaped_at / max_iter)
             r = g = b = v
         # put pixel values in the bytearray
         pixels[out] = r
