@@ -52,6 +52,7 @@ dependencies = [
 
   "gmpy2>=2.3",
   "tqdm>=4.67",
+  "Pillow>=10",
 
 ]
 
