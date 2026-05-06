@@ -50,25 +50,11 @@ dependencies = [
   # best place for project dependencies, if possible
   # development-only dependencies go in the [tool.poetry.group.dev.dependencies] section below
 
-  "fractalshades>=1.2",
-  "gmp>=0.0.17",
-  # "mpfr>=0.0.17",
-  # "libmpc>=0.0.17",
-  "mpfr (>=0.0.1,<0.0.2)",
-  "mpmath (==1.3.0)"
+  "gmpy2>=2.3",
+  "tqdm>=4.67",
+  "Pillow>=12",
 
 ]
-
-# TODO: these configs were necessary
-# export GMP_PREFIX="$(brew --prefix gmp)"
-# export MPFR_PREFIX="$(brew --prefix mpfr)"
-# export MPC_PREFIX="$(brew --prefix libmpc)"
-# export CPPFLAGS="-I$GMP_PREFIX/include -I$MPFR_PREFIX/include -I$MPC_PREFIX/include"
-# export CFLAGS="$CPPFLAGS"
-# export LDFLAGS="-L$GMP_PREFIX/lib -L$MPFR_PREFIX/lib -L$MPC_PREFIX/lib"
-# export LIBRARY_PATH="$GMP_PREFIX/lib:$MPFR_PREFIX/lib:$MPC_PREFIX/lib:$LIBRARY_PATH"
-# export PKG_CONFIG_PATH="$GMP_PREFIX/lib/pkgconfig:$MPFR_PREFIX/lib/pkgconfig:$MPC_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
-# poetry run python -m pip install -U pip setuptools wheel cython
 
 ####################################################################################################
 [project.scripts]
@@ -128,8 +114,8 @@ pyinstrument = "^5.1"
 typeguard = "^4.5"
 
 # project-specific dev-only
-
-# TODO: add dev-only deps here
+gmpy2-stubs = "^2.2"
+types-tqdm = "^4.67"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = "^1.10"

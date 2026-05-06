@@ -20,12 +20,17 @@ from . import __version__
 class TranZoomConfig(clibase.CLIConfig):
   """TranZoom global context, storing the configuration."""
 
-  foo: int
-  bar: str
+  img_width: int
+  img_height: int
 
 
 # CLI app setup, this is an important object and can be imported elsewhere and called
-app = typer.Typer(add_completion=True, no_args_is_help=True, help='TranZoom does amazing things!')
+app = typer.Typer(
+  add_completion=True,
+  no_args_is_help=True,
+  help='TranZoom does amazing things!',  # keep in sync with Main() app.callback help
+  # TODO: add epilog and actual help
+)
 
 
 def Run() -> None:
@@ -33,7 +38,11 @@ def Run() -> None:
   app()
 
 
-@app.callback(invoke_without_command=True)  # have only one; this is the "constructor"
+@app.callback(
+  invoke_without_command=True,
+  help='TranZoom does amazing things!',  # keep in sync with app help
+  # TODO: add actual help
+)  # have only one; this is the "constructor"
 @clibase.CLIErrorGuard
 def Main(  # documentation is help/epilog/args # noqa: D103
   *,
@@ -56,8 +65,22 @@ def Main(  # documentation is help/epilog/args # noqa: D103
       'Defaults to having colors.'  # state default because None default means docs don't show it
     ),
   ),
-  foo: int = typer.Option(1000, '-f', '--foo', help='Some integer option.'),
-  bar: str = typer.Option('str default', '-b', '--bar', help='Some string option.'),
+  img_width: int = typer.Option(
+    1024,
+    '-w',
+    '--width',
+    min=4,
+    max=16384,
+    help='Width of the image; 4 <= width <= 16384; default is 1024',
+  ),
+  img_height: int = typer.Option(
+    1024,
+    '-h',
+    '--height',
+    min=4,
+    max=16384,
+    help='Height of the image; 4 <= height <= 16384; default is 1024',
+  ),
 ) -> None:
   if version:
     typer.echo(__version__)
@@ -75,8 +98,8 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     verbose=verbose,
     color=color,
     appconfig=app_config.InitConfig('tranzoom', 'config.bin'),
-    foo=foo,
-    bar=bar,
+    img_width=img_width,
+    img_height=img_height,
   )
   # even though this is a convenient place to print(), beware that this runs even when
   # a subcommand is invoked; so prefer logging.debug/info/warning/error instead of print();

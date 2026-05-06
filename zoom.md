@@ -9,45 +9,34 @@ Usage: zoom [OPTIONS] COMMAND [ARGS]...
  TranZoom does amazing things!                                                                                                                             
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --version                                                        Show version and exit.                                                                 │
-│ --verbose             -v                INTEGER RANGE [0<=x<=3]  Verbosity (nothing=ERROR, -v=WARNING, -vv=INFO, -vvv=DEBUG).               │
-│ --color                   --no-color                             Force enable/disable colored output (respects NO_COLOR env var if not provided).       │
-│                                                                  Defaults to having colors.                                                             │
-│ --foo                 -f                INTEGER                  Some integer option.                                                    │
-│ --bar                 -b                TEXT                     Some string option.                                              │
-│ --install-completion                                             Install completion for the current shell.                                              │
-│ --show-completion                                                Show completion for the current shell, to copy it or customize the installation.       │
-│ --help                                                           Show this message and exit.                                                            │
+│ --version                                                            Show version and exit.                                                             │
+│ --verbose             -v                INTEGER RANGE [0<=x<=3]      Verbosity (nothing=ERROR, -v=WARNING, -vv=INFO, -vvv=DEBUG).           │
+│ --color                   --no-color                                 Force enable/disable colored output (respects NO_COLOR env var if not provided).   │
+│                                                                      Defaults to having colors.                                                         │
+│ --width               -w                INTEGER RANGE [4<=x<=16384]  Width of the image; 4 <= width <= 16384; default is 1024            │
+│ --height              -h                INTEGER RANGE [4<=x<=16384]  Height of the image; 4 <= height <= 16384; default is 1024          │
+│ --install-completion                                                 Install completion for the current shell.                                          │
+│ --show-completion                                                    Show completion for the current shell, to copy it or customize the installation.   │
+│ --help                                                               Show this message and exit.                                                        │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ markdown    Emit Markdown docs for the CLI (see README.md section "Creating a New Version").                                                            │
-│ configpath  Print the config file path.                                                                                                                 │
-│ hello       Say hello.                                                                                                                                  │
-│ random      Random utilities.                                                                                                                           │
+│ markdown  Emit Markdown docs for the CLI (see README.md section "Creating a New Version").                                                              │
+│ image     Make a Mandelbrot image.                                                                                                                      │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-## `zoom configpath` Command
+## `zoom image` Command
 
 ```text
-Usage: zoom configpath [OPTIONS]                                                                                                                          
+Usage: zoom image [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]                                                                                  
                                                                                                                                                            
- Print the config file path.                                                                                                                               
-                                                                                                                                                           
-╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --help          Show this message and exit.                                                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-```
-
-## `zoom hello` Command
-
-```text
-Usage: zoom hello [OPTIONS] [NAME]                                                                                                                        
-                                                                                                                                                           
- Say hello.                                                                                                                                                
+ Make a Mandelbrot image.                                                                                                                                  
                                                                                                                                                            
 ╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│   name      [NAME]                                                                                                                      │
+│   center_re      [CENTER_RE]  Real part of the center point; default is "-0.5"                                                           │
+│   center_im      [CENTER_IM]  Imaginary part of the center point; default is "0"                                                            │
+│   f_width        [F_WIDTH]    Width of the frame in the real plane; default is "3"                                                          │
+│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; default is None, i.e, the same as width                                       │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                                                                                             │
@@ -69,48 +58,4 @@ Usage: zoom markdown [OPTIONS]
                                                                                                                                                            
  $ poetry run zoom markdown > zoom.md                                                                                                                      
  <<saves CLI doc>>
-```
-
-## `zoom random` Command
-
-```text
-Usage: zoom random [OPTIONS] COMMAND [ARGS]...                                                                                                            
-                                                                                                                                                           
- Random utilities.                                                                                                                                         
-                                                                                                                                                           
-╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --help          Show this message and exit.                                                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ num  Generate a random integer.                                                                                                                         │
-│ str  Generate a random string.                                                                                                                          │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-```
-
-### `zoom random num` Sub-Command
-
-```text
-Usage: zoom random num [OPTIONS]                                                                                                                          
-                                                                                                                                                           
- Generate a random integer.                                                                                                                                
-                                                                                                                                                           
-╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --min         INTEGER  Minimum value (inclusive).                                                                                           │
-│ --max         INTEGER  Maximum value (inclusive).                                                                                         │
-│ --help                 Show this message and exit.                                                                                                      │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-```
-
-### `zoom random str` Sub-Command
-
-```text
-Usage: zoom random str [OPTIONS]                                                                                                                          
-                                                                                                                                                           
- Generate a random string.                                                                                                                                 
-                                                                                                                                                           
-╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --length    -n      INTEGER RANGE   String length.                                                                                   │
-│ --alphabet          TEXT                  Custom alphabet to sample from (defaults to ).                                                                │
-│ --help                                    Show this message and exit.                                                                                   │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
