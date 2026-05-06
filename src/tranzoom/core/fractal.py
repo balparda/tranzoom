@@ -1,6 +1,10 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""Business logic examples."""
+"""Fractal computing.
+
+Heavy use of gmpy2 for arbitrary precision, which is needed to render deep zooms correctly; see
+<https://gmpy2.readthedocs.io/en/latest/>
+"""
 
 from __future__ import annotations
 
@@ -15,6 +19,7 @@ from transcrypto.utils import base as tbase
 
 _MIN_ITER: int = 100
 DEFAULT_ITER: int = 1000
+_MIN_GUARD_BITS: int = 64
 
 _MPFR_ZERO = gmpy2.mpfr('0')
 _MPFR_SIXTEENTH = gmpy2.mpfr('0.0625')
@@ -123,7 +128,7 @@ class Frame:
     dx, dy = dx / _MPFR_TWO, dy / _MPFR_TWO
     return Frame(top=gmpy2.mpc(cx - dx, cy + dy), bottom=gmpy2.mpc(cx + dx, cy - dy))
 
-  def AutoPrecisionBits(self, width: int, height: int, *, guard_bits: int = 64) -> int:
+  def AutoPrecisionBits(self, width: int, height: int, *, guard_bits: int = _MIN_GUARD_BITS) -> int:
     """Pick enough precision to distinguish adjacent pixels in smaller complex-plane dimension.
 
     This is a practical heuristic, not a proof of numerical correctness for all escape decisions.
@@ -131,20 +136,21 @@ class Frame:
     Args:
       width (int): The width of the output image in pixels.
       height (int): The height of the output image in pixels.
-      guard_bits (int, optional): Additional bits to add as a safety margin. Defaults to 64.
+      guard_bits (int, optional): Additional bits to add as a safety margin.
+          Defaults to _MIN_GUARD_BITS.
 
     Returns:
       int: The estimated number of bits of precision needed.
 
     Raises:
-      Error: If width or height is less than 4, or if guard_bits is less than 64.
+      Error: If width or height is less than 4, or if guard_bits is less than _MIN_GUARD_BITS.
 
     """
     # check parameters
     if width < 4 or height < 4:  # noqa: PLR2004
       raise Error(f'{width=} and {height=} must be >= 4')
-    if guard_bits < 64:  # noqa: PLR2004
-      raise Error(f'{guard_bits=} must be >= 64')
+    if guard_bits < _MIN_GUARD_BITS:
+      raise Error(f'{guard_bits=} must be >= {_MIN_GUARD_BITS}')
     # use high temporary precision so the precision estimate itself does not get quantized too early
     with gmpy2.local_context(gmpy2.context(), precision=512):
       dx: gmpy2.mpfr = self.bottom.real - self.top.real
@@ -153,13 +159,16 @@ class Frame:
       # need about -log2(pixel_size) bits, plus guard.
       return max(80, int(gmpy2.ceil(-gmpy2.log2(scale))) + guard_bits)
 
-  def AutoPrecisionContext(self, width: int, height: int, *, guard_bits: int = 64) -> gmpy2.context:
+  def AutoPrecisionContext(
+    self, width: int, height: int, *, guard_bits: int = _MIN_GUARD_BITS
+  ) -> gmpy2.context:
     """Get gmpy2 context with precision to distinguish adjacent pixels in smaller complex-plane dim.
 
     Args:
       width (int): The width of the output image in pixels.
       height (int): The height of the output image in pixels.
-      guard_bits (int, optional): Additional bits to add as a safety margin. Defaults to 64.
+      guard_bits (int, optional): Additional bits to add as a safety margin.
+          Defaults to _MIN_GUARD_BITS.
 
     Returns:
       gmpy2.context: A context with the estimated number of bits of precision needed.
