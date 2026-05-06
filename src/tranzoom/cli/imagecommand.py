@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import pathlib
+
 import click
 from transcrypto.cli import clibase
 
@@ -14,7 +16,7 @@ from tranzoom.core import fractal
 @zoom.app.command(
   'image',
   help='Make an image.',
-  epilog=(  # TODO
+  epilog=(  # TODO: write example
     ''
   ),
 )
@@ -25,18 +27,11 @@ def Image(  # documentation is help/epilog/args # noqa: D103
 ) -> None:
   # check sanity
   config: zoom.TranZoomConfig = ctx.obj
-  # if not config.db and not config.output:
-  #   raise click.UsageError('With `--no-db` you must specify `--out`')
+  # if not config.db and not config.output:  # TODO: use or remove
+  #   raise click.UsageError('With `--no-db` you must specify `--out`')  # noqa: ERA001
 
-  fractal.render_mandelbrot(
-    out_dir='renders/seahorse',
-    x='-0.743643887037151',
-    y='0.131825904205330',
-    dx='1e-8',
-    precision=40,
-    width=1920,
-    height=1080,
-    max_iter=20_000,
-  )
+  # TODO: do something useful!
+  raw_png: bytes = fractal.Mandelbrot(fractal.Frame.FromCenter('0', '0', '2'), 1024, 1024)
+  pathlib.Path('output.png').write_bytes(raw_png)
 
   config.console.print()

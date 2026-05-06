@@ -50,12 +50,8 @@ dependencies = [
   # best place for project dependencies, if possible
   # development-only dependencies go in the [tool.poetry.group.dev.dependencies] section below
 
-  "fractalshades>=1.2",
-  "gmp>=0.0.17",
-  # "mpfr>=0.0.17",
-  # "libmpc>=0.0.17",
-  "mpfr (>=0.0.1,<0.0.2)",
-  "mpmath (==1.3.0)"
+  "gmpy2>=2.3",
+  "tqdm>=4.67",
 
 ]
 
@@ -128,8 +124,8 @@ pyinstrument = "^5.1"
 typeguard = "^4.5"
 
 # project-specific dev-only
-
-# TODO: add dev-only deps here
+gmpy2-stubs = "^2.2"
+types-tqdm = "^4.67"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = "^1.10"

@@ -1,4 +1,6 @@
-# CODEOWNERS — every PR requires approval from the repo owner
+# SPDX-FileCopyrightText: Copyright 2026 Daniel Balparda <balparda@github.com>
+
+## CODEOWNERS - owners, PR reviewers
 
 * @balparda
 * @BellaKeri
