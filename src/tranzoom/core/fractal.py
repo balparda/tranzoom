@@ -79,6 +79,16 @@ class Frame:
     dy: gmpy2.mpq = self.top_im - self.bottom_im
     return f'[({cx}, {cy}) ± {dx}]' if dx == dy else f'[({cx}, {cy}) ± ({dx}, {dy})]'
 
+  @property
+  def area(self) -> gmpy2.mpq:
+    """Get the area of the frame.
+
+    Returns:
+      gmpy2.mpq: The area of the frame.
+
+    """
+    return (self.bottom_re - self.top_re) * (self.top_im - self.bottom_im)
+
   @staticmethod
   def FromCoords(re1: str | float, im1: str | float, re2: str | float, im2: str | float) -> Frame:
     """Create a Frame from coordinate values. Will order the corners correctly.
@@ -229,7 +239,7 @@ def Mandelbrot(  # noqa: PLR0914
     for py in tqdm.tqdm(
       iterable=range(height),
       desc='Img',
-      unit='px',
+      unit='ln',
       dynamic_ncols=True,
       smoothing=0.1,
       colour='green',
