@@ -94,6 +94,17 @@ class Frame:
     return (self.bottom_re - self.top_re, self.top_im - self.bottom_im)
 
   @property
+  def is_square(self) -> bool:
+    """Check if the frame is square.
+
+    Returns:
+      bool: True if the frame is square, False otherwise.
+
+    """
+    dx, dy = self.size
+    return dx == dy
+
+  @property
   def scale(self) -> gmpy2.mpq:
     """Get the scale of the frame, i.e., the smaller dimension. Exact.
 
@@ -210,7 +221,12 @@ class Frame:
     if dx <= 0 or dy <= 0:
       raise Error(f'width and height must be positive, got {dx=} and {dy=}')
     dx, dy = dx / _MPQ_TWO, dy / _MPQ_TWO
-    return Frame(top_re=cx - dx, top_im=cy + dy, bottom_re=cx + dx, bottom_im=cy - dy)
+    fr = Frame(top_re=cx - dx, top_im=cy + dy, bottom_re=cx + dx, bottom_im=cy - dy)
+    if fr.center != (cx, cy):
+      raise Error(f'calculated frame center {fr.center} does not match input center ({cx}, {cy})')
+    if fr.size != (dx * _MPQ_TWO, dy * _MPQ_TWO):
+      raise Error(f'calculated frame size {fr.size} does not match input size ({dx * 2}, {dy * 2})')
+    return fr
 
   @property
   def precision(self) -> int:
