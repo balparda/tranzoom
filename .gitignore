@@ -3,6 +3,9 @@
 
 # START project-specific ignores
 
+# ignore mandelbrot images (probably test/debug images), but only in repo root
+/*.png
+
 # Mac-specific
 .DS_Store
 

@@ -4,104 +4,82 @@
 
 Fractal manipulation with LLMs
 
-- **Primary use case:** *<e.g., bulk process files, manage deployments, query APIs>*
-- **Works with:** *<e.g., local files, Git repos, Kubernetes, AWS, JSON logs>*
-- **Status:** *<stable | beta | experimental>*
-- **License:** *<MIT | Apache-2.0 | GPL-3.0 | Proprietary>*
+- **Primary use case:** Render ultra-deep Mandelbrot fractal images with arbitrary precision, and (planned) use AI/LLMs to guide fractal zoom sequences
+- **Works with:** Local filesystem (PNG output), complex-plane coordinates, AI models (future)
+- **Status:** Early / experimental — core fractal engine is functional; AI guidance is planned
+- **License:** Apache-2.0
 
-***TODO:*** *throughout this documentation* ***ITALICS*** *mark* ***placeholder content*** *that a new project would typically want to edit with its own information.*
+**tranZoom** is a Python CLI tool for rendering the Mandelbrot set at virtually unlimited zoom depth using arbitrary-precision arithmetic (`gmpy2`). The goal is to be able to zoom so deep that standard double-precision floating point becomes meaningless — tranZoom automatically computes the required precision and renders faithfully at any scale. The long-term vision is to integrate with LLMs (via the `transai` library) to intelligently select and navigate interesting regions of the fractal automatically.
 
-***TODO:*** *If you are starting a new project, there are lots of instructions and useful information in the* "[Appendix **I**: Using the `poetrycli` template](#appendix-i-using-the-poetrycli-template)" *and* [Appendix **II**: Template Checklist](#appendix-ii-template-checklist-turning-poetrycli-into-your-new-cli-project-in-12-steps) *sections.*
+Built with:
 
-**`poetrycli`** is a **template** for building modern Python CLI applications using:
-
-- **Python 3.12** or **Python 3.13** or **Python 3.14**
-- **Poetry** for packaging, dependency management, and `venv` workflow
-- **Typer** for CLI structure (commands, options, subcommands, help)
-- **Transcrypto** for CLI modules, logging, humanization, crypto, random, hash, serialization, etc
-- **Rich** for consistent console output and pretty logging
-- **Ruff** for formatting + linting
-- **MyPy** (and **Pyright/Pylance/typeguard**) for strict type checking
-- **Pytest + coverage** for tests
-- **pre-commit** + **GitHub Actions CI** to keep everything enforced automatically
-- **dependabot** + **codeql** to keep dependencies always up-to-date and security issues at bay
-
-The `poetrycli` repo is intentionally opinionated because it was built to help the authors (2-space indentation, single quotes, strict typing, “select ALL rules” linting are examples) but includes escape hatches and ***TODO*** markers to customize quickly. Started in Jan/2026, by ***Daniel Balparda***.
-
-*Since version 0.1.0 it is PyPI package: <https://pypi.org/project/foobarnotreally/>*
-
-***TODO:*** *change this header to match your project's conditions.*
+- **Python 3.12+** with **Poetry** for dependency management
+- **gmpy2** for arbitrary-precision (`mpq`/`mpfr`) complex-plane arithmetic
+- **Pillow** for PNG image output
+- **tqdm** for progress bars during rendering
+- **transai** as the foundation for future AI/LLM integration
+- **Typer** + **Rich** for the CLI and terminal output
+- **Transcrypto** for CLI boilerplate, logging, hashing, and config management
+- **Ruff**, **MyPy**, **Pyright**, **typeguard**, **pre-commit**, **GitHub Actions** for quality and CI
 
 ## Table of contents
 
 - [tranZoom](#tranzoom)
   - [Table of contents](#table-of-contents)
   - [License](#license)
-    - [*Third-party notices (TODO)*](#third-party-notices-todo)
-    - [*Contributions and inbound licensing (TODO)*](#contributions-and-inbound-licensing-todo)
-  - [*Installation (TODO)*](#installation-todo)
-    - [*Supported platforms (TODO)*](#supported-platforms-todo)
+    - [Third-party notices](#third-party-notices)
+    - [Contributions and inbound licensing](#contributions-and-inbound-licensing)
+  - [Installation](#installation)
+    - [Supported platforms](#supported-platforms)
     - [Known dependencies (Prerequisites)](#known-dependencies-prerequisites)
-  - [*Context / Problem Space (TODO)*](#context--problem-space-todo)
-    - [*What this tool is (TODO)*](#what-this-tool-is-todo)
-    - [*What this tool is not (TODO)*](#what-this-tool-is-not-todo)
-    - [*Key concepts and terminology* (TODO)](#key-concepts-and-terminology-todo)
-    - [*Inputs and outputs (TODO)*](#inputs-and-outputs-todo)
-      - [*Inputs (TODO)*](#inputs-todo)
-      - [*Outputs (TODO)*](#outputs-todo)
-  - [*Design assumptions / Disclaimers (TODO)*](#design-assumptions--disclaimers-todo)
-    - [*Guarantees and stability (TODO)*](#guarantees-and-stability-todo)
-    - [*Assumptions (TODO)*](#assumptions-todo)
-    - [*Known limitations (TODO)*](#known-limitations-todo)
-    - [*Deprecation policy (TODO)*](#deprecation-policy-todo)
-    - [*Privacy / telemetry (TODO)*](#privacy--telemetry-todo)
-  - [*CLI Interface (TODO)*](#cli-interface-todo)
-    - [*Quick start (TODO)*](#quick-start-todo)
-    - [*Common workflows (TODO)*](#common-workflows-todo)
-      - [*Workflow 1 (TODO)*](#workflow-1-todo)
-      - [*Workflow 2 (TODO)*](#workflow-2-todo)
-    - [*Command structure (TODO)*](#command-structure-todo)
+  - [Context / Problem Space](#context--problem-space)
+    - [What this tool is](#what-this-tool-is)
+    - [What this tool is not](#what-this-tool-is-not)
+    - [Key concepts and terminology](#key-concepts-and-terminology)
+    - [Inputs and outputs](#inputs-and-outputs)
+      - [Inputs](#inputs)
+      - [Outputs](#outputs)
+  - [CLI Interface](#cli-interface)
+    - [Quick start](#quick-start)
+    - [Command structure](#command-structure)
     - [Global flags](#global-flags)
     - [CLI Commands Documentation](#cli-commands-documentation)
-    - [*Configuration (TODO)*](#configuration-todo)
-      - [Config file locations](#config-file-locations)
-      - [*Configuration schema (TODO)*](#configuration-schema-todo)
-      - [*Validate configuration (TODO)*](#validate-configuration-todo)
-      - [*Environment variables (TODO)*](#environment-variables-todo)
-    - [*Input / output behavior (TODO)*](#input--output-behavior-todo)
-      - [*`stdin` and piping (TODO)*](#stdin-and-piping-todo)
-      - [*Output formats (TODO)*](#output-formats-todo)
-      - [Color and formatting](#color-and-formatting)
-      - [*Exit codes (TODO)*](#exit-codes-todo)
-    - [*Logging and observability (TODO)*](#logging-and-observability-todo)
-    - [*Safety features (TODO)*](#safety-features-todo)
-  - [*Project Design (TODO)*](#project-design-todo)
-    - [*Architecture overview (TODO)*](#architecture-overview-todo)
-    - [*Modules / packages (TODO)*](#modules--packages-todo)
-    - [*Data flow (TODO)*](#data-flow-todo)
-    - [*Error handling philosophy (TODO)*](#error-handling-philosophy-todo)
-    - [*Security model (TODO)*](#security-model-todo)
-    - [*Performance characteristics (TODO)*](#performance-characteristics-todo)
+    - [`zoom image` — Render a Mandelbrot image](#zoom-image--render-a-mandelbrot-image)
+    - [Comprehensive example images and zooms](#comprehensive-example-images-and-zooms)
+      - [Full / Default (×1, 80 bits)](#full--default-1-80-bits)
+      - [Seahorse (×155, 83 bits)](#seahorse-155-83-bits)
+      - [Seahorse Tail (×3k, 88 bits)](#seahorse-tail-3k-88-bits)
+      - [Satellite Antenna (×852k, 96 bits)](#satellite-antenna-852k-96-bits)
+      - [Satellite Seahorse Tail with Julia Island (×4G, 108 bits)](#satellite-seahorse-tail-with-julia-island-4g-108-bits)
+      - [One Island (×417G, 115 bits)](#one-island-417g-115-bits)
+      - [Last Lights On (×2.5e+228, 835 bits)](#last-lights-on-25e228-835-bits)
+      - [Eye of the Universe (×2.5e+1090, 3698 bits)](#eye-of-the-universe-25e1090-3698-bits)
+    - [Deep zoom capability](#deep-zoom-capability)
+    - [Configuration](#configuration)
+    - [Color and formatting](#color-and-formatting)
+    - [Exit codes](#exit-codes)
+  - [Project Design](#project-design)
+    - [Architecture overview](#architecture-overview)
+    - [Modules / packages](#modules--packages)
+    - [Performance characteristics](#performance-characteristics)
   - [Development Instructions](#development-instructions)
     - [File structure](#file-structure)
     - [Development Setup](#development-setup)
-      - [*Requirements (TODO)*](#requirements-todo)
       - [Install Python](#install-python)
       - [Install Poetry (recommended: `pipx`)](#install-poetry-recommended-pipx)
       - [Make sure `.venv` is local](#make-sure-venv-is-local)
       - [Get the repository](#get-the-repository)
       - [Create environment and install dependencies](#create-environment-and-install-dependencies)
       - [Optional: VSCode setup](#optional-vscode-setup)
-    - [*Build (TODO)*](#build-todo)
-    - [*Run locally (TODO)*](#run-locally-todo)
+    - [Build](#build)
+    - [Run locally](#run-locally)
     - [Testing](#testing)
       - [Unit tests / Coverage](#unit-tests--coverage)
       - [Instrumenting your code](#instrumenting-your-code)
       - [Integration / e2e tests](#integration--e2e-tests)
-      - [*Golden tests for CLI output (TODO)*](#golden-tests-for-cli-output-todo)
     - [Linting / formatting / static analysis](#linting--formatting--static-analysis)
       - [Type checking](#type-checking)
-    - [*Documentation updates (TODO)*](#documentation-updates-todo)
+    - [Documentation updates](#documentation-updates)
     - [Versioning and releases](#versioning-and-releases)
       - [Versioning scheme](#versioning-scheme)
       - [Updating versions](#updating-versions)
@@ -111,330 +89,357 @@ The `poetrycli` repo is intentionally opinionated because it was built to help t
         - [CI and docs](#ci-and-docs)
         - [Git tag and commit](#git-tag-and-commit)
         - [Publish to PyPI](#publish-to-pypi)
-    - [*Contributing (TODO)*](#contributing-todo)
   - [Security](#security)
-    - [*Supply chain (TODO)*](#supply-chain-todo)
-  - [*Reliability (TODO)*](#reliability-todo)
-    - [*Operational guidance (TODO)*](#operational-guidance-todo)
-    - [*Running in automation (TODO)*](#running-in-automation-todo)
-    - [*Failure modes (TODO)*](#failure-modes-todo)
-  - [*Troubleshooting (TODO)*](#troubleshooting-todo)
-    - [*Enable debug output (TODO)*](#enable-debug-output-todo)
-    - [*Common issues (TODO)*](#common-issues-todo)
-    - [*Collect diagnostics (TODO)*](#collect-diagnostics-todo)
-  - [*FAQ (TODO)*](#faq-todo)
-    - [*FAQ Section I (TODO)*](#faq-section-i-todo)
-      - [*Why does `<project>` need `<permission/dependency>`? (TODO)*](#why-does-project-need-permissiondependency-todo)
-      - [*How do I migrate from version X to Y? (TODO)*](#how-do-i-migrate-from-version-x-to-y-todo)
-      - [*How stable is the JSON output? (TODO)*](#how-stable-is-the-json-output-todo)
-  - [*Glossary (TODO)*](#glossary-todo)
+  - [Troubleshooting](#troubleshooting)
+    - [Enable debug output](#enable-debug-output)
+    - [`gmpy2` installation issues](#gmpy2-installation-issues)
+    - [Rendering is very slow](#rendering-is-very-slow)
 
 ## License
 
-Copyright 2025 Daniel Balparda <balparda@github.com>
+Copyright 2026 Daniel Balparda <balparda@github.com> & Bella Keri <BellaKeri@github.com>
 
-Licensed under the ***Apache License, Version 2.0*** (the "License"); you may not use this file except in compliance with the License. You may obtain a [copy of the License here](http://www.apache.org/licenses/LICENSE-2.0).
+Licensed under the **Apache License, Version 2.0** (the "License"); you may not use this file except in compliance with the License. You may obtain a [copy of the License here](http://www.apache.org/licenses/LICENSE-2.0).
 
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
 
-### *Third-party notices (TODO)*
+### Third-party notices
 
-*This project includes or depends on third-party software. See:*
+This project includes or depends on third-party software (see `requirements.txt` and `pyproject.toml`). Key dependencies include:
 
-- *NOTICE \<link\> (if applicable)*
-- *Dependency license list: \<link or section\>*
+- [gmpy2](https://gmpy2.readthedocs.io/) — Apache-2.0 compatible
+- [Pillow](https://python-pillow.github.io/) — HPND license
+- [tqdm](https://github.com/tqdm/tqdm) — MPL-2.0 / MIT
+- [transai](https://github.com/balparda/transai) — Apache-2.0
+- [transcrypto](https://github.com/balparda/transcrypto) — Apache-2.0
 
-### *Contributions and inbound licensing (TODO)*
+### Contributions and inbound licensing
 
-- *Contributions are accepted under: \<same as project license | CLA | DCO\>*
-- *Policy: \<link to CONTRIBUTING.md\>*
+Contributions are accepted under the Apache-2.0 license (same as project).
 
-## *Installation (TODO)*
+## Installation
 
-*To use in your project just do:*
+To install from PyPI:
 
 ```sh
-pip3 install <your_pkg>
+pip3 install tranzoom
 ```
 
-*and then `from <your_pkg> import <your_library>` (or other parts of the library) for using it.*
+Or install from the repository for development (see [Development Setup](#development-setup)).
 
-### *Supported platforms (TODO)*
+### Supported platforms
 
-- *OS: \<Linux | macOS | Windows\>*
-- *Architectures: \<x86_64 | arm64\>*
-- *Minimum versions: \<e.g., macOS 12+, Ubuntu 20.04+, Windows 11\>*
+- OS: Linux, macOS
+- Architectures: x86_64, arm64
+- Python: 3.12, 3.13, 3.14
 
 ### Known dependencies (Prerequisites)
 
-- **[python 3.12](https://python.org/)** - [documentation](https://docs.python.org/3.12/)
-- **[rich 14.2+](https://pypi.org/project/rich/)** - Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal - [documentation](https://rich.readthedocs.io/en/latest/)
-- **[typer 0.21+](https://pypi.org/project/typer/)** - CLI parser - [documentation](https://typer.tiangolo.com/)
-- **[transcrypto 2.1+](https://pypi.org/project/transcrypto/)** - CLI modules, logging, humanization, crypto, random, hash, serialization, config management, etc. - [documentation](https://github.com/balparda/transcrypto)
-- **[poetrycli](https://github.com/balparda/poetrycli)** - CLI app templates and utils
-- ***TODO:*** *add your main dependencies here too*
+- **[python 3.12+](https://python.org/)** — [documentation](https://docs.python.org/3.12/)
+- **[gmpy2 2.3+](https://pypi.org/project/gmpy2/)** — Arbitrary-precision arithmetic using GMP/MPFR/MPC — [documentation](https://gmpy2.readthedocs.io/en/latest/)
+- **[Pillow 12+](https://pypi.org/project/Pillow/)** — PNG image generation — [documentation](https://pillow.readthedocs.io/)
+- **[tqdm 4.67+](https://pypi.org/project/tqdm/)** — Progress bars — [documentation](https://tqdm.github.io/)
+- **[rich 14.2+](https://pypi.org/project/rich/)** — Terminal formatting — [documentation](https://rich.readthedocs.io/en/latest/)
+- **[typer 0.21+](https://pypi.org/project/typer/)** — CLI parser — [documentation](https://typer.tiangolo.com/)
+- **[transai 1.2+](https://pypi.org/project/transai/)** — AI integration foundation — [documentation](https://github.com/balparda/transai)
+- **[transcrypto 2.1+](https://pypi.org/project/transcrypto/)** — CLI utilities, logging, hashing, config — [documentation](https://github.com/balparda/transcrypto)
 
-## *Context / Problem Space (TODO)*
+## Context / Problem Space
 
-### *What this tool is (TODO)*
+### What this tool is
 
-*\<Describe the CLI in one paragraph. Emphasize outcomes and workflows.\>*
+tranZoom is a command-line fractal renderer focused on extreme zoom depth. Standard double-precision (`float64`) floating point has only about 15–16 significant decimal digits, so any zoom below roughly 1e-14 of the full Mandelbrot set will produce incorrect images due to precision loss. tranZoom uses `gmpy2.mpq` (exact rational arithmetic) to represent frame coordinates and `gmpy2.mpfr` (arbitrary-precision floating point) for the escape-time computations, automatically determining how many bits of precision are needed for any given zoom level.
 
-### *What this tool is not (TODO)*
+The long-term vision is to use LLMs to autonomously guide the zoom — identifying interesting regions, proposing successive frames, and building navigated zoom sequences without manual coordinate discovery.
 
-- *Not intended for:*
-- *Not a replacement for:*
+### What this tool is not
 
-### *Key concepts and terminology* (TODO)
+- Not a real-time / interactive fractal explorer (rendering is intentionally CPU-intensive for correctness at depth)
+- Not limited to a fixed precision (unlike most other fractal tools, which cap at `float64`)
+- Not yet AI-guided (that is the planned future direction)
 
-- *A*
-- *B*
+### Key concepts and terminology
 
-### *Inputs and outputs (TODO)*
+- **Frame**: A rectangular region of the complex plane, defined by two corners or a center + width. Stored as `gmpy2.mpq` (exact rationals) to avoid any accumulation of rounding error in coordinates.
+- **Precision**: The number of bits of `mpfr` floating-point precision used for escape-time iteration. Computed automatically from the frame size; never needs to be set manually.
+- **Magnification**: Ratio of the default full-set frame area to the current frame area. 1× = full set; 1G× = zoomed in one billion times.
+- **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
+- **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
 
-#### *Inputs (TODO)*
+### Inputs and outputs
 
-- *stdin: \<supported | not supported\>*
-- *Files: \<paths, globs, formats\>*
-- *Network/API: \<endpoints, services\>*
-- *Environment variables/config:*
+#### Inputs
 
-#### *Outputs (TODO)*
+- stdin: not used
+- CLI arguments: center coordinates (real + imaginary parts as strings, for exact `mpq` conversion), frame width/height, output image dimensions
+- Config file: stored in the OS-native location via `transcrypto.utils.config`
 
-- *stdout: \<human output / structured output\>*
-- *stderr: \<errors/logging\>*
-- *Files/artifacts:*
+#### Outputs
 
-## *Design assumptions / Disclaimers (TODO)*
+- stdout: progress info and saved filename
+- stderr: warnings/errors/logs (controlled by `--verbose`)
+- Files: PNG images named `mandel-<YYYYMMDDHHMMSS>-<hash12>.png` saved to the working directory
 
-### *Guarantees and stability (TODO)*
+## CLI Interface
 
-- *CLI flags/commands stability: \<stable | may change\>*
-- *JSON output stability: \<stable schema | best-effort\>*
-- *Backward compatibility:*
+### Quick start
 
-### *Assumptions (TODO)*
-
-- *Environment: \<filesystem, permissions, network access\>*
-- *Locale/encoding: \<UTF-8 expected?\>*
-- *Time/timezone:*
-
-### *Known limitations (TODO)*
-
-- *Scale limits: \<e.g., tested up to 10k files\>*
-- *Platform limitations: \<e.g., Windows path edge cases\>*
-- *Edge cases: \<symlinks, long paths, etc.\>*
-
-### *Deprecation policy (TODO)*
-
-- *Deprecations are announced via:*
-- *Timeline: \<e.g., 2 minor versions\>*
-- *Migration guidance:*
-
-### *Privacy / telemetry (TODO)*
-
-- *Telemetry: \<none | optional | on by default\>*
-- *What is collected:*
-- *How to disable: \<env var | config flag\>*
-
-## *CLI Interface (TODO)*
-
-### *Quick start (TODO)*
-
-*Minimal example.*
+Render the full Mandelbrot set (default, 1024×1024):
 
 ```sh
-<project> <command> <arg>
+poetry run zoom image
 ```
 
-### *Common workflows (TODO)*
-
-#### *Workflow 1 (TODO)*
+Render a well-known deep zoom (seahorse valley, ~155× magnification, 512×512):
 
 ```sh
-<project> <cmd> --flag value <input>
+poetry run zoom -w 512 -h 512 image " -0.74303" "0.126433" "0.01611"
 ```
 
-#### *Workflow 2 (TODO)*
+Render an extreme zoom (~4 billion× magnification):
 
 ```sh
-<project> <cmd> <input> --output <file>
+poetry run zoom -w 256 -h 256 image " -0.74364388717342" "0.13182590425182" "0.00000000059849"
 ```
 
-### *Command structure (TODO)*
-
-General shape:
+### Command structure
 
 ```sh
-<project> [global flags] <command> [command flags] [args]
+zoom [global flags] <command> [args]
 ```
 
 ### Global flags
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `-h`, `--help` | Show help | \<off\> |
-| `--version` | Show version and exit | \<off\> |
+| `--help` | Show help | off |
+| `--version` | Show version and exit | off |
 | `-v`, `-vv`, `-vvv`, `--verbose` | Verbosity (nothing=*ERROR*, `-v`=*WARNING*, `-vv`=*INFO*, `-vvv`=*DEBUG*) | *ERROR* |
-| `--color`/`--no-color` | Force enable/disable colored output (respects NO_COLOR env var if not provided) | `--color` |
+| `--color`/`--no-color` | Force enable/disable colored output (respects `NO_COLOR` env var if not provided) | `--color` |
+| `-w`/`--width` | Output image width in pixels (4–8192) | 1024 |
+| `-h`/`--height` | Output image height in pixels (4–8192) | 1024 |
 
 ### CLI Commands Documentation
 
-This software auto-generates docs for CLI apps:
+Auto-generated CLI reference: [**`zoom` documentation**](zoom.md)
 
-- [**`mycli`** documentation](mycli.md)
-
-### *Configuration (TODO)*
-
-#### Config file locations
-
-This template uses `transcrypto.util.config` for configuration management. Config files are stored in OS-native locations:
-
-- On MacOS: `/Users/[user]/Library/Application Support/[app_name]{/[version]}`
-- On Windows: `C:\\Users\\[user]\\AppData\\Local{\\[app_author]}\\[app_name]{\\[version]}`
-- On Linux: `/home/[user]/.config/[app_name]{/[version]}`
-- On Android: `/data/data/com.myApp/shared_prefs/[app_name]{/[version]}`
-
-***TODO: add specific config files info***
-
-#### *Configuration schema (TODO)*
-
-```yaml
-# ~/.config/<project>/config.yaml
-profile: default
-timeout_ms: 30000
-retries: 3
-output:
-  format: human # or json
-  color: auto   # auto|always|never
-```
-
-#### *Validate configuration (TODO)*
+### `zoom image` — Render a Mandelbrot image
 
 ```sh
-<project> config validate
-<project> config show --effective
+zoom [-w WIDTH] [-h HEIGHT] image [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 ```
 
-#### *Environment variables (TODO)*
+Arguments (all optional; defaults show the full Mandelbrot set):
 
-| Variable | Description | Default | Notes |
+| Argument | Description | Default |
+| --- | --- | --- |
+| `CENTER_RE` | Real part of the center point (string, for exact precision) | `'-0.75'` |
+| `CENTER_IM` | Imaginary part of the center point (string, for exact precision) | `'0'` |
+| `F_WIDTH` | Width of the frame in the real plane | `'2.5'` |
+| `F_HEIGHT` | Height of the frame in the imaginary plane | same as `F_WIDTH` |
+
+The command:
+
+1. Constructs a `Frame` from the given coordinates using `gmpy2.mpq` exact arithmetic
+2. Calculates the required `mpfr` precision automatically based on zoom depth
+3. Scales `max_iter` logarithmically with magnification
+4. Renders all pixels using the escape-time algorithm (with cardioid/bulb interior shortcuts)
+5. Saves the PNG to `mandel-<YYYYMMDDHHMMSS>-<hash12>.png` in the working directory
+
+Example output:
+
+```txt
+512x512 Mandelbrot in frame [(-74303/100000, 126433/1000000) @ 1611/100000],
+precision 83 bits, 155.183 magnification, 1072 iterations...
+Img 100%|█████████████████████████| 512/512 [00:12<00:00, 40.9ln/s]
+Generated image 'a3f9b2c1d4e5...' in 12.34s
+Saved to 'mandel-20260507120000-a3f9b2c1d4e5.png'
+```
+
+### Comprehensive example images and zooms
+
+You can run all these at once by executing `scripts/make_examples.sh`.
+
+#### Full / Default (×1, 80 bits)
+
+Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) with all the default values (image size 1024×1024, centered in $-0.75+0j$ and with width of $2.5$, a good frame that contains the whole set):
+
+```sh
+$ poetry run zoom image
+
+1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, 512 iterations...
+
+Img: 100%|█████████████████████████████████████████████| 1024/1024 [00:08<00:00, 124.58ln/s]
+
+Generated image '6129072fffc1c8cb911e7b7ea0e8eba4d3722d35c4a5f4d1b8607b3f49c2e2c3' in 8.260 s
+Saved to 'mandel-20260507151339-6129072fffc1.png'
+```
+
+This is what tranZoom considers ***"1 magnification"***, and will measure other magnifications against this size.
+
+#### Seahorse (×155, 83 bits)
+
+Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mandel_zoom_03_seehorse.jpg) to a 512×512 image:
+
+```sh
+$ poetry run zoom -w 512 -h 512 image " -0.74303" "0.126433" "0.01611"
+
+512x512 Mandelbrot in frame [(-74303/100000, 126433/1000000) @ 1611/100000],
+precision 83 bits, 155.183 magnification, 1072 iterations...
+
+Img: 100%|█████████████████████████████████████████████| 512/512 [00:21<00:00, 24.07ln/s]
+
+Generated image '9f555784d1ba4c7f3596392344f55b21c9fee50cd0704e8f23f9ebe0d712eecb' in 21.294 s
+Saved to 'mandel-20260507152011-9f555784d1ba.png'
+```
+
+#### Seahorse Tail (×3k, 88 bits)
+
+Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tail_part.jpg) to a 512×512 image:
+
+```sh
+$ poetry run zoom -w 512 -h 512 image " -0.7436499" "0.13188204" "0.00073801"
+
+512x512 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) @ 73801/100000000],
+precision 88 bits, 3.387 k magnification, 1415 iterations...
+
+Img: 100%|█████████████████████████████████████████████| 512/512 [00:11<00:00, 45.56ln/s]
+
+Generated image '5a4f21f401eee6c457bec194e2b12c7c6684c7f5dd5ec7cb6ef9ee6b14588318' in 11.266 s
+Saved to 'mandel-20260507152619-5a4f21f401ee.png'
+```
+
+#### Satellite Antenna (×852k, 96 bits)
+
+Render a ["Satellite Antenna"](https://en.wikipedia.org/wiki/File:Mandel_zoom_08_satellite_antenna.jpg) to a 256×256 image:
+
+```sh
+$ poetry run zoom -w 256 -h 256 image " -0.743644786" "0.1318252536" "0.0000029336"
+
+256x256 Mandelbrot in frame [(-371822393/500000000, 164781567/1250000000) @ 3667/1250000000],
+precision 96 bits, 852.195 k magnification, 2030 iterations...
+
+Img: 100%|█████████████████████████████████████████████| 256/256 [00:21<00:00, 11.96ln/s]
+
+Generated image '11f65b438d7f9b75be209d08c594f567588de3a57e5f93249da7e0a08a4bf7fd' in 21.432 s
+Saved to 'mandel-20260507153058-11f65b438d7f.png'
+```
+
+#### Satellite Seahorse Tail with Julia Island (×4G, 108 bits)
+
+Render a ["Satellite Seahorse Tail with Julia Island"](https://en.wikipedia.org/wiki/File:Mandel_zoom_13_satellite_seehorse_tail_with_julia_island.jpg) to a 256×256 image:
+
+```sh
+$ poetry run zoom -w 256 -h 256 image " -0.74364388717342" "0.13182590425182" "0.00000000059849"
+
+256x256 Mandelbrot in frame [(-37182194358671/50000000000000, 6591295212591/50000000000000) @
+59849/100000000000000], precision 108 bits, 4.177 G magnification, 2974 iterations...
+
+Img: 100%|█████████████████████████████████████████████| 256/256 [00:31<00:00,  8.16ln/s]
+
+Generated image '2a0ed82d5e0fbba920ad7593a1b298ebd4ce9c8e4cdceab905a1f751ce75957b' in 31.398 s
+Saved to 'mandel-20260507153351-2a0ed82d5e0f.png'
+```
+
+#### One Island (×417G, 115 bits)
+
+Render an ["One Island"](https://commons.wikimedia.org/wiki/File:Mandel_zoom_15_one_island.jpg) to a 256×256 image:
+
+```sh
+$ poetry run zoom -w 256 -h 256 image " -0.743643887036" "0.13182590421" "0.000000000006"
+
+256x256 Mandelbrot in frame [(-185910971759/250000000000, 13182590421/100000000000) @ 3/500000000000], precision 115 bits, 416.667 G magnification, 3486 iterations...
+
+Img: 100%|█████████████████████████████████████████████| 256/256 [01:14<00:00,  3.43ln/s]
+
+Generated image 'fe957c271352991f6243d014c11558cf7f6abcfde61c5ade870a3a00e48ffa6e' in 1.244 min
+Saved to 'mandel-20260507153620-fe957c271352.png'
+```
+
+#### Last Lights On (×2.5e+228, 835 bits)
+
+Render a ["Last Lights On"](https://youtu.be/foxD6ZQlnlU) ultra-deep zoom to a 64×64 image:
+
+```sh
+$ poetry run zoom -w 64 -h 64 image " -1.7685736563152709932817429153295447129341200534055498823375111352827765533646353820119779335363321986478087958745766432300344486098206084588445291690832853792608335811319613234806674959498380432536269122404488847453646628324959064543" " -0.0009642968513582800001762427203738194482747761226565635652857831533070475543666558930286153827950716700828887932578932976924523447497708248894734256480183898683164582055541842171815899305250842692638349057118793296768325124255746563" "0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+
+TODO: add example
+```
+
+#### Eye of the Universe (×2.5e+1090, 3698 bits)
+
+Render an ["Eye of the Universe"](https://youtu.be/pCpLWbHVNhk) extra-ultra-deep zoom to a 64×64 image:
+
+```sh
+$ poetry run zoom -w 64 -h 64 image "0.360240443437614363236125244449545308482607807958585750488375814740195346059218100311752936722773426396233731729724987737320035372683285317664532401218521579554288661726564324134702299962817029213329980895208036363104546639698106204384566555001322985619004717862781192694046362748742863016467354574422779443226982622356594130430232458472420816652623492974891730419252651127672782407292315574480207005828774566475024380960675386215814315654794021855269375824443853463117354448779647099224311848192893972572398662626725254769950976527431277402440752868498588785436705371093442460696090720654908973712759963732914849861213100695402602927267843779747314419332179148608587129105289166676461292845685734536033692577618496925170576714796693411776794742904333484665301628662532967079174729170714156810530598764525260869731233845987202037712637770582084286587072766838497865108477149114659838883818795374195150936369987302574377608649625020864292915913378927790344097552591919409137354459097560040374880346637533711271919419723135538377394364882968994646845930838049998854075817859391340445151448381853615103761584177161812057928" " -0.64131306106480317486037501517930206657949495228230525955617754306444857417275369025563702306896811623707405655370721497901069732111052737408519933948032874376062385962622877310759994839404671612888406145810912943257099889922691650073943057326832083188346723669475507109200885016557042523852444811688364262770522325934129814722379683536614777935303366072477389516258177554010650453622730397883322455673450616657567086893592945166682714405252736530837178777012377561442143948702455985908839737165316911242866695528036404140685233252768089090403176170926838265215015399323972620120110820987219446431186950012260489774300385094701017155554390478847520583348048913896855309461126215734165824829262218047674662583460144179343561498373520926088916390727459306393646935132167191145233289906900695886760879236566576560237944843247975460242483281565864716626310087413490699614938176001001334397215579692632211850959512414914087567515824713075373828279240737467608840817048879020400360566114013787859524521050992424992410032080134608784429534086481786923537881537872299402216117310344052035199453139116273149008518510721229904925" "0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+
+TODO: add example
+```
+
+### Deep zoom capability
+
+tranZoom supports zoom levels far beyond what standard floating point can represent. A few examples and their required precision:
+
+| Magnification | Approx. scale | Bits needed | Example |
 | --- | --- | --- | --- |
-| `<PROJECT>_CONFIG` | Config file path | \<auto\> | |
-| `<PROJECT>_LOG_LEVEL` | Log level | info | debug |
-| `<PROJECT>_NO_COLOR` | Disable color | \<unset\> | obeys `NO_COLOR` too |
+| 1× | 2.5 (full set) | 80 | Default view |
+| 155× | ~0.016 | 83 | Seahorse valley |
+| 3.4k× | ~7e-4 | 88 | Seahorse tail |
+| 850k× | ~3e-9 | 96 | Satellite antenna |
+| 4.2G× | ~6e-10 | 108 | Satellite seahorse tail |
+| 417G× | ~6e-12 | 115 | One island |
+| ~10^230× | ~10^-231 | ~835 | Deep in the set |
 
-### *Input / output behavior (TODO)*
+The `precision` property of a `Frame` automatically computes the required bits, and `gmpy2.local_context()` ensures all floating-point operations in `Mandelbrot()` use that precision. Maximum supported precision is 300,000 bits (~100k decimal digits).
 
-#### *`stdin` and piping (TODO)*
+### Configuration
 
-```sh
-cat input.txt | <project> <command> --from-stdin
-```
+Config files are stored in OS-native locations via `transcrypto.utils.config`:
 
-#### *Output formats (TODO)*
+- macOS: `~/Library/Application Support/tranzoom/config.bin`
+- Linux: `~/.config/tranzoom/config.bin`
+- Windows: `%APPDATA%\tranzoom\config.bin`
 
-- *Human-readable (default)*
-- *JSON (`--json`) for automation and scripting*
+### Color and formatting
 
-#### Color and formatting
+The CLI respects the `NO_COLOR` environment variable and the `--no-color` / `--color` flag. Rich markup is used for console output — see [Rich markup conventions](https://rich.readthedocs.io/en/latest/markup.html).
 
-Rich can provide color output in logging and in CLI output. App:
-
-- Respects `NO_COLOR` environment variable
-- Has `--no-color` / `--color` flag: if given will override the `NO_COLOR` environment variable
-- If there is no environment variable and no flag is given, default to having color
-
-To control color see [Rich's markup conventions](https://rich.readthedocs.io/en/latest/markup.html). In summary, the basic 16 colors are:
-
-- `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`
-- Bright variants: `bright_black` (gray), `bright_red`, `bright_green`, `bright_yellow`, `bright_blue`, `bright_magenta`, `bright_cyan`, `bright_white`
-
-Extended named colors (256-color palette) are as above, plus many more, including these useful ones:
-
-- `grey0` through `grey100` (grayscale)
-- `dark_red`, `light_red`, `dark_green`, `light_green`, `dark_blue`, `light_blue`, `dark_cyan`, `light_cyan`, `dark_magenta`, `light_magenta`
-- `orange1`, `orange3`, `orange4`, `purple`, `purple4`, `gold1`, `gold3`
-
-Styles you can combine with colors are: `bold`, `dim`, `italic`, `underline`, `blink`, `reverse`, `strike`, `overline`. Common usage patterns:
-
-- `[red]text[/]` - red text
-- `[bold red]text[/]` - bold red text
-- `[bold]text[/]` - just bold
-- `[#ff0000]text[/]` - hex color (RGB)
-- `[rgb(255,0,0)]text[/]` - RGB notation
-- `[on blue]text[/]` - blue **background**
-- `[red on white]text[/]` - red text on white **background**
-
-#### *Exit codes (TODO)*
+### Exit codes
 
 | Code | Meaning |
 | --- | --- |
 | 0 | Success |
 | 1 | Generic failure |
-| 2 | CLI usage error |
-| 3 | Runtime dependency failure (network/filesystem) |
-| 4 | Partial success (some items failed) |
+| 2 | CLI usage error (bad arguments) |
 
-*Keep this stable if users will script against it.*
+## Project Design
 
-### *Logging and observability (TODO)*
+### Architecture overview
 
-- *Log levels: error|warn|info|debug|trace*
-- *Structured logs: \<supported? --log-format=json\>*
-- *Debug bundle: \<project\> debug report (if available)*
+```txt
+zoom CLI (zoom.py: Main callback, global options, TranZoomConfig)
+    └── zoom image (cli/imagecommand.py)
+            └── fractal.Frame + fractal.Mandelbrot() (core/fractal.py)
+                    ├── gmpy2 mpq — exact coordinate representation
+                    ├── gmpy2 mpfr — arbitrary-precision escape-time math
+                    └── Pillow — PNG image output
+```
 
-### *Safety features (TODO)*
-
-- *Dry run: `--dry-run` (no side effects)*
-- *Non-interactive: `--yes` / `--no-input`*
-- *Force: `--force` (document exactly what it bypasses)*
-
-## *Project Design (TODO)*
-
-### *Architecture overview (TODO)*
-
-*\<High-level description of components and how they interact.\>*
-
-*Example:*
-
-- *CLI parser → configuration loader → core engine → output renderer*
-- *Optional: plugins/adapters for external systems*
-
-### *Modules / packages (TODO)*
+### Modules / packages
 
 | Component | Responsibility |
 | --- | --- |
-| cmd/ | CLI entrypoints and subcommands |
-| internal/core/ | Core business logic |
-| internal/io/ | Filesystem/network adapters |
-| internal/output/ | Output formatting (human/JSON) |
+| `zoom.py` | CLI entry point (`app`, `Main`, `TranZoomConfig`) |
+| `cli/base.py` | Shared CLI options, defaults, `DEFAULT_FRAME` |
+| `cli/imagecommand.py` | `zoom image` command implementation |
+| `core/fractal.py` | `Frame` class and `Mandelbrot()` renderer — all fractal math |
+| `utils/template.py` | Template for new utility modules |
 
-### *Data flow (TODO)*
+### Performance characteristics
 
-1. *Parse args + load config*
-1. *Validate inputs*
-1. *Execute core operation(s)*
-1. *Collect results and render output*
-1. *Return exit code*
+Rendering is CPU-bound. Time scales roughly with `width × height × max_iter × precision_overhead`. For deep zooms, higher precision means slower `mpfr` arithmetic (roughly linear in the number of bits). For very deep zooms (>100 bits precision), rendering a 256×256 image at 50k iterations can take minutes to hours. The `tqdm` progress bar shows per-row speed.
 
-### *Error handling philosophy (TODO)*
-
-- *Clear actionable messages for user errors*
-- *Structured errors for --json*
-- *Avoid leaking secrets in errors/logs*
-
-### *Security model (TODO)*
-
-- *Principle of least privilege*
-- *Secret handling: never log secrets; redact by default*
-- *TLS verification: on by default; disabling requires explicit opt-in*
-
-### *Performance characteristics (TODO)*
-
-- *Intended scale:*
-- *Complexity notes:*
-- *Benchmarks:*
+The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image and reuses them across rows, which is an important optimization since `mpfr` construction is expensive at high precision.
 
 ## Development Instructions
 
@@ -445,8 +450,8 @@ Styles you can combine with colors are: `bold`, `dim`, `italic`, `underline`, `b
 ├── CHANGELOG.md                  ⟸ latest changes/releases
 ├── LICENSE
 ├── Makefile
-├── mycli.md                      ⟸ this is auto-generated CLI doc (by `make docs` or `make ci`)
-├── poetry.lock                   ⟸ this is maintained by Poetry, do not manually edit
+├── zoom.md                       ⟸ auto-generated CLI doc (by `make docs` or `make ci`)
+├── poetry.lock                   ⟸ maintained by Poetry; do not manually edit
 ├── pyproject.toml                ⟸ most important configurations live here
 ├── README.md                     ⟸ this documentation
 ├── SECURITY.md                   ⟸ security policy
@@ -455,95 +460,69 @@ Styles you can combine with colors are: `bold`, `dim`, `italic`, `underline`, `b
 ├── .gitignore
 ├── .pre-commit-config.yaml       ⟸ pre-submit configs
 ├── .github/
-│   ├── copilot-instructions.md   ⟸ GitHub Copilot project-specific instructions
-│   ├── dependabot.yaml           ⟸ Github dependency update pipeline
+│   ├── copilot-instructions.md
+│   ├── dependabot.yaml
 │   └── workflows/
-│       ├── ci.yaml               ⟸ Github CI pipeline
-│       └── codeql.yaml           ⟸ Github security scans and code quality pipeline
+│       ├── ci.yaml
+│       └── codeql.yaml
 ├── .vscode/
 │   ├── extensions.json
-│   └── settings.json             ⟸ VSCode configs
+│   └── settings.json
 ├── scripts/
-│   └── template.py               ⟸ Use template & directory for executable standalone scripts
+│   └── template.py               ⟸ template for standalone executable scripts
 ├── src/
-│   └── <your_pkg>/               ⟸ change this directory's name (originally mycli)
-│       ├── __init__.py
+│   └── tranzoom/
+│       ├── __init__.py           ⟸ version lives here
 │       ├── __main__.py
-│       ├── mycli.py              ⟸ Main CLI app entry point (Main())
+│       ├── zoom.py               ⟸ main CLI entry point (Main, TranZoomConfig)
 │       ├── py.typed
 │       ├── cli/
 │       │   ├── __init__.py
-│       │   └── randomcommand.py  ⟸ CLI commands implementation, to keep `mycli.py` clean
+│       │   ├── base.py           ⟸ shared CLI options and frame defaults
+│       │   └── imagecommand.py   ⟸ `zoom image` command implementation
 │       ├── core/
 │       │   ├── __init__.py
-│       │   └── example.py        ⟸ Business logic goes in this directory
+│       │   └── fractal.py        ⟸ Frame class and Mandelbrot() renderer
 │       └── utils/
 │           ├── __init__.py
-│           └── template.py       ⟸ Use template for starting regular modules
-├── tests/                        ⟸ Unit-Testing goes in this directory
-│   ├── mycli_test.py
-│   └── ...                       ⟸ Usually, a similar structure to `src/mycli/...`
+│           └── template.py       ⟸ template for new utility modules
+├── tests/
+│   ├── zoom_test.py
+│   └── cli/
+│       └── imagecommand_test.py
 └── tests_integration/
-    └── test_installed_cli.py     ⟸ Integration testing goes in this directory
+    └── test_installed_cli.py
 ```
-
-What each area is for:
-
-- `src/<your_pkg>/cli.py`: **Typer app** definition, top-level callback (**Main**), and all **commands/subcommands**.
-- `src/<your_pkg>/core/example.py`: **“Business logic”** layer. CLI commands call into here. This is the main testable logic layer.
-- `src/<your_pkg>/utils/template.py`: A template module showing a recommended docstring structure for **new modules**.
-- `tests/test_cli.py`: Comprehensive CLI **tests** using Typer’s CliRunner, pytest.mark.parametrize, and unittest.mock.patch.
-- `scripts/template.py`: A template for **“directly executable scripts”** (includes a shebang).
-
-Specifically note and use the templates.
-
-- **`src/<your_pkg>/utils/template.py`** is a suggested “module docstring skeleton” (purpose, API, inputs, errors, security, etc.). Copy it when creating new modules.
-- **`scripts/template.py`** is a suggested “executable script skeleton” (with shebang) that imports and calls into the package. Scripts should remain thin.
-
-Make sure you are familiar with the [`poetrycli` Features explained](#poetrycli-features-explained) for this project so you understand the philosophy behind developing for the structure here.
 
 ### Development Setup
 
-#### *Requirements (TODO)*
-
 #### Install Python
 
-Here is a suggested recipe to install an arbitrary Python version on **Linux**:
+On **Linux**:
 
 ```sh
-sudo apt-get update
-sudo apt-get upgrade
+sudo apt-get update && sudo apt-get upgrade
 sudo apt-get install git python3 python3-dev python3-venv build-essential software-properties-common
-
-sudo add-apt-repository ppa:deadsnakes/ppa
-sudo apt-get update
-sudo apt-get install python3.12  # or python3.13 or python3.14 - TODO: pick a version
+sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt-get update
+sudo apt-get install python3.12  # or python3.13 or python3.14
 ```
 
-and on **Mac**:
+On **macOS**:
 
 ```sh
-brew update
-brew upgrade
-brew cleanup -s
-
-brew install git python@3.12  # or python3.13 or python3.14 - TODO: pick a version
+brew update && brew upgrade && brew cleanup -s
+brew install git python@3.12  # or python3.13 or python3.14
 ```
+
+Note: `gmpy2` requires the GMP, MPFR, and MPC C libraries. On macOS: `brew install gmp mpfr mpc`. On Linux: `sudo apt-get install libgmp-dev libmpfr-dev libmpc-dev`.
 
 #### Install Poetry (recommended: `pipx`)
 
 [Poetry reference.](https://python-poetry.org/docs/cli/)
 
-Install `pipx` (if you don’t have it):
-
 ```sh
 python3 -m pip install --user pipx
 python3 -m pipx ensurepath
-```
-
-If you previously had **Poetry** installed, but ***not*** through `pipx` make sure to remove it first: `brew uninstall poetry` (mac) / `sudo apt-get remove python3-poetry` (linux). You should install Poetry with `pipx` and configure poetry to create `.venv/` locally. This keeps Poetry isolated from project virtual environments and python for the environments is isolated from python for Poetry. Do:
-
-```sh
 pipx install poetry
 poetry --version
 ```
@@ -551,12 +530,10 @@ poetry --version
 If you will use [PyPI](https://pypi.org/) to publish:
 
 ```sh
-poetry config pypi-token.pypi <TOKEN>  # add your personal PyPI project token, if any
+poetry config pypi-token.pypi <TOKEN>
 ```
 
 #### Make sure `.venv` is local
-
-This template expects a project-local virtual environment at `./.venv` (VSCode settings assume it, for example).
 
 ```sh
 poetry config virtualenvs.in-project true
@@ -565,47 +542,31 @@ poetry config virtualenvs.in-project true
 #### Get the repository
 
 ```sh
-git clone https://github.com/balparda/poetrycli.git poetrycli  # TODO: change to your project's repo
-cd poetrycli
+git clone https://github.com/balparda/tranzoom.git
+cd tranzoom
 ```
 
 #### Create environment and install dependencies
 
-From the repository root:
-
 ```sh
-poetry env use python3.12  # creates the .venv with the correct Python version - TODO: pick correct Python version
-poetry sync                # sync env to project's poetry.lock file
-poetry env info            # no-op: just to check that environment looks good
-poetry check               # no-op: make sure all pyproject.toml fields are being used correctly
-
-poetry run mycli --help    # simple test if everything loaded OK
-make ci                    # should pass OK on clean repo
+poetry env use python3.12   # creates the .venv with the correct Python version
+poetry sync                  # install all dependencies from poetry.lock
+poetry env info              # verify environment
+poetry run zoom --help       # smoke test
+make ci                      # should pass on clean repo
 ```
 
-To activate and use the environment do:
+To activate the environment:
 
 ```sh
-poetry env activate        # (optional) will print activation command for environment, but you can just use:
-source .venv/bin/activate  # because .venv SHOULD BE LOCAL
-...
-pytest -vvv  # for example, or other commands you want to execute in-environment
-...
-deactivate  # to close environment
+source .venv/bin/activate
+# ... work ...
+deactivate
 ```
 
 #### Optional: VSCode setup
 
-This repo ships a `.vscode/settings.json` configured to:
-
-- use `./.venv/bin/python`
-- run `pytest`
-- use **Ruff** as formatter
-- disable deprecated pylint/flake8 integrations
-- configure Google-style docstrings via **autoDocstring**
-- use **Code Spell Checker**
-
-Recommended VSCode extensions:
+This repo ships a `.vscode/settings.json` configured to use `./.venv/bin/python`, run `pytest`, format with Ruff, and use Google-style docstrings. Recommended extensions:
 
 - Python (`ms-python.python`)
 - Python Environments (`ms-python.vscode-python-envs`)
@@ -613,24 +574,24 @@ Recommended VSCode extensions:
 - Pylance (`ms-python.vscode-pylance`)
 - Mypy Type Checker (`ms-python.mypy-type-checker`)
 - Ruff (`charliermarsh.ruff`)
-- autoDocstring – Python Docstring Generator (`njpwerner.autodocstring`)
+- autoDocstring (`njpwerner.autodocstring`)
 - Code Spell Checker (`streetsidesoftware.code-spell-checker`)
 - markdownlint (`davidanson.vscode-markdownlint`)
-- Markdown All in One (`yzhang.markdown-all-in-one`) - helps maintain this `README.md` table of contents
-- Markdown Preview Enhanced (`shd101wyy.markdown-preview-enhanced`, optional)
-- GitHub Copilot (`github.copilot`) - AI assistant; reads `.github/copilot-instructions.md` for project-specific coding conventions (indentation, naming, workflow)
+- Markdown All in One (`yzhang.markdown-all-in-one`)
+- GitHub Copilot (`github.copilot`)
 
-### *Build (TODO)*
+### Build
 
 ```sh
-<build command>
+poetry build   # builds wheel + sdist in dist/
 ```
 
-### *Run locally (TODO)*
+### Run locally
 
 ```sh
-<project> --help
-<run-from-source command>
+poetry run zoom --help
+poetry run zoom image                                          # full set, 1024×1024
+poetry run zoom -w 512 -h 512 image "-0.74303" "0.126433" "0.01611"  # seahorse valley
 ```
 
 ### Testing
@@ -638,139 +599,91 @@ Recommended VSCode extensions:
 #### Unit tests / Coverage
 
 ```sh
-make test               # plain test run, no integration tests
+make test               # plain test run (no integration tests)
 make integration        # run the integration tests
-poetry run pytest -vvv  # verbose test run, includes integration tests
+poetry run pytest -vvv  # verbose
 
-make cov  # coverage run, equivalent to: poetry run pytest --cov=src --cov-report=term-missing
+make cov  # coverage: poetry run pytest --cov=src --cov-report=term-missing
 ```
 
-A test can be marked with a "tag" by just adding a decorator:
-
-```py
-@pytest.mark.slow
-def test_foo_method() -> None:
-  """Test."""
-  ...
-```
-
-These tags, like `slow` above are defined in `pyproject.toml`, in section `[tool.pytest.ini_options.markers]`, and you can define your own there. The ones already defined are:
+Test tags defined in `pyproject.toml`:
 
 | Tag | Meaning |
 | --- | --- |
-| `slow` | test is slow (> 1s) |
-| `flaky` | AVOID! - test is known to be flaky |
-| `stochastic` | test is capable of failing (even if very unlikely) |
+| `slow` | test takes > 1s |
+| `flaky` | known flaky test — avoid |
+| `stochastic` | may fail with very low probability |
 
-You can use them to filter tests, for example:
+Filter by tag:
 
 ```sh
-poetry run pytest -vvv -m slow  # run only the slow tests
+poetry run pytest -vvv -m slow
 ```
 
-You can find the slowest tests by running (example suggestions):
+Find slow tests:
 
 ```sh
 poetry run pytest -vvv -q --durations=20
-poetry run pytest -vvv -q --durations=20 -m "not slow"  # find unknown slow methods
-poetry run pytest -vvv -q --durations=20 -m slow        # check methods marked `slow` are in fact slow
 ```
 
-You can search for flaky tests by running `make flakes`, which runs all tests 100 times. Or you can do more, like in the example:
+Find flaky tests:
 
 ```sh
-make flakes  # equivalent to: poetry run pytest --flake-finder --flake-runs=100 -q tests
-poetry run pytest --flake-finder --flake-runs=10000 -m "not slow"
+make flakes  # runs all tests 100 times
 ```
 
 #### Instrumenting your code
 
-You can instrument your code to find bottlenecks:
-
 ```sh
-$ source .venv/bin/activate
-$ which mycli
-/path/to/.venv/bin/mycli  # <== place this in the command below:
-$ pyinstrument -r html -o output1.html -- /path/to/.venv/bin/mycli <your-cli-command> <your-cli-flags>
-$ deactivate
+source .venv/bin/activate
+pyinstrument -r html -o profile.html -- $(which zoom) image "-0.74303" "0.126433" "0.01611"
+deactivate
 ```
-
-This will save a file `output1.html` to the project directory with the timings for all method calls. Make sure to **cleanup** these html files later.
 
 #### Integration / e2e tests
 
-Integration tests validate packaging and the installed console script by:
-
-- building a wheel from the repository
-- installing that wheel into a fresh temporary virtualenv
-- running the installed console script(s) to verify behavior (for example, `--version` and basic commands)
-
-The canonical integration test is [tests_integration/test_installed_cli.py](tests_integration/test_installed_cli.py). It uses helpers from `transcrypto.utils.config` to simplify the workflow:
-
-- `EnsureAndInstallWheel(repo_root, tmp_path, expected_version, app_names)` — builds the wheel and installs it into a temporary venv, returning the venv python and `bin` directory.
-- `EnsureConsoleScriptsPrintExpectedVersion(vpy, bin_dir, expected_version, app_names)` — verifies the console scripts exist and that `--version` prints the expected version.
-- `CallGetConfigDirFromVEnv(vpy, app_name)` — calls the installed CLI inside the venv to find its data/config directory (used for cleanup/isolation).
-
-Tests in this suite are marked with `pytest.mark.integration`.
-
-Run the integration tests with:
+Integration tests build a wheel, install it into a fresh temporary virtualenv, and run the console scripts. Run with:
 
 ```sh
-# Run only integration-marked tests (recommended)
-poetry run pytest -m integration -q
-
-# Or run the full integration target (equivalent)
 make integration
+# or:
+poetry run pytest -m integration -q
 ```
-
-Notes:
-
-- These tests are slower and require `poetry`/venv support on the host system.
-- Keep the `_APP_NAME` / `_APP_NAMES` constants in the test aligned with your package and console-script names.
-- Use `--no-color` in assertions to avoid ANSI escape sequences when checking output.
-
-#### *Golden tests for CLI output (TODO)*
-
-- *Human output:*
-- *JSON output:*
 
 ### Linting / formatting / static analysis
 
 ```sh
-make lint  # equivalent to: poetry run ruff check .
-make fmt   # equivalent to: poetry run ruff format .
-```
+make lint  # poetry run ruff check .
+make fmt   # poetry run ruff format .
 
-To check formatting without rewriting:
-
-```sh
-poetry run ruff format --check .
+poetry run ruff format --check .  # check formatting without rewriting
 ```
 
 #### Type checking
 
 ```sh
-make type  # equivalent to: poetry run mypy src tests tests_integration
+make type  # poetry run mypy src tests tests_integration
 ```
 
-(Pyright is primarily for editor-time; MyPy is what CI enforces.)
+### Documentation updates
 
-### *Documentation updates (TODO)*
+CLI reference is auto-generated from the CLI source code:
 
-- *How docs are built: \<mkdocs/docusaurus/sphinx/etc.\>*
-- *CLI reference generation:*
+```sh
+make docs  # regenerates zoom.md
+# or:
+poetry run zoom markdown > zoom.md
+```
+
+Always run `make ci` before committing — it runs linting, type checking, tests, and regenerates docs and `requirements.txt`.
 
 ### Versioning and releases
 
-Make sure you are familiar with the [`poetrycli` Features explained](#poetrycli-features-explained) for this project so you understand the philosophy behind developing for the structure here.
-
 #### Versioning scheme
 
-This project follows a pragmatic versioning approach:
-
 - **Patch**: bug fixes / docs / small improvements.
-- **Minor**: new template features or non-breaking developer workflow changes.
-- **Major**: breaking template changes (e.g., required file/command renames).
+- **Minor**: new features or non-breaking changes.
+- **Major**: breaking changes (command renames, incompatible output formats).
 
 See: [CHANGELOG.md](CHANGELOG.md)
 
@@ -778,152 +691,87 @@ See: [CHANGELOG.md](CHANGELOG.md)
 
 ##### Bump project version (patch/minor/major)
 
-Poetry can bump versions:
-
 ```sh
-# bump the version!
-poetry version minor  # updates 1.6 to 1.7, for example
-# or:
-poetry version patch  # updates 1.6 to 1.6.1
-# or:
-poetry version <version-number>
-# (also updates `pyproject.toml` and `poetry.lock`)
+poetry version minor   # 1.0.0 → 1.1.0
+poetry version patch   # 1.0.0 → 1.0.1
+poetry version 1.2.3   # explicit version
 ```
 
-This updates `[project].version` in `pyproject.toml`. **Remember to also update `src/<your_pkg>/__init__.py` to match (this repo gets/prints `__version__` from there)!**
+**Also update `src/tranzoom/__init__.py` to match!**
 
 ##### Update dependency versions
 
-The project has a [**dependabot**](https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/dependabot-quickstart-guide) config file in `.github/dependabot.yaml` that weekly (defaulting to Tuesdays) scans both Github actions and the project dependencies and creates PRs to update them.
-
-To update `poetry.lock` file to more current versions do `poetry update`, it will ignore the current lock, update, and rewrite the `poetry.lock` file. If you have cache problems `poetry cache clear PyPI --all` will clean it.
-
-To add a new dependency you should do:
-
 ```sh
-poetry add "pkg>=1.2.3"  # regenerates lock, updates env (adds dep to prod code)
-poetry add -G dev "pkg>=1.2.3"  # adds dep to dev code ("group" dev)
-# also remember: "pkg@^1.2.3" = latest 1.* ; "pkg@~1.2.3" = latest 1.2.* ; "pkg@1.2.3" exact
+poetry update                      # update poetry.lock to latest compatible versions
+poetry cache clear PyPI --all      # if cache issues
+poetry add "pkg>=1.2.3"            # add prod dependency
+poetry add -G dev "pkg>=1.2.3"     # add dev dependency
 ```
-
-Keep tool versions aligned. Remember to check your diffs before submitting (especially `poetry.lock`) to avoid surprises!
 
 ##### Exporting the `requirements.txt` file
 
-This template does not generate `requirements.txt` automatically (Poetry uses `poetry.lock`). If you need a `requirements.txt` for Docker/legacy tooling, use Poetry’s export plugin (`poetry-plugin-export`) by simply running:
-
 ```sh
-make req  # or: poetry export --format requirements.txt --without-hashes --output requirements.txt
+make req  # poetry export --format requirements.txt --without-hashes --output requirements.txt
 ```
 
 ##### CI and docs
 
-Make sure to run `make docs` or even better `make ci`. Both will update the CLI markdown docs and `requirements.txt` automatically.
+```sh
+make ci  # runs lint, type check, tests, docs, requirements — do this before every commit
+```
 
 ##### Git tag and commit
 
-Publish to GIT, including a TAG:
-
 ```sh
-git commit -a -m "release version 0.1.0"
-git tag 0.1.0
-git push
-git push --tags
+git commit -a -m "release version 1.0.0"
+git tag 1.0.0
+git push && git push --tags
 ```
 
 ##### Publish to PyPI
 
-If you already have your PyPI token registered with Poetry (see [Install Poetry](#install-poetry-recommended-pipx)) then just:
-
 ```sh
+poetry config pypi-token.pypi <TOKEN>  # once, if not already configured
 poetry build
 poetry publish
 ```
-
-Remember to update [CHANGELOG.md](CHANGELOG.md).
-
-### *Contributing (TODO)*
-
-- *See `CONTRIBUTING.md*`
-- *Code of conduct: `CODE_OF_CONDUCT.md`*
 
 ## Security
 
 Please refer to the security policy in [SECURITY.md](SECURITY.md) for supported versions and how to report vulnerabilities.
 
-The project has a [**codeql**](https://codeql.github.com/docs/) config file in `.github/workflows/codeql.yaml` that weekly (defaulting to Fridays) scans the project for code quality and security issues. It will also run on all commits. Github security issues will be opened in the project if anything is found.
+The project uses [**CodeQL**](https://codeql.github.com/docs/) (weekly + on every push) and [**dependabot**](https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/dependabot-quickstart-guide) (weekly dependency updates) to keep the codebase secure and up-to-date.
 
-### *Supply chain (TODO)*
+## Troubleshooting
 
-- *Dependency pinning:*
-- *Signed releases: \<GPG/cosign\>*
-- *SBOM: \<available? where?\>*
-
-## *Reliability (TODO)*
-
-### *Operational guidance (TODO)*
-
-- *Recommended timeouts:*
-- *Retry behavior:*
-- *Idempotency:*
-
-### *Running in automation (TODO)*
-
-- *CI usage examples*
-- *Cron usage examples*
-- *Non-interactive flags (`--yes`, `--json`, `--quiet`)*
-
-### *Failure modes (TODO)*
-
-- *Network failures:*
-- *Partial failures: \<exit code + output behavior\>*
-- *Rate limiting:*
-
-## *Troubleshooting (TODO)*
-
-### *Enable debug output (TODO)*
+### Enable debug output
 
 ```sh
-<project> --verbose
-<project> --log-level debug <command>
+zoom -vvv image ...   # DEBUG level logging
 ```
 
-### *Common issues (TODO)*
+### `gmpy2` installation issues
 
-- *Problem:*
-*Cause:*
-*Fix:*
-
-- *Problem:*
-*Fix:*
-
-### *Collect diagnostics (TODO)*
+On macOS, `gmpy2` requires the GMP, MPFR, and MPC C libraries. Install them first:
 
 ```sh
-<project> debug report --output diagnostics.zip
+brew install gmp mpfr mpc
+poetry sync
 ```
 
-## *FAQ (TODO)*
+On Linux:
 
-### *FAQ Section I (TODO)*
+```sh
+sudo apt-get install libgmp-dev libmpfr-dev libmpc-dev
+poetry sync
+```
 
-#### *Why does `<project>` need `<permission/dependency>`? (TODO)*
+### Rendering is very slow
 
-*\<Answer\>*
-
-#### *How do I migrate from version X to Y? (TODO)*
-
-*\<Answer + link to migration guide\>*
-
-#### *How stable is the JSON output? (TODO)*
-
-*\<Answer + schema contract\>*
-
-## *Glossary (TODO)*
-
-- A
-- B
+- Reduce image size: `zoom -w 256 -h 256 image ...`
+- `max_iter` is auto-scaled with zoom depth; very deep zooms are inherently slow
+- Very high precision (> 1000 bits, i.e., zoom > ~10^300) will always be slow — this is expected
 
 ---
 
-*Thanks!* - Daniel Balparda
+Thanks! *Daniel Balparda & Bella Keri*
