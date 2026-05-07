@@ -1,6 +1,9 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""CLI: Random commands."""
+"""CLI: Image command.
+
+<https://en.wikipedia.org/wiki/Mandelbrot_set>
+"""
 
 from __future__ import annotations
 
@@ -8,11 +11,11 @@ import pathlib
 import time
 
 import click
-import typer
 from transcrypto.cli import clibase
 from transcrypto.utils import timer
 
 from tranzoom import zoom
+from tranzoom.cli import base
 from tranzoom.core import fractal
 
 
@@ -27,12 +30,10 @@ from tranzoom.core import fractal
 def Image(  # documentation is help/epilog/args # noqa: D103
   *,
   ctx: click.Context,
-  center_re: str = typer.Argument('-0.6', help='Real part of the center point; default is "-0.6"'),
-  center_im: str = typer.Argument('0', help='Imaginary part of the center point; default is "0"'),
-  f_width: str = typer.Argument('3', help='Width of the frame in the real plane; default is "3"'),
-  f_height: str | None = typer.Argument(
-    None, help='Height of the frame in the imaginary plane; default is None, i.e, the same as width'
-  ),
+  center_re: str = base.FRAME_CENTER_RE_OPTION,  # type: ignore[assignment]
+  center_im: str = base.FRAME_CENTER_IM_OPTION,  # type: ignore[assignment]
+  f_width: str = base.FRAME_WIDTH_OPTION,  # type: ignore[assignment]
+  f_height: str | None = base.FRAME_HEIGHT_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity
   config: zoom.TranZoomConfig = ctx.obj
