@@ -33,9 +33,9 @@ Usage: zoom image [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  Make a Mandelbrot image.                                                                                                                                  
                                                                                                                                                            
 ╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│   center_re      [CENTER_RE]  Real part of the center point; default is "-0.6"                                                           │
-│   center_im      [CENTER_IM]  Imaginary part of the center point; default is "0"                                                            │
-│   f_width        [F_WIDTH]    Width of the frame in the real plane; default is "3"                                                          │
+│   center_re      [CENTER_RE]  Real part of the center point; default is '-0.75'                                                         │
+│   center_im      [CENTER_IM]  Imaginary part of the center point; default is '0'                                                            │
+│   f_width        [F_WIDTH]    Width of the frame in the real plane; default is '2.5'                                                      │
 │   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; default is None, i.e, the same as width                                       │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
