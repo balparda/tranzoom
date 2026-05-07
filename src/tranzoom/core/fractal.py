@@ -116,7 +116,8 @@ class Frame:
       Frame: A Frame object representing the rectangle defined by the two corners.
 
     Raises:
-      Error: if the coordinates cannot be converted to mpfr or if the resulting frame is invalid
+      Error: if the coordinates cannot be converted to mpq or if they do not define a rectangle
+        with area
 
     """
     x1: gmpy2.mpq = gmpy2.mpq(re1)
