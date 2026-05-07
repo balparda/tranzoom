@@ -27,7 +27,7 @@ from tranzoom.core import fractal
 def Image(  # documentation is help/epilog/args # noqa: D103
   *,
   ctx: click.Context,
-  center_re: str = typer.Argument('-0.5', help='Real part of the center point; default is "-0.5"'),
+  center_re: str = typer.Argument('-0.6', help='Real part of the center point; default is "-0.6"'),
   center_im: str = typer.Argument('0', help='Imaginary part of the center point; default is "0"'),
   f_width: str = typer.Argument('3', help='Width of the frame in the real plane; default is "3"'),
   f_height: str | None = typer.Argument(
@@ -39,7 +39,9 @@ def Image(  # documentation is help/epilog/args # noqa: D103
   try:
     frame: fractal.Frame = fractal.Frame.FromCenter(center_re, center_im, f_width, f_height)
   except Exception as err:
-    raise click.UsageError('Invalid coordinates') from err
+    raise click.UsageError(
+      f'Invalid coordinates: {center_re=}, {center_im=}, {f_width=}, {f_height=}'
+    ) from err
   config.console.print(f'{config.img_width}x{config.img_height} Mandelbrot in frame {frame}...')
   # render the image
   with timer.Timer(emit_log=False) as tmr:
