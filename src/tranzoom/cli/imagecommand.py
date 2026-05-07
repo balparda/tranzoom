@@ -24,8 +24,12 @@ from tranzoom.core import fractal
 @zoom.app.command(
   'image',
   help='Make a Mandelbrot image.',
-  epilog=(  # TODO: write example
-    ''
+  epilog=(
+    'Example:\n\n\n\n'
+    '$ poetry run zoom image\n\n'
+    '<saves fractal to disk with default frame>\n\n'
+    '$ poetry run zoom image " -0.3" 0 2  # note the space because of the "-"\n\n'
+    '<saves fractal to disk with center -0.3+0j and width 2>'
   ),
 )
 @clibase.CLIErrorGuard
