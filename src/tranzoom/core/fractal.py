@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import dataclasses
 import io
+from collections import abc
+from typing import cast
 
 import gmpy2
 import tqdm
@@ -18,7 +20,7 @@ from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 
 # basic constants
-_MIN_ITER: int = 100
+_MIN_ITER: int = 512
 DEFAULT_ITER: int = 1000
 MIN_IMAGE_SIZE: int = 4
 MAX_IMAGE_SIZE: int = 8192
@@ -36,6 +38,11 @@ _MPFR_ONE = gmpy2.mpfr('1')
 _MPFR_TWO = gmpy2.mpfr('2')
 _MPFR_FOUR = gmpy2.mpfr('4')
 
+# gmpy2.mpfr ultra-precision context factory
+PrecisionContext: abc.Callable[[], gmpy2.context] = lambda: gmpy2.local_context(
+  gmpy2.context(), precision=_MPFR_BIG_PRECISION
+)
+
 # gmpy2.mpq constants
 _MPQ_TWO = gmpy2.mpq(2)
 _MPQ_MAX_IMAGE_SIZE = gmpy2.mpq(MAX_IMAGE_SIZE)
@@ -47,7 +54,7 @@ class Error(tbase.Error):
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class Frame:
-  """Defines a rectangular region of the complex plane, with arbitrary precision."""
+  """Defines a rectangular region of the complex plane, with arbitrary precision. Exact."""
 
   top_re: gmpy2.mpq  # the top-left corner of the rectangle
   top_im: gmpy2.mpq
@@ -66,6 +73,74 @@ class Frame:
     if self.top_im <= self.bottom_im:
       raise Error(f'top_im ({self.top_im}) must be > bottom_im ({self.bottom_im})')
 
+  @property
+  def center(self) -> tuple[gmpy2.mpq, gmpy2.mpq]:
+    """Get the center of the frame (re, im). Exact.
+
+    Returns:
+      tuple[gmpy2.mpq, gmpy2.mpq]: The center of the frame.
+
+    """
+    return ((self.top_re + self.bottom_re) / _MPQ_TWO, (self.top_im + self.bottom_im) / _MPQ_TWO)
+
+  @property
+  def size(self) -> tuple[gmpy2.mpq, gmpy2.mpq]:
+    """Get the size of the frame (re, im). Exact.
+
+    Returns:
+      tuple[gmpy2.mpq, gmpy2.mpq]: The size of the frame.
+
+    """
+    return (self.bottom_re - self.top_re, self.top_im - self.bottom_im)
+
+  @property
+  def scale(self) -> gmpy2.mpq:
+    """Get the scale of the frame, i.e., the smaller dimension. Exact.
+
+    Returns:
+      gmpy2.mpq: The scale of the frame.
+
+    """
+    s: tuple[gmpy2.mpq, gmpy2.mpq] = self.size
+    return min(s[0], s[1])
+
+  @property
+  def area(self) -> gmpy2.mpq:
+    """Get the area of the frame. Exact.
+
+    Returns:
+      gmpy2.mpq: The area of the frame.
+
+    """
+    s: tuple[gmpy2.mpq, gmpy2.mpq] = self.size
+    return s[0] * s[1]
+
+  @property
+  def magnification(self) -> tuple[gmpy2.mpfr, float]:
+    """Get frame magnification: How much "zoom" this frame has in relation to the whole set.
+
+    sqrt( DEFAULT_FRAME.area / self.area ) i.e., sqrt( WHOLE / this )
+
+    Returns:
+      tuple[gmpy2.mpfr, float]: (magnification, log10(magnification))
+
+    """
+    with PrecisionContext():
+      magnification: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(DEFAULT_FRAME.area / self.area))
+      return (magnification, float(cast('gmpy2.mpfr', gmpy2.log10(magnification))))
+
+  @property
+  def iterations(self) -> int:
+    """Get a suggested number of (max) iterations for the frame. Very naïve implementation.
+
+    Returns:
+      int: The number of suggested (max) iterations for the frame.
+
+    """
+    # TODO: histogram-based iteration limit
+    _, magnitude = self.magnification
+    return int(_MIN_ITER + 256 * magnitude) if magnitude > 0.0 else _MIN_ITER
+
   def __str__(self) -> str:
     """Get string representation of the frame.
 
@@ -73,21 +148,9 @@ class Frame:
       str: String representation of the frame.
 
     """
-    cx: gmpy2.mpq = (self.top_re + self.bottom_re) / _MPQ_TWO
-    cy: gmpy2.mpq = (self.top_im + self.bottom_im) / _MPQ_TWO
-    dx: gmpy2.mpq = self.bottom_re - self.top_re
-    dy: gmpy2.mpq = self.top_im - self.bottom_im
+    cx, cy = self.center
+    dx, dy = self.size
     return f'[({cx}, {cy}) @ {dx}]' if dx == dy else f'[({cx}, {cy}) @ ({dx}, {dy})]'
-
-  @property
-  def area(self) -> gmpy2.mpq:
-    """Get the area of the frame.
-
-    Returns:
-      gmpy2.mpq: The area of the frame.
-
-    """
-    return (self.bottom_re - self.top_re) * (self.top_im - self.bottom_im)
 
   @staticmethod
   def FromCoords(re1: str | float, im1: str | float, re2: str | float, im2: str | float) -> Frame:
@@ -165,14 +228,12 @@ class Frame:
 
     """
     # compute the size & most conservative scale - exact mpq computations
-    dx: gmpy2.mpq = self.bottom_re - self.top_re
-    dy: gmpy2.mpq = self.top_im - self.bottom_im
-    scale: gmpy2.mpq = min(dx / _MPQ_MAX_IMAGE_SIZE, dy / _MPQ_MAX_IMAGE_SIZE)
+    px_scale: gmpy2.mpq = self.scale / _MPQ_MAX_IMAGE_SIZE
     # log2 converts to mpfr, so we pick a huge, almost ridiculous, precision to do this in
-    with gmpy2.local_context(gmpy2.context(), precision=_MPFR_BIG_PRECISION):
+    with PrecisionContext():
       # need about -log2(scale) bits, plus guard
       n_precision: int = max(
-        _MPFR_MIN_PRECISION, int(gmpy2.ceil(-gmpy2.log2(scale))) + _MPFR_MIN_GUARD_BITS
+        _MPFR_MIN_PRECISION, int(gmpy2.ceil(-gmpy2.log2(px_scale))) + _MPFR_MIN_GUARD_BITS
       )
     # check for precision cap and return
     if n_precision > _MPFR_MAX_PRECISION:
@@ -188,6 +249,18 @@ class Frame:
 
     """
     return gmpy2.local_context(gmpy2.context(), precision=self.precision)
+
+
+# Frame: the default frame is the one that shows the whole Mandelbrot set, which is centered at
+# -0.75+0j and has width 2.5; the height is the same as the width by default;
+# The set <https://en.wikipedia.org/wiki/Mandelbrot_set> is contained in the rectangle with corners
+# -2.5-1.25j and 0.5+1.25j, which is exactly our default here
+DEFAULT_FRAME_CENTER_RE: str = '-0.75'
+DEFAULT_FRAME_CENTER_IM: str = '0'
+DEFAULT_FRAME_SIZE: str = '2.5'
+DEFAULT_FRAME: Frame = Frame.FromCenter(
+  DEFAULT_FRAME_CENTER_RE, DEFAULT_FRAME_CENTER_IM, DEFAULT_FRAME_SIZE
+)
 
 
 def Mandelbrot(  # noqa: PLR0914
@@ -224,8 +297,10 @@ def Mandelbrot(  # noqa: PLR0914
     raise Error(f'{max_iter=} must be >= {_MIN_ITER}')
   with frame.context:  # noqa: PLR1702
     # compute pixel size in complex plane and check frame validity
-    dx: gmpy2.mpq = (frame.bottom_re - frame.top_re) / gmpy2.mpq(width - 1)
-    dy: gmpy2.mpq = (frame.top_im - frame.bottom_im) / gmpy2.mpq(height - 1)
+    dx: gmpy2.mpq
+    dy: gmpy2.mpq
+    dx, dy = frame.size
+    dx, dy = dx / gmpy2.mpq(width - 1), dy / gmpy2.mpq(height - 1)
     if dx <= 0 or dy <= 0:
       raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
     # use a single bytearray for the whole image to avoid PIL overhead
