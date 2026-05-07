@@ -77,7 +77,7 @@ class Frame:
     cy: gmpy2.mpq = (self.top_im + self.bottom_im) / _MPQ_TWO
     dx: gmpy2.mpq = self.bottom_re - self.top_re
     dy: gmpy2.mpq = self.top_im - self.bottom_im
-    return f'[({cx}, {cy}) ± {dx}]' if dx == dy else f'[({cx}, {cy}) ± ({dx}, {dy})]'
+    return f'[({cx}, {cy}) @ {dx}]' if dx == dy else f'[({cx}, {cy}) @ ({dx}, {dy})]'
 
   @property
   def area(self) -> gmpy2.mpq:
