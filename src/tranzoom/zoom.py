@@ -13,6 +13,8 @@ from transcrypto.cli import clibase
 from transcrypto.utils import config as app_config
 from transcrypto.utils import logging as cli_logging
 
+from tranzoom.core import fractal
+
 from . import __version__
 
 
@@ -65,22 +67,8 @@ def Main(  # documentation is help/epilog/args # noqa: D103
       'Defaults to having colors.'  # state default because None default means docs don't show it
     ),
   ),
-  img_width: int = typer.Option(
-    1024,
-    '-w',
-    '--width',
-    min=4,
-    max=16384,
-    help='Width of the image; 4 <= width <= 16384; default is 1024',
-  ),
-  img_height: int = typer.Option(
-    1024,
-    '-h',
-    '--height',
-    min=4,
-    max=16384,
-    help='Height of the image; 4 <= height <= 16384; default is 1024',
-  ),
+  img_width: int = fractal.IMAGE_WIDTH_OPTION,  # type: ignore[assignment]
+  img_height: int = fractal.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
 ) -> None:
   if version:
     typer.echo(__version__)
