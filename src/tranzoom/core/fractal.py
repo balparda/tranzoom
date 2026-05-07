@@ -13,7 +13,6 @@ import io
 
 import gmpy2
 import tqdm
-import typer
 from PIL import Image
 from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
@@ -40,28 +39,6 @@ _MPFR_FOUR = gmpy2.mpfr('4')
 # gmpy2.mpq constants
 _MPQ_TWO = gmpy2.mpq(2)
 _MPQ_MAX_IMAGE_SIZE = gmpy2.mpq(MAX_IMAGE_SIZE)
-
-# CLI options that can be re-used
-IMAGE_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
-  DEFAULT_IMAGE_SIZE,
-  '-w',
-  '--width',
-  min=MIN_IMAGE_SIZE,
-  max=MAX_IMAGE_SIZE,
-  help=(
-    f'Width of the image; {MIN_IMAGE_SIZE} ≤ w ≤ {MAX_IMAGE_SIZE}; default is {DEFAULT_IMAGE_SIZE}'
-  ),
-)
-IMAGE_HEIGHT_OPTION: typer.models.OptionInfo = typer.Option(
-  DEFAULT_IMAGE_SIZE,
-  '-h',
-  '--height',
-  min=MIN_IMAGE_SIZE,
-  max=MAX_IMAGE_SIZE,
-  help=(
-    f'Height of the image; {MIN_IMAGE_SIZE} ≤ h ≤ {MAX_IMAGE_SIZE}; default is {DEFAULT_IMAGE_SIZE}'
-  ),
-)
 
 
 class Error(tbase.Error):
@@ -229,8 +206,10 @@ def Mandelbrot(  # noqa: PLR0914
 
   """
   # check parameters
-  if width < MIN_IMAGE_SIZE or height < MIN_IMAGE_SIZE:
-    raise Error(f'{width=} and {height=} must be >= {MIN_IMAGE_SIZE}')
+  if (
+    not MIN_IMAGE_SIZE <= width <= MAX_IMAGE_SIZE or not MIN_IMAGE_SIZE <= height <= MAX_IMAGE_SIZE
+  ):
+    raise Error(f'{width=} and {height=} must be between {MIN_IMAGE_SIZE} and {MAX_IMAGE_SIZE}')
   if max_iter < _MIN_ITER:
     raise Error(f'{max_iter=} must be >= {_MIN_ITER}')
   with frame.context:  # noqa: PLR1702
