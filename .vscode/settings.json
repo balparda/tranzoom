@@ -150,6 +150,7 @@
     "ipynb",
     "ipywidgets",
     "isort",
+    "itemsize",
     "libgmp",
     "libmpc",
     "libmpfr",

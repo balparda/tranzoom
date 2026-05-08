@@ -8,6 +8,7 @@ Heavy use of gmpy2 for arbitrary precision, which is needed to render deep zooms
 
 from __future__ import annotations
 
+import array
 import dataclasses
 import io
 from collections import abc
@@ -15,13 +16,18 @@ from typing import cast
 
 import gmpy2
 import tqdm
-from PIL import Image
+from PIL import Image as PILImage
 from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 
 # basic constants
+
+_N_BYTES_UINT: int = 4  # we use array of unsigned ints to store pixel data
 _MIN_ITER: int = 512
 DEFAULT_ITER: int = 1000
+_MAX_ITER: int = 2 ** (_N_BYTES_UINT * 8) - 1  # 4_294_967_295, the max value in array('I'), uint32
+type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel data array
+
 MIN_IMAGE_SIZE: int = 4
 MAX_IMAGE_SIZE: int = 8192
 DEFAULT_IMAGE_SIZE: int = 1024
@@ -279,15 +285,107 @@ DEFAULT_FRAME: Frame = Frame.FromCenter(
 )
 
 
+# TODO: Later, replace the color section only.
+class Image:
+  """A fractal image. Encapsulates the image operations."""
+
+  def __init__(self, frame: Frame, width: int, height: int, max_iter: int) -> None:
+    """Construct image.
+
+    Raises:
+      Error: on error
+
+    """
+    # check parameters
+    if not (MIN_IMAGE_SIZE <= width <= MAX_IMAGE_SIZE) or not (
+      MIN_IMAGE_SIZE <= height <= MAX_IMAGE_SIZE
+    ):
+      raise Error(f'{width=} and {height=} must be between {MIN_IMAGE_SIZE} and {MAX_IMAGE_SIZE}')
+    if not (_MIN_ITER <= max_iter <= _MAX_ITER):
+      raise Error(f'{max_iter=} must be between {_MIN_ITER} and {_MAX_ITER}')
+    # save objects
+    self._frame: Frame = frame
+    self._width: int = width
+    self._height: int = height
+    self._max_iter: int = max_iter
+    # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
+    self._escape: ImageUInt32Array = array.array('I', (0 for _ in range(width * height)))
+    if self._escape.itemsize != _N_BYTES_UINT:
+      raise Error(f'unsupported platform: array of unsigned ints is not {_N_BYTES_UINT} bytes')
+
+  def SetEscape(self, x: int, y: int, escaped_at: int) -> None:
+    """Set the escape iteration for a given pixel.
+
+    Args:
+      x (int): The x coordinate of the pixel.
+      y (int): The y coordinate of the pixel.
+      escaped_at (int): The escape iteration to set for the pixel.
+
+    Raises:
+      Error: if the pixel coordinates are out of bounds or if the escape iteration is invalid
+
+    """
+    if not (0 <= x < self._width) or not (0 <= y < self._height):
+      raise Error(f'Pixel coordinates out of bounds: {x=}, {y=}, {self._width=}, {self._height=}')
+    if not (0 <= escaped_at <= self._max_iter):
+      raise Error(f'Invalid escape iteration: {escaped_at=} / {self._max_iter=}')
+    self._escape[y * self._width + x] = escaped_at
+
+  def _PixelPalette(self, escaped_at: int) -> tuple[int, int, int]:
+    """Get the RGB color for a given escape iteration.
+
+    Args:
+      escaped_at (int): The escape iteration of the point.
+
+    Returns:
+      tuple[int, int, int]: The RGB color for the given escape iteration.
+
+    """
+    v: int = 255 - int(255 * escaped_at / self._max_iter)
+    return (v, v, v)
+
+  def AsPixels(self) -> bytes:
+    """Convert the image to raw pixel bytes.
+
+    Returns:
+      bytes: Raw pixel data in RGB format (3 bytes per pixel).
+
+    """
+    # convert the raw pixel data to a PNG using PIL
+    pixels = bytearray(self._width * self._height * 3)
+    for i, escaped_at in enumerate(self._escape):
+      # decide pixel color based on escape iteration
+      r, g, b = self._PixelPalette(escaped_at)
+      # put pixel values in the bytearray
+      pixels[i * 3] = r
+      pixels[i * 3 + 1] = g
+      pixels[i * 3 + 2] = b
+    return bytes(pixels)
+
+  def AsPNG(self) -> tuple[bytes, str]:
+    """Convert the image to PNG bytes and return it with its internal data hash.
+
+    Returns:
+      tuple[bytes, str]: PNG image data and its internal data hash.
+
+    """
+    # convert the raw pixel data to a PNG using PIL
+    raw_img: bytes = self.AsPixels()
+    img: PILImage.Image = PILImage.frombytes('RGB', (self._width, self._height), raw_img)
+    # save to PNG bytes, hash and return
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return (buf.getvalue(), hashes.Hash256(raw_img).hex())
+
+
 def Mandelbrot(  # noqa: PLR0914
   frame: Frame, width: int, height: int, *, max_iter: int = DEFAULT_ITER, progress_bar: bool = True
-) -> tuple[bytes, str]:
+) -> Image:
   """Render the frame rectangle to PNG bytes.
 
   Current palette:
     - black for points that do not escape
     - grayscale by escape iteration for points that do
-  TODO: Later, replace the color section only.
 
   Args:
     frame (Frame): The frame to render.
@@ -298,20 +396,15 @@ def Mandelbrot(  # noqa: PLR0914
     progress_bar (bool, optional): Whether to show a progress bar. Defaults to True.
 
   Returns:
-    tuple[bytes, str]: PNG image data and its internal data hash.
+    Image: The rendered fractal image.
 
   Raises:
     Error: on error
 
   """
   # check parameters
-  if (
-    not MIN_IMAGE_SIZE <= width <= MAX_IMAGE_SIZE or not MIN_IMAGE_SIZE <= height <= MAX_IMAGE_SIZE
-  ):
-    raise Error(f'{width=} and {height=} must be between {MIN_IMAGE_SIZE} and {MAX_IMAGE_SIZE}')
-  if max_iter < _MIN_ITER:
-    raise Error(f'{max_iter=} must be >= {_MIN_ITER}')
-  with frame.context:  # noqa: PLR1702
+
+  with frame.context:
     # compute pixel size in complex plane and check frame validity
     dx: gmpy2.mpq
     dy: gmpy2.mpq
@@ -319,13 +412,12 @@ def Mandelbrot(  # noqa: PLR0914
     dx, dy = dx / gmpy2.mpq(width - 1), dy / gmpy2.mpq(height - 1)
     if dx <= 0 or dy <= 0:
       raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
-    # use a single bytearray for the whole image to avoid PIL overhead
-    pixels = bytearray(width * height * 3)
+    # create image
+    image: Image = Image(frame, width, height, max_iter)
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
     # are relatively expensive and we can reuse the x values across rows ("inner for loop");
     # also, this is where the "X" (real) coordinates are converted mpq->mpfr
     xs: list[gmpy2.mpfr] = [gmpy2.mpfr(frame.top_re + gmpy2.mpq(i) * dx) for i in range(width)]
-    out: int = 0
     # iterate over pixels in row-major order, computing escape iterations in mpfr
     for py in tqdm.tqdm(
       iterable=range(height),
@@ -336,7 +428,7 @@ def Mandelbrot(  # noqa: PLR0914
       colour='green',
       disable=not progress_bar,
     ):
-      # Image.frombytes interprets the first row written as the top row of the image, so
+      # PILImage.frombytes interprets the first row written as the top row of the image, so
       # we iterate y inverted by starting at the top and going down;
       # this is the "outer for loop", no benefit in pre-computing y values;
       # also, this is where the "Y" (imaginary) coordinates are converted mpq->mpfr
@@ -350,39 +442,26 @@ def Mandelbrot(  # noqa: PLR0914
         in_cardioid: bool = q * (q + x_minus_quarter) <= _MPFR_FOURTH * cy * cy
         x_plus_one: gmpy2.mpfr = cx + _MPFR_ONE
         in_bulb: bool = x_plus_one * x_plus_one + cy * cy <= _MPFR_SIXTEENTH
-        r: int = 0  # start with black "interior" point/color
-        g: int = 0
-        b: int = 0
-        if not in_cardioid and not in_bulb:
-          # not in the main cardioid or period-2 bulb, do the full escape-time test in mpfr
-          zx: gmpy2.mpfr = _MPFR_ZERO
-          zy: gmpy2.mpfr = _MPFR_ZERO
-          escaped_at: int = max_iter
-          # escape-time loop, implemented with explicit zx/zy variables
-          for n in range(max_iter):
-            zx2: gmpy2.mpfr = zx * zx
-            zy2: gmpy2.mpfr = zy * zy
-            # avoid sqrt(abs(z)); compare squared magnitude to 2^2
-            if zx2 + zy2 > _MPFR_FOUR:
-              escaped_at = n
-              break
-            # z = z^2 + c in terms of zx/zy: zx' = zx^2 - zy^2 + cx
-            zy = _MPFR_TWO * zx * zy + cy
-            zx = zx2 - zy2 + cx
-          # decide pixel color based on escape iteration
-          if escaped_at != max_iter:
-            # escaped before max_iter, so NOT an interior point
-            # placeholder grayscale palette for escaped points: map escape iteration to 0-255
-            v: int = 255 - int(255 * escaped_at / max_iter)
-            r = g = b = v
-        # put pixel values in the bytearray
-        pixels[out] = r
-        pixels[out + 1] = g
-        pixels[out + 2] = b
-        out += 3
-    # done, convert the raw pixel data to a PNG using PIL
-    raw_img: bytes = bytes(pixels)
-    img: Image.Image = Image.frombytes('RGB', (width, height), raw_img)
-    buf = io.BytesIO()
-    img.save(buf, format='PNG')
-    return (buf.getvalue(), hashes.Hash256(raw_img).hex())
+        if in_cardioid or in_bulb:
+          # point is in the main cardioid or period-2 bulb, so it's an interior point, no escape
+          image.SetEscape(px, py, max_iter)
+          continue
+        # not in the main cardioid or period-2 bulb, do the full escape-time test in mpfr
+        zx: gmpy2.mpfr = _MPFR_ZERO
+        zy: gmpy2.mpfr = _MPFR_ZERO
+        escaped_at: int = 0
+        # escape-time loop, implemented with explicit zx/zy variables
+        for escaped_at in range(max_iter):  # noqa: B007
+          zx2: gmpy2.mpfr = zx * zx
+          zy2: gmpy2.mpfr = zy * zy
+          # avoid sqrt(abs(z)); compare squared magnitude to 2^2
+          if zx2 + zy2 > _MPFR_FOUR:
+            break
+          # z = z^2 + c in terms of zx/zy: zx' = zx^2 - zy^2 + cx
+          zy = _MPFR_TWO * zx * zy + cy
+          zx = zx2 - zy2 + cx
+        else:
+          escaped_at = max_iter  # if we didn't break, we reached max_iter, mark as non-escaped
+        image.SetEscape(px, py, escaped_at)
+    # done
+    return image

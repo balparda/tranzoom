@@ -62,9 +62,10 @@ def Image(  # documentation is help/epilog/args # noqa: D103
   )
   # render the image
   with timer.Timer(emit_log=False) as tmr:
-    raw_png, raw_hash = fractal.Mandelbrot(
+    image: fractal.Image = fractal.Mandelbrot(
       frame, config.img_width, config.img_height, max_iter=iter_limit
     )
+    raw_png, raw_hash = image.AsPNG()
   config.console.print(f'\nGenerated image {raw_hash!r} in {tmr}')
   # save the image to a file named by its time/hash
   tm_str: str = time.strftime('%Y%m%d%H%M%S', time.gmtime(timer.Now()))
