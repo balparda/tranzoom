@@ -18,7 +18,7 @@ from transcrypto.utils import human, timer
 
 from tranzoom import zoom
 from tranzoom.cli import base
-from tranzoom.core import fractal
+from tranzoom.core import fractal, frame, image
 
 
 @zoom.app.command(
@@ -44,31 +44,31 @@ def Image(  # documentation is help/epilog/args  # noqa: D103, PLR0914
   # check sanity
   config: zoom.TranZoomConfig = ctx.obj
   try:
-    frame: fractal.Frame = fractal.Frame.FromCenter(center_re, center_im, f_width, f_height)
+    frm: frame.Frame = frame.Frame.FromCenter(center_re, center_im, f_width, f_height)
   except Exception as err:
     raise click.UsageError(
       f'Invalid coordinates: {center_re=}, {center_im=}, {f_width=}, {f_height=}'
     ) from err
-  magnification, magnitude = frame.magnification
+  magnification, magnitude = frm.magnification
   magnification_str: str = (
     # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation
     human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
   )
-  iter_limit: int = frame.iterations
+  iter_limit: int = frm.iterations
   config.console.print(
-    f'\n{config.img_width}x{config.img_height} Mandelbrot in frame {frame}, '
-    f'precision {frame.precision} bits, {magnification_str} magnification, '
+    f'\n{config.img_width}x{config.img_height} Mandelbrot in frame {frm}, '
+    f'precision {frm.precision} bits, {magnification_str} magnification, '
     f'{iter_limit} iterations...\n'
   )
   # render the image
   with timer.Timer(emit_log=False) as tmr:
-    image: fractal.Image = fractal.Mandelbrot(
-      frame, config.img_width, config.img_height, max_iter=iter_limit
+    img: image.Image = fractal.Mandelbrot(
+      frm, config.img_width, config.img_height, max_iter=iter_limit
     )
-    raw_png, raw_hash = image.AsPNG()
+    raw_png, raw_hash = img.AsPNG()
   config.console.print(f'\nGenerated image {raw_hash!r} in {tmr}')
   # check we can recover the hash from the PNG: should never fail unless we have a bug
-  w, h, png_hash, _ = fractal.GetBasicDataFromPNG(raw_png)
+  w, h, png_hash, _ = image.GetBasicDataFromPNG(raw_png)
   if png_hash != raw_hash or w != config.img_width or h != config.img_height:
     raise click.ClickException(
       f'Mismatch: expected {config.img_width}x{config.img_height}/{raw_hash!r} but '

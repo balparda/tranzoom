@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import typer
 
-from tranzoom.core import fractal
+from tranzoom.core import frame
 
 # global CLI data, and some test stuff
 
@@ -20,25 +20,25 @@ DEFAULT_IMAGE_PREFIX: str = 'mandel'
 
 # Image: output image
 IMAGE_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
-  fractal.DEFAULT_IMAGE_SIZE,
+  frame.DEFAULT_IMAGE_SIZE,
   '-w',
   '--width',
-  min=fractal.MIN_IMAGE_SIZE,
-  max=fractal.MAX_IMAGE_SIZE,
+  min=frame.MIN_IMAGE_SIZE,
+  max=frame.MAX_IMAGE_SIZE,
   help=(
-    f'Width of the image; {fractal.MIN_IMAGE_SIZE} ≤ w ≤ {fractal.MAX_IMAGE_SIZE}; '
-    f'default is {fractal.DEFAULT_IMAGE_SIZE}'
+    f'Width of the image; {frame.MIN_IMAGE_SIZE} ≤ w ≤ {frame.MAX_IMAGE_SIZE}; '
+    f'default is {frame.DEFAULT_IMAGE_SIZE}'
   ),
 )
 IMAGE_HEIGHT_OPTION: typer.models.OptionInfo = typer.Option(
-  fractal.DEFAULT_IMAGE_SIZE,
+  frame.DEFAULT_IMAGE_SIZE,
   '-h',
   '--height',
-  min=fractal.MIN_IMAGE_SIZE,
-  max=fractal.MAX_IMAGE_SIZE,
+  min=frame.MIN_IMAGE_SIZE,
+  max=frame.MAX_IMAGE_SIZE,
   help=(
-    f'Height of the image; {fractal.MIN_IMAGE_SIZE} ≤ h ≤ {fractal.MAX_IMAGE_SIZE}; '
-    f'default is {fractal.DEFAULT_IMAGE_SIZE}'
+    f'Height of the image; {frame.MIN_IMAGE_SIZE} ≤ h ≤ {frame.MAX_IMAGE_SIZE}; '
+    f'default is {frame.DEFAULT_IMAGE_SIZE}'
   ),
 )
 IMAGE_PATH_OUTPUT_OPTION: typer.models.OptionInfo = typer.Option(
@@ -86,16 +86,16 @@ IMAGE_INCLUDE_HASH_OPTION: typer.models.OptionInfo = typer.Option(
 # The set <https://en.wikipedia.org/wiki/Mandelbrot_set> is contained in the rectangle with corners
 # -2.5-1.25j and 0.5+1.25j, which is exactly our default here
 FRAME_CENTER_RE_OPTION: typer.models.ArgumentInfo = typer.Argument(
-  fractal.DEFAULT_FRAME_CENTER_RE,
-  help=f'Real part of the center point; default is {fractal.DEFAULT_FRAME_CENTER_RE!r}',
+  frame.DEFAULT_FRAME_CENTER_RE,
+  help=f'Real part of the center point; default is {frame.DEFAULT_FRAME_CENTER_RE!r}',
 )
 FRAME_CENTER_IM_OPTION: typer.models.ArgumentInfo = typer.Argument(
-  fractal.DEFAULT_FRAME_CENTER_IM,
-  help=f'Imaginary part of the center point; default is {fractal.DEFAULT_FRAME_CENTER_IM!r}',
+  frame.DEFAULT_FRAME_CENTER_IM,
+  help=f'Imaginary part of the center point; default is {frame.DEFAULT_FRAME_CENTER_IM!r}',
 )
 FRAME_WIDTH_OPTION: typer.models.ArgumentInfo = typer.Argument(
-  fractal.DEFAULT_FRAME_SIZE,
-  help=f'Width of the frame in the real plane; default is {fractal.DEFAULT_FRAME_SIZE!r}',
+  frame.DEFAULT_FRAME_SIZE,
+  help=f'Width of the frame in the real plane; default is {frame.DEFAULT_FRAME_SIZE!r}',
 )
 FRAME_HEIGHT_OPTION: typer.models.ArgumentInfo = typer.Argument(
   None, help='Height of the frame in the imaginary plane; default is None, i.e, the same as width'

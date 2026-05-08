@@ -24,7 +24,7 @@ from transcrypto.utils import config
 
 import tranzoom
 from tranzoom.cli import base
-from tranzoom.core import fractal
+from tranzoom.core import image
 
 _APP_NAME: str = 'tranzoom'  # this is the directory name, the package name
 _APP_NAMES: set[str] = {'zoom'}  # this is the console scripts names
@@ -76,7 +76,7 @@ def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path
       )
       assert output_image.exists(), f'Expected output image not found: {output_image}'
       # check the image data
-      w, h, hsh, _ = fractal.GetBasicDataFromPNG(output_image.read_bytes())
+      w, h, hsh, _ = image.GetBasicDataFromPNG(output_image.read_bytes())
       assert w == h == 512
       assert hsh == base.SEAHORSE_TAIL_HASH
   finally:

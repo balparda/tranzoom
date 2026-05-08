@@ -521,7 +521,9 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 │       │   └── imagecommand.py   ⟸ `zoom image` command implementation
 │       ├── core/
 │       │   ├── __init__.py
-│       │   └── fractal.py        ⟸ Frame class and Mandelbrot() renderer
+│       │   ├── fractal.py        ⟸ Mandelbrot() renderer
+│       │   ├── frame.py          ⟸ Frame class; base for computation
+│       │   └── image.py          ⟸ Image class
 │       └── utils/
 │           ├── __init__.py
 │           └── template.py       ⟸ template for new utility modules
