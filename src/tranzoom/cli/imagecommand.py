@@ -76,13 +76,20 @@ def Image(  # documentation is help/epilog/args  # noqa: D103, PLR0914
     )
   # save the image to a file named by its time/hash
   tm_str: str = time.strftime('%Y%m%d%H%M%S', time.gmtime(timer.Now()))
+  # validate that img_path_prefix is a basename (no path separators) to prevent directory traversal
   filename: str = config.img_path_prefix
+  if pathlib.Path(filename).name != config.img_path_prefix:
+    raise click.UsageError(
+      f'Invalid prefix: {config.img_path_prefix!r} has path separators (ex: "/" or "\\")'
+    )
+  # add date and hash to the file name if requested
   if config.img_use_date:
     filename += f'-{tm_str}'
   if config.img_use_hash:
     # use 20 chars of the hash to avoid very long file names; 20 chars = 10 bytes = 80 bits;
     # collision is 1 in 2**40 ~ 1 in 1 trillion, which is good enough for our use case
     filename += f'-{raw_hash[:20]}'
+  # add .png extension, make full path, and save the file
   filename += '.png'
   full_path: pathlib.Path = (
     pathlib.Path(filename) if config.img_output_path is None else config.img_output_path / filename
