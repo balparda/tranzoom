@@ -61,7 +61,6 @@ Built with:
     - [Color and formatting](#color-and-formatting)
     - [Exit codes](#exit-codes)
   - [Project Design](#project-design)
-    - [Architecture overview](#architecture-overview)
     - [Modules / packages](#modules--packages)
     - [Performance characteristics](#performance-characteristics)
   - [Development Instructions](#development-instructions)
@@ -452,17 +451,6 @@ The CLI respects the `NO_COLOR` environment variable and the `--no-color` / `--c
 
 ## Project Design
 
-### Architecture overview
-
-```txt
-zoom CLI (zoom.py: Main callback, global options, TranZoomConfig)
-    └── zoom image (cli/imagecommand.py)
-            └── fractal.Frame + fractal.Mandelbrot() (core/fractal.py)
-                    ├── gmpy2 mpq — exact coordinate representation
-                    ├── gmpy2 mpfr — arbitrary-precision escape-time math
-                    └── Pillow — PNG image output
-```
-
 ### Modules / packages
 
 | Component | Responsibility |
@@ -470,7 +458,9 @@ zoom CLI (zoom.py: Main callback, global options, TranZoomConfig)
 | `zoom.py` | CLI entry point (`app`, `Main`, `TranZoomConfig`) |
 | `cli/base.py` | Shared CLI options, defaults, `DEFAULT_FRAME` |
 | `cli/imagecommand.py` | `zoom image` command implementation |
-| `core/fractal.py` | `Frame` class and `Mandelbrot()` renderer — all fractal math |
+| `core/fractal.py` | `Mandelbrot()` renderer — most fractal math |
+| `core/frame.py` | `Frame` class and base math |
+| `core/image.py` | `Image` class |
 | `utils/template.py` | Template for new utility modules |
 
 ### Performance characteristics
