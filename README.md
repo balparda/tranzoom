@@ -196,13 +196,13 @@ $ poetry run zoom image
 
 Img: 100%|█████████████████████████████████████████████| 1024/1024 [00:13<00:00, 74.30ln/s]
 
-Generated image '64bc99945eadee05f4f68deead541f6a3c0ecffd653e97a05c7b52dc2a693bf9' in 14.344 s
-Saved to 'tests/data/images/mandel-64bc99945eadee05f4f6.png'
+Generated image 'bd77ee8874aa425422a9ea92867c53937f28534898d49a56b9e4d1dca7b5dd54' in 13.967 s
+Saved to "mandel-bd77ee8874aa425422a9.png"
 ```
 
 As can be seen, the `Frame` is stored as rational numbers with arbitrary precision, `[(-3/4, 0) @ 5/2]`, so it is guaranteed to be exact (centered in $-0.75+0j$ and with width of $2.5$). It will pick a precision, in bits, which is the internal `float` representation (mantissa), and will pick the (max) number of iterations for the generation. The magnification here is 1 because it is the full Mandelbrot set. There will be a progress bar, counting the horizontal lines being produced. The generated image data will be hashed and then saved to a PNG on disk.
 
-![Full / Default](tests/data/images/mandel-64bc99945eadee05f4f6.png)
+![Full / Default](tests/data/images/demo-mandel-whole-set.png)
 
 Render a 512×512 [well-known zoom ("Seahorse", ~155× magnification, 512×512)](#seahorse-155-83-bits):
 
@@ -210,7 +210,7 @@ Render a 512×512 [well-known zoom ("Seahorse", ~155× magnification, 512×512)]
 poetry run zoom -w 512 -h 512 image " -0.74303" "0.126433" "0.01611"
 ```
 
-![Seahorse](tests/data/images/mandel-411d8a9f5d35c761badc.png)
+![Seahorse](tests/data/images/demo-mandel-seahorse.png)
 
 Render an extreme 256×256 [zoom ("Satellite Seahorse Tail with Julia Island", ~4 billion× magnification)](#satellite-seahorse-tail-with-julia-island-4g-108-bits):
 
@@ -218,7 +218,7 @@ Render an extreme 256×256 [zoom ("Satellite Seahorse Tail with Julia Island", ~
 poetry run zoom -w 256 -h 256 image " -0.74364388717342" "0.13182590425182" "0.00000000059849"
 ```
 
-![Satellite Seahorse Tail with Julia Island](tests/data/images/mandel-34166c6d5db640bfa399.png)
+![Satellite Seahorse Tail with Julia Island](tests/data/images/demo-mandel-seahorse-julia-island.png)
 
 ### Command structure
 
@@ -281,13 +281,13 @@ $ poetry run zoom image
 
 Img: 100%|█████████████████████████████████████████████| 1024/1024 [00:13<00:00, 74.30ln/s]
 
-Generated image '64bc99945eadee05f4f68deead541f6a3c0ecffd653e97a05c7b52dc2a693bf9' in 14.344 s
-Saved to 'tests/data/images/mandel-64bc99945eadee05f4f6.png'
+Generated image 'bd77ee8874aa425422a9ea92867c53937f28534898d49a56b9e4d1dca7b5dd54' in 13.967 s
+Saved to "mandel-bd77ee8874aa425422a9.png"
 ```
 
 This is what tranZoom considers ***"1 magnification"***, and will measure other magnifications against this size.
 
-![Full / Default](tests/data/images/mandel-64bc99945eadee05f4f6.png)
+![Full / Default](tests/data/images/demo-mandel-whole-set.png)
 
 #### Seahorse (×155, 83 bits)
 
@@ -300,11 +300,11 @@ $ poetry run zoom -w 512 -h 512 image " -0.74303" "0.126433" "0.01611"
 
 Img: 100%|█████████████████████████████████████████████| 512/512 [00:30<00:00, 16.77ln/s]
 
-Generated image '411d8a9f5d35c761badcabc61b09abfcecf943e32fd8bebc473c16bd324db240' in 30.687 s
-Saved to 'tests/data/images/mandel-411d8a9f5d35c761badc.png'
+Generated image '0c3a28ad7cbd74d2194a6f88bed341738dc1d69770f39ea681c444fe0510a380' in 30.063 s
+Saved to "mandel-0c3a28ad7cbd74d2194a.png"
 ```
 
-![Seahorse](tests/data/images/mandel-411d8a9f5d35c761badc.png)
+![Seahorse](tests/data/images/demo-mandel-seahorse.png)
 
 #### Seahorse Tail (×3k, 88 bits)
 
@@ -317,11 +317,11 @@ $ poetry run zoom -w 512 -h 512 image " -0.7436499" "0.13188204" "0.00073801"
 
 Img: 100%|█████████████████████████████████████████████| 512/512 [00:11<00:00, 43.04ln/s]
 
-Generated image '826ee9edaa3cde78059cee02a74faf361e5f2e2da62e44d46b0da9dab1f592f7' in 12.085 s
-Saved to 'tests/data/images/mandel-826ee9edaa3cde78059c.png'
+Generated image '2537af0ab52a4ec846d190a5464dce493fb77d6527a3e226e18201d0f5216939' in 12.080 s
+Saved to "mandel-2537af0ab52a4ec846d1.png"
 ```
 
-![Seahorse Tail](tests/data/images/mandel-826ee9edaa3cde78059c.png)
+![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail.png)
 
 #### Satellite Antenna (×852k, 96 bits)
 
@@ -335,11 +335,11 @@ iterations...
 
 Img: 100%|█████████████████████████████████████████████| 256/256 [00:30<00:00,  8.30ln/s]
 
-Generated image 'f521ad3bf2644a5f3255a297a5a3bf68f94376f01ea0097b0b1a0d2c8865a9c5' in 30.890 s
-Saved to 'tests/data/images/mandel-f521ad3bf2644a5f3255.png'
+Generated image '09bbf5d9ebd7fa80b16989b18275c9d342543dd25b01d3fb35e1cefd77085a9b' in 31.077 s
+Saved to "mandel-09bbf5d9ebd7fa80b169.png"
 ```
 
-![Satellite Antenna](tests/data/images/mandel-f521ad3bf2644a5f3255.png)
+![Satellite Antenna](tests/data/images/demo-mandel-satellite-antenna.png)
 
 #### Satellite Seahorse Tail with Julia Island (×4G, 108 bits)
 
@@ -353,11 +353,11 @@ magnification, 4848 iterations...
 
 Img: 100%|█████████████████████████████████████████████| 256/256 [00:32<00:00,  7.87ln/s]
 
-Generated image '34166c6d5db640bfa3996aeaa9f1d2f969d3942359dbe0f42014c93c06276a47' in 32.604 s
-Saved to 'tests/data/images/mandel-34166c6d5db640bfa399.png'
+Generated image '5d7eeb3edb59049749d3b7bfa12802220c0c3513a2d17634d679b1c962b675c7' in 32.781 s
+Saved to "mandel-5d7eeb3edb59049749d3.png"
 ```
 
-![Satellite Seahorse Tail with Julia Island](tests/data/images/mandel-34166c6d5db640bfa399.png)
+![Satellite Seahorse Tail with Julia Island](tests/data/images/demo-mandel-seahorse-julia-island.png)
 
 #### One Island (×417G, 115 bits)
 
@@ -371,11 +371,11 @@ iterations...
 
 Img: 100%|█████████████████████████████████████████████| 256/256 [01:20<00:00,  3.18ln/s]
 
-Generated image 'ec687adf4c237e2cf2cc750a5d430a32a8a6b9913aae9e258840b3f8fab74a22' in 1.342 min
-Saved to 'tests/data/images/mandel-ec687adf4c237e2cf2cc.png'
+Generated image '3fc932609599fbd47db0c2782d256a9118ce997dc02f66f8934a5ec751beac59' in 1.362 min
+Saved to "mandel-3fc932609599fbd47db0.png"
 ```
 
-![One Island](tests/data/images/mandel-ec687adf4c237e2cf2cc.png)
+![One Island](tests/data/images/demo-mandel-one-island.png)
 
 #### Last Lights On (×2.5e+228, 835 bits)
 
@@ -389,10 +389,10 @@ $ poetry run zoom -w 64 -h 64 image " -1.768573656315270993281742915329544712934
 Img: 100%|█████████████████████████████████████████████| 64/64 [05:10<00:00,  4.86s/ln]
 
 Generated image 'f3cc103136423a57975750907ebc1d367e2985ac6338976d4d5a439f50323f4a' in 5.184 min
-Saved to 'tests/data/images/mandel-f3cc103136423a579757.png'
+Saved to 'mandel-f3cc103136423a579757.png'
 ```
 
-![Last Lights On](tests/data/images/mandel-f3cc103136423a579757.png)
+![Last Lights On](tests/data/images/demo-mandel-last-lights-on.png)
 
 TODO: **THIS IS STILL WORK IN PROGRESS**
 

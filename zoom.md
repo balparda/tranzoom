@@ -17,8 +17,15 @@ Usage: zoom [OPTIONS] COMMAND [ARGS]...
 │ --height              -h                INTEGER RANGE [4<=x<=8192]  Height of the image; 4 ≤ h ≤ 8192; default is 1024                   │
 │ --out                 -o                DIRECTORY                   The local output root directory path, ex: "~/foo/bar/"; if not given, the image     │
 │                                                                     will be saved in the current working directory                                      │
+│ --prefix                                TEXT                        Image save prefix; default: 'mandel' (the final file name will be                   │
+│                                                                     "<prefix>[-<date>][-<hash20>].png", note the date and the hash can be turned off    │
+│                                                                     with --no-date and --no-hash, respectively)                                         │
+│                                                                                                                                        │
 │ --date                    --no-date                                 If True, file names will include the date-time as YYYYMMDDhhmmss; if False, file    │
 │                                                                     names will only include the hash; default is True                                   │
+│                                                                                                                                          │
+│ --hash                    --no-hash                                 If True, file names will include the hash; if False, file names will not include    │
+│                                                                     the hash; default is True                                                           │
 │                                                                                                                                          │
 │ --install-completion                                                Install completion for the current shell.                                           │
 │ --show-completion                                                   Show completion for the current shell, to copy it or customize the installation.    │

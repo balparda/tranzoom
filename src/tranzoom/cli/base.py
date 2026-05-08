@@ -10,6 +10,8 @@ from tranzoom.core import fractal
 
 # CLI options that can be re-used
 
+DEFAULT_IMAGE_PREFIX: str = 'mandel'
+
 # Image: output image
 IMAGE_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
   fractal.DEFAULT_IMAGE_SIZE,
@@ -41,17 +43,35 @@ IMAGE_PATH_OUTPUT_OPTION: typer.models.OptionInfo = typer.Option(
   file_okay=False,
   dir_okay=True,
   readable=True,
+  writable=True,
   help=(
     'The local output root directory path, ex: "~/foo/bar/"; '
     'if not given, the image will be saved in the current working directory'
   ),
 )
-SD_DB_USE_OPTION: typer.models.OptionInfo = typer.Option(
+IMAGE_PREFIX_OPTION: typer.models.OptionInfo = typer.Option(
+  DEFAULT_IMAGE_PREFIX,
+  '--prefix',
+  help=(
+    f'Image save prefix; default: {DEFAULT_IMAGE_PREFIX!r} '
+    '(the final file name will be "<prefix>[-<date>][-<hash20>].png", note the date and the hash '
+    'can be turned off with --no-date and --no-hash, respectively)'
+  ),
+)
+IMAGE_INCLUDE_DATE_OPTION: typer.models.OptionInfo = typer.Option(
   True,
   '--date/--no-date',
   help=(
     'If True, file names will include the date-time as YYYYMMDDhhmmss; '
     'if False, file names will only include the hash; default is True'
+  ),
+)
+IMAGE_INCLUDE_HASH_OPTION: typer.models.OptionInfo = typer.Option(
+  True,
+  '--hash/--no-hash',
+  help=(
+    'If True, file names will include the hash; '
+    'if False, file names will not include the hash; default is True'
   ),
 )
 

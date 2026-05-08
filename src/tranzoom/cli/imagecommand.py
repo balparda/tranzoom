@@ -69,11 +69,14 @@ def Image(  # documentation is help/epilog/args # noqa: D103
   config.console.print(f'\nGenerated image {raw_hash!r} in {tmr}')
   # save the image to a file named by its time/hash
   tm_str: str = time.strftime('%Y%m%d%H%M%S', time.gmtime(timer.Now()))
-  filename: str = (
+  filename: str = config.img_path_prefix
+  if config.img_use_date:
+    filename += f'-{tm_str}'
+  if config.img_use_hash:
     # use 20 chars of the hash to avoid very long file names; 20 chars = 10 bytes = 80 bits;
     # collision is 1 in 2**40 ~ 1 in 1 trillion, which is good enough for our use case
-    f'mandel-{tm_str}-{raw_hash[:20]}.png' if config.img_use_date else f'mandel-{raw_hash[:20]}.png'
-  )
+    filename += f'-{raw_hash[:20]}'
+  filename += '.png'
   full_path: pathlib.Path = (
     pathlib.Path(filename) if config.img_output_path is None else config.img_output_path / filename
   )
