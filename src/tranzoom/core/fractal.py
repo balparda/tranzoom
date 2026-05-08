@@ -425,7 +425,9 @@ class Image:
       if escaped_at >= self._max_iter or total_exterior == 0:
         r, g, b = 0, 0, 0  # interior point: black
       else:
-        t: float = cumulative[escaped_at] / total_exterior
+        # Keep t in [0, 1) so the highest escape bucket does not wrap to the
+        # first palette color inside _PixelPalette().
+        t: float = (cumulative[escaped_at] - 1) / total_exterior
         r, g, b = _PixelPalette(t)
       pixels[i * 3] = r
       pixels[i * 3 + 1] = g
