@@ -8,9 +8,17 @@ import typer
 
 from tranzoom.core import fractal
 
+# global CLI data, and some test stuff
+
+# if `tests/data/images/demo-mandel-seahorse-tail.png` changes you have to update this hash!
+SEAHORSE_TAIL_HASH: str = '2537af0ab52a4ec846d190a5464dce493fb77d6527a3e226e18201d0f5216939'
+# this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
+
 # CLI options that can be re-used
 
-# Image: output image size
+DEFAULT_IMAGE_PREFIX: str = 'mandel'
+
+# Image: output image
 IMAGE_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
   fractal.DEFAULT_IMAGE_SIZE,
   '-w',
@@ -31,6 +39,45 @@ IMAGE_HEIGHT_OPTION: typer.models.OptionInfo = typer.Option(
   help=(
     f'Height of the image; {fractal.MIN_IMAGE_SIZE} ≤ h ≤ {fractal.MAX_IMAGE_SIZE}; '
     f'default is {fractal.DEFAULT_IMAGE_SIZE}'
+  ),
+)
+IMAGE_PATH_OUTPUT_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '-o',
+  '--out',
+  exists=True,
+  file_okay=False,
+  dir_okay=True,
+  readable=True,
+  writable=True,
+  help=(
+    'The local output root directory path, ex: "~/foo/bar/"; '
+    'if not given, the image will be saved in the current working directory'
+  ),
+)
+IMAGE_PREFIX_OPTION: typer.models.OptionInfo = typer.Option(
+  DEFAULT_IMAGE_PREFIX,
+  '--prefix',
+  help=(
+    f'Image save prefix; default: {DEFAULT_IMAGE_PREFIX!r} '
+    '(the final file name will be "<prefix>[-<date>][-<hash20>].png", note the date and the hash '
+    'can be turned off with --no-date and --no-hash, respectively)'
+  ),
+)
+IMAGE_INCLUDE_DATE_OPTION: typer.models.OptionInfo = typer.Option(
+  True,
+  '--date/--no-date',
+  help=(
+    'If True, file names will include the date-time as YYYYMMDDhhmmss; '
+    'if False, file names will not include the date-time; default is True'
+  ),
+)
+IMAGE_INCLUDE_HASH_OPTION: typer.models.OptionInfo = typer.Option(
+  True,
+  '--hash/--no-hash',
+  help=(
+    'If True, file names will include the hash; '
+    'if False, file names will not include the hash; default is True'
   ),
 )
 

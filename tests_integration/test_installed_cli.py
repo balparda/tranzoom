@@ -8,19 +8,23 @@ Why this exists (vs normal unit tests):
 - This test validates *packaging*: the wheel builds, installs, and the console script works.
 
 What we verify:
-- `mycli --version` prints the expected version.
-- `mycli --no-color hello Ada` runs successfully and produces non-ANSI output.
+- `zoom --version` prints the expected version.
+- `zoom image` renders a Seahorse Tail image with deterministic output and verifies it
 """
 
 from __future__ import annotations
 
 import pathlib
 import shutil
+import tempfile
 
 import pytest
-from transcrypto.utils import base, config
+from transcrypto.utils import base as tbase
+from transcrypto.utils import config
 
 import tranzoom
+from tranzoom.cli import base
+from tranzoom.core import fractal
 
 _APP_NAME: str = 'tranzoom'  # this is the directory name, the package name
 _APP_NAMES: set[str] = {'zoom'}  # this is the console scripts names
@@ -37,16 +41,43 @@ def test_installed_cli_smoke(tmp_path: pathlib.Path) -> None:
   )
   # basic command smoke tests
   data_dir: pathlib.Path = config.CallGetConfigDirFromVEnv(vpy, _APP_NAME)
-  _hello_call(cli_paths, data_dir)  # TODO: change
+  _SeahorseTailCall(cli_paths, data_dir)
 
 
-def _hello_call(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path) -> None:
-  return  # TODO: remove
-  try:  # type: ignore[unreachable]
-    # basic command smoke test; use --no-color to avoid ANSI codes in asserts.
-    r = base.Run([str(cli_paths['mycli']), '--no-color', 'hello', 'Ada'])  # TODO: change
-    assert 'Hello, Ada!' in r.stdout
-    assert '\x1b[' not in r.stdout  # no ANSI escape sequences
-    assert '\x1b[' not in r.stderr
+def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path) -> None:
+  try:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+      # render a Seahorse Tail image; --no-date makes the filename deterministic (hash-only),
+      # --out directs output to tmp_dir so we can assert on the exact file produced.
+      r = tbase.Run(
+        # call the console script directly to test the installed CLI
+        [
+          str(cli_paths['zoom']),
+          '-w',
+          '512',
+          '-h',
+          '512',
+          '--no-date',
+          '--out',
+          tmp_dir,
+          'image',
+          ' -0.7436499',
+          '0.13188204',
+          '0.00073801',
+        ]
+      )
+      assert r.returncode == 0, f'zoom image failed:\n{r.stderr}'
+      # we check that the image is the same by trusting the 20-character hash in the file name;
+      # the hash is from the internal representation and should only depend on our implementation;
+      # resist the temptation of checking the PNG because PIL behaves differently across platforms
+      # and Python versions, and we don't want to be debugging PIL differences in this test
+      output_image: pathlib.Path = (
+        pathlib.Path(tmp_dir) / f'mandel-{base.SEAHORSE_TAIL_HASH[:20]}.png'
+      )
+      assert output_image.exists(), f'Expected output image not found: {output_image}'
+      # check the image data
+      w, h, hsh, _ = fractal.GetBasicDataFromPNG(output_image.read_bytes())
+      assert w == h == 512
+      assert hsh == base.SEAHORSE_TAIL_HASH
   finally:
     shutil.rmtree(data_dir)  # remove created data to isolate the next CLI's read step

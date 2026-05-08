@@ -33,7 +33,7 @@ from tranzoom.core import fractal
   ),
 )
 @clibase.CLIErrorGuard
-def Image(  # documentation is help/epilog/args # noqa: D103
+def Image(  # documentation is help/epilog/args  # noqa: D103, PLR0914
   *,
   ctx: click.Context,
   center_re: str = base.FRAME_CENTER_RE_OPTION,  # type: ignore[assignment]
@@ -62,12 +62,37 @@ def Image(  # documentation is help/epilog/args # noqa: D103
   )
   # render the image
   with timer.Timer(emit_log=False) as tmr:
-    raw_png, raw_hash = fractal.Mandelbrot(
+    image: fractal.Image = fractal.Mandelbrot(
       frame, config.img_width, config.img_height, max_iter=iter_limit
     )
+    raw_png, raw_hash = image.AsPNG()
   config.console.print(f'\nGenerated image {raw_hash!r} in {tmr}')
+  # check we can recover the hash from the PNG: should never fail unless we have a bug
+  w, h, png_hash, _ = fractal.GetBasicDataFromPNG(raw_png)
+  if png_hash != raw_hash or w != config.img_width or h != config.img_height:
+    raise click.ClickException(
+      f'Mismatch: expected {config.img_width}x{config.img_height}/{raw_hash!r} but '
+      f'got {w}x{h}/{png_hash!r} from PNG; this should never happen, please report this as a bug'
+    )
   # save the image to a file named by its time/hash
   tm_str: str = time.strftime('%Y%m%d%H%M%S', time.gmtime(timer.Now()))
-  filename: str = f'mandel-{tm_str}-{raw_hash[:12]}.png'
-  pathlib.Path(filename).write_bytes(raw_png)
-  config.console.print(f'Saved to {filename!r}\n')
+  # validate that img_path_prefix is a basename (no path separators) to prevent directory traversal
+  filename: str = config.img_path_prefix
+  if pathlib.Path(filename).name != config.img_path_prefix:
+    raise click.UsageError(
+      f'Invalid prefix: {config.img_path_prefix!r} has path separators (ex: "/" or "\\")'
+    )
+  # add date and hash to the file name if requested
+  if config.img_use_date:
+    filename += f'-{tm_str}'
+  if config.img_use_hash:
+    # use 20 chars of the hash to avoid very long file names; 20 chars = 10 bytes = 80 bits;
+    # collision is 1 in 2**40 ~ 1 in 1 trillion, which is good enough for our use case
+    filename += f'-{raw_hash[:20]}'
+  # add .png extension, make full path, and save the file
+  filename += '.png'
+  full_path: pathlib.Path = (
+    pathlib.Path(filename) if config.img_output_path is None else config.img_output_path / filename
+  )
+  full_path.write_bytes(raw_png)
+  config.console.print(f'Saved to "{full_path}"\n')

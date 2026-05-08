@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - YYYY-MM-DD - Placeholder](#vvv---yyyy-mm-dd---placeholder)
-  - [1.0.0 - 2026-05-07](#100---2026-05-07)
+  - [1.0.0 - 2026-05-08](#100---2026-05-08)
 
 This project follows a pragmatic versioning approach:
 
@@ -25,7 +25,7 @@ This project follows a pragmatic versioning approach:
 - Fixed
   - Placeholder for future changes.
 
-## 1.0.0 - 2026-05-07
+## 1.0.0 - 2026-05-08
 
 Initial public release.
 
@@ -36,8 +36,11 @@ Initial public release.
 - Fast interior shortcuts: main cardioid and period-2 bulb algebraic tests skip the iterative escape test for known interior points
 - Logarithmic auto-scaling of `max_iter` with magnification level (deeper zooms get more iterations)
 - Progress bar (via `tqdm`) during rendering, showing per-row speed
-- Output images saved as `mandel-<YYYYMMDDHHMMSS>-<SHA256-12>.png` in the working directory
-- `Frame` class with `FromCoords()` and `FromCenter()` constructors, `area` and `precision` properties, and a human-readable `__str__` representation showing center and half-width in exact rational form
+- Smooth 16-color histogram-equalized exterior color palette (blue-to-yellow-to-brown cycling gradient); interior points (never escaped) are rendered as pure black
+- Output images saved as `<prefix>[-<YYYYMMDDhhmmss>][-<SHA256-20>].png`; prefix defaults to `'mandel'` (global `--prefix` flag); date via `--date/--no-date`; 20-char SHA256 hash via `--hash/--no-hash`; directory via `-o/--out` flag
+- `Frame` class with `FromCoords()` and `FromCenter()` constructors, `area`, `precision`, `magnification`, and `iterations` properties, and a human-readable `__str__` representation showing center and half-width in exact rational form
 - `zoom markdown` command: auto-generates CLI documentation in Markdown
-- Global CLI options: `--version`, `--verbose` (0–3), `--color/--no-color`, `--width/-w`, `--height/-h` (4–8192 pixels, default 1024)
+- `GetBasicDataFromPNG()` utility for round-trip PNG integrity verification (dimensions + hash) after rendering
+- Example renders at 7 zoom levels saved as committed test data in `tests/data/images/` via `scripts/make_examples.sh`; seahorse-tail image hash pinned in `cli/base.py` for regression testing
+- Global CLI options: `--version`, `--verbose` (0–3), `--color/--no-color`, `--width/-w`, `--height/-h` (4–8192 pixels, default 1024), `-o/--out` (output directory), `--prefix` (filename prefix, default `'mandel'`), `--date/--no-date`, `--hash/--no-hash`
 - `transai` dependency included as the foundation for future AI/LLM-guided zoom features

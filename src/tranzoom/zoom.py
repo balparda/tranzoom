@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""CLI name / short purpose."""
+"""Zoom CLI entry point for the TranZoom Mandelbrot renderer."""
 
 from __future__ import annotations
 
+import pathlib
 from dataclasses import dataclass
 
 import click
@@ -24,6 +25,10 @@ class TranZoomConfig(clibase.CLIConfig):
 
   img_width: int
   img_height: int
+  img_output_path: pathlib.Path | None
+  img_use_date: bool
+  img_use_hash: bool
+  img_path_prefix: str
 
 
 # CLI app setup, this is an important object and can be imported elsewhere and called
@@ -69,6 +74,10 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   ),
   img_width: int = base.IMAGE_WIDTH_OPTION,  # type: ignore[assignment]
   img_height: int = base.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
+  img_output_path: pathlib.Path | None = base.IMAGE_PATH_OUTPUT_OPTION,  # type: ignore[assignment]
+  img_path_prefix: str = base.IMAGE_PREFIX_OPTION,  # type: ignore[assignment]
+  img_use_date: bool = base.IMAGE_INCLUDE_DATE_OPTION,  # type: ignore[assignment]
+  img_use_hash: bool = base.IMAGE_INCLUDE_HASH_OPTION,  # type: ignore[assignment]
 ) -> None:
   if version:
     typer.echo(__version__)
@@ -88,6 +97,10 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     appconfig=app_config.InitConfig('tranzoom', 'config.bin'),
     img_width=img_width,
     img_height=img_height,
+    img_output_path=None if img_output_path is None else img_output_path.expanduser().resolve(),
+    img_path_prefix=img_path_prefix,
+    img_use_date=img_use_date,
+    img_use_hash=img_use_hash,
   )
   # even though this is a convenient place to print(), beware that this runs even when
   # a subcommand is invoked; so prefer logging.debug/info/warning/error instead of print();
@@ -96,7 +109,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
 
 @app.command(
   'markdown',
-  help='Emit Markdown docs for the CLI (see README.md section "Creating a New Version").',
+  help='Emit Markdown docs for the CLI (see README.md section "Versioning and releases").',
   epilog=('Example:\n\n\n\n$ poetry run zoom markdown > zoom.md\n\n<<saves CLI doc>>'),
 )
 @clibase.CLIErrorGuard

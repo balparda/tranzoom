@@ -6,9 +6,7 @@ from __future__ import annotations
 
 from unittest import mock
 
-import click
 import pytest
-import typer
 from click import testing as click_testing
 from transcrypto.utils import config as app_config
 from transcrypto.utils import logging as cli_logging
@@ -57,14 +55,6 @@ def test_version_flag() -> None:
   result: click_testing.Result = CallCLI(['--version'])
   assert result.exit_code == 0
   assert '.' in result.stdout
-
-
-def test_version_flag_raises_exit() -> None:
-  """Test version flag raises typer.Exit with exit code 0."""
-  ctx = mock.Mock(spec=click.Context)
-  with pytest.raises(typer.Exit) as exc_info:
-    zoom.Main(ctx=ctx, version=True, verbose=0, color=None, img_width=1000, img_height=1000)
-  assert exc_info.value.exit_code == 0
 
 
 def test_run_function() -> None:

@@ -15,12 +15,24 @@ Usage: zoom [OPTIONS] COMMAND [ARGS]...
 │                                                                     Defaults to having colors.                                                          │
 │ --width               -w                INTEGER RANGE [4<=x<=8192]  Width of the image; 4 ≤ w ≤ 8192; default is 1024                    │
 │ --height              -h                INTEGER RANGE [4<=x<=8192]  Height of the image; 4 ≤ h ≤ 8192; default is 1024                   │
+│ --out                 -o                DIRECTORY                   The local output root directory path, ex: "~/foo/bar/"; if not given, the image     │
+│                                                                     will be saved in the current working directory                                      │
+│ --prefix                                TEXT                        Image save prefix; default: 'mandel' (the final file name will be                   │
+│                                                                     "<prefix>[-<date>][-<hash20>].png", note the date and the hash can be turned off    │
+│                                                                     with --no-date and --no-hash, respectively)                                         │
+│                                                                                                                                        │
+│ --date                    --no-date                                 If True, file names will include the date-time as YYYYMMDDhhmmss; if False, file    │
+│                                                                     names will not include the date-time; default is True                               │
+│                                                                                                                                          │
+│ --hash                    --no-hash                                 If True, file names will include the hash; if False, file names will not include    │
+│                                                                     the hash; default is True                                                           │
+│                                                                                                                                          │
 │ --install-completion                                                Install completion for the current shell.                                           │
 │ --show-completion                                                   Show completion for the current shell, to copy it or customize the installation.    │
 │ --help                                                              Show this message and exit.                                                         │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ markdown  Emit Markdown docs for the CLI (see README.md section "Creating a New Version").                                                              │
+│ markdown  Emit Markdown docs for the CLI (see README.md section "Versioning and releases").                                                             │
 │ image     Make a Mandelbrot image.                                                                                                                      │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -41,6 +53,13 @@ Usage: zoom image [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Example:                                                                                                                                                  
+                                                                                                                                                           
+ $ poetry run zoom image                                                                                                                                   
+ <saves fractal to disk with default frame>                                                                                                                
+ $ poetry run zoom image " -0.3" 0 2  # note the space because of the "-"                                                                                  
+ <saves fractal to disk with center -0.3+0j and width 2>
 ```
 
 ## `zoom markdown` Command
@@ -48,7 +67,7 @@ Usage: zoom image [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 ```text
 Usage: zoom markdown [OPTIONS]                                                                                                                            
                                                                                                                                                            
- Emit Markdown docs for the CLI (see README.md section "Creating a New Version").                                                                          
+ Emit Markdown docs for the CLI (see README.md section "Versioning and releases").                                                                         
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                                                                                             │
