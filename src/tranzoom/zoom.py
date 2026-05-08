@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import pathlib
 from dataclasses import dataclass
 
 import click
@@ -24,6 +25,8 @@ class TranZoomConfig(clibase.CLIConfig):
 
   img_width: int
   img_height: int
+  img_output_path: pathlib.Path | None
+  img_use_date: bool
 
 
 # CLI app setup, this is an important object and can be imported elsewhere and called
@@ -69,6 +72,8 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   ),
   img_width: int = base.IMAGE_WIDTH_OPTION,  # type: ignore[assignment]
   img_height: int = base.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
+  img_output_path: pathlib.Path | None = base.IMAGE_PATH_OUTPUT_OPTION,  # type: ignore[assignment]
+  img_use_date: bool = base.SD_DB_USE_OPTION,  # type: ignore[assignment]
 ) -> None:
   if version:
     typer.echo(__version__)
@@ -88,6 +93,8 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     appconfig=app_config.InitConfig('tranzoom', 'config.bin'),
     img_width=img_width,
     img_height=img_height,
+    img_output_path=None if img_output_path is None else img_output_path.expanduser().resolve(),
+    img_use_date=img_use_date,
   )
   # even though this is a convenient place to print(), beware that this runs even when
   # a subcommand is invoked; so prefer logging.debug/info/warning/error instead of print();

@@ -10,7 +10,7 @@ from tranzoom.core import fractal
 
 # CLI options that can be re-used
 
-# Image: output image size
+# Image: output image
 IMAGE_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
   fractal.DEFAULT_IMAGE_SIZE,
   '-w',
@@ -31,6 +31,27 @@ IMAGE_HEIGHT_OPTION: typer.models.OptionInfo = typer.Option(
   help=(
     f'Height of the image; {fractal.MIN_IMAGE_SIZE} ≤ h ≤ {fractal.MAX_IMAGE_SIZE}; '
     f'default is {fractal.DEFAULT_IMAGE_SIZE}'
+  ),
+)
+IMAGE_PATH_OUTPUT_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '-o',
+  '--out',
+  exists=True,
+  file_okay=False,
+  dir_okay=True,
+  readable=True,
+  help=(
+    'The local output root directory path, ex: "~/foo/bar/"; '
+    'if not given, the image will be saved in the current working directory'
+  ),
+)
+SD_DB_USE_OPTION: typer.models.OptionInfo = typer.Option(
+  True,
+  '--date/--no-date',
+  help=(
+    'If True, file names will include the date-time as YYYYMMDDhhmmss; '
+    'if False, file names will only include the hash; default is True'
   ),
 )
 
