@@ -5,7 +5,7 @@
 # make_examples.sh — Generate a sequence of example Mandelbrot renders at increasing zoom depth.
 # Each command prints before it runs (set -x xtrace) so output is self-documenting.
 # Run from the tranzoom repo root: bash scripts/make_examples.sh
-# Output: PNG files named mandel-<YYYYMMDDHHMMSS>-<hash12>.png in the working directory.
+# Output: PNG files named tests/data/images/mandel-<hash20>.png
 
 set -euxo pipefail
 
