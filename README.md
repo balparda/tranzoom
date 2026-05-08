@@ -318,7 +318,7 @@ $ poetry run zoom -w 512 -h 512 image " -0.7436499" "0.13188204" "0.00073801"
 Img: 100%|█████████████████████████████████████████████| 512/512 [00:11<00:00, 43.04ln/s]
 
 Generated image '826ee9edaa3cde78059cee02a74faf361e5f2e2da62e44d46b0da9dab1f592f7' in 12.085 s
-Saved to 'tests/data/images/mandel-826ee9edaa3cde78059c'
+Saved to 'tests/data/images/mandel-826ee9edaa3cde78059c.png'
 ```
 
 ![Full / Default](tests/data/images/mandel-826ee9edaa3cde78059c.png)
