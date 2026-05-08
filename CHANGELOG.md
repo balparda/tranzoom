@@ -36,7 +36,7 @@ Initial public release.
 - Fast interior shortcuts: main cardioid and period-2 bulb algebraic tests skip the iterative escape test for known interior points
 - Logarithmic auto-scaling of `max_iter` with magnification level (deeper zooms get more iterations)
 - Progress bar (via `tqdm`) during rendering, showing per-row speed
-- Output images saved as `mandel-<YYYYMMDDHHMMSS>-<SHA256-20>.png` or `mandel-<YYYYMMDDHHMMSS>-<SHA256-20>.png`, depending on `--date/--no-date` flag, to a directory chosen by the user, `-o/--out` flag.
+- Output images saved as `mandel-<YYYYMMDDHHMMSS>-<SHA256-20>.png` or `mandel-<SHA256-20>.png`, depending on `--date/--no-date` flag, to a directory chosen by the user, `-o/--out` flag.
 - `Frame` class with `FromCoords()` and `FromCenter()` constructors, `area` and `precision` properties, and a human-readable `__str__` representation showing center and half-width in exact rational form
 - `zoom markdown` command: auto-generates CLI documentation in Markdown
 - Global CLI options: `--version`, `--verbose` (0–3), `--color/--no-color`, `--width/-w`, `--height/-h` (4–8192 pixels, default 1024)
