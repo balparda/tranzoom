@@ -556,7 +556,7 @@ def GetBasicDataFromPNG(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict
     (width, height, hash, metadata) where:
       - width: The width of the image in pixels.
       - height: The height of the image in pixels.
-      - hash: A hash of the image data (SHA256 of RGBA bytes).
+      - hash: A hash of the image data (SHA256 of RGB bytes).
       - metadata: The extracted metadata from the image.
 
   Raises:
