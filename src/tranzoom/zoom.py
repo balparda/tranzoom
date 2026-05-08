@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""CLI name / short purpose."""
+"""Zoom CLI entry point for the TranZoom Mandelbrot renderer."""
 
 from __future__ import annotations
 
@@ -109,7 +109,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
 
 @app.command(
   'markdown',
-  help='Emit Markdown docs for the CLI (see README.md section "Creating a New Version").',
+  help='Emit Markdown docs for the CLI (see README.md section "Versioning and releases").',
   epilog=('Example:\n\n\n\n$ poetry run zoom markdown > zoom.md\n\n<<saves CLI doc>>'),
 )
 @clibase.CLIErrorGuard

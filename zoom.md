@@ -32,7 +32,7 @@ Usage: zoom [OPTIONS] COMMAND [ARGS]...
 │ --help                                                              Show this message and exit.                                                         │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ markdown  Emit Markdown docs for the CLI (see README.md section "Creating a New Version").                                                              │
+│ markdown  Emit Markdown docs for the CLI (see README.md section "Versioning and releases").                                                             │
 │ image     Make a Mandelbrot image.                                                                                                                      │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -67,7 +67,7 @@ Usage: zoom image [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 ```text
 Usage: zoom markdown [OPTIONS]                                                                                                                            
                                                                                                                                                            
- Emit Markdown docs for the CLI (see README.md section "Creating a New Version").                                                                          
+ Emit Markdown docs for the CLI (see README.md section "Versioning and releases").                                                                         
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                                                                                             │
