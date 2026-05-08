@@ -314,7 +314,18 @@ DEFAULT_FRAME: Frame = Frame.FromCenter(
 
 
 class Image:
-  """A fractal image. Encapsulates the image operations."""
+  """A fractal image. Encapsulates the image operations.
+
+  Attributes:
+    escape (ImageUInt32Array): An array storing the escape iteration for each pixel;
+        this is not the color, but the raw data that will be converted to color later;
+        the length of this array is equal to the total number of pixels in the image.
+        You are encouraged to use the SetEscape() method to set the escape iterations,
+        but for hot paths you can also set the escape iterations directly in the array,
+        remembering that the pixel at coordinates (x, y) is stored at index (y * width + x)
+        in the array.
+
+  """
 
   def __init__(self, frame: Frame, width: int, height: int, max_iter: int) -> None:
     """Construct image.
@@ -336,8 +347,8 @@ class Image:
     self._height: int = height
     self._max_iter: int = max_iter
     # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
-    self._escape: ImageUInt32Array = array.array('I', (0 for _ in range(width * height)))
-    if self._escape.itemsize != _N_BYTES_UINT:
+    self.escape: ImageUInt32Array = array.array('I', (0 for _ in range(width * height)))
+    if self.escape.itemsize != _N_BYTES_UINT:
       raise Error(f'unsupported platform: array of unsigned ints is not {_N_BYTES_UINT} bytes')
 
   def SetEscape(self, x: int, y: int, escaped_at: int) -> None:
@@ -356,7 +367,7 @@ class Image:
       raise Error(f'Pixel coordinates out of bounds: {x=}, {y=}, {self._width=}, {self._height=}')
     if not (0 <= escaped_at <= self._max_iter):
       raise Error(f'Invalid escape iteration: {escaped_at=} / {self._max_iter=}')
-    self._escape[y * self._width + x] = escaped_at
+    self.escape[y * self._width + x] = escaped_at
 
   def AsPixels(self) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
@@ -377,7 +388,7 @@ class Image:
     """
     # step 1: build histogram of escape iterations for exterior pixels only
     histogram: dict[int, int] = {}
-    for escaped_at in self._escape:
+    for escaped_at in self.escape:
       if escaped_at < self._max_iter:
         histogram[escaped_at] = histogram.get(escaped_at, 0) + 1
     total_exterior: int = sum(histogram.values())
@@ -393,7 +404,7 @@ class Image:
     g: int
     b: int
     pixels = bytearray(self._width * self._height * 3)
-    for i, escaped_at in enumerate(self._escape):
+    for i, escaped_at in enumerate(self.escape):
       if escaped_at >= self._max_iter or total_exterior == 0:
         r, g, b = 0, 0, 0  # interior point: black
       else:
@@ -441,6 +452,8 @@ def Mandelbrot(  # noqa: PLR0914
     Error: on error
 
   """
+  # create image; will also check the parameters and frame validity in the Image constructor
+  image: Image = Image(frame, width, height, max_iter)
   # compute pixel size in complex plane and check frame validity; exact computation (gmpy2.mpq)
   dx: gmpy2.mpq
   dy: gmpy2.mpq
@@ -448,8 +461,6 @@ def Mandelbrot(  # noqa: PLR0914
   dx, dy = dx / gmpy2.mpq(width - 1), dy / gmpy2.mpq(height - 1)
   if dx <= 0 or dy <= 0:
     raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
-  # create image; will also check the parameters and frame validity in the Image constructor
-  image: Image = Image(frame, width, height, max_iter)
   # start the mpfr context for floating-point computations with the precision needed
   with frame.context:
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
@@ -482,7 +493,7 @@ def Mandelbrot(  # noqa: PLR0914
         in_bulb: bool = x_plus_one * x_plus_one + cy * cy <= _MPFR_SIXTEENTH
         if in_cardioid or in_bulb:
           # point is in the main cardioid or period-2 bulb, so it's an interior point, no escape
-          image.SetEscape(px, py, max_iter)
+          image.escape[py * width + px] = max_iter  # carefully set this directly in the array
           continue
         # not in the main cardioid or period-2 bulb, do the full escape-time test in mpfr
         zx: gmpy2.mpfr = _MPFR_ZERO
@@ -500,7 +511,7 @@ def Mandelbrot(  # noqa: PLR0914
           zx = zx2 - zy2 + cx
         else:
           escaped_at = max_iter  # if we didn't break, we reached max_iter, mark as non-escaped
-        image.SetEscape(px, py, escaped_at)
+        image.escape[py * width + px] = escaped_at  # carefully set this directly in the array
   # done
   return image
 
