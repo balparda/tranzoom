@@ -47,20 +47,23 @@ def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path
     with tempfile.TemporaryDirectory() as tmp_dir:
       # render a Seahorse Tail image; --no-date makes the filename deterministic (hash-only),
       # --out directs output to tmp_dir so we can assert on the exact file produced.
-      r = base.Run([
-        str(cli_paths['zoom']),
-        '-w',
-        '512',
-        '-h',
-        '512',
-        '--no-date',
-        '--out',
-        tmp_dir,
-        'image',
-        ' -0.7436499',
-        '0.13188204',
-        '0.00073801',
-      ])
+      r = base.Run(
+        # call the console script directly to test the installed CLI
+        [
+          str(cli_paths['zoom']),
+          '-w',
+          '512',
+          '-h',
+          '512',
+          '--no-date',
+          '--out',
+          tmp_dir,
+          'image',
+          ' -0.7436499',
+          '0.13188204',
+          '0.00073801',
+        ]
+      )
       assert r.returncode == 0, f'zoom image failed:\n{r.stderr}'
       output_image: pathlib.Path = pathlib.Path(tmp_dir) / 'mandel-2537af0ab52a4ec846d1.png'
       assert output_image.exists(), f'Expected output image not found: {output_image}'
