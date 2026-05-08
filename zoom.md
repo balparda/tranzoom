@@ -22,7 +22,7 @@ Usage: zoom [OPTIONS] COMMAND [ARGS]...
 │                                                                     with --no-date and --no-hash, respectively)                                         │
 │                                                                                                                                        │
 │ --date                    --no-date                                 If True, file names will include the date-time as YYYYMMDDhhmmss; if False, file    │
-│                                                                     names will only include the hash; default is True                                   │
+│                                                                     names will not include the date-time; default is True                               │
 │                                                                                                                                          │
 │ --hash                    --no-hash                                 If True, file names will include the hash; if False, file names will not include    │
 │                                                                     the hash; default is True                                                           │
