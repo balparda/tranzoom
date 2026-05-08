@@ -70,7 +70,7 @@ def Image(  # documentation is help/epilog/args  # noqa: D103, PLR0914
   # check we can recover the hash from the PNG: should never fail unless we have a bug
   w, h, png_hash, _ = fractal.GetBasicDataFromPNG(raw_png)
   if png_hash != raw_hash or w != config.img_width or h != config.img_height:
-    raise RuntimeError(
+    raise click.ClickException(
       f'Mismatch: expected {config.img_width}x{config.img_height}/{raw_hash!r} but '
       f'got {w}x{h}/{png_hash!r} from PNG; this should never happen, please report this as a bug'
     )
