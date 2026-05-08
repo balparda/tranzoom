@@ -23,9 +23,10 @@ from transcrypto.utils import base as tbase
 # basic constants
 
 _N_BYTES_UINT: int = 4  # we use array of unsigned ints to store pixel data
-_MIN_ITER: int = 512
+_MIN_ITER: int = 1000
 DEFAULT_ITER: int = 1000
 _MAX_ITER: int = 2 ** (_N_BYTES_UINT * 8) - 1  # 4_294_967_295, the max value in array('I'), uint32
+_ITER_PER_MAGNITUDE: int = 400  # how much more iter per magnitude unit; this is a very naïve way!
 type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel data array
 
 MIN_IMAGE_SIZE: int = 4
@@ -53,9 +54,64 @@ PrecisionContext: abc.Callable[[], gmpy2.context] = lambda: gmpy2.local_context(
 _MPQ_TWO = gmpy2.mpq(2)
 _MPQ_MAX_IMAGE_SIZE = gmpy2.mpq(MAX_IMAGE_SIZE)
 
+# Smooth palette for exterior points: 16 color stops cycling through a
+# blue-to-yellow-to-brown gradient (based on the classic Mandelbrot color scheme)
+_SMOOTH_PALETTE: tuple[tuple[int, int, int], ...] = (
+  (66, 30, 15),  # dark reddish-brown
+  (25, 7, 26),  # dark violet
+  (9, 1, 47),  # dark blue
+  (4, 4, 73),  # deep blue
+  (0, 7, 100),  # deep blue
+  (12, 44, 138),  # blue
+  (24, 82, 177),  # blue
+  (57, 125, 209),  # light blue
+  (134, 181, 229),  # very light blue
+  (211, 236, 248),  # near-white blue
+  (241, 233, 191),  # pale yellow
+  (248, 201, 95),  # yellow
+  (255, 170, 0),  # gold / orange
+  (204, 128, 0),  # dark orange
+  (153, 87, 0),  # brown
+  (106, 52, 3),  # dark brown
+)
+
+# how many times to cycle through the palette across the histogram-equalized range;
+# more cycles = tighter, more frequent color banding; 3 is a visually balanced default
+_PALETTE_CYCLES: int = 3
+
 
 class Error(tbase.Error):
   """Base fractal exception."""
+
+
+def _PixelPalette(t: float) -> tuple[int, int, int]:
+  """Get the RGB color for a histogram-equalized normalized palette position.
+
+  Smoothly interpolates between adjacent stops in _SMOOTH_PALETTE, cycling
+  _PALETTE_CYCLES times across the [0, 1) range for visual banding.
+
+  Args:
+    t (float): Normalized position in [0, 1) derived from histogram equalization.
+
+  Returns:
+    tuple[int, int, int]: The interpolated RGB color.
+
+  """
+  # cycle multiple times through the palette for visual banding
+  t_cycled: float = (t * _PALETTE_CYCLES) % 1.0
+  n: int = len(_SMOOTH_PALETTE)
+  # fractional index into the palette
+  idx: float = t_cycled * n
+  lo: int = int(idx) % n
+  hi: int = (lo + 1) % n
+  frac: float = idx - int(idx)
+  r0, g0, b0 = _SMOOTH_PALETTE[lo]
+  r1, g1, b1 = _SMOOTH_PALETTE[hi]
+  return (
+    int(r0 + frac * (r1 - r0)),
+    int(g0 + frac * (g1 - g0)),
+    int(b0 + frac * (b1 - b0)),
+  )
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
@@ -156,7 +212,7 @@ class Frame:
     """
     # TODO: histogram-based iteration limit
     _, magnitude = self.magnification
-    return int(_MIN_ITER + 256 * magnitude) if magnitude > 0.0 else _MIN_ITER
+    return int(_MIN_ITER + _ITER_PER_MAGNITUDE * magnitude) if magnitude > 0.0 else _MIN_ITER
 
   def __str__(self) -> str:
     """Get string representation of the frame.
@@ -285,7 +341,6 @@ DEFAULT_FRAME: Frame = Frame.FromCenter(
 )
 
 
-# TODO: Later, replace the color section only.
 class Image:
   """A fractal image. Encapsulates the image operations."""
 
@@ -331,32 +386,47 @@ class Image:
       raise Error(f'Invalid escape iteration: {escaped_at=} / {self._max_iter=}')
     self._escape[y * self._width + x] = escaped_at
 
-  def _PixelPalette(self, escaped_at: int) -> tuple[int, int, int]:
-    """Get the RGB color for a given escape iteration.
-
-    Args:
-      escaped_at (int): The escape iteration of the point.
-
-    Returns:
-      tuple[int, int, int]: The RGB color for the given escape iteration.
-
-    """
-    v: int = 255 - int(255 * escaped_at / self._max_iter)
-    return (v, v, v)
-
   def AsPixels(self) -> bytes:
-    """Convert the image to raw pixel bytes.
+    """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
+
+    Current palette:
+    - black for interior points (never escape)
+    - smooth 16-color cycling gradient, histogram-equalized across escape iterations
+
+    Interior points (that never escaped, i.e., escaped_at == max_iter) are rendered as
+    pure black. Exterior points are colored by mapping their escape iteration through a
+    cumulative histogram distribution (histogram equalization) into [0, 1), which is then
+    fed into a smooth cycling 16-color gradient via _PixelPalette. This ensures the full
+    color range is used regardless of zoom depth or iteration distribution.
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
 
     """
-    # convert the raw pixel data to a PNG using PIL
+    # step 1: build histogram of escape iterations for exterior pixels only
+    histogram: dict[int, int] = {}
+    for escaped_at in self._escape:
+      if escaped_at < self._max_iter:
+        histogram[escaped_at] = histogram.get(escaped_at, 0) + 1
+    total_exterior: int = sum(histogram.values())
+    # step 2: compute cumulative distribution function for histogram equalization;
+    # cumulative[v] = number of exterior pixels with escape value <= v
+    cumulative: dict[int, int] = {}
+    cum: int = 0
+    for v in sorted(histogram):
+      cum += histogram[v]
+      cumulative[v] = cum
+    # step 3: map each pixel to an RGB color
+    r: int
+    g: int
+    b: int
     pixels = bytearray(self._width * self._height * 3)
     for i, escaped_at in enumerate(self._escape):
-      # decide pixel color based on escape iteration
-      r, g, b = self._PixelPalette(escaped_at)
-      # put pixel values in the bytearray
+      if escaped_at >= self._max_iter or total_exterior == 0:
+        r, g, b = 0, 0, 0  # interior point: black
+      else:
+        t: float = cumulative[escaped_at] / total_exterior
+        r, g, b = _PixelPalette(t)
       pixels[i * 3] = r
       pixels[i * 3 + 1] = g
       pixels[i * 3 + 2] = b
@@ -381,11 +451,7 @@ class Image:
 def Mandelbrot(  # noqa: PLR0914
   frame: Frame, width: int, height: int, *, max_iter: int = DEFAULT_ITER, progress_bar: bool = True
 ) -> Image:
-  """Render the frame rectangle to PNG bytes.
-
-  Current palette:
-    - black for points that do not escape
-    - grayscale by escape iteration for points that do
+  """Render the frame rectangle to an Image.
 
   Args:
     frame (Frame): The frame to render.

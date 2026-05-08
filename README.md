@@ -184,19 +184,28 @@ The long-term vision is to use LLMs to autonomously guide the zoom — identifyi
 
 ### Quick start
 
-Render the full Mandelbrot set (default, 1024×1024):
+Render the [full Mandelbrot set](#full--default-1-80-bits) (default, 1024×1024):
 
 ```sh
-poetry run zoom image
+$ poetry run zoom image
+
+1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, 1000 iterations...
+
+Img: 100%|█████████████████████████████████████████████| 1024/1024 [00:13<00:00, 74.30ln/s]
+
+Generated image '64bc99945eadee05f4f68deead541f6a3c0ecffd653e97a05c7b52dc2a693bf9' in 14.344 s
+Saved to 'mandel-20260508104540-64bc99945ead.png'
 ```
 
-Render a well-known deep zoom (seahorse valley, ~155× magnification, 512×512):
+As can be seen, the `Frame` is stored as rational numbers with arbitrary precision, `[(-3/4, 0) @ 5/2]`, so it is guaranteed to be exact (centered in $-0.75+0j$ and with width of $2.5$). It will pick a precision, in bits, which is the internal `float` representation (matissa), and will pick the (max) number of iterations for the generation. The magnification here is 1 because it is the full Mandelbrot set. There will be a progress bar, counting the horizontal lines being produced. The generated image data will be hashed and then saved to a PNG on disk.
+
+Render a 512×512 [well-known zoom ("Seahorse", ~155× magnification, 512×512)](#seahorse-155-83-bits):
 
 ```sh
 poetry run zoom -w 512 -h 512 image " -0.74303" "0.126433" "0.01611"
 ```
 
-Render an extreme zoom (~4 billion× magnification):
+Render an extreme 256×256 [zoom ("Satellite Seahorse Tail with Julia Island", ~4 billion× magnification)](#satellite-seahorse-tail-with-julia-island-4g-108-bits):
 
 ```sh
 poetry run zoom -w 256 -h 256 image " -0.74364388717342" "0.13182590425182" "0.00000000059849"
@@ -246,15 +255,7 @@ The command:
 4. Renders all pixels using the escape-time algorithm (with cardioid/bulb interior shortcuts)
 5. Saves the PNG to `mandel-<YYYYMMDDHHMMSS>-<hash12>.png` in the working directory
 
-Example output:
-
-```txt
-512x512 Mandelbrot in frame [(-74303/100000, 126433/1000000) @ 1611/100000],
-precision 83 bits, 155.183 magnification, 1072 iterations...
-Img 100%|█████████████████████████| 512/512 [00:12<00:00, 40.9ln/s]
-Generated image 'a3f9b2c1d4e5...' in 12.34s
-Saved to 'mandel-20260507120000-a3f9b2c1d4e5.png'
-```
+See below for many example outputs.
 
 ### Comprehensive example images and zooms
 
@@ -267,12 +268,12 @@ Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) w
 ```sh
 $ poetry run zoom image
 
-1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, 512 iterations...
+1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, 1000 iterations...
 
-Img: 100%|█████████████████████████████████████████████| 1024/1024 [00:08<00:00, 124.58ln/s]
+Img: 100%|█████████████████████████████████████████████| 1024/1024 [00:13<00:00, 74.30ln/s]
 
-Generated image '6129072fffc1c8cb911e7b7ea0e8eba4d3722d35c4a5f4d1b8607b3f49c2e2c3' in 8.260 s
-Saved to 'mandel-20260507151339-6129072fffc1.png'
+Generated image '64bc99945eadee05f4f68deead541f6a3c0ecffd653e97a05c7b52dc2a693bf9' in 14.344 s
+Saved to 'mandel-20260508104540-64bc99945ead.png'
 ```
 
 This is what tranZoom considers ***"1 magnification"***, and will measure other magnifications against this size.
@@ -284,13 +285,12 @@ Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mande
 ```sh
 $ poetry run zoom -w 512 -h 512 image " -0.74303" "0.126433" "0.01611"
 
-512x512 Mandelbrot in frame [(-74303/100000, 126433/1000000) @ 1611/100000],
-precision 83 bits, 155.183 magnification, 1072 iterations...
+512x512 Mandelbrot in frame [(-74303/100000, 126433/1000000) @ 1611/100000], precision 83 bits, 155.183 magnification, 1876 iterations...
 
-Img: 100%|█████████████████████████████████████████████| 512/512 [00:21<00:00, 24.07ln/s]
+Img: 100%|█████████████████████████████████████████████| 512/512 [00:30<00:00, 16.77ln/s]
 
-Generated image '9f555784d1ba4c7f3596392344f55b21c9fee50cd0704e8f23f9ebe0d712eecb' in 21.294 s
-Saved to 'mandel-20260507152011-9f555784d1ba.png'
+Generated image '411d8a9f5d35c761badcabc61b09abfcecf943e32fd8bebc473c16bd324db240' in 30.687 s
+Saved to 'mandel-20260508104611-411d8a9f5d35.png'
 ```
 
 #### Seahorse Tail (×3k, 88 bits)
@@ -300,13 +300,12 @@ Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tai
 ```sh
 $ poetry run zoom -w 512 -h 512 image " -0.7436499" "0.13188204" "0.00073801"
 
-512x512 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) @ 73801/100000000],
-precision 88 bits, 3.387 k magnification, 1415 iterations...
+512x512 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) @ 73801/100000000], precision 88 bits, 3.387 k magnification, 2411 iterations...
 
-Img: 100%|█████████████████████████████████████████████| 512/512 [00:11<00:00, 45.56ln/s]
+Img: 100%|█████████████████████████████████████████████| 512/512 [00:11<00:00, 43.04ln/s]
 
-Generated image '5a4f21f401eee6c457bec194e2b12c7c6684c7f5dd5ec7cb6ef9ee6b14588318' in 11.266 s
-Saved to 'mandel-20260507152619-5a4f21f401ee.png'
+Generated image '826ee9edaa3cde78059cee02a74faf361e5f2e2da62e44d46b0da9dab1f592f7' in 12.085 s
+Saved to 'mandel-20260508104624-826ee9edaa3c.png'
 ```
 
 #### Satellite Antenna (×852k, 96 bits)
@@ -316,13 +315,13 @@ Render a ["Satellite Antenna"](https://en.wikipedia.org/wiki/File:Mandel_zoom_08
 ```sh
 $ poetry run zoom -w 256 -h 256 image " -0.743644786" "0.1318252536" "0.0000029336"
 
-256x256 Mandelbrot in frame [(-371822393/500000000, 164781567/1250000000) @ 3667/1250000000],
-precision 96 bits, 852.195 k magnification, 2030 iterations...
+256x256 Mandelbrot in frame [(-371822393/500000000, 164781567/1250000000) @ 3667/1250000000], precision 96 bits, 852.195 k magnification, 3372
+iterations...
 
-Img: 100%|█████████████████████████████████████████████| 256/256 [00:21<00:00, 11.96ln/s]
+Img: 100%|█████████████████████████████████████████████| 256/256 [00:30<00:00,  8.30ln/s]
 
-Generated image '11f65b438d7f9b75be209d08c594f567588de3a57e5f93249da7e0a08a4bf7fd' in 21.432 s
-Saved to 'mandel-20260507153058-11f65b438d7f.png'
+Generated image 'f521ad3bf2644a5f3255a297a5a3bf68f94376f01ea0097b0b1a0d2c8865a9c5' in 30.890 s
+Saved to 'mandel-20260508104655-f521ad3bf264.png'
 ```
 
 #### Satellite Seahorse Tail with Julia Island (×4G, 108 bits)
@@ -332,13 +331,13 @@ Render a ["Satellite Seahorse Tail with Julia Island"](https://en.wikipedia.org/
 ```sh
 $ poetry run zoom -w 256 -h 256 image " -0.74364388717342" "0.13182590425182" "0.00000000059849"
 
-256x256 Mandelbrot in frame [(-37182194358671/50000000000000, 6591295212591/50000000000000) @
-59849/100000000000000], precision 108 bits, 4.177 G magnification, 2974 iterations...
+256x256 Mandelbrot in frame [(-37182194358671/50000000000000, 6591295212591/50000000000000) @ 59849/100000000000000], precision 108 bits, 4.177 G
+magnification, 4848 iterations...
 
-Img: 100%|█████████████████████████████████████████████| 256/256 [00:31<00:00,  8.16ln/s]
+Img: 100%|█████████████████████████████████████████████| 256/256 [00:32<00:00,  7.87ln/s]
 
-Generated image '2a0ed82d5e0fbba920ad7593a1b298ebd4ce9c8e4cdceab905a1f751ce75957b' in 31.398 s
-Saved to 'mandel-20260507153351-2a0ed82d5e0f.png'
+Generated image '34166c6d5db640bfa3996aeaa9f1d2f969d3942359dbe0f42014c93c06276a47' in 32.604 s
+Saved to 'mandel-20260508104728-34166c6d5db6.png'
 ```
 
 #### One Island (×417G, 115 bits)
@@ -348,12 +347,13 @@ Render an ["One Island"](https://commons.wikimedia.org/wiki/File:Mandel_zoom_15_
 ```sh
 $ poetry run zoom -w 256 -h 256 image " -0.743643887036" "0.13182590421" "0.000000000006"
 
-256x256 Mandelbrot in frame [(-185910971759/250000000000, 13182590421/100000000000) @ 3/500000000000], precision 115 bits, 416.667 G magnification, 3486 iterations...
+256x256 Mandelbrot in frame [(-185910971759/250000000000, 13182590421/100000000000) @ 3/500000000000], precision 115 bits, 416.667 G magnification, 5647
+iterations...
 
-Img: 100%|█████████████████████████████████████████████| 256/256 [01:14<00:00,  3.43ln/s]
+Img: 100%|█████████████████████████████████████████████| 256/256 [01:20<00:00,  3.18ln/s]
 
-Generated image 'fe957c271352991f6243d014c11558cf7f6abcfde61c5ade870a3a00e48ffa6e' in 1.244 min
-Saved to 'mandel-20260507153620-fe957c271352.png'
+Generated image 'ec687adf4c237e2cf2cc750a5d430a32a8a6b9913aae9e258840b3f8fab74a22' in 1.342 min
+Saved to 'mandel-20260508104849-ec687adf4c23.png'
 ```
 
 #### Last Lights On (×2.5e+228, 835 bits)
@@ -363,7 +363,12 @@ Render a ["Last Lights On"](https://youtu.be/foxD6ZQlnlU) ultra-deep zoom to a 6
 ```sh
 $ poetry run zoom -w 64 -h 64 image " -1.7685736563152709932817429153295447129341200534055498823375111352827765533646353820119779335363321986478087958745766432300344486098206084588445291690832853792608335811319613234806674959498380432536269122404488847453646628324959064543" " -0.0009642968513582800001762427203738194482747761226565635652857831533070475543666558930286153827950716700828887932578932976924523447497708248894734256480183898683164582055541842171815899305250842692638349057118793296768325124255746563" "0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
 
-TODO: add example
+64x64 Mandelbrot in frame [...], precision 835 bits, 2.500000e+228 magnification, 92359 iterations...
+
+Img: 100%|█████████████████████████████████████████████| 64/64 [05:10<00:00,  4.86s/ln]
+
+Generated image 'f3cc103136423a57975750907ebc1d367e2985ac6338976d4d5a439f50323f4a' in 5.184 min
+Saved to 'mandel-20260508105401-f3cc10313642.png'
 ```
 
 #### Eye of the Universe (×2.5e+1090, 3698 bits)
