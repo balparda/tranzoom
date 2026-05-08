@@ -468,18 +468,17 @@ def Mandelbrot(  # noqa: PLR0914
     Error: on error
 
   """
-  # check parameters
-
+  # compute pixel size in complex plane and check frame validity; exact computation (gmpy2.mpq)
+  dx: gmpy2.mpq
+  dy: gmpy2.mpq
+  dx, dy = frame.size
+  dx, dy = dx / gmpy2.mpq(width - 1), dy / gmpy2.mpq(height - 1)
+  if dx <= 0 or dy <= 0:
+    raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
+  # create image; will also check the parameters and frame validity in the Image constructor
+  image: Image = Image(frame, width, height, max_iter)
+  # start the mpfr context for floating-point computations with the precision needed
   with frame.context:
-    # compute pixel size in complex plane and check frame validity
-    dx: gmpy2.mpq
-    dy: gmpy2.mpq
-    dx, dy = frame.size
-    dx, dy = dx / gmpy2.mpq(width - 1), dy / gmpy2.mpq(height - 1)
-    if dx <= 0 or dy <= 0:
-      raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
-    # create image
-    image: Image = Image(frame, width, height, max_iter)
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
     # are relatively expensive and we can reuse the x values across rows ("inner for loop");
     # also, this is where the "X" (real) coordinates are converted mpq->mpfr
@@ -529,5 +528,5 @@ def Mandelbrot(  # noqa: PLR0914
         else:
           escaped_at = max_iter  # if we didn't break, we reached max_iter, mark as non-escaped
         image.SetEscape(px, py, escaped_at)
-    # done
-    return image
+  # done
+  return image
