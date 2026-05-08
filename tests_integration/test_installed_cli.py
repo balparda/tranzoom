@@ -8,14 +8,16 @@ Why this exists (vs normal unit tests):
 - This test validates *packaging*: the wheel builds, installs, and the console script works.
 
 What we verify:
-- `mycli --version` prints the expected version.
-- `mycli --no-color hello Ada` runs successfully and produces non-ANSI output.
+- `zoom --version` prints the expected version.
+- `zoom image` renders a Seahorse Tail image with deterministic output and verifies it is
+  bit-for-bit identical to the reference image in tests/data/images/.
 """
 
 from __future__ import annotations
 
 import pathlib
 import shutil
+import tempfile
 
 import pytest
 from transcrypto.utils import base, config
@@ -37,16 +39,37 @@ def test_installed_cli_smoke(tmp_path: pathlib.Path) -> None:
   )
   # basic command smoke tests
   data_dir: pathlib.Path = config.CallGetConfigDirFromVEnv(vpy, _APP_NAME)
-  _hello_call(cli_paths, data_dir)  # TODO: change
+  _SeahorseTailCall(cli_paths, data_dir)
 
 
-def _hello_call(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path) -> None:
-  return  # TODO: remove
-  try:  # type: ignore[unreachable]
-    # basic command smoke test; use --no-color to avoid ANSI codes in asserts.
-    r = base.Run([str(cli_paths['mycli']), '--no-color', 'hello', 'Ada'])  # TODO: change
-    assert 'Hello, Ada!' in r.stdout
-    assert '\x1b[' not in r.stdout  # no ANSI escape sequences
-    assert '\x1b[' not in r.stderr
+def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path) -> None:
+  try:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+      # render a Seahorse Tail image; --no-date makes the filename deterministic (hash-only),
+      # --out directs output to tmp_dir so we can assert on the exact file produced.
+      r = base.Run([
+        str(cli_paths['zoom']),
+        '-w',
+        '512',
+        '-h',
+        '512',
+        '--no-date',
+        '--out',
+        tmp_dir,
+        'image',
+        ' -0.7436499',
+        '0.13188204',
+        '0.00073801',
+      ])
+      assert r.returncode == 0, f'zoom image failed:\n{r.stderr}'
+      output_image: pathlib.Path = pathlib.Path(tmp_dir) / 'mandel-2537af0ab52a4ec846d1.png'
+      assert output_image.exists(), f'Expected output image not found: {output_image}'
+      repo_root: pathlib.Path = pathlib.Path(__file__).resolve().parents[1]
+      reference_image: pathlib.Path = (
+        repo_root / 'tests' / 'data' / 'images' / 'demo-mandel-seahorse-tail.png'
+      )
+      assert output_image.read_bytes() == reference_image.read_bytes(), (
+        'Rendered image is not bit-for-bit identical to reference'
+      )
   finally:
     shutil.rmtree(data_dir)  # remove created data to isolate the next CLI's read step
