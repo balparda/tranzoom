@@ -11,6 +11,8 @@ Fractal manipulation with LLMs
 
 **tranZoom** is a Python CLI tool for rendering the Mandelbrot set at virtually unlimited zoom depth using arbitrary-precision arithmetic (`gmpy2`). The goal is to be able to zoom so deep that standard double-precision floating point becomes meaningless — tranZoom automatically computes the required precision and renders faithfully at any scale. The long-term vision is to integrate with LLMs (via the `transai` library) to intelligently select and navigate interesting regions of the fractal automatically.
 
+Since version 1.0.0 it is a PyPI package: <https://pypi.org/project/tranzoom/>
+
 Built with:
 
 - **Python 3.12+** with **Poetry** for dependency management

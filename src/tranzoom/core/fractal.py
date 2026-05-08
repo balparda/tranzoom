@@ -4,6 +4,8 @@
 
 Heavy use of gmpy2 for arbitrary precision, which is needed to render deep zooms correctly; see
 <https://gmpy2.readthedocs.io/en/latest/>
+
+# TODO: refactor this file so that Frame and Image are in new separate modules
 """
 
 from __future__ import annotations
