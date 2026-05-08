@@ -15,6 +15,11 @@ Usage: zoom [OPTIONS] COMMAND [ARGS]...
 │                                                                     Defaults to having colors.                                                          │
 │ --width               -w                INTEGER RANGE [4<=x<=8192]  Width of the image; 4 ≤ w ≤ 8192; default is 1024                    │
 │ --height              -h                INTEGER RANGE [4<=x<=8192]  Height of the image; 4 ≤ h ≤ 8192; default is 1024                   │
+│ --out                 -o                DIRECTORY                   The local output root directory path, ex: "~/foo/bar/"; if not given, the image     │
+│                                                                     will be saved in the current working directory                                      │
+│ --date                    --no-date                                 If True, file names will include the date-time as YYYYMMDDhhmmss; if False, file    │
+│                                                                     names will only include the hash; default is True                                   │
+│                                                                                                                                          │
 │ --install-completion                                                Install completion for the current shell.                                           │
 │ --show-completion                                                   Show completion for the current shell, to copy it or customize the installation.    │
 │ --help                                                              Show this message and exit.                                                         │
@@ -41,6 +46,13 @@ Usage: zoom image [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Example:                                                                                                                                                  
+                                                                                                                                                           
+ $ poetry run zoom image                                                                                                                                   
+ <saves fractal to disk with default frame>                                                                                                                
+ $ poetry run zoom image " -0.3" 0 2  # note the space because of the "-"                                                                                  
+ <saves fractal to disk with center -0.3+0j and width 2>
 ```
 
 ## `zoom markdown` Command
