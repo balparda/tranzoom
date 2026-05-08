@@ -69,7 +69,7 @@ IMAGE_INCLUDE_DATE_OPTION: typer.models.OptionInfo = typer.Option(
   '--date/--no-date',
   help=(
     'If True, file names will include the date-time as YYYYMMDDhhmmss; '
-    'if False, file names will only include the hash; default is True'
+    'if False, file names will not include the date-time; default is True'
   ),
 )
 IMAGE_INCLUDE_HASH_OPTION: typer.models.OptionInfo = typer.Option(
