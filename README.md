@@ -178,7 +178,10 @@ The long-term vision is to use LLMs to autonomously guide the zoom — identifyi
 
 - stdout: progress info and saved filename
 - stderr: warnings/errors/logs (controlled by `--verbose`)
-- Output images are saved as `mandel-<YYYYMMDDHHMMSS>-<SHA256-20>.png` or `mandel-<YYYYMMDDHHMMSS>-<SHA256-20>.png`, depending on `--date/--no-date` flag, to a directory chosen by the user, `-o/--out` flag
+- Output images are saved as
+  `mandel-<YYYYMMDDHHMMSS>-<SHA256-20>.png` or `mandel-<SHA256-20>.png`,
+  depending on the `--date/--no-date` flag, in the directory chosen by the
+  user via the `-o/--out` flag
 
 ## CLI Interface
 
