@@ -12,7 +12,7 @@ from tranzoom.core import fractal
 
 # if `tests/data/images/demo-mandel-seahorse-tail.png` changes you have to update this hash!
 SEAHORSE_TAIL_HASH: str = '2537af0ab52a4ec846d190a5464dce493fb77d6527a3e226e18201d0f5216939'
-# this is tested from `tests/cli/imagecommand_test.py` & `tests_integration/test_installed_cli.py`!
+# this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 
 # CLI options that can be re-used
 
