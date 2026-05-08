@@ -84,36 +84,6 @@ class Error(tbase.Error):
   """Base fractal exception."""
 
 
-def _PixelPalette(t: float) -> tuple[int, int, int]:
-  """Get the RGB color for a histogram-equalized normalized palette position.
-
-  Smoothly interpolates between adjacent stops in _SMOOTH_PALETTE, cycling
-  _PALETTE_CYCLES times across the [0, 1) range for visual banding.
-
-  Args:
-    t (float): Normalized position in [0, 1) derived from histogram equalization.
-
-  Returns:
-    tuple[int, int, int]: The interpolated RGB color.
-
-  """
-  # cycle multiple times through the palette for visual banding
-  t_cycled: float = (t * _PALETTE_CYCLES) % 1.0
-  n: int = len(_SMOOTH_PALETTE)
-  # fractional index into the palette
-  idx: float = t_cycled * n
-  lo: int = int(idx) % n
-  hi: int = (lo + 1) % n
-  frac: float = idx - int(idx)
-  r0, g0, b0 = _SMOOTH_PALETTE[lo]
-  r1, g1, b1 = _SMOOTH_PALETTE[hi]
-  return (
-    int(r0 + frac * (r1 - r0)),
-    int(g0 + frac * (g1 - g0)),
-    int(b0 + frac * (b1 - b0)),
-  )
-
-
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class Frame:
   """Defines a rectangular region of the complex plane, with arbitrary precision. Exact."""
@@ -531,3 +501,65 @@ def Mandelbrot(  # noqa: PLR0914
         image.SetEscape(px, py, escaped_at)
   # done
   return image
+
+
+def _PixelPalette(t: float) -> tuple[int, int, int]:
+  """Get the RGB color for a histogram-equalized normalized palette position.
+
+  Smoothly interpolates between adjacent stops in _SMOOTH_PALETTE, cycling
+  _PALETTE_CYCLES times across the [0, 1) range for visual banding.
+
+  Args:
+    t (float): Normalized position in [0, 1) derived from histogram equalization.
+
+  Returns:
+    tuple[int, int, int]: The interpolated RGB color.
+
+  """
+  # cycle multiple times through the palette for visual banding
+  t_cycled: float = (t * _PALETTE_CYCLES) % 1.0
+  n: int = len(_SMOOTH_PALETTE)
+  # fractional index into the palette
+  idx: float = t_cycled * n
+  lo: int = int(idx) % n
+  hi: int = (lo + 1) % n
+  frac: float = idx - int(idx)
+  r0, g0, b0 = _SMOOTH_PALETTE[lo]
+  r1, g1, b1 = _SMOOTH_PALETTE[hi]
+  return (
+    int(r0 + frac * (r1 - r0)),
+    int(g0 + frac * (g1 - g0)),
+    int(b0 + frac * (b1 - b0)),
+  )
+
+
+def GetBasicDataFromPNG(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:
+  """Get basic data from a PNG image, including format, size, hash, and metadata text.
+
+  Args:
+    img_bytes: The PNG image data as bytes.
+
+  Returns:
+    (width, height, hash, metadata) where:
+      - width: The width of the image in pixels.
+      - height: The height of the image in pixels.
+      - hash: A hash of the image data (SHA256 of RGBA bytes).
+      - metadata: The extracted metadata from the image.
+
+  Raises:
+    Error: If the image format is unsupported or if there are issues processing the image.
+
+  """
+  with PILImage.open(io.BytesIO(img_bytes)) as img:
+    # make sure format is PNG
+    if (img.format or '').upper() != 'PNG':
+      raise Error(f'Unsupported image format {img.format!r}, expected PNG')
+    # get the internal data we need (size and hash)
+    width: int = img.width
+    height: int = img.height
+    if width < 1 or height < 1:
+      raise Error(f'Invalid image size {width}x{height}')
+    raw_hash: str = hashes.Hash256(img.convert('RGB').tobytes()).hex()  # not 'RGBA'!!
+    # extract metadata from PNG
+    pil_info: tbase.JSONDict = img.info  # type: ignore[assignment]
+  return (width, height, raw_hash, pil_info)

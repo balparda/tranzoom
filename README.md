@@ -323,6 +323,8 @@ Saved to "mandel-2537af0ab52a4ec846d1.png"
 
 ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail.png)
 
+This image is relatively fast to generate (despite the zoom level, it has very little interior regions), so we use it in the unit and integration tests to make sure we are operating consistently. If the hash of this image changes, remember to change it in `src/tranzoom/cli/base.py`.
+
 #### Satellite Antenna (×852k, 96 bits)
 
 Render a ["Satellite Antenna"](https://en.wikipedia.org/wiki/File:Mandel_zoom_08_satellite_antenna.jpg) to a 256×256 image:

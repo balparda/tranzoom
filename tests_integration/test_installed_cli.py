@@ -19,9 +19,12 @@ import shutil
 import tempfile
 
 import pytest
-from transcrypto.utils import base, config
+from transcrypto.utils import base as tbase
+from transcrypto.utils import config
 
 import tranzoom
+from tranzoom.cli import base
+from tranzoom.core import fractal
 
 _APP_NAME: str = 'tranzoom'  # this is the directory name, the package name
 _APP_NAMES: set[str] = {'zoom'}  # this is the console scripts names
@@ -46,7 +49,7 @@ def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path
     with tempfile.TemporaryDirectory() as tmp_dir:
       # render a Seahorse Tail image; --no-date makes the filename deterministic (hash-only),
       # --out directs output to tmp_dir so we can assert on the exact file produced.
-      r = base.Run(
+      r = tbase.Run(
         # call the console script directly to test the installed CLI
         [
           str(cli_paths['zoom']),
@@ -68,7 +71,13 @@ def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path
       # the hash is from the internal representation and should only depend on our implementation;
       # resist the temptation of checking the PNG because PIL behaves differently across platforms
       # and Python versions, and we don't want to be debugging PIL differences in this test
-      output_image: pathlib.Path = pathlib.Path(tmp_dir) / 'mandel-2537af0ab52a4ec846d1.png'
+      output_image: pathlib.Path = (
+        pathlib.Path(tmp_dir) / f'mandel-{base.SEAHORSE_TAIL_HASH[:20]}.png'
+      )
       assert output_image.exists(), f'Expected output image not found: {output_image}'
+      # check the image data
+      w, h, hsh, _ = fractal.GetBasicDataFromPNG(output_image.read_bytes())
+      assert w == h == 512
+      assert hsh == base.SEAHORSE_TAIL_HASH
   finally:
     shutil.rmtree(data_dir)  # remove created data to isolate the next CLI's read step
