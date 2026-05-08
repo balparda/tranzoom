@@ -167,6 +167,7 @@ The long-term vision is to use LLMs to autonomously guide the zoom — identifyi
 - **Magnification**: Ratio of the default full-set frame area to the current frame area. 1× = full set; 1G× = zoomed in one billion times.
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
 - **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
+- **Color palette**: A smooth 16-stop blue-to-yellow-to-brown gradient used to color exterior (escaped) pixels. Positions in the gradient are determined by histogram equalization of escape-iteration counts, ensuring the full color range is used regardless of zoom depth or iteration scale. Interior points (never escaped) are always rendered as pure black.
 
 ### Inputs and outputs
 
@@ -180,10 +181,7 @@ The long-term vision is to use LLMs to autonomously guide the zoom — identifyi
 
 - stdout: progress info and saved filename
 - stderr: warnings/errors/logs (controlled by `--verbose`)
-- Output images are saved as
-  `mandel-<YYYYMMDDHHMMSS>-<SHA256-20>.png` or `mandel-<SHA256-20>.png`,
-  depending on the `--date/--no-date` flag, in the directory chosen by the
-  user via the `-o/--out` flag
+- Output images are saved as `<prefix>[-<YYYYMMDDhhmmss>][-<SHA256-20>].png`; the prefix defaults to `mandel` and is set via `--prefix`; date inclusion is controlled by `--date/--no-date`; hash (first 20 chars of SHA256, 80 bits) inclusion is controlled by `--hash/--no-hash`; output directory is set via `-o/--out` (defaults to the current working directory)
 
 ## CLI Interface
 
@@ -238,6 +236,10 @@ zoom [global flags] <command> [args]
 | `--color`/`--no-color` | Force enable/disable colored output (respects `NO_COLOR` env var if not provided) | `--color` |
 | `-w`/`--width` | Output image width in pixels (4–8192) | 1024 |
 | `-h`/`--height` | Output image height in pixels (4–8192) | 1024 |
+| `-o`/`--out` | Output directory path | current directory |
+| `--prefix` | Filename prefix | `mandel` |
+| `--date`/`--no-date` | Include date-time (`YYYYMMDDhhmmss`) in filename | `--date` |
+| `--hash`/`--no-hash` | Include 20-char SHA256 hash in filename | `--hash` |
 
 ### CLI Commands Documentation
 
@@ -264,7 +266,7 @@ The command:
 2. Calculates the required `mpfr` precision automatically based on zoom depth
 3. Scales `max_iter` logarithmically with magnification
 4. Renders all pixels using the escape-time algorithm (with cardioid/bulb interior shortcuts)
-5. Saves the PNG to `mandel-<YYYYMMDDHHMMSS>-<hash12>.png` in the working directory
+5. Saves the PNG to `<prefix>[-<YYYYMMDDhhmmss>][-<SHA256-20>].png` in the working directory (or the path given by `-o/--out`)
 
 See below for many example outputs.
 
@@ -505,6 +507,7 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 │   ├── extensions.json
 │   └── settings.json
 ├── scripts/
+│   ├── make_examples.sh          ⟸ renders example images at all zoom levels to test/data/images
 │   └── template.py               ⟸ template for standalone executable scripts
 ├── src/
 │   └── tranzoom/
@@ -524,8 +527,11 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 │           └── template.py       ⟸ template for new utility modules
 ├── tests/
 │   ├── zoom_test.py
-│   └── cli/
-│       └── imagecommand_test.py
+│   ├── cli/
+│   │   ├── base_test.py          ⟸ seahorse tail hash regression test
+│   │   └── imagecommand_test.py
+│   └── data/
+│       └── images/               ⟸ example renders at 7 zoom levels (committed to git)
 └── tests_integration/
     └── test_installed_cli.py
 ```
