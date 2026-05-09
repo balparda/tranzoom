@@ -220,7 +220,7 @@ class Image:
     # precision and magnification
     png_meta.add_text(META_PRECISION_KEY, str(self._frame.precision))
     magnification, magnitude = self._frame.magnification
-    png_meta.add_text(META_MAGNIFICATION_KEY, str(float(magnification)))
+    png_meta.add_text(META_MAGNIFICATION_KEY, str(float(magnification)))  # huge if not converted!
     png_meta.add_text(META_MAGNIFICATION_ORDER_KEY, str(magnitude))
     # escape iteration range in the image
     min_escape: int

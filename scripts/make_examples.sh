@@ -3,12 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # make_examples.sh — Generate a sequence of example Mandelbrot renders at increasing zoom depth.
-# Each command prints before it runs (set -x xtrace) so output is self-documenting.
+#
 # Run from the tranzoom repo root: bash scripts/make_examples.sh
 # Output: PNG files with pinned names in tests/data/images/; these are used in the docs and tests,
 # so they are committed to git, and will change when code changes, so we don't want to be depending
 # on the hashes or dates, so we use --no-date and --no-hash to get stable file names
 
+# Each command prints before it runs (set -x xtrace) so output is self-documenting
 set -euxo pipefail
 
 # Render the Full / Default Mandelbrot set
