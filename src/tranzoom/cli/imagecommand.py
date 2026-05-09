@@ -66,7 +66,7 @@ def Image(  # documentation is help/epilog/args  # noqa: D103
       frm, config.img_width, config.img_height, max_iter=max_iter
     )
     raw_png, raw_hash = img.AsPNG()
-  config.console.print(f'\nGenerated image {raw_hash!r} in {tmr}')
+  config.console.print(f'\nGenerated image {raw_hash!r} in {tmr}, escape range {img.escape_range}')
   # check we can recover the hash from the PNG: should never fail unless we have a bug
   w, h, png_hash, _ = image.GetBasicDataFromPNG(raw_png)
   if png_hash != raw_hash or w != config.img_width or h != config.img_height:

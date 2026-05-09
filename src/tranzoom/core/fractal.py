@@ -178,14 +178,17 @@ def _MandelbrotAdaptiveIterations(frm: frame.Frame, progress_bar: bool) -> int:
     escape_histogram: dict[int, int] = {}
     for escaped_at in img16.escape:
       escape_histogram[escaped_at] = escape_histogram.get(escaped_at, 0) + 1
+    # sort the histogram by escape iteration; find the highest escape iteration that < high limit
     histogram: list[tuple[int, int]] = sorted(escape_histogram.items())
     max_iter = (
       histogram[-1][0] if histogram[-1][0] != high_iter or len(histogram) == 1 else histogram[-2][0]
     )
+    # apply safety factor and clamp
     max_iter = min(MAX_ITER, max(MIN_ITER, int(max_iter * _ITER_SAFETY_FACTOR)))
     if max_iter < high_iter:
       # we found a winner!
       if len(histogram) > 7:  # noqa: PLR2004 ; 7 is 3 before, the middle, and 3 after
+        # this is usually the case: many escape values, so summarize the middle ones
         summary_histogram: list[tuple[int, int] | tuple[str, int]] = [
           *histogram[:3],
           ('...', sum(count for _, count in histogram[3:-3])),
@@ -193,7 +196,10 @@ def _MandelbrotAdaptiveIterations(frm: frame.Frame, progress_bar: bool) -> int:
         ]
         logging.warning(f'Picked {max_iter=}: histogram {summary_histogram}')
       else:
+        # probably a pretty rare thing, but then we can show all
         logging.warning(f'Picked {max_iter=}: histogram {histogram}')
+      # stop here
       return max_iter
+    # here we didn't find, so we loop to the next higher limit...
   # if we exhausted all the high_iters without finding a suitable max_iter, we have to give up
   raise Error(f'Estimated {max_iter=} is above the adaptive limit of {HIGH_ITERS[-1]}')

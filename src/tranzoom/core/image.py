@@ -7,11 +7,31 @@ from __future__ import annotations
 import array
 import io
 
+from gmpy2 import mpq
 from PIL import Image as PILImage
+from PIL import PngImagePlugin
 from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 
+from tranzoom import __version__
 from tranzoom.core import frame
+
+# metadata keys for PNG tEXt chunks; used to store the frame parameters and other info in the PNG
+# keys use a "tranzoom:" namespace to avoid collisions with other metadata
+META_VERSION_KEY = 'tranzoom:version'
+META_TOP_RE_KEY = 'tranzoom:frame:top_re'
+META_TOP_IM_KEY = 'tranzoom:frame:top_im'
+META_BOTTOM_RE_KEY = 'tranzoom:frame:bottom_re'
+META_BOTTOM_IM_KEY = 'tranzoom:frame:bottom_im'
+META_CENTER_RE_KEY = 'tranzoom:frame:center_re'
+META_CENTER_IM_KEY = 'tranzoom:frame:center_im'
+META_WIDTH_RE_KEY = 'tranzoom:frame:width_re'
+META_HEIGHT_IM_KEY = 'tranzoom:frame:height_im'
+META_PRECISION_KEY = 'tranzoom:frame:precision'
+META_MAGNIFICATION_KEY = 'tranzoom:frame:magnification'
+META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'
+META_ITER_DEPTH_MIN_KEY = 'tranzoom:iter_depth:min'
+META_ITER_DEPTH_MAX_KEY = 'tranzoom:iter_depth:max'
 
 N_BYTES_UINT: int = 4  # we use array of unsigned ints to store pixel data
 type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel data array
@@ -106,6 +126,16 @@ class Image:
       raise Error(f'Invalid escape iteration: {escaped_at=}')
     self.escape[y * self._width + x] = escaped_at
 
+  @property
+  def escape_range(self) -> tuple[int, int]:
+    """Get the range of escape iterations in the image.
+
+    Returns:
+      tuple[int, int]: A tuple containing the minimum and maximum escape iterations in the image.
+
+    """
+    return (min(self.escape), max(self.escape))
+
   def AsPixels(self) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
@@ -128,11 +158,13 @@ class Image:
     """
     # step 1: build histogram of escape iterations for exterior pixels only
     histogram: dict[int, int] = {}
-    if min_escape := min(self.escape) < 0:
+    min_escape: int
+    max_escape: int
+    min_escape, max_escape = self.escape_range
+    if min_escape < 0:
       raise Error(f'Invalid min escape iteration: {min_escape=}')
-    max_iter: int = max(self.escape)
     for escaped_at in self.escape:
-      if escaped_at < max_iter:
+      if escaped_at < max_escape:
         histogram[escaped_at] = histogram.get(escaped_at, 0) + 1
     total_exterior: int = sum(histogram.values())
     # step 2: compute cumulative distribution function for histogram equalization;
@@ -148,7 +180,7 @@ class Image:
     b: int
     pixels = bytearray(self._width * self._height * 3)
     for i, escaped_at in enumerate(self.escape):
-      if escaped_at >= max_iter or total_exterior == 0:
+      if escaped_at >= max_escape or total_exterior == 0:
         r, g, b = 0, 0, 0  # interior point: black
       else:
         # keep t in [0, 1) so the highest escape bucket does not wrap
@@ -169,9 +201,36 @@ class Image:
     # convert the raw pixel data to a PNG using PIL
     raw_img: bytes = self.AsPixels()
     img: PILImage.Image = PILImage.frombytes('RGB', (self._width, self._height), raw_img)
+    # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
+    png_meta = PngImagePlugin.PngInfo()
+    # version
+    png_meta.add_text(META_VERSION_KEY, __version__)
+    # frame as corners
+    png_meta.add_text(META_TOP_RE_KEY, str(self._frame.top_re))
+    png_meta.add_text(META_TOP_IM_KEY, str(self._frame.top_im))
+    png_meta.add_text(META_BOTTOM_RE_KEY, str(self._frame.bottom_re))
+    png_meta.add_text(META_BOTTOM_IM_KEY, str(self._frame.bottom_im))
+    # frame as center + size
+    center: tuple[mpq, mpq] = self._frame.center
+    sz: tuple[mpq, mpq] = self._frame.size
+    png_meta.add_text(META_CENTER_RE_KEY, str(center[0]))
+    png_meta.add_text(META_CENTER_IM_KEY, str(center[1]))
+    png_meta.add_text(META_WIDTH_RE_KEY, str(sz[0]))
+    png_meta.add_text(META_HEIGHT_IM_KEY, str(sz[1]))
+    # precision and magnification
+    png_meta.add_text(META_PRECISION_KEY, str(self._frame.precision))
+    magnification, magnitude = self._frame.magnification
+    png_meta.add_text(META_MAGNIFICATION_KEY, str(magnification))
+    png_meta.add_text(META_MAGNIFICATION_ORDER_KEY, str(magnitude))
+    # escape iteration range in the image
+    min_escape: int
+    max_escape: int
+    min_escape, max_escape = self.escape_range
+    png_meta.add_text(META_ITER_DEPTH_MIN_KEY, str(min_escape))
+    png_meta.add_text(META_ITER_DEPTH_MAX_KEY, str(max_escape))
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
-    img.save(buf, format='PNG')
+    img.save(buf, format='PNG', pnginfo=png_meta)
     return (buf.getvalue(), hashes.Hash256(raw_img).hex())
 
 
