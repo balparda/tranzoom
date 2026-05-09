@@ -349,8 +349,8 @@ We have, for fun, generated a sequence of powers of 1000, demonstrating the amaz
 | ![Zoom 10^-33](tests/data/images/demo-mandel-zoom-12.png) | $186$ | $58119$-$205876$ | $10^{-33}$ | $\sim 1\,\mu\mathrm{m}$ = Cell/microbe scale: bacteria, organelles, and wavelengths near visible/infrared light. |
 | ![Zoom 10^-36](tests/data/images/demo-mandel-zoom-13.png) | $196$ | $65240$-$67722$ | $10^{-36}$ | $\sim 1\,\mathrm{nm}$ = Molecule scale: DNA width, proteins, small molecular machines. |
 | ![Zoom 10^-39](tests/data/images/demo-mandel-zoom-14.png) | $206$ | $65327$-$67968$ | $10^{-39}$ | $\sim 1\,\mathrm{pm}$ = Deep atomic/electron-cloud scale: smaller than typical atomic diameters, which are around $10^{-10}\,\mathrm{m}$. |
-| ![Zoom 10^-42](tests/data/images/demo-mandel-zoom-15.png) | $216$ | $1$-$1$ | $10^{-42}$ | $\sim 1\,\mathrm{fm}$ = Atomic nucleus / proton scale: the proton rms charge radius is about $8.4075 \times 10^{-16}\,\mathrm{m}$. |
-| ![Zoom 10^-45](tests/data/images/demo-mandel-zoom-16.png) | $1$ | $1$-$1$ | $10^{-45}$ | $\sim 1\,\mathrm{am}$ = Quarks and leptons: elementary particles in the Standard Model |
+| ![Zoom 10^-42](tests/data/images/demo-mandel-zoom-15.png) | $216$ | $65524$-$70198$ | $10^{-42}$ | $\sim 1\,\mathrm{fm}$ = Atomic nucleus / proton scale: the proton rms charge radius is about $8.4075 \times 10^{-16}\,\mathrm{m}$. |
+| ![Zoom 10^-45](tests/data/images/demo-mandel-zoom-16.png) | $226$ | $1$-$1$ | $10^{-45}$ | $\sim 1\,\mathrm{am}$ = Quarks and leptons: elementary particles in the Standard Model |
 
 " -0.743643887037158704752191506114774" "0.131825904205311970493132056385139"
 
