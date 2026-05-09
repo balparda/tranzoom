@@ -13,6 +13,7 @@ from transcrypto.utils import base as tbase
 
 from tranzoom.core import frame
 
+N_BYTES_UINT: int = 4  # we use array of unsigned ints to store pixel data
 type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel data array
 
 # Smooth palette for exterior points: 16 color stops cycling through a
@@ -59,14 +60,13 @@ class Image:
 
   """
 
-  def __init__(self, frm: frame.Frame, width: int, height: int, max_iter: int) -> None:
+  def __init__(self, frm: frame.Frame, width: int, height: int) -> None:
     """Construct image.
 
     Args:
       frm (Frame): The frame to render.
       width (int): The width of the output image in pixels.
       height (int): The height of the output image in pixels.
-      max_iter (int): The maximum number of iterations to determine escape.
 
     Raises:
       Error: on error
@@ -79,17 +79,14 @@ class Image:
       raise Error(
         f'{width=} and {height=} must be between {frame.MIN_IMAGE_SIZE} and {frame.MAX_IMAGE_SIZE}'
       )
-    if not (frame.MIN_ITER <= max_iter <= frame.MAX_ITER):
-      raise Error(f'{max_iter=} must be between {frame.MIN_ITER} and {frame.MAX_ITER}')
     # save objects
     self._frame: frame.Frame = frm
     self._width: int = width
     self._height: int = height
-    self._max_iter: int = max_iter
     # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
     self.escape: ImageUInt32Array = array.array('I', (0 for _ in range(width * height)))
-    if self.escape.itemsize != frame.N_BYTES_UINT:
-      raise Error(f'unsupported platform: array of unsigned ints is not {frame.N_BYTES_UINT} bytes')
+    if self.escape.itemsize != N_BYTES_UINT:
+      raise Error(f'unsupported platform: array of unsigned ints is not {N_BYTES_UINT} bytes')
 
   def SetEscape(self, x: int, y: int, escaped_at: int) -> None:
     """Set the escape iteration for a given pixel.
@@ -105,8 +102,8 @@ class Image:
     """
     if not (0 <= x < self._width) or not (0 <= y < self._height):
       raise Error(f'Pixel coordinates out of bounds: {x=}, {y=}, {self._width=}, {self._height=}')
-    if not (0 <= escaped_at <= self._max_iter):
-      raise Error(f'Invalid escape iteration: {escaped_at=} / {self._max_iter=}')
+    if escaped_at < 0:
+      raise Error(f'Invalid escape iteration: {escaped_at=}')
     self.escape[y * self._width + x] = escaped_at
 
   def AsPixels(self) -> bytes:
@@ -125,11 +122,17 @@ class Image:
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
 
+    Raises:
+      Error: on error
+
     """
     # step 1: build histogram of escape iterations for exterior pixels only
     histogram: dict[int, int] = {}
+    if min_escape := min(self.escape) < 0:
+      raise Error(f'Invalid min escape iteration: {min_escape=}')
+    max_iter: int = max(self.escape)
     for escaped_at in self.escape:
-      if escaped_at < self._max_iter:
+      if escaped_at < max_iter:
         histogram[escaped_at] = histogram.get(escaped_at, 0) + 1
     total_exterior: int = sum(histogram.values())
     # step 2: compute cumulative distribution function for histogram equalization;
@@ -145,7 +148,7 @@ class Image:
     b: int
     pixels = bytearray(self._width * self._height * 3)
     for i, escaped_at in enumerate(self.escape):
-      if escaped_at >= self._max_iter or total_exterior == 0:
+      if escaped_at >= max_iter or total_exterior == 0:
         r, g, b = 0, 0, 0  # interior point: black
       else:
         # keep t in [0, 1) so the highest escape bucket does not wrap

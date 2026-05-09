@@ -33,13 +33,14 @@ from tranzoom.core import fractal, frame, image
   ),
 )
 @clibase.CLIErrorGuard
-def Image(  # documentation is help/epilog/args  # noqa: D103, PLR0914
+def Image(  # documentation is help/epilog/args  # noqa: D103
   *,
   ctx: click.Context,
   center_re: str = base.FRAME_CENTER_RE_OPTION,  # type: ignore[assignment]
   center_im: str = base.FRAME_CENTER_IM_OPTION,  # type: ignore[assignment]
   f_width: str = base.FRAME_WIDTH_OPTION,  # type: ignore[assignment]
   f_height: str | None = base.FRAME_HEIGHT_OPTION,  # type: ignore[assignment]
+  max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity
   config: zoom.TranZoomConfig = ctx.obj
@@ -54,16 +55,15 @@ def Image(  # documentation is help/epilog/args  # noqa: D103, PLR0914
     # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation
     human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
   )
-  iter_limit: int = frm.iterations
   config.console.print(
     f'\n{config.img_width}x{config.img_height} Mandelbrot in frame {frm}, '
     f'precision {frm.precision} bits, {magnification_str} magnification, '
-    f'{iter_limit} iterations...\n'
+    f'{"AUTO" if max_iter is None else max_iter} iterations...\n'
   )
   # render the image
   with timer.Timer(emit_log=False) as tmr:
     img: image.Image = fractal.Mandelbrot(
-      frm, config.img_width, config.img_height, max_iter=iter_limit
+      frm, config.img_width, config.img_height, max_iter=max_iter
     )
     raw_png, raw_hash = img.AsPNG()
   config.console.print(f'\nGenerated image {raw_hash!r} in {tmr}')

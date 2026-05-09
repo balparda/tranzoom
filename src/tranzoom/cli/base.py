@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import typer
 
-from tranzoom.core import frame
+from tranzoom.core import fractal, frame
 
 # global CLI data, and some test stuff
 
@@ -99,4 +99,18 @@ FRAME_WIDTH_OPTION: typer.models.ArgumentInfo = typer.Argument(
 )
 FRAME_HEIGHT_OPTION: typer.models.ArgumentInfo = typer.Argument(
   None, help='Height of the frame in the imaginary plane; default is None, i.e, the same as width'
+)
+
+# Computation Options
+MAX_ITERATIONS_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '-i',
+  '--iter',
+  min=fractal.MIN_ITER,
+  max=fractal.MAX_ITER,
+  help=(
+    'Maximum iterations (depth) to compute before determining escape; '
+    f'{fractal.MIN_ITER} ≤ iter ≤ {fractal.MAX_ITER}; '
+    f'default is None (automatic search for optimal iterations --- recommended)'
+  ),
 )

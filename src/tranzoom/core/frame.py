@@ -13,13 +13,7 @@ from transcrypto.utils import base as tbase
 
 # basic constants
 
-N_BYTES_UINT: int = 4  # we use array of unsigned ints to store pixel data
-MIN_ITER: int = 1000
-DEFAULT_ITER: int = 1000
-MAX_ITER: int = 2 ** (N_BYTES_UINT * 8) - 1  # 4_294_967_295, the max value in array('I'), uint32
-_ITER_PER_MAGNITUDE: int = 400  # how much more iter per magnitude unit; this is a very naïve way!
-
-MIN_IMAGE_SIZE: int = 4
+MIN_IMAGE_SIZE: int = 16  # BEWARE: we use this for the "auto" depth calculation, so not too small!
 MAX_IMAGE_SIZE: int = 8192
 DEFAULT_IMAGE_SIZE: int = 1024
 
@@ -138,18 +132,6 @@ class Frame:
     with PrecisionContext():
       magnification: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(DEFAULT_FRAME.area / self.area))
       return (magnification, float(cast('gmpy2.mpfr', gmpy2.log10(magnification))))
-
-  @property
-  def iterations(self) -> int:
-    """Get a suggested number of (max) iterations for the frame. Very naïve implementation.
-
-    Returns:
-      int: The number of suggested (max) iterations for the frame.
-
-    """
-    # TODO: histogram-based iteration limit
-    _, magnitude = self.magnification
-    return int(MIN_ITER + _ITER_PER_MAGNITUDE * magnitude) if magnitude > 0.0 else MIN_ITER
 
   def __str__(self) -> str:
     """Get string representation of the frame.
