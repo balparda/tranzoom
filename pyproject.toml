@@ -44,12 +44,15 @@ readme = "README.md"
 license-files = [ "LICENSE" ]
 
 dependencies = [
-
-  "transai>=1.2.0",
-
   # best place for project dependencies, if possible
   # development-only dependencies go in the [tool.poetry.group.dev.dependencies] section below
 
+  "transcrypto>=2.1",
+  "transai>=1.2.0",
+
+  "click>=8.1",
+  "rich>=14.2",
+  "typer>=0.21",
   "gmpy2>=2.3",
   "tqdm>=4.67",
   "Pillow>=12",

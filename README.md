@@ -200,7 +200,7 @@ Saved to "mandel-bd77ee8874aa425422a9.png"
 
 As can be seen, the `Frame` is stored as rational numbers with arbitrary precision, `[(-3/4, 0) @ 5/2]`, so it is guaranteed to be exact (centered in $-0.75+0j$ and with width of $2.5$). It will pick a precision, in bits, which is the internal `float` representation (mantissa), and will pick the (max) number of iterations for the generation. The magnification here is 1 because it is the full Mandelbrot set. There will be a progress bar, counting the horizontal lines being produced. The generated image data will be hashed and then saved to a PNG on disk.
 
-Render a 512×512 [well-known zoom ("Seahorse", ~155× magnification, 512×512)](#seahorse-155-83-bits):
+Render a [well-known zoom ("Seahorse", ~155× magnification)](#seahorse-155-83-bits):
 
 ```sh
 poetry run mandel gen " -0.74303" "0.126433" "0.01611"
@@ -311,7 +311,7 @@ This is what tranZoom considers ***"1 magnification"***, and will measure other 
 
 ![Seahorse](tests/data/images/demo-mandel-seahorse.png)
 
-Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mandel_zoom_03_seehorse.jpg) to a 512×512 image:
+Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mandel_zoom_03_seehorse.jpg) to a 1024×1024 image (default size):
 
 ```sh
 $ poetry run mandel gen " -0.74303" "0.126433" "0.01611"
@@ -451,7 +451,6 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 ├── src/
 │   └── tranzoom/
 │       ├── __init__.py           ⟸ version lives here
-│       ├── __main__.py
 |       ├── mandel.py             ⟸ TranZoom mandel CLI
 │       ├── zoom.py               ⟸ TranZoom zoom CLI
 │       ├── py.typed
