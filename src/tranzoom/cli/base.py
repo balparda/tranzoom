@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import typer
 
-from tranzoom.core import fractal, frame, image
+from tranzoom.core import fractal, frame, palette
 
 # global CLI data, and some test stuff
 
@@ -117,10 +117,10 @@ MAX_ITERATIONS_OPTION: typer.models.OptionInfo = typer.Option(
 
 # Color options
 PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
-  image.DEFAULT_PALETTE,
+  palette.DEFAULT_PALETTE,
   '--palette',
   help=(
-    f'Color palette to use for rendering; default is {image.DEFAULT_PALETTE.value!r}; '
-    f'available palettes: {sorted(p.value for p in image.PALETTES)}'
+    f'Color palette to use for rendering; default is {palette.DEFAULT_PALETTE.value!r}; '
+    f'available palettes: {sorted(p.value for p in palette.PALETTES)}'
   ),
 )

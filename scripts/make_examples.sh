@@ -19,7 +19,11 @@ poetry run zoom --no-date --no-hash --prefix "demo-mandel-whole-set" -o tests/da
 poetry run zoom --no-date --no-hash --prefix "demo-mandel-seahorse" -o tests/data/images image " -0.74303" "0.126433" "0.01611"
 
 # Render Seahorse Tail
-poetry run zoom --no-date --no-hash --prefix "demo-mandel-seahorse-tail" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801"
+poetry run zoom --no-date --no-hash --prefix "demo-mandel-seahorse-tail" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "blue-to-yellow-to-brown"
+poetry run zoom -w 256 -h 256 --no-date --no-hash --prefix "demo-mandel-seahorse-tail-byb" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "blue-to-yellow-to-brown"
+poetry run zoom -w 256 -h 256 --no-date --no-hash --prefix "demo-mandel-seahorse-tail-lava" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "lava"
+poetry run zoom -w 256 -h 256 --no-date --no-hash --prefix "demo-mandel-seahorse-tail-ocean" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "electric-ocean"
+poetry run zoom -w 256 -h 256 --no-date --no-hash --prefix "demo-mandel-seahorse-tail-sunset" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "sunset"
 
 # generate the 16 images in the POWERS OF 1000 zoom sequence
 

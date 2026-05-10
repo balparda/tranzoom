@@ -43,6 +43,7 @@ Built with:
       - [Outputs](#outputs)
   - [CLI Interface](#cli-interface)
     - [Quick start](#quick-start)
+    - [Palettes](#palettes)
     - [Command structure](#command-structure)
     - [Global flags](#global-flags)
     - [CLI Commands Documentation](#cli-commands-documentation)
@@ -208,6 +209,17 @@ poetry run zoom image " -0.74303" "0.126433" "0.01611"
 ![Seahorse](tests/data/images/demo-mandel-seahorse.png)
 
 See many more examples in *[Comprehensive example images and zooms](#comprehensive-example-images-and-zooms)*.
+
+### Palettes
+
+With the `--palette` flag you can pick your color scheme. We provide the following out of the box:
+
+| Flag Value | Example |
+| --- | --- |
+| **`blue-to-yellow-to-brown"` (DEFAULT)** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-byb.png) |
+| **`"lava"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-lava.png) |
+| **`"electric-ocean"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-ocean.png) |
+| **`"sunset"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-sunset.png) |
 
 ### Command structure
 

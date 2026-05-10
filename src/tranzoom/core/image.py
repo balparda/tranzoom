@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import array
-import enum
 import io
 
 from gmpy2 import mpq
@@ -15,7 +14,7 @@ from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 
 from tranzoom import __version__
-from tranzoom.core import frame
+from tranzoom.core import frame, palette
 
 # metadata keys for PNG tEXt chunks; used to store the frame parameters and other info in the PNG
 # keys use a "tranzoom:" namespace to avoid collisions with other metadata
@@ -43,44 +42,6 @@ META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:iter_depth:search'  # int, can be "-1" if
 
 N_BYTES_UINT: int = 4  # we use array of unsigned ints to store pixel data
 type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel data array
-
-# palette constants
-
-
-class Palette(enum.Enum):
-  """Palette enum."""
-
-  BYB = 'blue-to-yellow-to-brown'
-
-
-DEFAULT_PALETTE: Palette = Palette.BYB
-
-# how many times to cycle through the palette across the histogram-equalized range;
-# more cycles = tighter, more frequent color banding; 3 is a visually balanced default
-_PALETTE_CYCLES: int = 3
-
-# Smooth palette for exterior points: 16 color stops cycling through a
-# blue-to-yellow-to-brown gradient (based on the classic Mandelbrot color scheme)
-PALETTES: dict[Palette, tuple[tuple[int, int, int], ...]] = {
-  Palette.BYB: (
-    (66, 30, 15),  # dark reddish-brown
-    (25, 7, 26),  # dark violet
-    (9, 1, 47),  # dark blue
-    (4, 4, 73),  # deep blue
-    (0, 7, 100),  # deep blue
-    (12, 44, 138),  # blue
-    (24, 82, 177),  # blue
-    (57, 125, 209),  # light blue
-    (134, 181, 229),  # very light blue
-    (211, 236, 248),  # near-white blue
-    (241, 233, 191),  # pale yellow
-    (248, 201, 95),  # yellow
-    (255, 170, 0),  # gold / orange
-    (204, 128, 0),  # dark orange
-    (153, 87, 0),  # brown
-    (106, 52, 3),  # dark brown
-  )
-}
 
 
 class Error(frame.Error):
@@ -173,21 +134,21 @@ class Image:
       raise Error(f'Inconsistent depth: {depth=} is < than {max_escape=}')
     self._depth = depth
 
-  def AsPixels(self, *, palette: Palette = DEFAULT_PALETTE) -> bytes:
+  def AsPixels(self, *, pal: palette.Palette = palette.DEFAULT_PALETTE) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
     Current palette:
     - black for interior points (never escape)
-    - smooth 16-color cycling gradient, histogram-equalized across escape iterations
+    - smooth multi-stop cycling gradient, histogram-equalized across escape iterations
 
     Interior points (that never escaped, i.e., escaped_at == max_iter) are rendered as
     pure black. Exterior points are colored by mapping their escape iteration through a
     cumulative histogram distribution (histogram equalization) into [0, 1), which is then
-    fed into a smooth cycling 16-color gradient via (_PixelPalette). This ensures the full
+    fed into a smooth cycling color gradient via (_PixelPalette). This ensures the full
     color range is used regardless of zoom depth or iteration distribution.
 
     Args:
-      palette (Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
+      pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
@@ -226,24 +187,24 @@ class Image:
       else:
         # keep t in [0, 1) so the highest escape bucket does not wrap
         t: float = (cumulative[escaped_at] - 1) / total_exterior
-        r, g, b = _PixelPalette(t, palette)
+        r, g, b = _PixelPalette(t, pal)
       pixels[i * 3] = r
       pixels[i * 3 + 1] = g
       pixels[i * 3 + 2] = b
     return bytes(pixels)
 
-  def AsPNG(self, *, palette: Palette = DEFAULT_PALETTE) -> tuple[bytes, str]:
+  def AsPNG(self, *, pal: palette.Palette = palette.DEFAULT_PALETTE) -> tuple[bytes, str]:
     """Convert the image to PNG bytes and return it with its internal data hash.
 
     Args:
-      palette (Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
+      pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
 
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
 
     """
     # convert the raw pixel data to a PNG using PIL
-    raw_img: bytes = self.AsPixels(palette=palette)
+    raw_img: bytes = self.AsPixels(pal=pal)
     img: PILImage.Image = PILImage.frombytes('RGB', (self._width, self._height), raw_img)
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
     png_meta = PngImagePlugin.PngInfo()
@@ -252,7 +213,7 @@ class Image:
     # image parameters
     png_meta.add_text(META_IMAGE_WIDTH_KEY, str(self._width))
     png_meta.add_text(META_IMAGE_HEIGHT_KEY, str(self._height))
-    png_meta.add_text(META_PALETTE_KEY, palette.value)
+    png_meta.add_text(META_PALETTE_KEY, pal.value)
     # frame as corners
     png_meta.add_text(META_TOP_RE_KEY, str(self._frame.top_re))
     png_meta.add_text(META_TOP_IM_KEY, str(self._frame.top_im))
@@ -283,7 +244,7 @@ class Image:
     return (buf.getvalue(), hashes.Hash256(raw_img).hex())
 
 
-def _PixelPalette(t: float, palette: Palette) -> tuple[int, int, int]:
+def _PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:
   """Get the RGB color for a histogram-equalized normalized palette position.
 
   Smoothly interpolates between adjacent stops in the specified palette, cycling
@@ -291,7 +252,7 @@ def _PixelPalette(t: float, palette: Palette) -> tuple[int, int, int]:
 
   Args:
     t (float): Normalized position in [0, 1) derived from histogram equalization.
-    palette (str): The name of the palette to use.
+    pal (Palette): The palette to use.
 
   Returns:
     tuple[int, int, int]: The interpolated RGB color.
@@ -301,11 +262,11 @@ def _PixelPalette(t: float, palette: Palette) -> tuple[int, int, int]:
 
   """
   # get the palette stops
-  if palette not in PALETTES:
-    raise Error(f'Unknown palette {palette!r}, available: {list(PALETTES.keys())}')
-  palette_stops: tuple[tuple[int, int, int], ...] = PALETTES[palette]
+  if pal not in palette.PALETTES:
+    raise Error(f'Unknown palette {pal!r}, available: {list(palette.PALETTES.keys())}')
+  palette_stops: tuple[tuple[int, int, int], ...] = palette.PALETTES[pal]
   # cycle multiple times through the palette for visual banding
-  t_cycled: float = (t * _PALETTE_CYCLES) % 1.0
+  t_cycled: float = (t * palette.PALETTE_CYCLES) % 1.0
   n: int = len(palette_stops)
   # fractional index into the palette
   idx: float = t_cycled * n
