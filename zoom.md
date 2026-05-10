@@ -27,8 +27,8 @@ Usage: zoom [OPTIONS] COMMAND [ARGS]...
 │ --hash                    --no-hash                                  If True, file names will include the hash; if False, file names will not include   │
 │                                                                      the hash; default is True                                                          │
 │                                                                                                                                          │
-│ --threads                               INTEGER RANGE [1<=x<=12]     Number of threads to use for rendering; default is None, which means to use all    │
-│                                                                      available CPU cores; will be limited to 12 threads                                 │
+│ --threads                               INTEGER RANGE [1<=x<=16]     Number of threads to use for rendering; default is None, which means to use all    │
+│                                                                      available CPU cores; will be limited to 16 threads                                 │
 │ --install-completion                                                 Install completion for the current shell.                                          │
 │ --show-completion                                                    Show completion for the current shell, to copy it or customize the installation.   │
 │ --help                                                               Show this message and exit.                                                        │

@@ -27,8 +27,8 @@ Usage: mandel [OPTIONS] COMMAND [ARGS]...
 │ --hash                    --no-hash                                  If True, file names will include the hash; if False, file names will not include   │
 │                                                                      the hash; default is True                                                          │
 │                                                                                                                                          │
-│ --threads                               INTEGER RANGE [1<=x<=12]     Number of threads to use for rendering; default is None, which means to use all    │
-│                                                                      available CPU cores; will be limited to 12 threads                                 │
+│ --threads                               INTEGER RANGE [1<=x<=16]     Number of threads to use for rendering; default is None, which means to use all    │
+│                                                                      available CPU cores; will be limited to 16 threads                                 │
 │ --install-completion                                                 Install completion for the current shell.                                          │
 │ --show-completion                                                    Show completion for the current shell, to copy it or customize the installation.   │
 │ --help                                                               Show this message and exit.                                                        │
@@ -43,7 +43,7 @@ Usage: mandel [OPTIONS] COMMAND [ARGS]...
  $ poetry run mandel gen                                                                                                                                   
  1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...                                                                                                       
  ...                                                                                                                                                       
- Saved to "mandel--.png"                                                                                                                       
+ Saved to "mandel-<date>-<hash>.png"                                                                                                                       
                                                                                                                                                            
  $ poetry run mandel -w 512 -h 512 gen " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                               
  <saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>
@@ -78,7 +78,7 @@ Usage: mandel gen [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  $ poetry run mandel gen                                                                                                                                   
  1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...                                                                                                       
  ...                                                                                                                                                       
- Saved to "mandel--.png"                                                                                                                       
+ Saved to "mandel-<date>-<hash>.png"                                                                                                                       
                                                                                                                                                            
  $ poetry run mandel -w 512 -h 512 gen " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                               
  <saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>

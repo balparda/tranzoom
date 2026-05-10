@@ -237,7 +237,7 @@ mandel [global flags] <command> [args]
 | `--color`/`--no-color` | Force enable/disable colored output (respects `NO_COLOR` env var if not provided) | `--color` |
 | `-w`/`--width` | Output image width in pixels (16–8192) | 1024 |
 | `-h`/`--height` | Output image height in pixels (16–8192) | 1024 |
-| `--threads` | Number of threads for rendering (1–N, default: all available cores) | all cores |
+| `--threads` | Number of worker processes for rendering (1–N, default: all available cores) | all cores |
 | `-o`/`--out` | Output directory path | current directory |
 | `--prefix` | Filename prefix | `mandel` |
 | `--date`/`--no-date` | Include date-time (`YYYYMMDDhhmmss`) in filename | `--date` |

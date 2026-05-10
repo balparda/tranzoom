@@ -122,10 +122,10 @@ MAX_THREADS_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '--threads',
   min=1,
-  max=min(fractal.MAX_CONCURRENCE, fractal.AVAILABLE_CPU),
+  max=fractal.MAX_CONCURRENCE,
   help=(
     'Number of threads to use for rendering; default is None, which means to use all available '
-    f'CPU cores; will be limited to {min(fractal.MAX_CONCURRENCE, fractal.AVAILABLE_CPU)} threads'
+    f'CPU cores; will be limited to {fractal.MAX_CONCURRENCE} threads'
   ),
 )
 
