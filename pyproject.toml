@@ -44,12 +44,15 @@ readme = "README.md"
 license-files = [ "LICENSE" ]
 
 dependencies = [
-
-  "transai>=1.2.0",
-
   # best place for project dependencies, if possible
   # development-only dependencies go in the [tool.poetry.group.dev.dependencies] section below
 
+  "transcrypto>=2.1",
+  "transai>=1.2.0",
+
+  "click>=8.1",
+  "rich>=14.2",
+  "typer>=0.21",
   "gmpy2>=2.3",
   "tqdm>=4.67",
   "Pillow>=12",
@@ -62,6 +65,7 @@ dependencies = [
 # console scripts that will be installed when installing the package;
 # if you change/add a line here also edit [tool.poetry.scripts] below and re-run `poetry sync`
 
+mandel = "tranzoom.mandel:Run"
 zoom = "tranzoom.zoom:Run"
 
 ####################################################################################################
@@ -70,6 +74,7 @@ zoom = "tranzoom.zoom:Run"
 # poetry/poetry-core still relies on this section for wheel entry points in some versions;
 # keep this in sync with [project.scripts] above
 
+mandel = "tranzoom.mandel:Run"
 zoom = "tranzoom.zoom:Run"
 
 ####################################################################################################

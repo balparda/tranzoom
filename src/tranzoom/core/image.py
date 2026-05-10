@@ -237,7 +237,9 @@ class Image:
     min_escape, max_escape = self.escape_range
     png_meta.add_text(META_ITER_DEPTH_MIN_KEY, str(min_escape))
     png_meta.add_text(META_ITER_DEPTH_MAX_KEY, str(max_escape))
-    png_meta.add_text(META_ITER_SEARCH_DEPTH_KEY, str(self._depth) if self._depth else '-1')
+    png_meta.add_text(
+      META_ITER_SEARCH_DEPTH_KEY, str(self._depth) if self._depth is not None else '-1'
+    )
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
     img.save(buf, format='PNG', pnginfo=png_meta)

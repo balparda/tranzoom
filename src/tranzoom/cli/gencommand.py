@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""CLI: Image command.
+"""CLI: Mandelbrot generation command.
 
 <https://en.wikipedia.org/wiki/Mandelbrot_set>
 
@@ -16,24 +16,27 @@ import click
 from transcrypto.cli import clibase
 from transcrypto.utils import human, timer
 
-from tranzoom import zoom
+from tranzoom import mandel
 from tranzoom.cli import base
 from tranzoom.core import fractal, frame, image, palette
 
 
-@zoom.app.command(
-  'image',
-  help='Make a Mandelbrot image.',
+@mandel.app.command(
+  'gen',
+  help='Generate a Mandelbrot image.',
   epilog=(
-    'Example:\n\n\n\n'
-    '$ poetry run zoom image\n\n'
-    '<saves fractal to disk with default frame>\n\n'
-    '$ poetry run zoom image " -0.3" 0 2  # note the space because of the "-"\n\n'
-    '<saves fractal to disk with center -0.3+0j and width 2>'
+    'Examples:\n\n\n\n'
+    '$ poetry run mandel gen\n\n'
+    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
+    '...\n\n'
+    'Saved to "mandel-<date>-<hash>.png"\n\n\n\n'
+    '$ poetry run mandel -w 512 -h 512 gen " -0.74303" "0.126433" "0.01611"  '
+    '# note the space because of the "-"\n\n'
+    '<saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>'
   ),
 )
 @clibase.CLIErrorGuard
-def Image(  # documentation is help/epilog/args  # noqa: D103
+def Gen(  # documentation is help/epilog/args  # noqa: D103
   *,
   ctx: click.Context,
   center_re: str = base.FRAME_CENTER_RE_OPTION,  # type: ignore[assignment]
@@ -44,7 +47,7 @@ def Image(  # documentation is help/epilog/args  # noqa: D103
   pal: palette.Palette = base.PALETTE_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity
-  config: zoom.TranZoomConfig = ctx.obj
+  config: base.TranZoomConfig = ctx.obj
   try:
     frm: frame.Frame = frame.Frame.FromCenter(center_re, center_im, f_width, f_height)
   except Exception as err:

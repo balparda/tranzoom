@@ -8,8 +8,9 @@ Why this exists (vs normal unit tests):
 - This test validates *packaging*: the wheel builds, installs, and the console script works.
 
 What we verify:
+- `mandel --version` prints the expected version.
+- `mandel gen` renders a Seahorse Tail image with deterministic output and verifies it
 - `zoom --version` prints the expected version.
-- `zoom image` renders a Seahorse Tail image with deterministic output and verifies it
 """
 
 from __future__ import annotations
@@ -27,9 +28,10 @@ from tranzoom.cli import base
 from tranzoom.core import image
 
 _APP_NAME: str = 'tranzoom'  # this is the directory name, the package name
-_APP_NAMES: set[str] = {'zoom'}  # this is the console scripts names
+_APP_NAMES: set[str] = {'mandel', 'zoom'}  # this is the console scripts names
 
 
+@pytest.mark.slow
 @pytest.mark.integration
 def test_installed_cli_smoke(tmp_path: pathlib.Path) -> None:
   """Build wheel, install into a clean venv, run the installed CLIs."""
@@ -52,17 +54,17 @@ def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path
       r = tbase.Run(
         # call the console script directly to test the installed CLI
         [
-          str(cli_paths['zoom']),
+          str(cli_paths['mandel']),
           '--no-date',
           '--out',
           tmp_dir,
-          'image',
+          'gen',
           ' -0.7436499',
           '0.13188204',
           '0.00073801',
         ]
       )
-      assert r.returncode == 0, f'zoom image failed:\n{r.stderr}'
+      assert r.returncode == 0, f'mandel gen failed:\n{r.stderr}'
       # we check that the image is the same by trusting the 20-character hash in the file name;
       # the hash is from the internal representation and should only depend on our implementation;
       # resist the temptation of checking the PNG because PIL behaves differently across platforms

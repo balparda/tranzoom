@@ -31,7 +31,8 @@ precommit:
 	poetry run pre-commit run --all-files
 
 docs:
-	@echo "Generating zoom.md"
+	@echo "Generating mandel.md & zoom.md"
+	poetry run mandel markdown > mandel.md
 	poetry run zoom markdown > zoom.md
 
 req:
