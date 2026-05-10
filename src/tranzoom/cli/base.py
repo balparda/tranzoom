@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import typer
 
-from tranzoom.core import frame
+from tranzoom.core import fractal, frame, palette
 
 # global CLI data, and some test stuff
 
 # if `tests/data/images/demo-mandel-seahorse-tail.png` changes you have to update this hash!
-SEAHORSE_TAIL_HASH: str = '2537af0ab52a4ec846d190a5464dce493fb77d6527a3e226e18201d0f5216939'
+SEAHORSE_TAIL_HASH: str = '38824cdaa58b64496ebfd86facf4d4ba4596ab18db95ac97afd643a7a892ff83'
 # this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 
 # CLI options that can be re-used
@@ -99,4 +99,28 @@ FRAME_WIDTH_OPTION: typer.models.ArgumentInfo = typer.Argument(
 )
 FRAME_HEIGHT_OPTION: typer.models.ArgumentInfo = typer.Argument(
   None, help='Height of the frame in the imaginary plane; default is None, i.e, the same as width'
+)
+
+# Computation Options
+MAX_ITERATIONS_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '-i',
+  '--iter',
+  min=fractal.MIN_ITER,
+  max=fractal.MAX_ITER,
+  help=(
+    'Maximum iterations (depth) to compute before determining escape; '
+    f'{fractal.MIN_ITER} ≤ iter ≤ {fractal.MAX_ITER}; '
+    f'default is None (automatic search for optimal iterations --- recommended)'
+  ),
+)
+
+# Color options
+PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
+  palette.DEFAULT_PALETTE,
+  '--palette',
+  help=(
+    f'Color palette to use for rendering; default is {palette.DEFAULT_PALETTE.value!r}; '
+    f'available palettes: {sorted(p.value for p in palette.PALETTES)}'
+  ),
 )

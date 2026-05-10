@@ -43,6 +43,7 @@ Built with:
       - [Outputs](#outputs)
   - [CLI Interface](#cli-interface)
     - [Quick start](#quick-start)
+    - [Palettes](#palettes)
     - [Command structure](#command-structure)
     - [Global flags](#global-flags)
     - [CLI Commands Documentation](#cli-commands-documentation)
@@ -51,12 +52,7 @@ Built with:
       - [Full / Default (×1, 80 bits)](#full--default-1-80-bits)
       - [Seahorse (×155, 83 bits)](#seahorse-155-83-bits)
       - [Seahorse Tail (×3k, 88 bits)](#seahorse-tail-3k-88-bits)
-      - [Satellite Antenna (×852k, 96 bits)](#satellite-antenna-852k-96-bits)
-      - [Satellite Seahorse Tail with Julia Island (×4G, 108 bits)](#satellite-seahorse-tail-with-julia-island-4g-108-bits)
-      - [One Island (×417G, 115 bits)](#one-island-417g-115-bits)
-      - [Last Lights On (×2.5e+228, 835 bits)](#last-lights-on-25e228-835-bits)
-      - [Eye of the Universe (×2.5e+1090, 3698 bits)](#eye-of-the-universe-25e1090-3698-bits)
-    - [Deep zoom capability](#deep-zoom-capability)
+      - [Powers of 1000](#powers-of-1000)
     - [Configuration](#configuration)
     - [Color and formatting](#color-and-formatting)
     - [Exit codes](#exit-codes)
@@ -186,38 +182,44 @@ The long-term vision is to use LLMs to autonomously guide the zoom — identifyi
 
 ### Quick start
 
+![Full / Default](tests/data/images/demo-mandel-whole-set.png)
+
 Render the [full Mandelbrot set](#full--default-1-80-bits) (default, 1024×1024):
 
 ```sh
 $ poetry run zoom image
 
-1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, 1000 iterations...
+1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, AUTO iterations...
 
-Img: 100%|█████████████████████████████████████████████| 1024/1024 [00:13<00:00, 74.30ln/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 1011.19px/s]
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:13<00:00, 78912.96px/s]
 
-Generated image 'bd77ee8874aa425422a9ea92867c53937f28534898d49a56b9e4d1dca7b5dd54' in 13.967 s
+Generated image 'bd77ee8874aa425422a9ea92867c53937f28534898d49a56b9e4d1dca7b5dd54' in 14.120 s, escape range (1, 1000)
 Saved to "mandel-bd77ee8874aa425422a9.png"
 ```
 
 As can be seen, the `Frame` is stored as rational numbers with arbitrary precision, `[(-3/4, 0) @ 5/2]`, so it is guaranteed to be exact (centered in $-0.75+0j$ and with width of $2.5$). It will pick a precision, in bits, which is the internal `float` representation (mantissa), and will pick the (max) number of iterations for the generation. The magnification here is 1 because it is the full Mandelbrot set. There will be a progress bar, counting the horizontal lines being produced. The generated image data will be hashed and then saved to a PNG on disk.
 
-![Full / Default](tests/data/images/demo-mandel-whole-set.png)
-
 Render a 512×512 [well-known zoom ("Seahorse", ~155× magnification, 512×512)](#seahorse-155-83-bits):
 
 ```sh
-poetry run zoom -w 512 -h 512 image " -0.74303" "0.126433" "0.01611"
+poetry run zoom image " -0.74303" "0.126433" "0.01611"
 ```
 
 ![Seahorse](tests/data/images/demo-mandel-seahorse.png)
 
-Render an extreme 256×256 [zoom ("Satellite Seahorse Tail with Julia Island", ~4 billion× magnification)](#satellite-seahorse-tail-with-julia-island-4g-108-bits):
+See many more examples in *[Comprehensive example images and zooms](#comprehensive-example-images-and-zooms)*.
 
-```sh
-poetry run zoom -w 256 -h 256 image " -0.74364388717342" "0.13182590425182" "0.00000000059849"
-```
+### Palettes
 
-![Satellite Seahorse Tail with Julia Island](tests/data/images/demo-mandel-seahorse-julia-island.png)
+With the `--palette` flag you can pick your color scheme. We provide the following out of the box:
+
+| Flag Value | Example |
+| --- | --- |
+| **`blue-to-yellow-to-brown"` (DEFAULT)** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-byb.png) |
+| **`"lava"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-lava.png) |
+| **`"electric-ocean"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-ocean.png) |
+| **`"sunset"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-sunset.png) |
 
 ### Command structure
 
@@ -275,159 +277,92 @@ You can run all these at once by executing `scripts/make_examples.sh`.
 
 #### Full / Default (×1, 80 bits)
 
+![Full / Default](tests/data/images/demo-mandel-whole-set.png)
+
 Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) with all the default values (image size 1024×1024, centered in $-0.75+0j$ and with width of $2.5$, a good frame that contains the whole set):
 
 ```sh
 $ poetry run zoom image
 
-1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, 1000 iterations...
+1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, AUTO iterations...
 
-Img: 100%|█████████████████████████████████████████████| 1024/1024 [00:13<00:00, 74.30ln/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 1011.19px/s]
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:13<00:00, 78912.96px/s]
 
-Generated image 'bd77ee8874aa425422a9ea92867c53937f28534898d49a56b9e4d1dca7b5dd54' in 13.967 s
+Generated image 'bd77ee8874aa425422a9ea92867c53937f28534898d49a56b9e4d1dca7b5dd54' in 14.120 s, escape range (1, 1000)
 Saved to "mandel-bd77ee8874aa425422a9.png"
 ```
 
 This is what tranZoom considers ***"1 magnification"***, and will measure other magnifications against this size.
 
-![Full / Default](tests/data/images/demo-mandel-whole-set.png)
-
 #### Seahorse (×155, 83 bits)
+
+![Seahorse](tests/data/images/demo-mandel-seahorse.png)
 
 Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mandel_zoom_03_seehorse.jpg) to a 512×512 image:
 
 ```sh
-$ poetry run zoom -w 512 -h 512 image " -0.74303" "0.126433" "0.01611"
+$ poetry run zoom image " -0.74303" "0.126433" "0.01611"
 
-512x512 Mandelbrot in frame [(-74303/100000, 126433/1000000) @ 1611/100000], precision 83 bits, 155.183 magnification, 1876 iterations...
+1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) @ 1611/100000], precision 83 bits, 155.183 magnification, AUTO iterations...
 
-Img: 100%|█████████████████████████████████████████████| 512/512 [00:30<00:00, 16.77ln/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 388.31px/s]
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [05:41<00:00, 3069.95px/s]
 
-Generated image '0c3a28ad7cbd74d2194a6f88bed341738dc1d69770f39ea681c444fe0510a380' in 30.063 s
-Saved to "mandel-0c3a28ad7cbd74d2194a.png"
+Generated image '0cf52a6f78b4a883727c553da286b9f0f446a3671b01a6e364e3ae8f9b2391b3' in 5.714 min, escape range (24, 9276)
+Saved to "mandel-0cf52a6f78b4a883727c.png"
 ```
 
-![Seahorse](tests/data/images/demo-mandel-seahorse.png)
-
 #### Seahorse Tail (×3k, 88 bits)
+
+![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail.png)
 
 Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tail_part.jpg) to a 512×512 image:
 
 ```sh
-$ poetry run zoom -w 512 -h 512 image " -0.7436499" "0.13188204" "0.00073801"
+$ poetry run zoom image " -0.7436499" "0.13188204" "0.00073801"
 
-512x512 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) @ 73801/100000000], precision 88 bits, 3.387 k magnification, 2411 iterations...
+1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) @ 73801/100000000], precision 88 bits, 3.387 k magnification, AUTO iterations...
 
-Img: 100%|█████████████████████████████████████████████| 512/512 [00:11<00:00, 43.04ln/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 23513.97px/s]
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:48<00:00, 21757.95px/s]
 
-Generated image '2537af0ab52a4ec846d190a5464dce493fb77d6527a3e226e18201d0f5216939' in 12.080 s
-Saved to "mandel-2537af0ab52a4ec846d1.png"
+Generated image '38824cdaa58b64496ebfd86facf4d4ba4596ab18db95ac97afd643a7a892ff83' in 48.953 s, escape range (36, 1000)
+Saved to "mandel-38824cdaa58b64496ebf.png"
 ```
-
-![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail.png)
 
 This image is relatively fast to generate (despite the zoom level, it has very little interior regions), so we use it in the unit and integration tests to make sure we are operating consistently. If the hash of this image changes, remember to change it in `src/tranzoom/cli/base.py`.
 
-#### Satellite Antenna (×852k, 96 bits)
+#### Powers of 1000
 
-Render a ["Satellite Antenna"](https://en.wikipedia.org/wiki/File:Mandel_zoom_08_satellite_antenna.jpg) to a 256×256 image:
+Centering on exactly:
 
-```sh
-$ poetry run zoom -w 256 -h 256 image " -0.743644786" "0.1318252536" "0.0000029336"
+$-0.7436438870371587047521915061147740000000008 + 0.13182590420531197049313205638514950000008j$
 
-256x256 Mandelbrot in frame [(-371822393/500000000, 164781567/1250000000) @ 3667/1250000000], precision 96 bits, 852.195 k magnification, 3372
-iterations...
+or, if you want to use as parameters:
 
-Img: 100%|█████████████████████████████████████████████| 256/256 [00:30<00:00,  8.30ln/s]
+`" -0.7436438870371587047521915061147740000000008" "0.13182590420531197049313205638514950000008"`
 
-Generated image '09bbf5d9ebd7fa80b16989b18275c9d342543dd25b01d3fb35e1cefd77085a9b' in 31.077 s
-Saved to "mandel-09bbf5d9ebd7fa80b169.png"
-```
+We have, for fun, generated a sequence of powers of 1000, demonstrating the amazing power of the infinite. The view size of each image is always $2.5$ times some power of 1000.
 
-![Satellite Antenna](tests/data/images/demo-mandel-satellite-antenna.png)
-
-#### Satellite Seahorse Tail with Julia Island (×4G, 108 bits)
-
-Render a ["Satellite Seahorse Tail with Julia Island"](https://en.wikipedia.org/wiki/File:Mandel_zoom_13_satellite_seehorse_tail_with_julia_island.jpg) to a 256×256 image:
-
-```sh
-$ poetry run zoom -w 256 -h 256 image " -0.74364388717342" "0.13182590425182" "0.00000000059849"
-
-256x256 Mandelbrot in frame [(-37182194358671/50000000000000, 6591295212591/50000000000000) @ 59849/100000000000000], precision 108 bits, 4.177 G
-magnification, 4848 iterations...
-
-Img: 100%|█████████████████████████████████████████████| 256/256 [00:32<00:00,  7.87ln/s]
-
-Generated image '5d7eeb3edb59049749d3b7bfa12802220c0c3513a2d17634d679b1c962b675c7' in 32.781 s
-Saved to "mandel-5d7eeb3edb59049749d3.png"
-```
-
-![Satellite Seahorse Tail with Julia Island](tests/data/images/demo-mandel-seahorse-julia-island.png)
-
-#### One Island (×417G, 115 bits)
-
-Render an ["One Island"](https://commons.wikimedia.org/wiki/File:Mandel_zoom_15_one_island.jpg) to a 256×256 image:
-
-```sh
-$ poetry run zoom -w 256 -h 256 image " -0.743643887036" "0.13182590421" "0.000000000006"
-
-256x256 Mandelbrot in frame [(-185910971759/250000000000, 13182590421/100000000000) @ 3/500000000000], precision 115 bits, 416.667 G magnification, 5647
-iterations...
-
-Img: 100%|█████████████████████████████████████████████| 256/256 [01:20<00:00,  3.18ln/s]
-
-Generated image '3fc932609599fbd47db0c2782d256a9118ce997dc02f66f8934a5ec751beac59' in 1.362 min
-Saved to "mandel-3fc932609599fbd47db0.png"
-```
-
-![One Island](tests/data/images/demo-mandel-one-island.png)
-
-#### Last Lights On (×2.5e+228, 835 bits)
-
-Render a ["Last Lights On"](https://youtu.be/foxD6ZQlnlU) ultra-deep zoom to a 64×64 image:
-
-```sh
-$ poetry run zoom -w 64 -h 64 image " -1.7685736563152709932817429153295447129341200534055498823375111352827765533646353820119779335363321986478087958745766432300344486098206084588445291690832853792608335811319613234806674959498380432536269122404488847453646628324959064543" " -0.0009642968513582800001762427203738194482747761226565635652857831533070475543666558930286153827950716700828887932578932976924523447497708248894734256480183898683164582055541842171815899305250842692638349057118793296768325124255746563" "0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
-
-64x64 Mandelbrot in frame [...], precision 835 bits, 2.500000e+228 magnification, 92359 iterations...
-
-Img: 100%|█████████████████████████████████████████████| 64/64 [05:10<00:00,  4.86s/ln]
-
-Generated image 'f3cc103136423a57975750907ebc1d367e2985ac6338976d4d5a439f50323f4a' in 5.184 min
-Saved to 'mandel-f3cc103136423a579757.png'
-```
-
-![Last Lights On](tests/data/images/demo-mandel-last-lights-on.png)
-
-TODO: **THIS IS STILL WORK IN PROGRESS**
-
-#### Eye of the Universe (×2.5e+1090, 3698 bits)
-
-Render an ["Eye of the Universe"](https://youtu.be/pCpLWbHVNhk) extra-ultra-deep zoom to a 64×64 image:
-
-```sh
-poetry run zoom -w 64 -h 64 image "0.360240443437614363236125244449545308482607807958585750488375814740195346059218100311752936722773426396233731729724987737320035372683285317664532401218521579554288661726564324134702299962817029213329980895208036363104546639698106204384566555001322985619004717862781192694046362748742863016467354574422779443226982622356594130430232458472420816652623492974891730419252651127672782407292315574480207005828774566475024380960675386215814315654794021855269375824443853463117354448779647099224311848192893972572398662626725254769950976527431277402440752868498588785436705371093442460696090720654908973712759963732914849861213100695402602927267843779747314419332179148608587129105289166676461292845685734536033692577618496925170576714796693411776794742904333484665301628662532967079174729170714156810530598764525260869731233845987202037712637770582084286587072766838497865108477149114659838883818795374195150936369987302574377608649625020864292915913378927790344097552591919409137354459097560040374880346637533711271919419723135538377394364882968994646845930838049998854075817859391340445151448381853615103761584177161812057928" " -0.64131306106480317486037501517930206657949495228230525955617754306444857417275369025563702306896811623707405655370721497901069732111052737408519933948032874376062385962622877310759994839404671612888406145810912943257099889922691650073943057326832083188346723669475507109200885016557042523852444811688364262770522325934129814722379683536614777935303366072477389516258177554010650453622730397883322455673450616657567086893592945166682714405252736530837178777012377561442143948702455985908839737165316911242866695528036404140685233252768089090403176170926838265215015399323972620120110820987219446431186950012260489774300385094701017155554390478847520583348048913896855309461126215734165824829262218047674662583460144179343561498373520926088916390727459306393646935132167191145233289906900695886760879236566576560237944843247975460242483281565864716626310087413490699614938176001001334397215579692632211850959512414914087567515824713075373828279240737467608840817048879020400360566114013787859524521050992424992410032080134608784429534086481786923537881537872299402216117310344052035199453139116273149008518510721229904925" "0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
-```
-
-![Eye of the Universe](tests/data/images/demo-mandel-eye-of-the-universe.png)
-
-TODO: **THIS IS STILL WORK IN PROGRESS**
-
-### Deep zoom capability
-
-tranZoom supports zoom levels far beyond what standard floating point can represent. A few examples and their required precision:
-
-| Magnification | Approx. scale | Bits needed | Example |
-| --- | --- | --- | --- |
-| 1× | 2.5 (full set) | 80 | Default view |
-| 155× | ~0.016 | 83 | Seahorse valley |
-| 3.4k× | ~7e-4 | 88 | Seahorse tail |
-| 850k× | ~3e-9 | 96 | Satellite antenna |
-| 4.2G× | ~6e-10 | 108 | Satellite seahorse tail |
-| 417G× | ~6e-12 | 115 | One island |
-| ~10^230× | ~10^-231 | ~835 | Deep in the set |
-
-The `precision` property of a `Frame` automatically computes the required bits, and `gmpy2.local_context()` ensures all floating-point operations in `Mandelbrot()` use that precision. Maximum supported precision is 300,000 bits (~100k decimal digits).
+| Image | Bits | Depth | Size $2.5\times$ | Equivalent real-world size / Landmark examples |
+| --- | --- | --- | --- | --- |
+| ![Zoom 1](tests/data/images/demo-mandel-zoom-01.png) | $80$ | $1$-$1000$ | $1$ | $\sim 10^{11}$ light-years = Observable-universe scale, about $93$ billion light-years across. |
+| ![Zoom 10^-3](tests/data/images/demo-mandel-zoom-02.png) | $86$ | $32$-$1000$ | $10^{-3}$ | $\sim 10^{8}$ light-years = Cosmic-web / supercluster scale: galaxy walls, voids. |
+| ![Zoom 10^-6](tests/data/images/demo-mandel-zoom-03.png) | $96$ | $219$-$7348$ | $10^{-6}$ | $\sim 10^{5}$ light-years = Galaxy scale: the Milky Way is about $100{,}000$ light-years across. |
+| ![Zoom 10^-9](tests/data/images/demo-mandel-zoom-04.png) | $106$ | $1006$-$2664$ | $10^{-9}$ | $\sim 100$ light-years = Local stellar-neighborhood scale: nearby star groups, nebulae, and star-forming regions. |
+| ![Zoom 10^-12](tests/data/images/demo-mandel-zoom-05.png) | $116$ | $1974$-$3901$ | $10^{-12}$ | $\sim 0.1$ light-year = Outer-solar-system scale: comparable to the distant Oort-cloud region. |
+| ![Zoom 10^-15](tests/data/images/demo-mandel-zoom-06.png) | $126$ | $4132$-$93051$ | $10^{-15}$ | $\sim 10^{9}\,\mathrm{km}$ = Inner-to-middle solar-system scale: comparable to giant-planet orbital distances. |
+| ![Zoom 10^-18](tests/data/images/demo-mandel-zoom-07.png) | $136$ | $8035$-$11740$ | $10^{-18}$ | $\sim 10^{6}\,\mathrm{km}$ = Star / giant-planet scale: the Sun’s diameter is about $1.39 \times 10^{6}\,\mathrm{km}$. |
+| ![Zoom 10^-21](tests/data/images/demo-mandel-zoom-08.png) | $146$ | $9033$-$15673$ | $10^{-21}$ | $\sim 10^{3}\,\mathrm{km}$ = Planetary-geography scale: large countries, small moons, continent-scale weather systems. |
+| ![Zoom 10^-24](tests/data/images/demo-mandel-zoom-09.png) | $156$ | $13074$-$33133$ | $10^{-24}$ | $\sim 1\,\mathrm{km}$ = Human landscape scale: mountains, city districts, bridges, runways. |
+| ![Zoom 10^-27](tests/data/images/demo-mandel-zoom-10.png) | $166$ | $17130$-$32103$ | $10^{-27}$ | $\sim 1\,\mathrm{m}$ = Human/body scale: a person, table, doorway, musical instrument. |
+| ![Zoom 10^-30](tests/data/images/demo-mandel-zoom-11.png) | $176$ | $26939$-$61788$ | $10^{-30}$ | $\sim 1\,\mathrm{mm}$ = Small visible-object scale: sand grains, seeds, insect parts, raindrops. |
+| ![Zoom 10^-33](tests/data/images/demo-mandel-zoom-12.png) | $186$ | $58119$-$205876$ | $10^{-33}$ | $\sim 1\,\mu\mathrm{m}$ = Cell/microbe scale: bacteria, organelles, and wavelengths near visible/infrared light. |
+| ![Zoom 10^-36](tests/data/images/demo-mandel-zoom-13.png) | $196$ | $65240$-$67722$ | $10^{-36}$ | $\sim 1\,\mathrm{nm}$ = Molecule scale: DNA width, proteins, small molecular machines. |
+| ![Zoom 10^-39](tests/data/images/demo-mandel-zoom-14.png) | $206$ | $65327$-$67968$ | $10^{-39}$ | $\sim 1\,\mathrm{pm}$ = Deep atomic/electron-cloud scale: smaller than typical atomic diameters, which are around $10^{-10}\,\mathrm{m}$. |
+| ![Zoom 10^-42](tests/data/images/demo-mandel-zoom-15.png) | $216$ | $65524$-$70198$ | $10^{-42}$ | $\sim 1\,\mathrm{fm}$ = Atomic nucleus / proton scale: the proton rms charge radius is about $8.4075 \times 10^{-16}\,\mathrm{m}$. |
+| ![Zoom 10^-45](tests/data/images/demo-mandel-zoom-16.png) | $226$ | $65799$-$69258$ | $10^{-45}$ | $\sim 1\,\mathrm{am}$ = Quarks and leptons: elementary particles in the Standard Model |
 
 ### Configuration
 

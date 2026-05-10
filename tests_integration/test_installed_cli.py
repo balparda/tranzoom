@@ -53,10 +53,6 @@ def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path
         # call the console script directly to test the installed CLI
         [
           str(cli_paths['zoom']),
-          '-w',
-          '512',
-          '-h',
-          '512',
           '--no-date',
           '--out',
           tmp_dir,
@@ -76,8 +72,28 @@ def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path
       )
       assert output_image.exists(), f'Expected output image not found: {output_image}'
       # check the image data
-      w, h, hsh, _ = image.GetBasicDataFromPNG(output_image.read_bytes())
-      assert w == h == 512
+      w, h, hsh, info = image.GetBasicDataFromPNG(output_image.read_bytes())
+      assert w == h == 1024, f'Expected image dimensions 1024x1024, got {w}x{h}'
       assert hsh == base.SEAHORSE_TAIL_HASH
+      assert info == {
+        'tranzoom:version': tranzoom.__version__,
+        'tranzoom:image:height': '1024',
+        'tranzoom:image:width': '1024',
+        'tranzoom:image:palette': 'blue-to-yellow-to-brown',
+        'tranzoom:frame:top_re': '-148803781/200000000',
+        'tranzoom:frame:top_im': '26450209/200000000',
+        'tranzoom:frame:bottom_re': '-148656179/200000000',
+        'tranzoom:frame:bottom_im': '26302607/200000000',
+        'tranzoom:frame:center_re': '-7436499/10000000',
+        'tranzoom:frame:center_im': '3297051/25000000',
+        'tranzoom:frame:width_re': '73801/100000000',
+        'tranzoom:frame:height_im': '73801/100000000',
+        'tranzoom:frame:magnification': '3387.487974417691',
+        'tranzoom:frame:magnification_order': '3.529877762139788',
+        'tranzoom:frame:precision': '88',
+        'tranzoom:iter_depth:min': '36',
+        'tranzoom:iter_depth:max': '1000',
+        'tranzoom:iter_depth:search': '1000',
+      }
   finally:
     shutil.rmtree(data_dir)  # remove created data to isolate the next CLI's read step

@@ -18,5 +18,5 @@ _SEAHORSE_TAIL_PATH: pathlib.Path = (
 def test_seahorse_tail_has_correct_hash() -> None:
   """Test."""
   w, h, hsh, _ = image.GetBasicDataFromPNG(_SEAHORSE_TAIL_PATH.read_bytes())
-  assert w == h == 512
+  assert w == h == 1024
   assert hsh == base.SEAHORSE_TAIL_HASH
