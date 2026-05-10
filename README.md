@@ -286,10 +286,10 @@ $ poetry run zoom image
 
 1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, AUTO iterations...
 
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 1011.19px/s]
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:13<00:00, 78912.96px/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 962134.25px/s]
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:01<00:00, 593762.44px/s]
 
-Generated image 'bd77ee8874aa425422a9ea92867c53937f28534898d49a56b9e4d1dca7b5dd54' in 14.120 s, escape range (1, 1000)
+Generated image 'bd77ee8874aa425422a9ea92867c53937f28534898d49a56b9e4d1dca7b5dd54' in 3.135 s, escape range (1, 1000)
 Saved to "mandel-bd77ee8874aa425422a9.png"
 ```
 
@@ -306,10 +306,10 @@ $ poetry run zoom image " -0.74303" "0.126433" "0.01611"
 
 1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) @ 1611/100000], precision 83 bits, 155.183 magnification, AUTO iterations...
 
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 388.31px/s]
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [05:41<00:00, 3069.95px/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 2575.92px/s]
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:36<00:00, 28721.25px/s]
 
-Generated image '0cf52a6f78b4a883727c553da286b9f0f446a3671b01a6e364e3ae8f9b2391b3' in 5.714 min, escape range (24, 9276)
+Generated image '0cf52a6f78b4a883727c553da286b9f0f446a3671b01a6e364e3ae8f9b2391b3' in 38.291 s, escape range (24, 9276)
 Saved to "mandel-0cf52a6f78b4a883727c.png"
 ```
 
@@ -324,10 +324,10 @@ $ poetry run zoom image " -0.7436499" "0.13188204" "0.00073801"
 
 1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) @ 73801/100000000], precision 88 bits, 3.387 k magnification, AUTO iterations...
 
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 23513.97px/s]
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:48<00:00, 21757.95px/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 101834.39px/s]
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:05<00:00, 199725.00px/s]
 
-Generated image '38824cdaa58b64496ebfd86facf4d4ba4596ab18db95ac97afd643a7a892ff83' in 48.953 s, escape range (36, 1000)
+Generated image '38824cdaa58b64496ebfd86facf4d4ba4596ab18db95ac97afd643a7a892ff83' in 6.797 s, escape range (36, 1000)
 Saved to "mandel-38824cdaa58b64496ebf.png"
 ```
 
@@ -347,22 +347,22 @@ We have, for fun, generated a sequence of powers of 1000, demonstrating the amaz
 
 | Image | Bits | Depth | Size $2.5\times$ | Equivalent real-world size / Landmark examples |
 | --- | --- | --- | --- | --- |
-| ![Zoom 1](tests/data/images/demo-mandel-zoom-01.png) | $80$ | $1$-$1000$ | $1$ | $\sim 10^{11}$ light-years = Observable-universe scale, about $93$ billion light-years across. |
-| ![Zoom 10^-3](tests/data/images/demo-mandel-zoom-02.png) | $86$ | $32$-$1000$ | $10^{-3}$ | $\sim 10^{8}$ light-years = Cosmic-web / supercluster scale: galaxy walls, voids. |
-| ![Zoom 10^-6](tests/data/images/demo-mandel-zoom-03.png) | $96$ | $219$-$7348$ | $10^{-6}$ | $\sim 10^{5}$ light-years = Galaxy scale: the Milky Way is about $100{,}000$ light-years across. |
-| ![Zoom 10^-9](tests/data/images/demo-mandel-zoom-04.png) | $106$ | $1006$-$2664$ | $10^{-9}$ | $\sim 100$ light-years = Local stellar-neighborhood scale: nearby star groups, nebulae, and star-forming regions. |
-| ![Zoom 10^-12](tests/data/images/demo-mandel-zoom-05.png) | $116$ | $1974$-$3901$ | $10^{-12}$ | $\sim 0.1$ light-year = Outer-solar-system scale: comparable to the distant Oort-cloud region. |
-| ![Zoom 10^-15](tests/data/images/demo-mandel-zoom-06.png) | $126$ | $4132$-$93051$ | $10^{-15}$ | $\sim 10^{9}\,\mathrm{km}$ = Inner-to-middle solar-system scale: comparable to giant-planet orbital distances. |
-| ![Zoom 10^-18](tests/data/images/demo-mandel-zoom-07.png) | $136$ | $8035$-$11740$ | $10^{-18}$ | $\sim 10^{6}\,\mathrm{km}$ = Star / giant-planet scale: the Sun’s diameter is about $1.39 \times 10^{6}\,\mathrm{km}$. |
-| ![Zoom 10^-21](tests/data/images/demo-mandel-zoom-08.png) | $146$ | $9033$-$15673$ | $10^{-21}$ | $\sim 10^{3}\,\mathrm{km}$ = Planetary-geography scale: large countries, small moons, continent-scale weather systems. |
-| ![Zoom 10^-24](tests/data/images/demo-mandel-zoom-09.png) | $156$ | $13074$-$33133$ | $10^{-24}$ | $\sim 1\,\mathrm{km}$ = Human landscape scale: mountains, city districts, bridges, runways. |
-| ![Zoom 10^-27](tests/data/images/demo-mandel-zoom-10.png) | $166$ | $17130$-$32103$ | $10^{-27}$ | $\sim 1\,\mathrm{m}$ = Human/body scale: a person, table, doorway, musical instrument. |
-| ![Zoom 10^-30](tests/data/images/demo-mandel-zoom-11.png) | $176$ | $26939$-$61788$ | $10^{-30}$ | $\sim 1\,\mathrm{mm}$ = Small visible-object scale: sand grains, seeds, insect parts, raindrops. |
-| ![Zoom 10^-33](tests/data/images/demo-mandel-zoom-12.png) | $186$ | $58119$-$205876$ | $10^{-33}$ | $\sim 1\,\mu\mathrm{m}$ = Cell/microbe scale: bacteria, organelles, and wavelengths near visible/infrared light. |
-| ![Zoom 10^-36](tests/data/images/demo-mandel-zoom-13.png) | $196$ | $65240$-$67722$ | $10^{-36}$ | $\sim 1\,\mathrm{nm}$ = Molecule scale: DNA width, proteins, small molecular machines. |
-| ![Zoom 10^-39](tests/data/images/demo-mandel-zoom-14.png) | $206$ | $65327$-$67968$ | $10^{-39}$ | $\sim 1\,\mathrm{pm}$ = Deep atomic/electron-cloud scale: smaller than typical atomic diameters, which are around $10^{-10}\,\mathrm{m}$. |
-| ![Zoom 10^-42](tests/data/images/demo-mandel-zoom-15.png) | $216$ | $65524$-$70198$ | $10^{-42}$ | $\sim 1\,\mathrm{fm}$ = Atomic nucleus / proton scale: the proton rms charge radius is about $8.4075 \times 10^{-16}\,\mathrm{m}$. |
-| ![Zoom 10^-45](tests/data/images/demo-mandel-zoom-16.png) | $226$ | $65799$-$69258$ | $10^{-45}$ | $\sim 1\,\mathrm{am}$ = Quarks and leptons: elementary particles in the Standard Model |
+| ![Zoom 1](tests/data/images/demo-mandel-zoom-01.png) | $80$ | $1$ - $1000$ | $1$ | $\sim 10^{11}$ light-years = Observable-universe scale, about $93$ billion light-years across. |
+| ![Zoom 10^-3](tests/data/images/demo-mandel-zoom-02.png) | $86$ | $32$ - $1000$ | $10^{-3}$ | $\sim 10^{8}$ light-years = Cosmic-web / supercluster scale: galaxy walls, voids. |
+| ![Zoom 10^-6](tests/data/images/demo-mandel-zoom-03.png) | $96$ | $219$ - $7348$ | $10^{-6}$ | $\sim 10^{5}$ light-years = Galaxy scale: the Milky Way is about $100{,}000$ light-years across. |
+| ![Zoom 10^-9](tests/data/images/demo-mandel-zoom-04.png) | $106$ | $1006$ - $2664$ | $10^{-9}$ | $\sim 100$ light-years = Local stellar-neighborhood scale: nearby star groups, nebulae, and star-forming regions. |
+| ![Zoom 10^-12](tests/data/images/demo-mandel-zoom-05.png) | $116$ | $1974$ - $3901$ | $10^{-12}$ | $\sim 0.1$ light-year = Outer-solar-system scale: comparable to the distant Oort-cloud region. |
+| ![Zoom 10^-15](tests/data/images/demo-mandel-zoom-06.png) | $126$ | $4132$ - $93051$ | $10^{-15}$ | $\sim 10^{9}\,\mathrm{km}$ = Inner-to-middle solar-system scale: comparable to giant-planet orbital distances. |
+| ![Zoom 10^-18](tests/data/images/demo-mandel-zoom-07.png) | $136$ | $8035$ - $11740$ | $10^{-18}$ | $\sim 10^{6}\,\mathrm{km}$ = Star / giant-planet scale: the Sun’s diameter is about $1.39 \times 10^{6}\,\mathrm{km}$. |
+| ![Zoom 10^-21](tests/data/images/demo-mandel-zoom-08.png) | $146$ | $9033$ - $15673$ | $10^{-21}$ | $\sim 10^{3}\,\mathrm{km}$ = Planetary-geography scale: large countries, small moons, continent-scale weather systems. |
+| ![Zoom 10^-24](tests/data/images/demo-mandel-zoom-09.png) | $156$ | $13074$ - $33133$ | $10^{-24}$ | $\sim 1\,\mathrm{km}$ = Human landscape scale: mountains, city districts, bridges, runways. |
+| ![Zoom 10^-27](tests/data/images/demo-mandel-zoom-10.png) | $166$ | $17130$ - $32103$ | $10^{-27}$ | $\sim 1\,\mathrm{m}$ = Human/body scale: a person, table, doorway, musical instrument. |
+| ![Zoom 10^-30](tests/data/images/demo-mandel-zoom-11.png) | $176$ | $26939$ - $61788$ | $10^{-30}$ | $\sim 1\,\mathrm{mm}$ = Small visible-object scale: sand grains, seeds, insect parts, raindrops. |
+| ![Zoom 10^-33](tests/data/images/demo-mandel-zoom-12.png) | $186$ | $58119$ - $205876$ | $10^{-33}$ | $\sim 1\,\mu\mathrm{m}$ = Cell/microbe scale: bacteria, organelles, and wavelengths near visible/infrared light. |
+| ![Zoom 10^-36](tests/data/images/demo-mandel-zoom-13.png) | $196$ | $65240$ - $67722$ | $10^{-36}$ | $\sim 1\,\mathrm{nm}$ = Molecule scale: DNA width, proteins, small molecular machines. |
+| ![Zoom 10^-39](tests/data/images/demo-mandel-zoom-14.png) | $206$ | $65327$ - $67968$ | $10^{-39}$ | $\sim 1\,\mathrm{pm}$ = Deep atomic/electron-cloud scale: smaller than typical atomic diameters, which are around $10^{-10}\,\mathrm{m}$. |
+| ![Zoom 10^-42](tests/data/images/demo-mandel-zoom-15.png) | $216$ | $65524$ - $70198$ | $10^{-42}$ | $\sim 1\,\mathrm{fm}$ = Atomic nucleus / proton scale: the proton rms charge radius is about $8.4075 \times 10^{-16}\,\mathrm{m}$. |
+| ![Zoom 10^-45](tests/data/images/demo-mandel-zoom-16.png) | $226$ | $65799$ - $69258$ | $10^{-45}$ | $\sim 1\,\mathrm{am}$ = Quarks and leptons: elementary particles in the Standard Model |
 
 ### Configuration
 

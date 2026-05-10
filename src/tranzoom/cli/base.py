@@ -114,6 +114,16 @@ MAX_ITERATIONS_OPTION: typer.models.OptionInfo = typer.Option(
     f'default is None (automatic search for optimal iterations --- recommended)'
   ),
 )
+MAX_THREADS_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '--threads',
+  min=1,
+  max=min(fractal.MAX_CONCURRENCE, fractal.AVAILABLE_CPU),
+  help=(
+    'Number of threads to use for rendering; default is None, which means to use all available '
+    f'CPU cores; will be limited to {min(fractal.MAX_CONCURRENCE, fractal.AVAILABLE_CPU)} threads'
+  ),
+)
 
 # Color options
 PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
