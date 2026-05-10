@@ -20,10 +20,10 @@ poetry run zoom --no-date --no-hash --prefix "demo-mandel-seahorse" -o tests/dat
 
 # Render Seahorse Tail
 poetry run zoom --no-date --no-hash --prefix "demo-mandel-seahorse-tail" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "blue-to-yellow-to-brown"
-poetry run zoom -w 256 -h 256 --no-date --no-hash --prefix "demo-mandel-seahorse-tail-byb" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "blue-to-yellow-to-brown"
-poetry run zoom -w 256 -h 256 --no-date --no-hash --prefix "demo-mandel-seahorse-tail-lava" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "lava"
-poetry run zoom -w 256 -h 256 --no-date --no-hash --prefix "demo-mandel-seahorse-tail-ocean" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "electric-ocean"
-poetry run zoom -w 256 -h 256 --no-date --no-hash --prefix "demo-mandel-seahorse-tail-sunset" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "sunset"
+poetry run zoom -w 512 -h 512 --no-date --no-hash --prefix "demo-mandel-seahorse-tail-byb" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "blue-to-yellow-to-brown"
+poetry run zoom -w 512 -h 512 --no-date --no-hash --prefix "demo-mandel-seahorse-tail-lava" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "lava"
+poetry run zoom -w 512 -h 512 --no-date --no-hash --prefix "demo-mandel-seahorse-tail-ocean" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "electric-ocean"
+poetry run zoom -w 512 -h 512 --no-date --no-hash --prefix "demo-mandel-seahorse-tail-sunset" -o tests/data/images image " -0.7436499" "0.13188204" "0.00073801" --palette "sunset"
 
 # generate the 16 images in the POWERS OF 1000 zoom sequence
 
@@ -37,5 +37,5 @@ for n in $(seq 1 16); do
     else
         zoom=$(printf "0.%0*d25" "$((3 * n - 4))" 0)  # then "0.0025", "0.0000025", etc.
     fi
-    poetry run zoom -w 256 -h 256 --no-date --no-hash --prefix "$prefix" -o tests/data/images image "$CX" "$CY" "$zoom"
+    poetry run zoom -w 512 -h 512 --no-date --no-hash --prefix "$prefix" -o tests/data/images image "$CX" "$CY" "$zoom"
 done
