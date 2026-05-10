@@ -51,9 +51,12 @@ Usage: zoom image [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; default is None, i.e, the same as width                                       │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --iter  -i      INTEGER RANGE [1000<=x<=4294967295]  Maximum iterations (depth) to compute before determining escape; 1000 ≤ iter ≤ 4294967295; default │
-│                                                      is None (automatic search for optimal iterations --- recommended)                                  │
-│ --help                                               Show this message and exit.                                                                        │
+│ --iter     -i      INTEGER RANGE [1000<=x<=4294967295]  Maximum iterations (depth) to compute before determining escape; 1000 ≤ iter ≤ 4294967295;      │
+│                                                         default is None (automatic search for optimal iterations --- recommended)                       │
+│ --palette          TEXT                                 Color palette to use for rendering; default is 'blue-to-yellow-to-brown'; available palettes:   │
+│                                                         ['blue-to-yellow-to-brown']                                                                     │
+│                                                                                                                       │
+│ --help                                                  Show this message and exit.                                                                     │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Example:                                                                                                                                                  

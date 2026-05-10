@@ -33,33 +33,41 @@ META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'
 META_ITER_DEPTH_MIN_KEY = 'tranzoom:iter_depth:min'
 META_ITER_DEPTH_MAX_KEY = 'tranzoom:iter_depth:max'
 
+# image constants
+
 N_BYTES_UINT: int = 4  # we use array of unsigned ints to store pixel data
 type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel data array
 
-# Smooth palette for exterior points: 16 color stops cycling through a
-# blue-to-yellow-to-brown gradient (based on the classic Mandelbrot color scheme)
-_SMOOTH_PALETTE: tuple[tuple[int, int, int], ...] = (
-  (66, 30, 15),  # dark reddish-brown
-  (25, 7, 26),  # dark violet
-  (9, 1, 47),  # dark blue
-  (4, 4, 73),  # deep blue
-  (0, 7, 100),  # deep blue
-  (12, 44, 138),  # blue
-  (24, 82, 177),  # blue
-  (57, 125, 209),  # light blue
-  (134, 181, 229),  # very light blue
-  (211, 236, 248),  # near-white blue
-  (241, 233, 191),  # pale yellow
-  (248, 201, 95),  # yellow
-  (255, 170, 0),  # gold / orange
-  (204, 128, 0),  # dark orange
-  (153, 87, 0),  # brown
-  (106, 52, 3),  # dark brown
-)
+# palette constants
+
+DEFAULT_PALETTE: str = 'blue-to-yellow-to-brown'
 
 # how many times to cycle through the palette across the histogram-equalized range;
 # more cycles = tighter, more frequent color banding; 3 is a visually balanced default
 _PALETTE_CYCLES: int = 3
+
+# Smooth palette for exterior points: 16 color stops cycling through a
+# blue-to-yellow-to-brown gradient (based on the classic Mandelbrot color scheme)
+PALETTES: dict[str, tuple[tuple[int, int, int], ...]] = {
+  'blue-to-yellow-to-brown': (  # TODO: make the palettes an enum and create more of them
+    (66, 30, 15),  # dark reddish-brown
+    (25, 7, 26),  # dark violet
+    (9, 1, 47),  # dark blue
+    (4, 4, 73),  # deep blue
+    (0, 7, 100),  # deep blue
+    (12, 44, 138),  # blue
+    (24, 82, 177),  # blue
+    (57, 125, 209),  # light blue
+    (134, 181, 229),  # very light blue
+    (211, 236, 248),  # near-white blue
+    (241, 233, 191),  # pale yellow
+    (248, 201, 95),  # yellow
+    (255, 170, 0),  # gold / orange
+    (204, 128, 0),  # dark orange
+    (153, 87, 0),  # brown
+    (106, 52, 3),  # dark brown
+  )
+}
 
 
 class Error(frame.Error):
@@ -136,7 +144,7 @@ class Image:
     """
     return (min(self.escape), max(self.escape))
 
-  def AsPixels(self) -> bytes:
+  def AsPixels(self, *, palette: str = DEFAULT_PALETTE) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
     Current palette:
@@ -148,6 +156,9 @@ class Image:
     cumulative histogram distribution (histogram equalization) into [0, 1), which is then
     fed into a smooth cycling 16-color gradient via (_PixelPalette). This ensures the full
     color range is used regardless of zoom depth or iteration distribution.
+
+    Args:
+      palette (str, optional): The name of the color palette to use. Defaults to DEFAULT_PALETTE.
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
@@ -185,21 +196,24 @@ class Image:
       else:
         # keep t in [0, 1) so the highest escape bucket does not wrap
         t: float = (cumulative[escaped_at] - 1) / total_exterior
-        r, g, b = _PixelPalette(t)
+        r, g, b = _PixelPalette(t, palette)
       pixels[i * 3] = r
       pixels[i * 3 + 1] = g
       pixels[i * 3 + 2] = b
     return bytes(pixels)
 
-  def AsPNG(self) -> tuple[bytes, str]:
+  def AsPNG(self, *, palette: str = DEFAULT_PALETTE) -> tuple[bytes, str]:
     """Convert the image to PNG bytes and return it with its internal data hash.
+
+    Args:
+      palette (str, optional): The name of the color palette to use. Defaults to DEFAULT_PALETTE.
 
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
 
     """
     # convert the raw pixel data to a PNG using PIL
-    raw_img: bytes = self.AsPixels()
+    raw_img: bytes = self.AsPixels(palette=palette)
     img: PILImage.Image = PILImage.frombytes('RGB', (self._width, self._height), raw_img)
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
     png_meta = PngImagePlugin.PngInfo()
@@ -227,36 +241,44 @@ class Image:
     max_escape: int
     min_escape, max_escape = self.escape_range
     png_meta.add_text(META_ITER_DEPTH_MIN_KEY, str(min_escape))
-    png_meta.add_text(META_ITER_DEPTH_MAX_KEY, str(max_escape))
+    png_meta.add_text(META_ITER_DEPTH_MAX_KEY, str(max_escape))  # TODO: save palette
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
     img.save(buf, format='PNG', pnginfo=png_meta)
     return (buf.getvalue(), hashes.Hash256(raw_img).hex())
 
 
-def _PixelPalette(t: float) -> tuple[int, int, int]:
+def _PixelPalette(t: float, palette: str) -> tuple[int, int, int]:
   """Get the RGB color for a histogram-equalized normalized palette position.
 
-  Smoothly interpolates between adjacent stops in _SMOOTH_PALETTE, cycling
+  Smoothly interpolates between adjacent stops in the specified palette, cycling
   _PALETTE_CYCLES times across the [0, 1) range for visual banding.
 
   Args:
     t (float): Normalized position in [0, 1) derived from histogram equalization.
+    palette (str): The name of the palette to use.
 
   Returns:
     tuple[int, int, int]: The interpolated RGB color.
 
+  Raises:
+    Error: if the palette name is unknown or if there are issues computing the color.
+
   """
+  # get the palette stops
+  if palette not in PALETTES:
+    raise Error(f'Unknown palette {palette!r}, available: {list(PALETTES.keys())}')
+  palette_stops: tuple[tuple[int, int, int], ...] = PALETTES[palette]
   # cycle multiple times through the palette for visual banding
   t_cycled: float = (t * _PALETTE_CYCLES) % 1.0
-  n: int = len(_SMOOTH_PALETTE)
+  n: int = len(palette_stops)
   # fractional index into the palette
   idx: float = t_cycled * n
   lo: int = int(idx) % n
   hi: int = (lo + 1) % n
   frac: float = idx - int(idx)
-  r0, g0, b0 = _SMOOTH_PALETTE[lo]
-  r1, g1, b1 = _SMOOTH_PALETTE[hi]
+  r0, g0, b0 = palette_stops[lo]
+  r1, g1, b1 = palette_stops[hi]
   return (
     int(r0 + frac * (r1 - r0)),
     int(g0 + frac * (g1 - g0)),

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import typer
 
-from tranzoom.core import fractal, frame
+from tranzoom.core import fractal, frame, image
 
 # global CLI data, and some test stuff
 
@@ -112,5 +112,15 @@ MAX_ITERATIONS_OPTION: typer.models.OptionInfo = typer.Option(
     'Maximum iterations (depth) to compute before determining escape; '
     f'{fractal.MIN_ITER} ≤ iter ≤ {fractal.MAX_ITER}; '
     f'default is None (automatic search for optimal iterations --- recommended)'
+  ),
+)
+
+# Color options
+PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
+  image.DEFAULT_PALETTE,
+  '--palette',
+  help=(
+    f'Color palette to use for rendering; default is {image.DEFAULT_PALETTE!r}; '
+    f'available palettes: {list(image.PALETTES.keys())}'
   ),
 )
