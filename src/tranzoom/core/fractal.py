@@ -9,6 +9,7 @@ Heavy use of gmpy2 for arbitrary precision, which is needed to render deep zooms
 from __future__ import annotations
 
 import logging
+from typing import NoReturn
 
 import gmpy2
 import tqdm
@@ -65,6 +66,7 @@ def Mandelbrot(  # noqa: PLR0914
 
   """
   # if max_iter is None, we do an adaptive iteration limit calculation based on a small test render
+  # BEWARE: the method call will call Mandelbrot() recursively, but with a fixed max_iter!
   max_iter = _MandelbrotAdaptiveIterations(frm, progress_bar) if max_iter is None else max_iter
   # sanity check the iter_limit: if error, it came from the user (b/c adaptive clamps to the limits)
   if not (MIN_ITER <= max_iter <= MAX_ITER):
@@ -85,8 +87,8 @@ def Mandelbrot(  # noqa: PLR0914
     # also, this is where the "X" (real) coordinates are converted mpq->mpfr
     xs: list[gmpy2.mpfr] = [gmpy2.mpfr(frm.top_re + gmpy2.mpq(i) * dx) for i in range(width)]
     # create progress bar based on total pixels and the options
-    p_bar: tqdm.tqdm[int] = tqdm.tqdm(
-      iterable=range(width * height),
+    p_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
+      total=width * height,
       desc='Pre' if width == frame.MIN_IMAGE_SIZE and height == frame.MIN_IMAGE_SIZE else 'Img',
       unit='px',
       dynamic_ncols=True,
@@ -134,6 +136,8 @@ def Mandelbrot(  # noqa: PLR0914
         img.escape[py * width + px] = escaped_at  # carefully set this directly in the array
         p_bar.update(1)  # we touched a pixel, so update the progress bar
   # done
+  p_bar.close()
+  img.SetDepth(max_iter)  # set the depth of the image to the max_iter we used
   return img
 
 
@@ -179,6 +183,7 @@ def _MandelbrotAdaptiveIterations(frm: frame.Frame, progress_bar: bool) -> int:
     for escaped_at in img16.escape:
       escape_histogram[escaped_at] = escape_histogram.get(escaped_at, 0) + 1
     # sort the histogram by escape iteration; find the highest escape iteration that < high limit
+    # if all pixels hit high_iter then max_iter will be high_iter, and we WANT it to FAIL
     histogram: list[tuple[int, int]] = sorted(escape_histogram.items())
     max_iter = (
       histogram[-1][0] if histogram[-1][0] != high_iter or len(histogram) == 1 else histogram[-2][0]
@@ -202,4 +207,7 @@ def _MandelbrotAdaptiveIterations(frm: frame.Frame, progress_bar: bool) -> int:
       return max_iter
     # here we didn't find, so we loop to the next higher limit...
   # if we exhausted all the high_iters without finding a suitable max_iter, we have to give up
-  raise Error(f'Estimated {max_iter=} is above the adaptive limit of {HIGH_ITERS[-1]}')
+  raise Error(
+    f'Estimated {max_iter=} is above the adaptive limit of {HIGH_ITERS[-1]}; '
+    'maybe this frame is interior-only (all pixels are non-escaping)'
+  )

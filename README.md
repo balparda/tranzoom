@@ -202,7 +202,7 @@ As can be seen, the `Frame` is stored as rational numbers with arbitrary precisi
 Render a 512×512 [well-known zoom ("Seahorse", ~155× magnification, 512×512)](#seahorse-155-83-bits):
 
 ```sh
-poetry run zoom -w 512 -h 512 image " -0.74303" "0.126433" "0.01611"
+poetry run zoom image " -0.74303" "0.126433" "0.01611"
 ```
 
 ![Seahorse](tests/data/images/demo-mandel-seahorse.png)
@@ -290,7 +290,7 @@ This is what tranZoom considers ***"1 magnification"***, and will measure other 
 Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mandel_zoom_03_seehorse.jpg) to a 512×512 image:
 
 ```sh
-$ poetry run zoom -w 512 -h 512 image " -0.74303" "0.126433" "0.01611"
+$ poetry run zoom image " -0.74303" "0.126433" "0.01611"
 
 1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) @ 1611/100000], precision 83 bits, 155.183 magnification, AUTO iterations...
 
@@ -308,7 +308,7 @@ Saved to "mandel-0cf52a6f78b4a883727c.png"
 Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tail_part.jpg) to a 512×512 image:
 
 ```sh
-$ poetry run zoom -w 512 -h 512 image " -0.7436499" "0.13188204" "0.00073801"
+$ poetry run zoom image " -0.7436499" "0.13188204" "0.00073801"
 
 1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) @ 73801/100000000], precision 88 bits, 3.387 k magnification, AUTO iterations...
 
@@ -351,8 +351,6 @@ We have, for fun, generated a sequence of powers of 1000, demonstrating the amaz
 | ![Zoom 10^-39](tests/data/images/demo-mandel-zoom-14.png) | $206$ | $65327$-$67968$ | $10^{-39}$ | $\sim 1\,\mathrm{pm}$ = Deep atomic/electron-cloud scale: smaller than typical atomic diameters, which are around $10^{-10}\,\mathrm{m}$. |
 | ![Zoom 10^-42](tests/data/images/demo-mandel-zoom-15.png) | $216$ | $65524$-$70198$ | $10^{-42}$ | $\sim 1\,\mathrm{fm}$ = Atomic nucleus / proton scale: the proton rms charge radius is about $8.4075 \times 10^{-16}\,\mathrm{m}$. |
 | ![Zoom 10^-45](tests/data/images/demo-mandel-zoom-16.png) | $226$ | $65799$-$69258$ | $10^{-45}$ | $\sim 1\,\mathrm{am}$ = Quarks and leptons: elementary particles in the Standard Model |
-
-" -0.743643887037158704752191506114774" "0.131825904205311970493132056385139"
 
 ### Configuration
 

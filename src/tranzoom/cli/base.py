@@ -120,7 +120,7 @@ PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
   image.DEFAULT_PALETTE,
   '--palette',
   help=(
-    f'Color palette to use for rendering; default is {image.DEFAULT_PALETTE!r}; '
-    f'available palettes: {list(image.PALETTES.keys())}'
+    f'Color palette to use for rendering; default is {image.DEFAULT_PALETTE.value!r}; '
+    f'available palettes: {sorted(p.value for p in image.PALETTES)}'
   ),
 )

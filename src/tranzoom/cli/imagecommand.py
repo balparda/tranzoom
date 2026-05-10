@@ -41,7 +41,7 @@ def Image(  # documentation is help/epilog/args  # noqa: D103
   f_width: str = base.FRAME_WIDTH_OPTION,  # type: ignore[assignment]
   f_height: str | None = base.FRAME_HEIGHT_OPTION,  # type: ignore[assignment]
   max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
-  pallette: str = base.PALETTE_OPTION,  # type: ignore[assignment]
+  palette: image.Palette = base.PALETTE_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity
   config: zoom.TranZoomConfig = ctx.obj
@@ -66,7 +66,7 @@ def Image(  # documentation is help/epilog/args  # noqa: D103
     img: image.Image = fractal.Mandelbrot(
       frm, config.img_width, config.img_height, max_iter=max_iter
     )
-    raw_png, raw_hash = img.AsPNG(palette=pallette)
+    raw_png, raw_hash = img.AsPNG(palette=palette)
   config.console.print(f'\nGenerated image {raw_hash!r} in {tmr}, escape range {img.escape_range}')
   # check we can recover the hash from the PNG: should never fail unless we have a bug
   w, h, png_hash, _ = image.GetBasicDataFromPNG(raw_png)

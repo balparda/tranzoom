@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import array
+import enum
 import io
 
 from gmpy2 import mpq
@@ -18,20 +19,25 @@ from tranzoom.core import frame
 
 # metadata keys for PNG tEXt chunks; used to store the frame parameters and other info in the PNG
 # keys use a "tranzoom:" namespace to avoid collisions with other metadata
-META_VERSION_KEY = 'tranzoom:version'
-META_TOP_RE_KEY = 'tranzoom:frame:top_re'
-META_TOP_IM_KEY = 'tranzoom:frame:top_im'
-META_BOTTOM_RE_KEY = 'tranzoom:frame:bottom_re'
-META_BOTTOM_IM_KEY = 'tranzoom:frame:bottom_im'
-META_CENTER_RE_KEY = 'tranzoom:frame:center_re'
-META_CENTER_IM_KEY = 'tranzoom:frame:center_im'
-META_WIDTH_RE_KEY = 'tranzoom:frame:width_re'
-META_HEIGHT_IM_KEY = 'tranzoom:frame:height_im'
-META_PRECISION_KEY = 'tranzoom:frame:precision'
-META_MAGNIFICATION_KEY = 'tranzoom:frame:magnification'
-META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'
-META_ITER_DEPTH_MIN_KEY = 'tranzoom:iter_depth:min'
-META_ITER_DEPTH_MAX_KEY = 'tranzoom:iter_depth:max'
+# all are converted to str for storage in PNG metadata, but the original types are indicated below
+META_VERSION_KEY = 'tranzoom:version'  # str, like "1.1.0"
+META_IMAGE_WIDTH_KEY = 'tranzoom:image:width'  # int, in pixels
+META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
+META_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "blue-to-yellow-to-brown", one of Palette
+META_TOP_RE_KEY = 'tranzoom:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
+META_TOP_IM_KEY = 'tranzoom:frame:top_im'  # gmpy2.mpq
+META_BOTTOM_RE_KEY = 'tranzoom:frame:bottom_re'  # gmpy2.mpq
+META_BOTTOM_IM_KEY = 'tranzoom:frame:bottom_im'  # gmpy2.mpq
+META_CENTER_RE_KEY = 'tranzoom:frame:center_re'  # gmpy2.mpq
+META_CENTER_IM_KEY = 'tranzoom:frame:center_im'  # gmpy2.mpq
+META_WIDTH_RE_KEY = 'tranzoom:frame:width_re'  # gmpy2.mpq
+META_HEIGHT_IM_KEY = 'tranzoom:frame:height_im'  # gmpy2.mpq
+META_PRECISION_KEY = 'tranzoom:frame:precision'  # int, in bits
+META_MAGNIFICATION_KEY = 'tranzoom:frame:magnification'  # gmpy2.mpfr -> converted to float
+META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'  # float
+META_ITER_DEPTH_MIN_KEY = 'tranzoom:iter_depth:min'  # int
+META_ITER_DEPTH_MAX_KEY = 'tranzoom:iter_depth:max'  # int
+META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:iter_depth:search'  # int, can be "-1" if unknown or not set
 
 # image constants
 
@@ -40,7 +46,14 @@ type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel
 
 # palette constants
 
-DEFAULT_PALETTE: str = 'blue-to-yellow-to-brown'
+
+class Palette(enum.Enum):
+  """Palette enum."""
+
+  BYB = 'blue-to-yellow-to-brown'
+
+
+DEFAULT_PALETTE: Palette = Palette.BYB
 
 # how many times to cycle through the palette across the histogram-equalized range;
 # more cycles = tighter, more frequent color banding; 3 is a visually balanced default
@@ -48,8 +61,8 @@ _PALETTE_CYCLES: int = 3
 
 # Smooth palette for exterior points: 16 color stops cycling through a
 # blue-to-yellow-to-brown gradient (based on the classic Mandelbrot color scheme)
-PALETTES: dict[str, tuple[tuple[int, int, int], ...]] = {
-  'blue-to-yellow-to-brown': (  # TODO: make the palettes an enum and create more of them
+PALETTES: dict[Palette, tuple[tuple[int, int, int], ...]] = {
+  Palette.BYB: (
     (66, 30, 15),  # dark reddish-brown
     (25, 7, 26),  # dark violet
     (9, 1, 47),  # dark blue
@@ -111,6 +124,7 @@ class Image:
     self._frame: frame.Frame = frm
     self._width: int = width
     self._height: int = height
+    self._depth: int | None = None  # may be set later by the fractal rendering function
     # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
     self.escape: ImageUInt32Array = array.array('I', (0 for _ in range(width * height)))
     if self.escape.itemsize != N_BYTES_UINT:
@@ -144,7 +158,22 @@ class Image:
     """
     return (min(self.escape), max(self.escape))
 
-  def AsPixels(self, *, palette: str = DEFAULT_PALETTE) -> bytes:
+  def SetDepth(self, depth: int) -> None:
+    """Set the maximum iteration depth for the image. Should be called after image is complete.
+
+    Args:
+      depth (int): The maximum iteration depth.
+
+    Raises:
+      Error: if the depth is invalid or inconsistent with the escape iterations.
+
+    """
+    _, max_escape = self.escape_range
+    if depth < max_escape:
+      raise Error(f'Inconsistent depth: {depth=} is < than {max_escape=}')
+    self._depth = depth
+
+  def AsPixels(self, *, palette: Palette = DEFAULT_PALETTE) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
     Current palette:
@@ -158,7 +187,7 @@ class Image:
     color range is used regardless of zoom depth or iteration distribution.
 
     Args:
-      palette (str, optional): The name of the color palette to use. Defaults to DEFAULT_PALETTE.
+      palette (Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
@@ -172,10 +201,11 @@ class Image:
     min_escape: int
     max_escape: int
     min_escape, max_escape = self.escape_range
-    if min_escape < 0:
-      raise Error(f'Invalid min escape iteration: {min_escape=}')
+    depth: int = self._depth if self._depth is not None else max_escape
+    if min_escape < 0 or depth < max_escape:
+      raise Error(f'Invalid/Inconsistent {min_escape=} or {depth=} < {max_escape=}')
     for escaped_at in self.escape:
-      if escaped_at < max_escape:
+      if escaped_at < depth:
         histogram[escaped_at] = histogram.get(escaped_at, 0) + 1
     total_exterior: int = sum(histogram.values())
     # step 2: compute cumulative distribution function for histogram equalization;
@@ -191,7 +221,7 @@ class Image:
     b: int
     pixels = bytearray(self._width * self._height * 3)
     for i, escaped_at in enumerate(self.escape):
-      if escaped_at >= max_escape or total_exterior == 0:
+      if escaped_at >= depth or total_exterior == 0:
         r, g, b = 0, 0, 0  # interior point: black
       else:
         # keep t in [0, 1) so the highest escape bucket does not wrap
@@ -202,11 +232,11 @@ class Image:
       pixels[i * 3 + 2] = b
     return bytes(pixels)
 
-  def AsPNG(self, *, palette: str = DEFAULT_PALETTE) -> tuple[bytes, str]:
+  def AsPNG(self, *, palette: Palette = DEFAULT_PALETTE) -> tuple[bytes, str]:
     """Convert the image to PNG bytes and return it with its internal data hash.
 
     Args:
-      palette (str, optional): The name of the color palette to use. Defaults to DEFAULT_PALETTE.
+      palette (Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
 
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
@@ -219,6 +249,10 @@ class Image:
     png_meta = PngImagePlugin.PngInfo()
     # version
     png_meta.add_text(META_VERSION_KEY, __version__)
+    # image parameters
+    png_meta.add_text(META_IMAGE_WIDTH_KEY, str(self._width))
+    png_meta.add_text(META_IMAGE_HEIGHT_KEY, str(self._height))
+    png_meta.add_text(META_PALETTE_KEY, palette.value)
     # frame as corners
     png_meta.add_text(META_TOP_RE_KEY, str(self._frame.top_re))
     png_meta.add_text(META_TOP_IM_KEY, str(self._frame.top_im))
@@ -241,14 +275,15 @@ class Image:
     max_escape: int
     min_escape, max_escape = self.escape_range
     png_meta.add_text(META_ITER_DEPTH_MIN_KEY, str(min_escape))
-    png_meta.add_text(META_ITER_DEPTH_MAX_KEY, str(max_escape))  # TODO: save palette
+    png_meta.add_text(META_ITER_DEPTH_MAX_KEY, str(max_escape))
+    png_meta.add_text(META_ITER_SEARCH_DEPTH_KEY, str(self._depth) if self._depth else '-1')
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
     img.save(buf, format='PNG', pnginfo=png_meta)
     return (buf.getvalue(), hashes.Hash256(raw_img).hex())
 
 
-def _PixelPalette(t: float, palette: str) -> tuple[int, int, int]:
+def _PixelPalette(t: float, palette: Palette) -> tuple[int, int, int]:
   """Get the RGB color for a histogram-equalized normalized palette position.
 
   Smoothly interpolates between adjacent stops in the specified palette, cycling
