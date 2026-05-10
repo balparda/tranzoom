@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""Entry point for the TranZoom Mandelbrot zoom renderer."""
+"""Entry point for the TranZoom Mandelbrot CLI."""
 
 from __future__ import annotations
 
@@ -21,8 +21,18 @@ from . import __version__
 app = typer.Typer(
   add_completion=True,
   no_args_is_help=True,
-  help='TranZoom will do things!',  # keep in sync with Main() app.callback help
-  # TODO: add epilog and actual help
+  # keep in sync with Main() app.callback help
+  help='TranZoom: `mandel` CLI generates and has utilities for Mandelbrot Set computations',
+  epilog=(
+    'Examples:\n\n\n\n'
+    '$ poetry run mandel gen\n\n'
+    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
+    '...\n\n'
+    'Saved to "mandel-\\[date]-\\[hash].png"\n\n\n\n'
+    '$ poetry run mandel -w 512 -h 512 gen " -0.74303" "0.126433" "0.01611"  '
+    '# note the space because of the "-"\n\n'
+    '<saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>'
+  ),
 )
 
 
@@ -33,8 +43,8 @@ def Run() -> None:
 
 @app.callback(
   invoke_without_command=True,
-  help='TranZoom will do things!',  # keep in sync with app help
-  # TODO: add actual help
+  # keep in sync with app help
+  help='TranZoom: `mandel` CLI generates and has utilities for Mandelbrot Set computations',
 )  # have only one; this is the "constructor"
 @clibase.CLIErrorGuard
 def Main(  # documentation is help/epilog/args # noqa: D103
@@ -98,12 +108,13 @@ def Main(  # documentation is help/epilog/args # noqa: D103
 @app.command(
   'markdown',
   help='Emit Markdown docs for the CLI (see README.md section "Versioning and releases").',
-  epilog=('Example:\n\n\n\n$ poetry run zoom markdown > zoom.md\n\n<<saves CLI doc>>'),
+  epilog=('Example:\n\n\n\n$ poetry run mandel markdown > mandel.md\n\n<<saves CLI doc>>'),
 )
 @clibase.CLIErrorGuard
 def Markdown(*, ctx: click.Context) -> None:  # documentation is help/epilog/args # noqa: D103
   config: base.TranZoomConfig = ctx.obj
-  config.console.print(clibase.GenerateTyperHelpMarkdown(app, prog_name='zoom'))
+  config.console.print(clibase.GenerateTyperHelpMarkdown(app, prog_name='mandel'))
 
 
-# TODO: add commands, for now just here...
+# Import CLI modules to register their commands with the app
+from tranzoom.cli import gencommand  # pyright: ignore[reportUnusedImport] # noqa: E402, F401

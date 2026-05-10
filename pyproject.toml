@@ -62,6 +62,7 @@ dependencies = [
 # console scripts that will be installed when installing the package;
 # if you change/add a line here also edit [tool.poetry.scripts] below and re-run `poetry sync`
 
+mandel = "tranzoom.mandel:Run"
 zoom = "tranzoom.zoom:Run"
 
 ####################################################################################################
@@ -70,6 +71,7 @@ zoom = "tranzoom.zoom:Run"
 # poetry/poetry-core still relies on this section for wheel entry points in some versions;
 # keep this in sync with [project.scripts] above
 
+mandel = "tranzoom.mandel:Run"
 zoom = "tranzoom.zoom:Run"
 
 ####################################################################################################

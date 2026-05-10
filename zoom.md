@@ -6,7 +6,7 @@
 ```text
 Usage: zoom [OPTIONS] COMMAND [ARGS]...                                                                                                                   
                                                                                                                                                            
- TranZoom does amazing things!                                                                                                                             
+ TranZoom will do things!                                                                                                                                  
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --version                                                            Show version and exit.                                                             │
@@ -35,40 +35,7 @@ Usage: zoom [OPTIONS] COMMAND [ARGS]...
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ markdown  Emit Markdown docs for the CLI (see README.md section "Versioning and releases").                                                             │
-│ image     Make a Mandelbrot image.                                                                                                                      │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-```
-
-## `zoom image` Command
-
-```text
-Usage: zoom image [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]                                                                                  
-                                                                                                                                                           
- Make a Mandelbrot image.                                                                                                                                  
-                                                                                                                                                           
-╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│   center_re      [CENTER_RE]  Real part of the center point; default is '-0.75'                                                         │
-│   center_im      [CENTER_IM]  Imaginary part of the center point; default is '0'                                                            │
-│   f_width        [F_WIDTH]    Width of the frame in the real plane; default is '2.5'                                                      │
-│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; default is None, i.e, the same as width                                       │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --iter     -i      INTEGER RANGE [1000<=x<=4294967295]                   Maximum iterations (depth) to compute before determining escape; 1000 ≤ iter ≤ │
-│                                                                          4294967295; default is None (automatic search for optimal iterations ---       │
-│                                                                          recommended)                                                                   │
-│ --palette            Color palette to use for rendering; default is 'blue-to-yellow-to-brown';      │
-│                                                                          available palettes: ['blue-to-yellow-to-brown', 'electric-ocean', 'lava',      │
-│                                                                          'sunset']                                                                      │
-│                                                                                                                       │
-│ --help                                                                   Show this message and exit.                                                    │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-                                                                                                                                                           
- Example:                                                                                                                                                  
-                                                                                                                                                           
- $ poetry run zoom image                                                                                                                                   
- <saves fractal to disk with default frame>                                                                                                                
- $ poetry run zoom image " -0.3" 0 2  # note the space because of the "-"                                                                                  
- <saves fractal to disk with center -0.3+0j and width 2>
 ```
 
 ## `zoom markdown` Command

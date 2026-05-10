@@ -47,7 +47,7 @@ Built with:
     - [Command structure](#command-structure)
     - [Global flags](#global-flags)
     - [CLI Commands Documentation](#cli-commands-documentation)
-    - [`zoom image` — Render a Mandelbrot image](#zoom-image--render-a-mandelbrot-image)
+    - [`mandel gen` — Render a Mandelbrot image](#mandel-gen--render-a-mandelbrot-image)
     - [Comprehensive example images and zooms](#comprehensive-example-images-and-zooms)
       - [Full / Default (×1, 80 bits)](#full--default-1-80-bits)
       - [Seahorse (×155, 83 bits)](#seahorse-155-83-bits)
@@ -187,7 +187,7 @@ The long-term vision is to use LLMs to autonomously guide the zoom — identifyi
 Render the [full Mandelbrot set](#full--default-1-80-bits) (default, 1024×1024):
 
 ```sh
-$ poetry run zoom image
+$ poetry run mandel gen
 
 1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, AUTO iterations...
 
@@ -203,7 +203,7 @@ As can be seen, the `Frame` is stored as rational numbers with arbitrary precisi
 Render a 512×512 [well-known zoom ("Seahorse", ~155× magnification, 512×512)](#seahorse-155-83-bits):
 
 ```sh
-poetry run zoom image " -0.74303" "0.126433" "0.01611"
+poetry run mandel gen " -0.74303" "0.126433" "0.01611"
 ```
 
 ![Seahorse](tests/data/images/demo-mandel-seahorse.png)
@@ -224,7 +224,7 @@ With the `--palette` flag you can pick your color scheme. We provide the followi
 ### Command structure
 
 ```sh
-zoom [global flags] <command> [args]
+mandel [global flags] <command> [args]
 ```
 
 ### Global flags
@@ -244,12 +244,15 @@ zoom [global flags] <command> [args]
 
 ### CLI Commands Documentation
 
-Auto-generated CLI reference: [**`zoom` documentation**](zoom.md)
+Auto-generated CLI reference:
 
-### `zoom image` — Render a Mandelbrot image
+- [**`mandel` documentation**](mandel.md)
+- [**`zoom` documentation**](zoom.md)
+
+### `mandel gen` — Render a Mandelbrot image
 
 ```sh
-zoom [-w WIDTH] [-h HEIGHT] image [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
+poetry run mandel [-w WIDTH] [-h HEIGHT] gen [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 ```
 
 Arguments (all optional; defaults show the full Mandelbrot set):
@@ -282,7 +285,7 @@ You can run all these at once by executing `scripts/make_examples.sh`.
 Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) with all the default values (image size 1024×1024, centered in $-0.75+0j$ and with width of $2.5$, a good frame that contains the whole set):
 
 ```sh
-$ poetry run zoom image
+$ poetry run mandel gen
 
 1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, AUTO iterations...
 
@@ -302,7 +305,7 @@ This is what tranZoom considers ***"1 magnification"***, and will measure other 
 Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mandel_zoom_03_seehorse.jpg) to a 512×512 image:
 
 ```sh
-$ poetry run zoom image " -0.74303" "0.126433" "0.01611"
+$ poetry run mandel gen " -0.74303" "0.126433" "0.01611"
 
 1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) @ 1611/100000], precision 83 bits, 155.183 magnification, AUTO iterations...
 
@@ -320,7 +323,7 @@ Saved to "mandel-0cf52a6f78b4a883727c.png"
 Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tail_part.jpg) to a 512×512 image:
 
 ```sh
-$ poetry run zoom image " -0.7436499" "0.13188204" "0.00073801"
+$ poetry run mandel gen " -0.7436499" "0.13188204" "0.00073801"
 
 1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) @ 73801/100000000], precision 88 bits, 3.387 k magnification, AUTO iterations...
 
@@ -390,7 +393,8 @@ The CLI respects the `NO_COLOR` environment variable and the `--no-color` / `--c
 
 | Component | Responsibility |
 | --- | --- |
-| `zoom.py` | CLI entry point (`app`, `Main`, `TranZoomConfig`) |
+| `mandel.py` | Mandelbrot CLI, generation, reading, etc |
+| `zoom.py` | Mandelbrot Zoom methods CLI |
 | `cli/base.py` | Shared CLI options, defaults, `DEFAULT_FRAME` |
 | `cli/imagecommand.py` | `zoom image` command implementation |
 | `core/fractal.py` | `Mandelbrot()` renderer — most fractal math |
@@ -413,6 +417,7 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 ├── CHANGELOG.md                  ⟸ latest changes/releases
 ├── LICENSE
 ├── Makefile
+├── mandel.md                     ⟸ auto-generated CLI doc (by `make docs` or `make ci`)
 ├── zoom.md                       ⟸ auto-generated CLI doc (by `make docs` or `make ci`)
 ├── poetry.lock                   ⟸ maintained by Poetry; do not manually edit
 ├── pyproject.toml                ⟸ most important configurations live here
@@ -438,27 +443,30 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 │   └── tranzoom/
 │       ├── __init__.py           ⟸ version lives here
 │       ├── __main__.py
-│       ├── zoom.py               ⟸ main CLI entry point (Main, TranZoomConfig)
+|       ├── mandel.py             ⟸ TranZoom mandel CLI
+│       ├── zoom.py               ⟸ TranZoom zoom CLI
 │       ├── py.typed
 │       ├── cli/
 │       │   ├── __init__.py
 │       │   ├── base.py           ⟸ shared CLI options and frame defaults
-│       │   └── imagecommand.py   ⟸ `zoom image` command implementation
+│       │   └── gencommand.py     ⟸ `mandel gen` command implementation
 │       ├── core/
 │       │   ├── __init__.py
 │       │   ├── fractal.py        ⟸ Mandelbrot() renderer
 │       │   ├── frame.py          ⟸ Frame class; base for computation
-│       │   └── image.py          ⟸ Image class
+│       │   ├── image.py          ⟸ Image class
+│       │   └── palette.py        ⟸ Palette definitions
 │       └── utils/
 │           ├── __init__.py
 │           └── template.py       ⟸ template for new utility modules
 ├── tests/
+│   ├── mandel_test.py
 │   ├── zoom_test.py
 │   ├── cli/
 │   │   ├── base_test.py          ⟸ seahorse tail hash regression test
-│   │   └── imagecommand_test.py
+│   │   └── gencommand_test.py
 │   └── data/
-│       └── images/               ⟸ example renders at 7 zoom levels (committed to git)
+│       └── images/               ⟸ example renders at 7 zoom levels and powers of 1000
 └── tests_integration/
     └── test_installed_cli.py
 ```
@@ -518,9 +526,10 @@ cd tranzoom
 #### Create environment and install dependencies
 
 ```sh
-poetry env use python3.12   # creates the .venv with the correct Python version
+poetry env use python3.12    # creates the .venv with the correct Python version
 poetry sync                  # install all dependencies from poetry.lock
 poetry env info              # verify environment
+poetry run mandel --help     # smoke test
 poetry run zoom --help       # smoke test
 make ci                      # should pass on clean repo
 ```
@@ -558,9 +567,8 @@ poetry build   # builds wheel + sdist in dist/
 ### Run locally
 
 ```sh
-poetry run zoom --help
-poetry run zoom image                                          # full set, 1024×1024
-poetry run zoom -w 512 -h 512 image "-0.74303" "0.126433" "0.01611"  # seahorse valley
+poetry run mandel --help
+poetry run mandel gen    # full set, 1024×1024
 ```
 
 ### Testing
@@ -639,8 +647,9 @@ make type  # poetry run mypy src tests tests_integration
 CLI reference is auto-generated from the CLI source code:
 
 ```sh
-make docs  # regenerates zoom.md
+make docs  # regenerates mandel.md & zoom.md
 # or:
+poetry run mandel markdown > mandel.md
 poetry run zoom markdown > zoom.md
 ```
 
@@ -716,7 +725,7 @@ The project uses [**CodeQL**](https://codeql.github.com/docs/) (weekly + on ever
 ### Enable debug output
 
 ```sh
-zoom -vvv image ...   # DEBUG level logging
+poetry run mandel -vvv gen ...   # DEBUG level logging
 ```
 
 ### `gmpy2` installation issues

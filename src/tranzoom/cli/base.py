@@ -4,7 +4,11 @@
 
 from __future__ import annotations
 
+import dataclasses
+import pathlib
+
 import typer
+from transcrypto.cli import clibase
 
 from tranzoom.core import fractal, frame, palette
 
@@ -134,3 +138,16 @@ PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
     f'available palettes: {sorted(p.value for p in palette.PALETTES)}'
   ),
 )
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class TranZoomConfig(clibase.CLIConfig):
+  """TranZoom global context, storing the configuration."""
+
+  img_width: int
+  img_height: int
+  img_output_path: pathlib.Path | None
+  img_use_date: bool
+  img_use_hash: bool
+  img_path_prefix: str
+  max_threads: int | None
