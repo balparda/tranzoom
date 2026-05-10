@@ -235,8 +235,9 @@ mandel [global flags] <command> [args]
 | `--version` | Show version and exit | off |
 | `-v`, `-vv`, `-vvv`, `--verbose` | Verbosity (nothing=*ERROR*, `-v`=*WARNING*, `-vv`=*INFO*, `-vvv`=*DEBUG*) | *ERROR* |
 | `--color`/`--no-color` | Force enable/disable colored output (respects `NO_COLOR` env var if not provided) | `--color` |
-| `-w`/`--width` | Output image width in pixels (4–8192) | 1024 |
-| `-h`/`--height` | Output image height in pixels (4–8192) | 1024 |
+| `-w`/`--width` | Output image width in pixels (16–8192) | 1024 |
+| `-h`/`--height` | Output image height in pixels (16–8192) | 1024 |
+| `--threads` | Number of threads for rendering (1–N, default: all available cores) | all cores |
 | `-o`/`--out` | Output directory path | current directory |
 | `--prefix` | Filename prefix | `mandel` |
 | `--date`/`--no-date` | Include date-time (`YYYYMMDDhhmmss`) in filename | `--date` |
@@ -396,7 +397,7 @@ The CLI respects the `NO_COLOR` environment variable and the `--no-color` / `--c
 | `mandel.py` | Mandelbrot CLI, generation, reading, etc |
 | `zoom.py` | Mandelbrot Zoom methods CLI |
 | `cli/base.py` | Shared CLI options, defaults, `DEFAULT_FRAME` |
-| `cli/imagecommand.py` | `zoom image` command implementation |
+| `cli/gencommand.py` | `mandel gen` command implementation |
 | `core/fractal.py` | `Mandelbrot()` renderer — most fractal math |
 | `core/frame.py` | `Frame` class and base math |
 | `core/image.py` | `Image` class |
@@ -613,7 +614,7 @@ make flakes  # runs all tests 100 times
 
 ```sh
 source .venv/bin/activate
-pyinstrument -r html -o profile.html -- $(which zoom) image "-0.74303" "0.126433" "0.01611"
+pyinstrument -r html -o profile.html -- $(which mandel) gen " -0.74303" "0.126433" "0.01611"
 deactivate
 ```
 
@@ -746,7 +747,7 @@ poetry sync
 
 ### Rendering is very slow
 
-- Reduce image size: `zoom -w 256 -h 256 image ...`
+- Reduce image size: `mandel -w 256 -h 256 gen ...`
 - `max_iter` is auto-scaled with zoom depth; very deep zooms are inherently slow
 - Very high precision (> 1000 bits, i.e., zoom > ~10^300) will always be slow — this is expected
 
