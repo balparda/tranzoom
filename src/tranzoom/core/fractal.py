@@ -8,7 +8,10 @@ Heavy use of gmpy2 for arbitrary precision, which is needed to render deep zooms
 
 from __future__ import annotations
 
+import dataclasses
 import logging
+import os
+from concurrent import futures
 from typing import NoReturn
 
 import gmpy2
@@ -27,6 +30,11 @@ MAX_ITER: int = 2 ** (image.N_BYTES_UINT * 8) - 1  # 4_294_967_295, max value fo
 
 _ITER_SAFETY_FACTOR: float = 1.5  # we multiply the estimated iter by this to be safe
 
+# multiprocessing
+
+AVAILABLE_CPU: int = int(getattr(os, 'process_cpu_count', os.cpu_count)() or 1)
+_MAX_PRE_PROCESS_THREADS: int = 4  # for the preprocess step, we limit the threads
+
 # gmpy2.mpfr constants
 _MPFR_ZERO = gmpy2.mpfr('0')
 _MPFR_SIXTEENTH = gmpy2.mpfr('0.0625')
@@ -40,13 +48,14 @@ class Error(image.Error):
   """Base fractal exception."""
 
 
-def Mandelbrot(  # noqa: PLR0914
+def Mandelbrot(
   frm: frame.Frame,
   width: int,
   height: int,
   *,
   max_iter: int | None = None,
   progress_bar: bool = True,
+  n_threads: int | None = None,
 ) -> image.Image:
   """Render the frame rectangle to an Image.
 
@@ -57,6 +66,8 @@ def Mandelbrot(  # noqa: PLR0914
     max_iter (int | None, optional): The maximum number of iterations to determine escape.
         Defaults to None, and that means "auto".
     progress_bar (bool, optional): Whether to show a progress bar. Defaults to True.
+    n_threads (int | None, optional): The number of threads to use for rendering. Defaults to None,
+        which means to use all available CPU cores.
 
   Returns:
     image.Image: The rendered fractal image.
@@ -65,46 +76,152 @@ def Mandelbrot(  # noqa: PLR0914
     Error: on error
 
   """
+  if n_threads is not None and n_threads < 1:
+    raise Error(f'{n_threads=} must be a positive integer or None')
   # if max_iter is None, we do an adaptive iteration limit calculation based on a small test render
   # BEWARE: the method call will call Mandelbrot() recursively, but with a fixed max_iter!
   max_iter = _MandelbrotAdaptiveIterations(frm, progress_bar) if max_iter is None else max_iter
-  # sanity check the iter_limit: if error, it came from the user (b/c adaptive clamps to the limits)
-  if not (MIN_ITER <= max_iter <= MAX_ITER):
-    raise Error(f'{max_iter=} must be between {MIN_ITER} and {MAX_ITER}')
+  # determine threads
+  is_preprocess: bool = width == frame.MIN_IMAGE_SIZE and height == frame.MIN_IMAGE_SIZE
+  n_threads = n_threads or AVAILABLE_CPU
+  n_threads = min(n_threads, _MAX_PRE_PROCESS_THREADS) if is_preprocess else n_threads
+  logging.debug(
+    f'Mandelbrot using {n_threads} thread(s) for {"PRE " if is_preprocess else ""}rendering'
+  )
+  # create inputs
+  inp: list[MandelbrotTaskInput] = [
+    MandelbrotTaskInput(
+      frm=frm,
+      width=width,
+      height=height,
+      max_iter=max_iter,
+      progress_bar=progress_bar,
+      n_task=i + 1,
+      total_tasks=n_threads,
+    )
+    for i in range(n_threads)
+  ]
+  # execute in threads
+  with futures.ProcessPoolExecutor(max_workers=n_threads) as executor:
+    results: list[MandelbrotTaskOutput] = list(executor.map(_MandelbrotComputation, inp))
+  # at this point all tasks are finished: check we have them all!
+  if len(results) != n_threads:
+    raise Error(f'Expected {n_threads} results from Mandelbrot computations, got {len(results)}')
+  # combine results into a single image; possible b/c each task wrote to a disjoint set of pixels
+  img: image.Image = results[0].img  # start with the first image to save time and space
+  for result in results[1:]:
+    # copy the escape values from this result's image into the correct pixels of the final image
+    n_task: int = result.n_task - 1  # convert to 0-based index for easier modulo math
+    for px_count in range(width * height):
+      if (px_count % n_threads) == n_task:
+        img.escape[px_count] = result.img.escape[px_count]  # this pixel belongs to this task: copy
+  # all copied, so we can return the final image
+  return img
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class MandelbrotTaskInput:
+  """Defines a Mandelbrot task."""
+
+  frm: frame.Frame
+  width: int
+  height: int
+  max_iter: int
+  progress_bar: bool
+  n_task: int
+  total_tasks: int
+
+  def __post_init__(self) -> None:
+    """Validate parameters.
+
+    Raises:
+      Error: on error
+
+    """
+    # check size
+    if not (frame.MIN_IMAGE_SIZE <= self.width <= frame.MAX_IMAGE_SIZE) or not (
+      frame.MIN_IMAGE_SIZE <= self.height <= frame.MAX_IMAGE_SIZE
+    ):
+      raise Error(
+        f'{self.width=} and {self.height=} must be between '
+        f'{frame.MIN_IMAGE_SIZE} and {frame.MAX_IMAGE_SIZE}'
+      )
+    # sanity check iter_limit: if error, it came from the user (b/c adaptive clamps to the limits)
+    if not (MIN_ITER <= self.max_iter <= MAX_ITER):
+      raise Error(f'{self.max_iter=} must be between {MIN_ITER} and {MAX_ITER}')
+    # check task numbers
+    if not (1 <= self.n_task <= self.total_tasks):
+      raise Error(f'{self.n_task=} must be between 1 and {self.total_tasks}')
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class MandelbrotTaskOutput:
+  """Defines a Mandelbrot task output."""
+
+  img: image.Image
+  n_task: int
+  total_tasks: int
+
+
+def _MandelbrotComputation(inp: MandelbrotTaskInput) -> MandelbrotTaskOutput:  # noqa: PLR0914
+  """Compute the Mandelbrot image for the given task input. ONE THREAD FOR MULTIPROCESSING.
+
+  Args:
+    inp (MandelbrotTaskInput): The task input containing all parameters for the computation.
+
+  Returns:
+    MandelbrotTaskOutput: The rendered fractal image and task information.
+
+  Raises:
+    Error: on error
+
+  """
+  is_preprocess: bool = inp.width == frame.MIN_IMAGE_SIZE and inp.height == frame.MIN_IMAGE_SIZE
   # create image; will also check the parameters and frame validity in the Image constructor
-  img: image.Image = image.Image(frm, width, height)
+  img: image.Image = image.Image(inp.frm, inp.width, inp.height)
   # compute pixel size in complex plane and check frame validity; exact computation (gmpy2.mpq)
   dx: gmpy2.mpq
   dy: gmpy2.mpq
-  dx, dy = frm.size
-  dx, dy = dx / gmpy2.mpq(width - 1), dy / gmpy2.mpq(height - 1)
+  dx, dy = inp.frm.size
+  dx, dy = dx / gmpy2.mpq(inp.width - 1), dy / gmpy2.mpq(inp.height - 1)
   if dx <= 0 or dy <= 0:
     raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
   # start the mpfr context for floating-point computations with the precision needed
-  with frm.context:
+  with inp.frm.context:
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
     # are relatively expensive and we can reuse the x values across rows ("inner for loop");
     # also, this is where the "X" (real) coordinates are converted mpq->mpfr
-    xs: list[gmpy2.mpfr] = [gmpy2.mpfr(frm.top_re + gmpy2.mpq(i) * dx) for i in range(width)]
+    xs: list[gmpy2.mpfr] = [
+      gmpy2.mpfr(inp.frm.top_re + gmpy2.mpq(i) * dx) for i in range(inp.width)
+    ]
     # create progress bar based on total pixels and the options
+    has_threads: bool = inp.total_tasks > 1
+    n_task: int = inp.n_task - 1  # convert to 0-based index for easier modulo math
     p_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
-      total=width * height,
-      desc='Pre' if width == frame.MIN_IMAGE_SIZE and height == frame.MIN_IMAGE_SIZE else 'Img',
+      total=inp.width * inp.height,
+      desc='Pre' if is_preprocess else 'Img',
       unit='px',
       dynamic_ncols=True,
       smoothing=0.1,
       colour='green',
-      disable=not progress_bar,
+      disable=not inp.progress_bar or (has_threads and n_task != 0),  # show for the 1st thread only
     )
     # iterate over pixels in row-major order, computing escape iterations in mpfr
-    for py in range(height):
+    px_count: int = -1
+    for py in range(inp.height):
       # PILImage.frombytes interprets the first row written as the top row of the image, so
       # we iterate y inverted by starting at the top and going down;
       # this is the "outer for loop", no benefit in pre-computing y values;
       # also, this is where the "Y" (imaginary) coordinates are converted mpq->mpfr
-      cy: gmpy2.mpfr = gmpy2.mpfr(frm.top_im - gmpy2.mpq(py) * dy)
+      cy: gmpy2.mpfr = gmpy2.mpfr(inp.frm.top_im - gmpy2.mpq(py) * dy)
       # iterate over columns, reusing x values and doing the escape test in mpfr for correctness
-      for px in range(width):
+      for px in range(inp.width):
+        px_count += 1
+        if has_threads and (px_count % inp.total_tasks) != n_task:
+          # this pixel is not for this thread, skip it but still update the progress bar
+          p_bar.update(1)
+          continue
+        # either this is a solo thread, or this pixel is for this thread
         cx: gmpy2.mpfr = xs[px]
         # fast interior tests, all in mpfr: main cardioid and period-2 bulb.
         x_minus_quarter: gmpy2.mpfr = cx - _MPFR_FOURTH
@@ -114,7 +231,7 @@ def Mandelbrot(  # noqa: PLR0914
         in_bulb: bool = x_plus_one * x_plus_one + cy * cy <= _MPFR_SIXTEENTH
         if in_cardioid or in_bulb:
           # point is in the main cardioid or period-2 bulb, so it's an interior point, no escape
-          img.escape[py * width + px] = max_iter  # carefully set this directly in the array
+          img.escape[px_count] = inp.max_iter  # carefully set this directly in the array
           p_bar.update(1)  # we touched a pixel, so update the progress bar
           continue
         # not in the main cardioid or period-2 bulb, do the full escape-time test in mpfr
@@ -122,7 +239,7 @@ def Mandelbrot(  # noqa: PLR0914
         zy: gmpy2.mpfr = _MPFR_ZERO
         escaped_at: int = 0
         # escape-time loop, implemented with explicit zx/zy variables
-        for escaped_at in range(max_iter):  # noqa: B007
+        for escaped_at in range(inp.max_iter):  # noqa: B007
           zx2: gmpy2.mpfr = zx * zx
           zy2: gmpy2.mpfr = zy * zy
           # avoid sqrt(abs(z)); compare squared magnitude to 2^2
@@ -132,13 +249,13 @@ def Mandelbrot(  # noqa: PLR0914
           zy = _MPFR_TWO * zx * zy + cy
           zx = zx2 - zy2 + cx
         else:
-          escaped_at = max_iter  # if we didn't break, we reached max_iter, mark as non-escaped
-        img.escape[py * width + px] = escaped_at  # carefully set this directly in the array
+          escaped_at = inp.max_iter  # if we didn't break, we reached max_iter, mark as non-escaped
+        img.escape[px_count] = escaped_at  # carefully set this directly in the array
         p_bar.update(1)  # we touched a pixel, so update the progress bar
   # done
   p_bar.close()
-  img.SetDepth(max_iter)  # set the depth of the image to the max_iter we used
-  return img
+  img.SetDepth(inp.max_iter)  # set the depth of the image to the max_iter we used
+  return MandelbrotTaskOutput(img=img, n_task=inp.n_task, total_tasks=inp.total_tasks)
 
 
 def _MandelbrotAdaptiveIterations(frm: frame.Frame, progress_bar: bool) -> int:
