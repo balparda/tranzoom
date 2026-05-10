@@ -64,7 +64,7 @@ def Image(  # documentation is help/epilog/args  # noqa: D103
   # render the image
   with timer.Timer(emit_log=False) as tmr:
     img: image.Image = fractal.Mandelbrot(
-      frm, config.img_width, config.img_height, max_iter=max_iter
+      frm, config.img_width, config.img_height, max_iter=max_iter, n_processes=config.max_threads
     )
     raw_png, raw_hash = img.AsPNG(pal=pal)
   config.console.print(f'\nGenerated image {raw_hash!r} in {tmr}, escape range {img.escape_range}')

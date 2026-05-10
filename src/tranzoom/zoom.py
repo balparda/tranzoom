@@ -29,6 +29,7 @@ class TranZoomConfig(clibase.CLIConfig):
   img_use_date: bool
   img_use_hash: bool
   img_path_prefix: str
+  max_threads: int | None
 
 
 # CLI app setup, this is an important object and can be imported elsewhere and called
@@ -78,6 +79,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   img_path_prefix: str = base.IMAGE_PREFIX_OPTION,  # type: ignore[assignment]
   img_use_date: bool = base.IMAGE_INCLUDE_DATE_OPTION,  # type: ignore[assignment]
   img_use_hash: bool = base.IMAGE_INCLUDE_HASH_OPTION,  # type: ignore[assignment]
+  max_threads: int | None = base.MAX_THREADS_OPTION,  # type: ignore[assignment]
 ) -> None:
   if version:
     typer.echo(__version__)
@@ -101,6 +103,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     img_path_prefix=img_path_prefix,
     img_use_date=img_use_date,
     img_use_hash=img_use_hash,
+    max_threads=max_threads,
   )
   # even though this is a convenient place to print(), beware that this runs even when
   # a subcommand is invoked; so prefer logging.debug/info/warning/error instead of print();

@@ -34,6 +34,7 @@ _ITER_SAFETY_FACTOR: float = 1.5  # we multiply the estimated iter by this to be
 
 AVAILABLE_CPU: int = int(getattr(os, 'process_cpu_count', os.cpu_count)() or 1)
 _MAX_PRE_PROCESS_CONCURRENCE: int = 4  # for the preprocess step, we limit the concurrency
+MAX_CONCURRENCE: int = 16  # for the main rendering step, we limit the concurrency
 
 # gmpy2.mpfr constants
 _MPFR_ZERO = gmpy2.mpfr('0')
@@ -67,7 +68,7 @@ def Mandelbrot(
         Defaults to None, and that means "auto".
     progress_bar (bool, optional): Whether to show a progress bar. Defaults to True.
     n_processes (int | None, optional): The number of processes to use for rendering. Defaults
-        to None, which means to use all available CPU cores.
+        to None, which means to use all available CPU cores. Will be limited to MAX_CONCURRENCE.
 
   Returns:
     image.Image: The rendered fractal image.
@@ -85,6 +86,7 @@ def Mandelbrot(
   is_preprocess: bool = width == frame.MIN_IMAGE_SIZE and height == frame.MIN_IMAGE_SIZE
   n_processes = n_processes or AVAILABLE_CPU
   n_processes = min(n_processes, _MAX_PRE_PROCESS_CONCURRENCE) if is_preprocess else n_processes
+  n_processes = min(n_processes, MAX_CONCURRENCE, AVAILABLE_CPU)  # never exceed CPU!
   logging.debug(
     f'Mandelbrot using {n_processes} process(es) for {"PRE " if is_preprocess else ""}rendering'
   )
@@ -102,19 +104,24 @@ def Mandelbrot(
     for i in range(n_processes)
   ]
   # execute in processes
-  with futures.ProcessPoolExecutor(max_workers=n_processes) as executor:
-    results: list[MandelbrotTaskOutput] = list(executor.map(_MandelbrotComputation, inp))
+  results: list[MandelbrotTaskOutput]
+  if n_processes == 1:
+    # no multiprocessing, just run the single task directly in this process (also good for debug)
+    results = [_MandelbrotComputation(inp[0])]
+  else:
+    # multiprocessing: run the tasks in separate processes and collect results
+    with futures.ProcessPoolExecutor(max_workers=n_processes) as executor:
+      results = list(executor.map(_MandelbrotComputation, inp))
   # at this point all tasks are finished: check we have them all!
   if len(results) != n_processes:
     raise Error(f'Expected {n_processes} results from Mandelbrot computations, got {len(results)}')
-  # combine results into a single image; possible b/c each task wrote to a disjoint set of pixels
   img: image.Image = results[0].img  # start with the first image to save time and space
-  for result in results[1:]:
-    # copy the escape values from this result's image into the correct pixels of the final image
-    n_task: int = result.n_task - 1  # convert to 0-based index for easier modulo math
-    for px_count in range(width * height):
-      if (px_count % n_processes) == n_task:
-        img.escape[px_count] = result.img.escape[px_count]  # this pixel belongs to this task: copy
+  if n_processes > 1:
+    # combine results into a single image; possible b/c each task wrote to a disjoint set of pixels
+    for result in results[1:]:
+      # copy only this task's interleaved pixels into the final image
+      n_task: int = result.n_task - 1  # convert to 0-based index for stepped slice indexing
+      img.escape[n_task::n_processes] = result.img.escape[n_task::n_processes]
   # all copied, so we can return the final image
   return img
 
