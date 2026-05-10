@@ -162,7 +162,7 @@ The long-term vision is to use LLMs to autonomously guide the zoom — identifyi
 - **Magnification**: Ratio of the default full-set frame area to the current frame area. 1× = full set; 1G× = zoomed in one billion times.
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
 - **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
-- **Color palette**: A smooth 16-stop blue-to-yellow-to-brown gradient used to color exterior (escaped) pixels. Positions in the gradient are determined by histogram equalization of escape-iteration counts, ensuring the full color range is used regardless of zoom depth or iteration scale. Interior points (never escaped) are always rendered as pure black.
+- **Color palette**: Four built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette`. Positions in the palette are determined by histogram equalization of escape-iteration counts, cycling through the stops `3` times across the range, so the full color range is used regardless of zoom depth or iteration scale. Interior points (never escaped) are always rendered as pure black. Available palettes: `blue-to-yellow-to-brown` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric-ocean` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient).
 
 ### Inputs and outputs
 
@@ -253,10 +253,10 @@ Auto-generated CLI reference:
 ### `mandel gen` — Render a Mandelbrot image
 
 ```sh
-poetry run mandel [-w WIDTH] [-h HEIGHT] gen [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
+poetry run mandel [-w WIDTH] [-h HEIGHT] gen [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] [--iter N] [--palette NAME]
 ```
 
-Arguments (all optional; defaults show the full Mandelbrot set):
+Positional arguments (all optional; defaults show the full Mandelbrot set):
 
 | Argument | Description | Default |
 | --- | --- | --- |
@@ -265,13 +265,21 @@ Arguments (all optional; defaults show the full Mandelbrot set):
 | `F_WIDTH` | Width of the frame in the real plane | `'2.5'` |
 | `F_HEIGHT` | Height of the frame in the imaginary plane | same as `F_WIDTH` |
 
+Command-level options:
+
+| Option | Description | Default |
+| --- | --- | --- |
+| `-i`/`--iter` | Override max iterations (depth); `1000`–4294967295 | automatic adaptive search |
+| `--palette` | Color palette name | `blue-to-yellow-to-brown` |
+
 The command:
 
 1. Constructs a `Frame` from the given coordinates using `gmpy2.mpq` exact arithmetic
 2. Calculates the required `mpfr` precision automatically based on zoom depth
-3. Scales `max_iter` logarithmically with magnification
-4. Renders all pixels using the escape-time algorithm (with cardioid/bulb interior shortcuts)
-5. Saves the PNG to `<prefix>[-<YYYYMMDDhhmmss>][-<SHA256-20>].png` in the working directory (or the path given by `-o/--out`)
+3. When `--iter` is not given, runs an adaptive pre-pass on a tiny 16×16 render to estimate the optimal `max_iter` for the frame (with a 1.5× safety margin); otherwise uses the value supplied
+4. Renders all pixels in parallel using `ProcessPoolExecutor` (one process per available CPU core, up to 16), each writing an interleaved subset of rows; results are merged into the final image
+5. Each process uses the escape-time algorithm with cardioid/period-2 bulb interior shortcuts and histogram-equalized color palette
+6. Saves the PNG to `<prefix>[-<YYYYMMDDhhmmss>][-<SHA256-20>].png` in the working directory (or the path given by `-o/--out`)
 
 See below for many example outputs.
 
