@@ -48,7 +48,7 @@ dependencies = [
   # development-only dependencies go in the [tool.poetry.group.dev.dependencies] section below
 
   "transcrypto>=2.1",
-  "transai>=1.2.0",
+  "transai>=1.3.0",
 
   "click>=8.1",
   "rich>=14.2",
