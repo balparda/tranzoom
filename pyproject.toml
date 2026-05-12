@@ -109,7 +109,7 @@ python = "^3.12"  # if version changes, remember to change README.md
 
 # basic, all projects should have
 ruff = "^0.15.12"
-mypy = "^1.20"
+mypy = "^2.1"
 pytest = "^9.0"
 pytest-cov = "^7.1"
 pytest-flakefinder = "^1.1"
