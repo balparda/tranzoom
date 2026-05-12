@@ -1,17 +1,26 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""Image operations for Mandelbrot rendering."""
+"""Image operations for Mandelbrot rendering.
+
+For info on the PNG format and metadata handling, see:
+https://pillow.readthedocs.io/en/stable/PIL.html#PIL.PngImagePlugin.PngInfo
+"""
 
 from __future__ import annotations
 
 import array
 import io
+import math
+import pathlib
+import time
+from typing import cast
 
 from gmpy2 import mpq
 from PIL import Image as PILImage
-from PIL import PngImagePlugin
+from PIL import ImageDraw, ImageFont, PngImagePlugin
 from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
+from transcrypto.utils import timer
 
 from tranzoom import __version__
 from tranzoom.core import frame, palette
@@ -22,7 +31,9 @@ from tranzoom.core import frame, palette
 META_VERSION_KEY = 'tranzoom:version'  # str, like "1.1.0"
 META_IMAGE_WIDTH_KEY = 'tranzoom:image:width'  # int, in pixels
 META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
-META_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "blue-to-yellow-to-brown", one of Palette
+META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
+META_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
+META_FRACTAL_KEY = 'tranzoom:frame:fractal'  # str, like "Mandelbrot", one of frame.Fractal
 META_TOP_RE_KEY = 'tranzoom:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
 META_TOP_IM_KEY = 'tranzoom:frame:top_im'  # gmpy2.mpq
 META_BOTTOM_RE_KEY = 'tranzoom:frame:bottom_re'  # gmpy2.mpq
@@ -205,6 +216,7 @@ class Image:
     """
     # convert the raw pixel data to a PNG using PIL
     raw_img: bytes = self.AsPixels(pal=pal)
+    img_data_hash: str = hashes.Hash256(raw_img).hex()
     img: PILImage.Image = PILImage.frombytes('RGB', (self._width, self._height), raw_img)
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
     png_meta = PngImagePlugin.PngInfo()
@@ -213,7 +225,10 @@ class Image:
     # image parameters
     png_meta.add_text(META_IMAGE_WIDTH_KEY, str(self._width))
     png_meta.add_text(META_IMAGE_HEIGHT_KEY, str(self._height))
+    png_meta.add_text(META_IMAGE_HASH_KEY, img_data_hash)
     png_meta.add_text(META_PALETTE_KEY, pal.value)
+    # frame type
+    png_meta.add_text(META_FRACTAL_KEY, self._frame.fractal.value)
     # frame as corners
     png_meta.add_text(META_TOP_RE_KEY, str(self._frame.top_re))
     png_meta.add_text(META_TOP_IM_KEY, str(self._frame.top_im))
@@ -243,7 +258,59 @@ class Image:
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
     img.save(buf, format='PNG', pnginfo=png_meta)
-    return (buf.getvalue(), hashes.Hash256(raw_img).hex())
+    return (buf.getvalue(), img_data_hash)
+
+
+def MakeImagePath(
+  img_output_path: pathlib.Path | None,
+  img_use_date: bool,
+  img_use_hash: bool,
+  img_path_prefix: str,
+  raw_hash: str,
+  *,
+  tm: int | None = None,
+  add_serial: int | None = None,
+) -> pathlib.Path:
+  """Make a file path for saving the image, based on the configuration and image hash.
+
+  Args:
+    img_output_path (pathlib.Path | None): The output directory path. If None, the current
+        directory is used.
+    img_use_date (bool): Whether to include the current date in the file name.
+    img_use_hash (bool): Whether to include the image hash in the file name.
+    img_path_prefix (str): The prefix for the file name.
+    raw_hash (str): The hash of the image data.
+    tm (int | None): Optional timestamp to use for the date in the file name. If None, the
+        current time is used.
+    add_serial (int | None): Optional serial number to include in the file name for uniqueness;
+        if None, no serial number is included; if provided, it is formatted as a zero-padded
+        5-digit number between the date and hash.
+
+  Returns:
+    pathlib.Path: The full path for saving the image.
+
+  Raises:
+    Error: If the img_path_prefix is invalid (contains path separators).
+
+  """
+  # save the image to a file named by its time/hash
+  tm_str: str = time.strftime('%Y%m%d%H%M%S', time.gmtime(tm or timer.Now()))
+  # validate that img_path_prefix is a basename (no path separators) to prevent directory traversal
+  filename: str = img_path_prefix
+  if pathlib.Path(filename).name != img_path_prefix:
+    raise Error(f'Invalid prefix: {img_path_prefix!r} has path separators (ex: "/" or "\\")')
+  # add date and hash to the file name if requested
+  if img_use_date:
+    filename += f'-{tm_str}'
+  if add_serial is not None:
+    filename += f'-{add_serial:05}'  # add a serial number
+  if img_use_hash:
+    # use 20 chars of the hash to avoid very long file names; 20 chars = 10 bytes = 80 bits;
+    # collision is 1 in 2**40 ~ 1 in 1 trillion, which is good enough for our use case
+    filename += f'-{raw_hash[:20]}'
+  # add .png extension, make full path, and save the file
+  filename += '.png'
+  return pathlib.Path(filename) if img_output_path is None else img_output_path / filename
 
 
 def _PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:
@@ -314,3 +381,81 @@ def GetBasicDataFromPNG(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict
     # extract metadata from PNG
     pil_info: tbase.JSONDict = img.info  # type: ignore[assignment]
   return (width, height, raw_hash, pil_info)
+
+
+_SQRT_TWO: float = math.sqrt(2)
+_LINE_WIDTH: int = 2
+_CIRCLE_RADIUS: int = 20
+_LABEL_OFFSET: int = 5
+_COLOR_WHITE: tuple[int, int, int] = (255, 255, 255)
+_COLOR_GREEN: tuple[int, int, int] = (0, 255, 0)
+
+
+def DrawInfoOverlay(img_data: bytes) -> bytes:
+  """Draw an overlay on the (512x512) image with target info for moving the zoom frame.
+
+  Overlays is:
+  - white lines delimiting the quadrants of the image, intersecting at the center
+  - 8 green circles around the center, indicating the 8 cardinal and ordinal directions
+    to move the frame
+  - each circle has a green label with its direction: "N", "NE", "E", "SE", "S", "SW", "W", "NW"
+
+  Works on any size image, but is designed for 512x512, especially because of:
+  - line width and circle radius are fixed
+  - text labels are fixed size and positioned with a fixed offset from the circle's center
+  Fix these and it can work well on other sizes too...
+
+  Args:
+    img_data: The PNG image data as bytes.
+
+  Returns:
+    The modified PNG image data with the overlay drawn.
+
+  Raises:
+    Error: If there are issues processing the image or drawing the overlay.
+
+  """
+  w: int
+  h: int
+  cx: int
+  cy: int
+  x: int
+  y: int
+  # open the image
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    # draw the quadrant lines
+    draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
+    w, h = img.size
+    cx, cy = w // 2, h // 2
+    step_sz: int = w // frame.DEFAULT_STEP_DIRECT
+    draw.line((0, cy, w, cy), fill=_COLOR_WHITE, width=_LINE_WIDTH)
+    draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
+    # draw 8 circles around the center to indicate the 8 cardinal/ordinal directions
+    font: ImageFont.ImageFont = cast('ImageFont.ImageFont', ImageFont.load_default())
+    for dx, dy, direction in [
+      (0, -step_sz, 'N'),
+      (step_sz / _SQRT_TWO, -step_sz / _SQRT_TWO, 'NE'),
+      (step_sz, 0, 'E'),
+      (step_sz / _SQRT_TWO, step_sz / _SQRT_TWO, 'SE'),
+      (0, step_sz, 'S'),
+      (-step_sz / _SQRT_TWO, step_sz / _SQRT_TWO, 'SW'),
+      (-step_sz, 0, 'W'),
+      (-step_sz / _SQRT_TWO, -step_sz / _SQRT_TWO, 'NW'),
+    ]:
+      x, y = int(cx + dx), int(cy + dy)
+      draw.ellipse(
+        (x - _CIRCLE_RADIUS, y - _CIRCLE_RADIUS, x + _CIRCLE_RADIUS, y + _CIRCLE_RADIUS),
+        outline=_COLOR_GREEN,
+        width=_LINE_WIDTH,
+      )
+      # for each circle, also draw the label text
+      draw.text((x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=_COLOR_GREEN, font=font)
+    # done: save and remember to preserve the original metadata
+    png_meta = PngImagePlugin.PngInfo()
+    for k, v in img.info.items():
+      if not isinstance(k, str):
+        raise Error(f'Unexpected non-string PNG metadata pair: {k!r}: {v!r}')
+      png_meta.add_text(k, str(v))
+    output = io.BytesIO()
+    img.save(output, format='PNG', pnginfo=png_meta)
+    return output.getvalue()

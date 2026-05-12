@@ -9,8 +9,8 @@ README.md has good examples for different zoom levels.
 
 from __future__ import annotations
 
+import json
 import pathlib
-import time
 
 import click
 from transcrypto.cli import clibase
@@ -46,10 +46,12 @@ def Gen(  # documentation is help/epilog/args  # noqa: D103
   max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
   pal: palette.Palette = base.PALETTE_OPTION,  # type: ignore[assignment]
 ) -> None:
-  # check sanity
+  # check sanity, create frame, and print info about the image we're going to generate
   config: base.TranZoomConfig = ctx.obj
   try:
-    frm: frame.Frame = frame.Frame.FromCenter(center_re, center_im, f_width, f_height)
+    frm: frame.Frame = frame.Frame.FromCenter(
+      frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height
+    )
   except Exception as err:
     raise click.UsageError(
       f'Invalid coordinates: {center_re=}, {center_im=}, {f_width=}, {f_height=}'
@@ -79,24 +81,40 @@ def Gen(  # documentation is help/epilog/args  # noqa: D103
       f'got {w}x{h}/{png_hash!r} from PNG; this should never happen, please report this as a bug'
     )
   # save the image to a file named by its time/hash
-  tm_str: str = time.strftime('%Y%m%d%H%M%S', time.gmtime(timer.Now()))
-  # validate that img_path_prefix is a basename (no path separators) to prevent directory traversal
-  filename: str = config.img_path_prefix
-  if pathlib.Path(filename).name != config.img_path_prefix:
-    raise click.UsageError(
-      f'Invalid prefix: {config.img_path_prefix!r} has path separators (ex: "/" or "\\")'
-    )
-  # add date and hash to the file name if requested
-  if config.img_use_date:
-    filename += f'-{tm_str}'
-  if config.img_use_hash:
-    # use 20 chars of the hash to avoid very long file names; 20 chars = 10 bytes = 80 bits;
-    # collision is 1 in 2**40 ~ 1 in 1 trillion, which is good enough for our use case
-    filename += f'-{raw_hash[:20]}'
-  # add .png extension, make full path, and save the file
-  filename += '.png'
-  full_path: pathlib.Path = (
-    pathlib.Path(filename) if config.img_output_path is None else config.img_output_path / filename
+  full_path: pathlib.Path = image.MakeImagePath(
+    config.img_output_path,
+    config.img_use_date,
+    config.img_use_hash,
+    config.img_path_prefix,
+    raw_hash,
   )
   full_path.write_bytes(raw_png)
   config.console.print(f'Saved to "{full_path}"\n')
+
+
+@mandel.app.command(
+  'read',
+  help='Read a Mandelbrot image.',
+  epilog=(
+    'Examples:\n\n\n\n'
+    '$ poetry run mandel read /path/to/image.png\n\n'
+    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
+    '...\n\n'
+  ),
+)
+@clibase.CLIErrorGuard
+def Read(  # documentation is help/epilog/args  # noqa: D103
+  *,
+  ctx: click.Context,
+  image_path: pathlib.Path = base.IMAGE_PATH_INPUT_OPTION,  # type: ignore[assignment]
+) -> None:
+  # check sanity
+  config: base.TranZoomConfig = ctx.obj
+  image_path = image_path.expanduser().resolve()
+  w, h, png_hash, info = image.GetBasicDataFromPNG(image_path.read_bytes())
+  config.console.print()
+  config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')
+  config.console.print(f'[green]{w}x{h}[/green] (wxh) / [cyan]{png_hash}[/cyan]')
+  config.console.print()
+  config.console.print(f'[white]{json.dumps(info, indent=2)}[/white]')
+  config.console.print()

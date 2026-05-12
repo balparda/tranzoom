@@ -85,6 +85,17 @@ IMAGE_INCLUDE_HASH_OPTION: typer.models.OptionInfo = typer.Option(
   ),
 )
 
+# Image: input image
+IMAGE_PATH_INPUT_OPTION: typer.models.ArgumentInfo = typer.Argument(
+  ...,
+  exists=True,
+  file_okay=True,
+  dir_okay=False,
+  readable=True,
+  writable=False,
+  help=('The local input file path, ex: "~/foo/bar/file.png"'),
+)
+
 # Frame: the default frame is the one that shows the whole Mandelbrot set, which is centered at
 # -0.75+0j and has width 2.5; the height is the same as the width by default;
 # The set <https://en.wikipedia.org/wiki/Mandelbrot_set> is contained in the rectangle with corners

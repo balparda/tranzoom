@@ -95,6 +95,7 @@
   "cSpell.words": [
     "abstra",
     "addopts",
+    "aicommand",
     "appdirs",
     "argcomplete",
     "argparse",
@@ -147,6 +148,7 @@
     "imagecommand",
     "iniconfig",
     "initlogging",
+    "Intercardinal",
     "ipykernel",
     "ipynb",
     "ipywidgets",
@@ -216,6 +218,7 @@
     "pytype",
     "pyupgrade",
     "pyyaml",
+    "qwen",
     "randbelow",
     "randomcommand",
     "richhandler",

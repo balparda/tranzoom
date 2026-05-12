@@ -37,12 +37,12 @@ _MAX_PRE_PROCESS_CONCURRENCE: int = 4  # for the preprocess step, we limit the c
 MAX_CONCURRENCE: int = 16  # for the main rendering step, we limit the concurrency
 
 # gmpy2.mpfr constants
-_MPFR_ZERO = gmpy2.mpfr('0')
-_MPFR_SIXTEENTH = gmpy2.mpfr('0.0625')
-_MPFR_FOURTH = gmpy2.mpfr('0.25')
-_MPFR_ONE = gmpy2.mpfr('1')
-_MPFR_TWO = gmpy2.mpfr('2')
-_MPFR_FOUR = gmpy2.mpfr('4')
+_MPFR_ZERO: gmpy2.mpfr = gmpy2.mpfr('0')
+_MPFR_SIXTEENTH: gmpy2.mpfr = gmpy2.mpfr('0.0625')
+_MPFR_FOURTH: gmpy2.mpfr = gmpy2.mpfr('0.25')
+_MPFR_ONE: gmpy2.mpfr = gmpy2.mpfr('1')
+_MPFR_TWO: gmpy2.mpfr = gmpy2.mpfr('2')
+_MPFR_FOUR: gmpy2.mpfr = gmpy2.mpfr('4')
 
 
 class Error(image.Error):
