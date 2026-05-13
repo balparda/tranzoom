@@ -24,6 +24,7 @@ from tranzoom import zoom
 from tranzoom.cli import base
 from tranzoom.core import fractal, frame, image
 
+# TODO: add model options!
 _WIDTH: int = 512  # square frames only!
 _MEMORY_SIZE: int = 3  # number of iterations the LLM will remember
 _MODEL_ID: str = 'qwen3-vl-32b-instruct@q8_0'  # TODO: option
@@ -329,6 +330,7 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
   center_im: str = base.FRAME_CENTER_IM_OPTION,  # type: ignore[assignment]
   f_width: str = base.FRAME_WIDTH_OPTION,  # type: ignore[assignment]
   f_height: str | None = base.FRAME_HEIGHT_OPTION,  # type: ignore[assignment]
+  max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
   config: base.TranZoomConfig = ctx.obj
@@ -341,121 +343,137 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
       f'Invalid coordinates: {center_re=}, {center_im=}, {f_width=}, {f_height=}'
     ) from err
   # we have a valid frame, let's start the AI search loop by loading the AI
+  config.console.print(
+    f'Will run for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
+    'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
+  )
   zoom_tm: int = timer.Now()
-  config.console.print('Loading AI model...')  # TODO: add model options!
-  with lms.LMStudioWorker(free_resources=True) as worker:
-    worker.LoadModel(
-      ai.MakeAIModelConfig(
-        model_id=_MODEL_ID,
-        vision=True,
-        temperature=0.2,  # only override the ones you care about!
-        # all other fields will have sensible defaults; currently also supported are:
-        # seed, context, gpu_ratio, gpu_layers, use_mmap, fp16, flash, spec_tokens, kv_cache
-      )
-    )
-    # main loop
-    json_chat: tbase.JSONDict | None = None
-    direction: str | None = None
-    img_data: bytes
-    img_hash: str
-    response: ZoomSectorScoring
-    count: int = 0
-    center_mpq_re: gmpy2.mpq
-    center_mpq_im: gmpy2.mpq
-    while True:
-      count += 1
-      # calculate magnification
-      magnification, magnitude = frm.magnification
-      magnification_str: str = (
-        # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation
-        human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
-      )
-      # render the image for the current frame
-      with timer.Timer(emit_log=False) as tmr:
-        img: image.Image = fractal.Mandelbrot(
-          frm, _WIDTH, _WIDTH, max_iter=None, progress_bar=True, n_processes=config.max_threads
+  config.console.print(f'[yellow]Loading AI model [bold]{_MODEL_ID!r}[/]...[/]\n')
+  count: int = 1
+  try:
+    with lms.LMStudioWorker(free_resources=True) as worker:
+      worker.LoadModel(
+        ai.MakeAIModelConfig(
+          model_id=_MODEL_ID,
+          vision=True,
+          temperature=0.2,  # only override the ones you care about!
+          # all other fields will have sensible defaults; currently also supported are:
+          # seed, context, gpu_ratio, gpu_layers, use_mmap, fp16, flash, spec_tokens, kv_cache
         )
-        # get PNG and overlay info on top of it
-        img_data, img_hash = img.AsPNG()
-        img_data = image.DrawThirdsInfoOverlay(img_data)
-      last_direction: str = f'Last move was "{direction}": ' if direction is not None else ''
-      # log!
-      config.console.print(
-        f'\n{last_direction}Mandelbrot zoom (#{count}) with frame {frm}, '
-        f'precision {frm.precision} bits, {magnification_str} magnification\n'
-        f'{img_hash!r} in {tmr}, escape range {img.escape_range}'
       )
-      # wipe memory of iterations older than _MEMORY_SIZE
-      if json_chat is not None:
-        messages: list[tbase.JSONDict] = cast('list[tbase.JSONDict]', json_chat['messages'])
-        if len(messages) > (2 * _MEMORY_SIZE + 1):  # +1 for the system prompt
-          json_chat = {
-            # the pattern is: first message is the system prompt,
-            # then a 'user' message alternating with 'assistant' messages
-            'messages': [messages[0], *messages[-2 * _MEMORY_SIZE :]]
-          }
-      # get AI verdict
-      config.console.print()
-      with timer.Timer(emit_log=False) as tmr:
-        response, json_chat = worker.ModelCall(
-          _MODEL_ID,
-          _AI_SETUP_THIRDS_SCORING_PROMPT,
-          _AI_IMAGE_THIRDS_SCORING_PROMPT,
-          ZoomSectorScoring,
-          images=[img_data],
-          chat_history=json_chat,
+      # main loop: runs until max_steps is reached, or Ctrl+C is pressed
+      json_chat: tbase.JSONDict | None = None
+      direction: str | None = None
+      img_data: bytes
+      img_hash: str
+      response: ZoomSectorScoring
+      center_mpq_re: gmpy2.mpq
+      center_mpq_im: gmpy2.mpq
+      count = 0
+      while True:
+        count += 1
+        # calculate magnification
+        magnification, magnitude = frm.magnification
+        magnification_str: str = (
+          # beyond 10^21, use scientific notation
+          human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
         )
-      # implement the move command: first the scale of the step
-      center_mpq_re, center_mpq_im = frm.center
-      frame_sz: gmpy2.mpq = frm.size[0]  # only works for square!
-      direct_step: gmpy2.mpq = frame_sz * frame.DEFAULT_MPQ_STEP_DIRECT
-      diagonal_step: gmpy2.mpq = frame_sz * frame.DEFAULT_MPQ_STEP_DIAGONAL
-      # now move the center according to the direction, if requested
-      best: SectorEvaluation = response.BestEvaluation()
-      direction = {1: 'NW', 2: 'N', 3: 'NE', 4: 'W', 5: 'C', 6: 'E', 7: 'SW', 8: 'S', 9: 'SE'}[
-        best.sector
-      ]
-      if direction == 'C':
-        pass  # no movement, zoom in place
-      elif direction == 'N':
-        center_mpq_im += direct_step
-      elif direction == 'NE':
-        center_mpq_re += diagonal_step
-        center_mpq_im += diagonal_step
-      elif direction == 'E':
-        center_mpq_re += direct_step
-      elif direction == 'SE':
-        center_mpq_re += diagonal_step
-        center_mpq_im -= diagonal_step
-      elif direction == 'S':
-        center_mpq_im -= direct_step
-      elif direction == 'SW':
-        center_mpq_re -= diagonal_step
-        center_mpq_im -= diagonal_step
-      elif direction == 'W':
-        center_mpq_re -= direct_step
-      elif direction == 'NW':
-        center_mpq_re -= diagonal_step
-        center_mpq_im += diagonal_step
-      else:
-        raise ValueError(f'invalid direction: {direction!r}')
-      config.console.print(
-        f'MODEL: move {direct_step} => {direction}-wards (in {tmr})\n{best.score}/{best.reason}'
-      )
-      # save image
-      full_path: pathlib.Path = image.MakeImagePath(
-        config.img_output_path,
-        config.img_use_date,
-        config.img_use_hash,
-        config.img_path_prefix,
-        img_hash,
-        tm=zoom_tm,
-        add_serial=count,
-      )
-      img_data = image.AddEvaluationMetaToImage(img_data, response.JSON())
-      full_path.write_bytes(img_data)
-      config.console.print(f'Saved to "{full_path}"')
-      # build the new frame
-      frm = frame.Frame.FromCenter(
-        frame.Fractal.MANDELBROT, center_mpq_re, center_mpq_im, frame_sz / frame.DEFAULT_MPQ_ZOOM
-      )
+        # render the image for the current frame
+        with timer.Timer(emit_log=False) as tmr:
+          img: image.Image = fractal.Mandelbrot(
+            frm, _WIDTH, _WIDTH, max_iter=None, progress_bar=True, n_processes=config.max_threads
+          )
+          # get PNG and overlay info on top of it
+          img_data, img_hash = img.AsPNG()
+          img_data = image.DrawThirdsInfoOverlay(img_data)
+        last_direction: str = f'Last move was "{direction}": ' if direction is not None else ''
+        # log!
+        config.console.print(
+          f'\n{last_direction}Mandelbrot zoom (#{count}) with frame {frm}, '
+          f'precision {frm.precision} bits, {magnification_str} magnification\n'
+          f'{img_hash!r} in {tmr}, escape range {img.escape_range}'
+        )
+        # wipe memory of iterations older than _MEMORY_SIZE
+        if json_chat is not None:
+          messages: list[tbase.JSONDict] = cast('list[tbase.JSONDict]', json_chat['messages'])
+          if len(messages) > (2 * _MEMORY_SIZE + 1):  # +1 for the system prompt
+            json_chat = {
+              # the pattern is: first message is the system prompt,
+              # then a 'user' message alternating with 'assistant' messages
+              'messages': [messages[0], *messages[-2 * _MEMORY_SIZE :]]
+            }
+        # get AI verdict
+        config.console.print()
+        config.console.print('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
+        with timer.Timer(emit_log=False) as tmr:
+          response, json_chat = worker.ModelCall(
+            _MODEL_ID,
+            _AI_SETUP_THIRDS_SCORING_PROMPT,
+            _AI_IMAGE_THIRDS_SCORING_PROMPT,
+            ZoomSectorScoring,
+            images=[img_data],
+            chat_history=json_chat,
+          )
+        # implement the move command: first the scale of the step
+        center_mpq_re, center_mpq_im = frm.center
+        frame_sz: gmpy2.mpq = frm.size[0]  # only works for square!
+        direct_step: gmpy2.mpq = frame_sz * frame.DEFAULT_MPQ_STEP_DIRECT
+        diagonal_step: gmpy2.mpq = frame_sz * frame.DEFAULT_MPQ_STEP_DIAGONAL
+        # now move the center according to the direction, if requested
+        best: SectorEvaluation = response.BestEvaluation()
+        direction = {1: 'NW', 2: 'N', 3: 'NE', 4: 'W', 5: 'C', 6: 'E', 7: 'SW', 8: 'S', 9: 'SE'}[
+          best.sector
+        ]
+        if direction == 'C':
+          pass  # no movement, zoom in place
+        elif direction == 'N':
+          center_mpq_im += direct_step
+        elif direction == 'NE':
+          center_mpq_re += diagonal_step
+          center_mpq_im += diagonal_step
+        elif direction == 'E':
+          center_mpq_re += direct_step
+        elif direction == 'SE':
+          center_mpq_re += diagonal_step
+          center_mpq_im -= diagonal_step
+        elif direction == 'S':
+          center_mpq_im -= direct_step
+        elif direction == 'SW':
+          center_mpq_re -= diagonal_step
+          center_mpq_im -= diagonal_step
+        elif direction == 'W':
+          center_mpq_re -= direct_step
+        elif direction == 'NW':
+          center_mpq_re -= diagonal_step
+          center_mpq_im += diagonal_step
+        else:
+          raise ValueError(f'invalid direction: {direction!r}')
+        config.console.print(
+          f'MODEL: move {direct_step} => {direction}-wards (in {tmr})\n{best.score}/{best.reason}'
+        )
+        # save image
+        full_path: pathlib.Path = image.MakeImagePath(
+          config.img_output_path,
+          config.img_use_date,
+          config.img_use_hash,
+          config.img_path_prefix,
+          img_hash,
+          tm=zoom_tm,
+          add_serial=count,
+        )
+        img_data = image.AddEvaluationMetaToImage(img_data, response.JSON())
+        full_path.write_bytes(img_data)
+        config.console.print(f'Saved to "{full_path}"')
+        # build the new frame
+        frm = frame.Frame.FromCenter(
+          frame.Fractal.MANDELBROT, center_mpq_re, center_mpq_im, frame_sz / frame.DEFAULT_MPQ_ZOOM
+        )
+        # stop if we've reached the maximum number of steps
+        if max_steps > 0 and count >= max_steps:
+          config.console.print(
+            f'[yellow]Reached maximum of {max_steps} step(s), stopping.[/yellow]'
+          )
+          break
+  except KeyboardInterrupt:
+    config.console.print(f'\n[yellow]Interrupted by user on step {count}.[/yellow]')
+  config.console.print(f'AI zoom session ended: {count - 1} step(s) completed, last frame: {frm}')

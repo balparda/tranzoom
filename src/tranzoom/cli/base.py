@@ -139,6 +139,16 @@ MAX_THREADS_OPTION: typer.models.OptionInfo = typer.Option(
     f'CPU cores; will be limited to {fractal.MAX_CONCURRENCE} threads'
   ),
 )
+MAX_STEPS_OPTION: typer.models.OptionInfo = typer.Option(
+  0,
+  '-n',
+  '--max-steps',
+  min=0,
+  help=(
+    'Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); '
+    'default is 0 (unlimited, run forever)'
+  ),
+)
 
 # Color options
 PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
