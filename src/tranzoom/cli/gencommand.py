@@ -39,10 +39,10 @@ from tranzoom.core import fractal, frame, image, palette
 def Gen(  # documentation is help/epilog/args  # noqa: D103
   *,
   ctx: click.Context,
-  center_re: str = base.FRAME_CENTER_RE_OPTION,  # type: ignore[assignment]
-  center_im: str = base.FRAME_CENTER_IM_OPTION,  # type: ignore[assignment]
-  f_width: str = base.FRAME_WIDTH_OPTION,  # type: ignore[assignment]
-  f_height: str | None = base.FRAME_HEIGHT_OPTION,  # type: ignore[assignment]
+  center_re: str = base.FRAME_CENTER_RE_ARGUMENT,  # type: ignore[assignment]
+  center_im: str = base.FRAME_CENTER_IM_ARGUMENT,  # type: ignore[assignment]
+  f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]
+  f_height: str | None = base.FRAME_HEIGHT_ARGUMENT,  # type: ignore[assignment]
   max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
   pal: palette.Palette = base.PALETTE_OPTION,  # type: ignore[assignment]
 ) -> None:
@@ -106,7 +106,7 @@ def Gen(  # documentation is help/epilog/args  # noqa: D103
 def Read(  # documentation is help/epilog/args  # noqa: D103
   *,
   ctx: click.Context,
-  image_path: pathlib.Path = base.IMAGE_PATH_INPUT_OPTION,  # type: ignore[assignment]
+  image_path: pathlib.Path = base.IMAGE_PATH_INPUT_ARGUMENT,  # type: ignore[assignment]
   iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity

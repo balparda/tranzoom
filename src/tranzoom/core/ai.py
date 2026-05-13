@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 import pathlib
 from collections import abc
 from typing import cast
@@ -55,9 +56,11 @@ def ZoomLoop(
   flash: bool,
   kv_cache: int | None,
   timeout: float,
+  query: str | None,
   memory: int,
   max_steps: int,
   iterm: bool,
+  target_weight: float,
   print_comm: abc.Callable[[str], None],
 ) -> None:
   """Execute main loop for AI-guided Mandelbrot zoom search.
@@ -84,10 +87,14 @@ def ZoomLoop(
     flash: Whether to use flash attention for the model; default is False.
     kv_cache: Optional size of the key-value cache for the model; if None, use the model's default.
     timeout: The timeout (in seconds) for model operations.
+    query: Optional query to be added to the default prompt; if None, no additional query.
     memory: The number of previous iterations the LLM will remember in its chat history;
         0 means no memory.
     max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
     iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
+    target_weight: The weight (0.0 to 1.0) to give to the target match score when determining the
+        best sector; if 0.0, only the fractal score is used; if 1.0, only the target match
+        score is used.
     print_comm: A rich console callable for printing messages.
 
   """
@@ -100,6 +107,14 @@ def ZoomLoop(
   print_comm(
     f'[yellow]Loading AI model [bold]{model}[/]...[/] / {timer.TimeStr(zoom_tm)} ({zoom_tm})\n'
   )
+  # make queries
+  setup_query: str
+  image_query: str
+  query = query.strip() if query else None
+  setup_query, image_query = queries.BuildImageThirdsPrompts(query)
+  logging.debug(f'AI setup query:\n{setup_query}\n')
+  logging.debug(f'AI image query:\n{image_query}\n')
+  # start
   count: int = 1
   try:
     with lms.LMStudioWorker(timeout=timeout, free_resources=True) as worker:
@@ -157,8 +172,8 @@ def ZoomLoop(
         with timer.Timer(emit_log=False) as tmr:
           response, json_chat = worker.ModelCall(
             model,
-            queries.AI_SETUP_THIRDS_SCORING_PROMPT,
-            queries.AI_IMAGE_THIRDS_SCORING_PROMPT,
+            setup_query,
+            image_query,
             queries.ZoomSectorScoring,
             images=[img_data],
             chat_history=json_chat,
@@ -166,7 +181,7 @@ def ZoomLoop(
         # save the image, adding the response evaluation as metadata on top of the image
         full_path.write_bytes(image.AddEvaluationMetaToImage(img_data, response.JSON()))
         # implement the move command
-        frm = _MoveCenter(frm, response, tmr, print_comm)
+        frm = _MoveCenter(frm, query, response, tmr, target_weight, print_comm)
         # stop if we've reached the maximum number of steps
         if max_steps and count >= max_steps:
           print_comm('[yellow]Reached maximum zoom step(s), stopping.[/yellow]')
@@ -250,16 +265,22 @@ def _ComputeMandelbrot(
 
 def _MoveCenter(  # noqa: C901
   frm: frame.Frame,
+  query: str | None,
   response: queries.ZoomSectorScoring,
   tmr: timer.Timer,
+  target_weight: float,
   print_comm: abc.Callable[[str], None],
 ) -> frame.Frame:
   """Move the frame center according to the AI response.
 
   Args:
     frm: The current frame.
+    query: The optional search query used for targeted scoring.
     response: The AI response containing the sector evaluations.
     tmr: The timer for the current operation.
+    target_weight: The weight (0.0 to 1.0) to give to the target match score when determining the
+        best sector; if 0.0, only the fractal score is used; if 1.0, only the
+        target match score is used.
     print_comm: A rich console callable for printing messages.
 
   Returns:
@@ -277,7 +298,7 @@ def _MoveCenter(  # noqa: C901
   direct_step: gmpy2.mpq = frame_sz * frame.DEFAULT_MPQ_STEP_DIRECT
   diagonal_step: gmpy2.mpq = frame_sz * frame.DEFAULT_MPQ_STEP_DIAGONAL
   # now move the center according to the direction, if requested
-  best: queries.SectorEvaluation = response.BestEvaluation()
+  best: queries.SectorEvaluation = response.BestEvaluation(target_weight=target_weight)
   direction: str = _DIRECTION_MAP[best.sector]
   if direction == 'C':
     pass  # no movement, zoom in place
@@ -304,10 +325,17 @@ def _MoveCenter(  # noqa: C901
   else:
     raise Error(f'invalid direction: {direction!r}')
   print_comm(f'[yellow]MODEL: move [bold]{best.sector}/{direction}-wards[/][/] (in {tmr})')
-  for sector_eval in sorted(response.sectors, key=lambda item: item.score, reverse=True):
+  for sector_eval in sorted(
+    response.sectors, key=lambda s: s.FinalScore(target_weight=target_weight), reverse=True
+  ):
+    target_score: str = (
+      '' if sector_eval.target_match_score is None else f'/{sector_eval.target_match_score}'
+    )
+    if sector_eval.target_match_score and query is None:
+      raise Error(f'Match score given but no query; LLM scoring inconsistent!\n{response.JSON()}')
     print_comm(
       f'#{sector_eval.sector}/[green]{_DIRECTION_MAP[sector_eval.sector]}[/]: '
-      f'{sector_eval.score} - {sector_eval.reason}'
+      f'{sector_eval.fractal_score}{target_score} - {sector_eval.reason}'
     )
   print_comm('')
   # build the new frame

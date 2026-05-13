@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Literal
 
 import pydantic
@@ -20,35 +21,63 @@ class Error(fractal.Error):
 # Current AI Queries and Data
 ####################################################################################################
 
+
+def BuildImageThirdsPrompts(target_search: str | None = None) -> tuple[str, str]:
+  """Build the AI setup and image prompts for the thirds scoring method.
+
+  Args:
+    target_search: Optional string describing the targeted search query;
+        if None, targeted search is inactive
+
+  Returns:
+    A tuple of (setup_prompt, image_prompt)
+
+  """
+  setup_text: str
+  image_text: str
+  if target_search:
+    query: str = json.dumps(target_search.strip())
+    setup_text = TARGET_THIRDS_SETUP.replace('<<<TARGETED_QUERY>>>', query)
+    image_text = TARGET_THIRDS_IMAGE.replace('<<<TARGETED_QUERY>>>', query)
+  else:
+    setup_text = 'Targeted search is NOT active. `target_match_score` is null for all sectors.'
+    image_text = setup_text
+  return (
+    AI_SETUP_THIRDS_SCORING_PROMPT.replace('<<<TARGETED_BLOCK>>>', setup_text.strip()),
+    AI_IMAGE_THIRDS_SCORING_PROMPT.replace('<<<TARGETED_BLOCK>>>', image_text.strip()),
+  )
+
+
 AI_SETUP_THIRDS_SCORING_PROMPT: str = """
 Evaluate Mandelbrot Set images for an automated zoom search.
 
 Each image is divided by white grid lines into 9 equal sectors.
 Each sector in the image is marked in clear green text with its sector number.
 
-Score each sector from 0 to 100 for how promising it is as the next zoom target.
+Score each sector from 0 to 100 for how promising it is as the next zoom target in `fractal_score`.
+Return one short reason for each sector in `reason`.
 
-Score high when a sector has:
+Score `fractal_score` high when a sector has:
 - dense visible fractal complexity;
 - fine detail at multiple scales;
 - sharp, intricate boundaries;
 - interesting shapes or visual novelty;
 - enough structure to make a beautiful zoom target.
 
-Score low when a sector is dominated by:
+Score `fractal_score` low when a sector is dominated by:
 - smooth color bands;
 - large empty or featureless areas;
 - large black or solid-color regions;
 - detail limited to only a small edge or corner.
 
-Calibration:
+Calibration of `fractal_score` scores:
 - 85 to 100: exceptional; only for the best 1 or 2 sectors in this image.
 - 70 to 84: strong; rich structure, but not the very best.
 - 50 to 69: good; clear structure with some smooth area.
 - 30 to 49: weak/moderate; partial structure or large smooth areas.
 - 0 to 29: poor; mostly smooth, empty, solid, or featureless.
 
-Rules:
+Rules for `fractal_score` scoring:
 - Score only what is visibly inside each sector.
 - Use the full score range.
 - Avoid score compression.
@@ -56,31 +85,58 @@ Rules:
 - Usually fewer than three sectors should score above 70.
 - A sector with more than one third smooth/empty area should usually score below 60.
 - A sector with more than half smooth/empty area should usually score below 40.
-- Return one short reason for each sector.
+
+<<<TARGETED_BLOCK>>>
 
 Reasoning rules:
 - Use plain visual descriptions only: dense detail, fine texture, sharp boundary, smooth area, dark area, empty area, edge detail.
 - Avoid naming specific Mandelbrot structures unless they are unmistakable.
-- Scores are relative within the image: normally only the best 1 or 2 sectors should score 90+.
+- `fractal_score` scores are relative within the image: normally only the best 1 or 2 sectors should score 90+.
+""".strip()  # noqa: E501
+
+TARGET_THIRDS_SETUP: str = """
+Targeted search is active, and the search target is:
+<<<TARGETED_QUERY>>>
+
+For each sector you will also assign a `target_match_score` from 0 to 100 for how well the sector visibly matches the search target.
+
+Rules for `target_match_score`:
+- Score only visible match to the target search, ignoring general fractal quality.
+- Clear, unmistakable matches should score 85 or above.
+- Partial or ambiguous matches should score below 50.
+- Sectors with no visible match should score 0.
+- Exact or strong matches should be rare; do not give high target scores broadly.
+- Smooth, empty, solid, black, or featureless sectors should usually score 0.
+- Any score above 30 must be visibly justified by the target search.
 """.strip()  # noqa: E501
 
 AI_IMAGE_THIRDS_SCORING_PROMPT: str = """
 Inspect the Mandelbrot image divided into 9 sectors with white grid lines and identified by green text labels.
 
-For each sector, assign a 0 to 100 score for next-zoom promise. Judge mainly by:
+For each sector, assign a 0 to 100 score in `fractal_score` for next-zoom promise. Judge mainly by:
 - visible fractal complexity;
 - amount of fine detail;
 - boundary intricacy;
 - visual beauty or novelty;
 - how much of the sector is smooth, empty, black, or featureless.
 
-Before returning, compare sectors against the best sector in this image:
-- best sector: usually 85+;
-- strong alternatives: usually 10 to 20 points lower;
+Before returning `fractal_score`, compare sectors against the best sector in this image:
+- best `fractal_score` sector: usually 85+;
+- strong `fractal_score` alternatives: usually 10 to 20 points lower;
 - partial detail with large smooth areas: usually 30 to 50 points lower;
 - mostly smooth sectors: usually 50+ points lower.
 
-Return exactly one score and one short reason for each sector.
+<<<TARGETED_BLOCK>>>
+
+Return exactly one `fractal_score`, one `target_match_score`, and one short `reason` for each sector.
+""".strip()  # noqa: E501
+
+TARGET_THIRDS_IMAGE: str = """
+Targeted search is active, and the search target is:
+<<<TARGETED_QUERY>>>
+
+For each sector you will also assign a `target_match_score` from 0 to 100 for how well the sector visibly matches this search target.
+Any `target_match_score` score above 30 should be easily justified and visibly match the target search.
 """.strip()  # noqa: E501
 
 
@@ -96,19 +152,53 @@ class SectorEvaluation(pydantic.BaseModel):
     ),
   )
 
-  score: int = pydantic.Field(
+  fractal_score: int = pydantic.Field(
+    ge=0,
+    le=100,
+    description=('General fractal sector score, from 0 to 100, ignoring optional targeted search'),
+  )
+
+  target_match_score: int | None = pydantic.Field(
+    default=None,
     ge=0,
     le=100,
     description=(
-      'Visual promise score from 0 to 100; Higher means better for the next Mandelbrot zoom target'
+      'How well this sector visibly matches the optional targeted search, from 0 to 100; '
+      'null when no targeted search is provided.'
     ),
   )
 
   reason: str = pydantic.Field(
     min_length=8,
     max_length=240,
-    description=('Brief reason for the score, based only on visible Mandelbrot structure'),
+    description=(
+      'Brief reason for the score, '
+      'based only on visible Mandelbrot structure and optional target match'
+    ),
   )
+
+  def FinalScore(self, *, target_weight: float = 0.8) -> int:
+    """Calculate the final score for this sector, blending fractal_score and target_match_score.
+
+    Args:
+      target_weight: Weight assigned to `target_match_score` when targeted search is active;
+          default is 0.8
+
+    Returns:
+      The final blended score for this sector.
+
+    """
+    # in the absence of a target match score, we just use the fractal score
+    if self.target_match_score is None:
+      return self.fractal_score
+    # we have a target match score, so we blend it with the fractal score
+    blended: int = round(
+      (1.0 - target_weight) * self.fractal_score + target_weight * self.target_match_score
+    )
+    # prevent very weak fractal regions from winning only because of a vague target match
+    if self.fractal_score < 30:  # noqa: PLR2004
+      blended = min(blended, 45)
+    return blended
 
 
 class ZoomSectorScoring(pydantic.BaseModel):
@@ -128,23 +218,36 @@ class ZoomSectorScoring(pydantic.BaseModel):
       The same ZoomSectorScoring instance if validation passes.
 
     Raises:
-      Error: If the sectors do not contain exactly one evaluation for each of the 9 sectors.
+      ValueError: If the sectors do not contain exactly one evaluation for each of the 9 sectors.
 
     """
     if len(self.sectors) != 9:  # noqa: PLR2004
-      raise Error('sectors should be exactly 9 and must not contain duplicates')
+      raise ValueError('sectors should be exactly 9 and must not contain duplicates')
     if (sect := {item.sector for item in self.sectors}) != set(range(1, 10)):
-      raise Error(f'exactly one evaluation for each sector from 1 to 9, got {sorted(sect)}')
+      raise ValueError(f'exactly one evaluation for each sector from 1 to 9, got {sorted(sect)}')
     return self
 
-  def BestEvaluation(self) -> SectorEvaluation:
-    """Get the sector evaluation with the highest score.
+  def BestEvaluation(self, *, target_weight: float = 0.8) -> SectorEvaluation:
+    """Get the sector evaluation with the highest final score.
+
+    If targeted search is inactive, this uses `fractal_score`.
+    If targeted search is active, this blends `fractal_score` and
+    `target_match_score`, giving more weight to the target match.
+
+    Args:
+      target_weight: Weight assigned to `target_match_score` when targeted search is active;
+          default is 0.8
 
     Returns:
-     The SectorEvaluation with the highest score.
+      The SectorEvaluation with the highest final score.
+
+    Raises:
+      Error: If target_weight is not between 0.0 and 1.0
 
     """
-    return max(self.sectors, key=lambda item: item.score)
+    if not (0.0 <= target_weight <= 1.0):
+      raise Error(f'target_weight must be between 0.0 and 1.0, got {target_weight}')
+    return max(self.sectors, key=lambda s: s.FinalScore(target_weight=target_weight))
 
   def JSON(self) -> tbase.JSONDict:
     """Get a JSON-serializable dict representation of this ZoomSectorScoring.

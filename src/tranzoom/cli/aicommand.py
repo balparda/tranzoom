@@ -16,6 +16,8 @@ from tranzoom import zoom
 from tranzoom.cli import base
 from tranzoom.core import ai, frame
 
+_MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the fractal score
+
 
 @zoom.app.command(
   'ai',
@@ -34,10 +36,11 @@ from tranzoom.core import ai, frame
 def AI(  # documentation is help/epilog/args  # noqa: D103
   *,
   ctx: click.Context,
-  center_re: str = base.FRAME_CENTER_RE_OPTION,  # type: ignore[assignment]
-  center_im: str = base.FRAME_CENTER_IM_OPTION,  # type: ignore[assignment]
-  f_width: str = base.FRAME_WIDTH_OPTION,  # type: ignore[assignment]
-  f_height: str | None = base.FRAME_HEIGHT_OPTION,  # type: ignore[assignment]
+  center_re: str = base.FRAME_CENTER_RE_ARGUMENT,  # type: ignore[assignment]
+  center_im: str = base.FRAME_CENTER_IM_ARGUMENT,  # type: ignore[assignment]
+  f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]
+  f_height: str | None = base.FRAME_HEIGHT_ARGUMENT,  # type: ignore[assignment]
+  query: str | None = base.AI_QUERY_OPTION,  # type: ignore[assignment]
   memory: int = base.MAX_CHAT_MEMORY_OPTION,  # type: ignore[assignment]
   max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
   iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
@@ -72,8 +75,10 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     config.flash,
     config.kv_cache,
     config.timeout,
+    query.strip() if query else None,
     memory,
     max_steps,
     iterm,
+    _MANUAL_QUERY_WEIGHT,
     config.console.print,
   )
