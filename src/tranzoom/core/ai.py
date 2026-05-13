@@ -43,6 +43,18 @@ def ZoomLoop(
   img_use_hash: bool,
   img_path_prefix: str,
   max_threads: int | None,
+  model: str,
+  spec_tokens: int | None,
+  seed: int | None,
+  context: int,
+  temperature: float,
+  gpu: float,
+  gpu_layers: int,
+  fp16: bool,
+  use_mmap: bool,
+  flash: bool,
+  kv_cache: int | None,
+  timeout: float,
   *,
   max_steps: int = 0,
   iterm: bool = False,
@@ -59,6 +71,19 @@ def ZoomLoop(
     img_path_prefix: A prefix to add to the image filename when saving.
     max_threads: Optional maximum number of threads to use for rendering; if None, use all
         available CPU cores.
+    model: The AI model identifier to use for the search.
+    spec_tokens: Optional number of tokens to use for the model's specification; if None,
+        use the model's default.
+    seed: Optional random seed for the model; if None, use a random seed.
+    context: The context window size (in tokens) for the model.
+    temperature: The sampling temperature for the model's responses.
+    gpu: The GPU usage ratio for the model (0.0 to 1.0).
+    gpu_layers: The number of layers of the model to offload to the GPU.
+    fp16: Whether to use FP16 precision for the model; default is False.
+    use_mmap: Whether to use memory-mapped files for the model; default is False.
+    flash: Whether to use flash attention for the model; default is False.
+    kv_cache: Optional size of the key-value cache for the model; if None, use the model's default.
+    timeout: The timeout (in seconds) for model operations.
     max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C);
         default is 0 (unlimited, run forever).
     iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol;
@@ -77,14 +102,21 @@ def ZoomLoop(
   )
   count: int = 1
   try:
-    with lms.LMStudioWorker(free_resources=True) as worker:
+    with lms.LMStudioWorker(timeout=timeout, free_resources=True) as worker:
       worker.LoadModel(
         ai.MakeAIModelConfig(
-          model_id=_MODEL_ID,
           vision=True,
-          temperature=0.33,  # TODO: option
-          # all other fields will have sensible defaults; currently also supported are:
-          # seed, context, gpu_ratio, gpu_layers, use_mmap, fp16, flash, spec_tokens, kv_cache
+          model_id=model,
+          seed=seed,
+          context=context,
+          temperature=temperature,
+          gpu_ratio=gpu,
+          gpu_layers=gpu_layers,
+          use_mmap=use_mmap,
+          fp16=fp16,
+          flash=flash,
+          spec_tokens=spec_tokens,
+          kv_cache=kv_cache,
         )
       )
       # main loop: runs until max_steps is reached, or Ctrl+C is pressed

@@ -38,7 +38,7 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
   iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
-  config: base.TranZoomConfig = ctx.obj
+  config: zoom.TranZoomAIConfig = ctx.obj
   try:
     frm: frame.Frame = frame.Frame.FromCenter(
       frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height
@@ -55,6 +55,18 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     config.img_use_hash,
     config.img_path_prefix,
     config.max_threads,
+    config.model,
+    config.spec_tokens,
+    config.seed,
+    config.context,
+    config.temperature,
+    config.gpu,
+    config.gpu_layers,
+    config.fp16,
+    config.use_mmap,
+    config.flash,
+    config.kv_cache,
+    config.timeout,
     max_steps=max_steps,
     iterm=iterm,
     print_comm=config.console.print,
