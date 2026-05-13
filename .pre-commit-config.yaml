@@ -18,7 +18,7 @@ repos:
       # Run the formatter
       - id: ruff-format
         name: ruff format
-        entry: poetry run ruff format --check
+        entry: poetry run ruff format --check --diff
         language: system
         types: [python]
         pass_filenames: false

@@ -91,6 +91,7 @@ Built with:
     - [Enable debug output](#enable-debug-output)
     - [`gmpy2` installation issues](#gmpy2-installation-issues)
     - [Rendering is very slow](#rendering-is-very-slow)
+  - [Appendix 1: Examples](#appendix-1-examples)
 
 ## License
 
@@ -641,7 +642,7 @@ poetry run pytest -m integration -q
 make lint  # poetry run ruff check .
 make fmt   # poetry run ruff format .
 
-poetry run ruff format --check .  # check formatting without rewriting
+poetry run ruff format --check --diff .  # check formatting without rewriting
 ```
 
 #### Type checking
@@ -757,6 +758,14 @@ poetry sync
 - Reduce image size: `mandel -w 256 -h 256 gen ...`
 - `max_iter` is auto-scaled with zoom depth; very deep zooms are inherently slow
 - Very high precision (> 1000 bits, i.e., zoom > ~10^300) will always be slow — this is expected
+
+## Appendix 1: Examples
+
+```txt
+[(-162452854280961744293928989494998845672725621110002078293086073/218375681713999306166051894706470193341374397277832031250000000,
+6150565486998248804964531337055568287130721174448488551411/46586812098986518648757737537380307912826538085937500000000) @
+404016274800301610616676185053381249861163/66174449004242213989712695365597028285264968872070312500000000]
+```
 
 ---
 

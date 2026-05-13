@@ -39,7 +39,7 @@ jobs:
         run: poetry run ruff check .
 
       - name: Format
-        run: poetry run ruff format --check .
+        run: poetry run ruff format --check --diff .
 
       - name: Typecheck
         run: poetry run mypy src tests tests_integration

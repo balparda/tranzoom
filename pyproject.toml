@@ -12,7 +12,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 
 name = "tranzoom"
-version = "1.0.0"  # also update src/tranzoom/__init__.py
+version = "1.1.0"  # also update src/tranzoom/__init__.py
 
 description = "Fractal manipulation with LLMs"
 license = "Apache-2.0"
@@ -48,7 +48,7 @@ dependencies = [
   # development-only dependencies go in the [tool.poetry.group.dev.dependencies] section below
 
   "transcrypto>=2.1",
-  "transai>=1.2.0",
+  "transai>=1.3.0",
 
   "click>=8.1",
   "rich>=14.2",
@@ -109,7 +109,7 @@ python = "^3.12"  # if version changes, remember to change README.md
 
 # basic, all projects should have
 ruff = "^0.15.12"
-mypy = "^1.20"
+mypy = "^2.1"
 pytest = "^9.0"
 pytest-cov = "^7.1"
 pytest-flakefinder = "^1.1"

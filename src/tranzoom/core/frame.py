@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import dataclasses
+import enum
 from collections import abc
 from typing import cast
 
@@ -13,6 +14,7 @@ from transcrypto.utils import base as tbase
 
 # basic constants
 
+type ExactInputType = str | float | gmpy2.mpq
 MIN_IMAGE_SIZE: int = 16  # BEWARE: we use this for the "auto" depth calculation, so not too small!
 MAX_IMAGE_SIZE: int = 8192
 DEFAULT_IMAGE_SIZE: int = 1024
@@ -29,8 +31,15 @@ PrecisionContext: abc.Callable[[], gmpy2.context] = lambda: gmpy2.local_context(
 )
 
 # gmpy2.mpq constants
-_MPQ_TWO = gmpy2.mpq(2)
-_MPQ_MAX_IMAGE_SIZE = gmpy2.mpq(MAX_IMAGE_SIZE)
+_MPQ_TWO: gmpy2.mpq = gmpy2.mpq('2')
+_MPQ_MAX_IMAGE_SIZE: gmpy2.mpq = gmpy2.mpq(MAX_IMAGE_SIZE)
+_MPQ_SQRT_TWO_NOT_PRECISE: gmpy2.mpq = gmpy2.mpq('99/70')  # good enough for our purposes
+# constant to divide frame size when zooming one step
+DEFAULT_MPQ_ZOOM: gmpy2.mpq = gmpy2.mpq('5/3')  # 1.67
+# fraction of frame size to move when moving in a cardinal direction
+DEFAULT_STEP_DIRECT: int = 3
+DEFAULT_MPQ_STEP_DIRECT: gmpy2.mpq = gmpy2.mpq(f'1/{DEFAULT_STEP_DIRECT}')
+DEFAULT_MPQ_STEP_DIAGONAL: gmpy2.mpq = DEFAULT_MPQ_STEP_DIRECT / _MPQ_SQRT_TWO_NOT_PRECISE
 
 # Frame: the default frame is the one that shows the whole Mandelbrot set, which is centered at
 # -0.75+0j and has width 2.5; the height is the same as the width by default;
@@ -45,10 +54,17 @@ class Error(tbase.Error):
   """Base frame exception."""
 
 
+class Fractal(enum.Enum):
+  """Fractal enum."""
+
+  MANDELBROT = 'Mandelbrot'
+
+
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class Frame:
   """Defines a rectangular region of the complex plane, with arbitrary precision. Exact."""
 
+  fractal: Fractal
   top_re: gmpy2.mpq  # the top-left corner of the rectangle
   top_im: gmpy2.mpq
   bottom_re: gmpy2.mpq  # the bottom-right corner of the rectangle
@@ -123,14 +139,16 @@ class Frame:
   def magnification(self) -> tuple[gmpy2.mpfr, float]:
     """Get frame magnification: How much "zoom" this frame has in relation to the whole set.
 
-    sqrt( DEFAULT_FRAME.area / self.area ) i.e., sqrt( WHOLE / this )
+    sqrt( DEFAULT_FRAMES[self.fractal].area / self.area ) i.e., sqrt( WHOLE / this )
 
     Returns:
       tuple[gmpy2.mpfr, float]: (magnification, log10(magnification))
 
     """
     with PrecisionContext():
-      magnification: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(DEFAULT_FRAME.area / self.area))
+      magnification: gmpy2.mpfr = cast(
+        'gmpy2.mpfr', gmpy2.sqrt(DEFAULT_FRAMES[self.fractal].area / self.area)
+      )
       return (magnification, float(cast('gmpy2.mpfr', gmpy2.log10(magnification))))
 
   def __str__(self) -> str:
@@ -145,14 +163,21 @@ class Frame:
     return f'[({cx}, {cy}) @ {dx}]' if dx == dy else f'[({cx}, {cy}) @ ({dx}, {dy})]'
 
   @staticmethod
-  def FromCoords(re1: str | float, im1: str | float, re2: str | float, im2: str | float) -> Frame:
+  def FromCoords(
+    fractal: Fractal,
+    re1: ExactInputType,
+    im1: ExactInputType,
+    re2: ExactInputType,
+    im2: ExactInputType,
+  ) -> Frame:
     """Create a Frame from coordinate values. Will order the corners correctly.
 
     Args:
-      re1 (str | float): Real part of one corner.
-      im1 (str | float): Imaginary part of one corner.
-      re2 (str | float): Real part of the second corner.
-      im2 (str | float): Imaginary part of the second corner.
+      fractal (Fractal): The type of fractal.
+      re1 (ExactInputType): Real part of one corner.
+      im1 (ExactInputType): Imaginary part of one corner.
+      re2 (ExactInputType): Real part of the second corner.
+      im2 (ExactInputType): Imaginary part of the second corner.
 
     Returns:
       Frame: A Frame object representing the rectangle defined by the two corners.
@@ -162,30 +187,36 @@ class Frame:
         with area
 
     """
-    x1: gmpy2.mpq = gmpy2.mpq(re1)
-    y1: gmpy2.mpq = gmpy2.mpq(im1)
-    x2: gmpy2.mpq = gmpy2.mpq(re2)
-    y2: gmpy2.mpq = gmpy2.mpq(im2)
+    x1: gmpy2.mpq = re1 if isinstance(re1, gmpy2.mpq) else gmpy2.mpq(re1)
+    y1: gmpy2.mpq = im1 if isinstance(im1, gmpy2.mpq) else gmpy2.mpq(im1)
+    x2: gmpy2.mpq = re2 if isinstance(re2, gmpy2.mpq) else gmpy2.mpq(re2)
+    y2: gmpy2.mpq = im2 if isinstance(im2, gmpy2.mpq) else gmpy2.mpq(im2)
     if x1 == x2 or y1 == y2:
       raise Error(f'coordinates must define a rectangle with area, got ({x1}, {y1}) / ({x2}, {y2})')
     return Frame(
-      top_re=min(x1, x2), top_im=max(y1, y2), bottom_re=max(x1, x2), bottom_im=min(y1, y2)
+      fractal=fractal,
+      top_re=min(x1, x2),
+      top_im=max(y1, y2),
+      bottom_re=max(x1, x2),
+      bottom_im=min(y1, y2),
     )
 
   @staticmethod
   def FromCenter(
-    center_re: str | float,
-    center_im: str | float,
-    width: str | float,
-    height: str | float | None = None,
+    fractal: Fractal,
+    center_re: ExactInputType,
+    center_im: ExactInputType,
+    width: ExactInputType,
+    height: ExactInputType | None = None,
   ) -> Frame:
     """Create a Frame from a center point and dimensions.
 
     Args:
-      center_re (str | float): Real part of the center point.
-      center_im (str | float): Imaginary part of the center point.
-      width (str | float): Width of the frame in the real direction.
-      height (str | float | None): Height of the frame in the imaginary direction. If None,
+      fractal (Fractal): The type of fractal.
+      center_re (ExactInputType): Real part of the center point.
+      center_im (ExactInputType): Imaginary part of the center point.
+      width (ExactInputType): Width of the frame in the real direction.
+      height (ExactInputType | None): Height of the frame in the imaginary direction. If None,
           height will be equal to width.
 
     Returns:
@@ -195,14 +226,18 @@ class Frame:
       Error: if the coordinates cannot be converted to mpq or if the resulting frame is invalid
 
     """
-    cx: gmpy2.mpq = gmpy2.mpq(center_re)
-    cy: gmpy2.mpq = gmpy2.mpq(center_im)
-    dx: gmpy2.mpq = gmpy2.mpq(width)
-    dy: gmpy2.mpq = gmpy2.mpq(height) if height is not None else dx
+    cx: gmpy2.mpq = center_re if isinstance(center_re, gmpy2.mpq) else gmpy2.mpq(center_re)
+    cy: gmpy2.mpq = center_im if isinstance(center_im, gmpy2.mpq) else gmpy2.mpq(center_im)
+    dx: gmpy2.mpq = width if isinstance(width, gmpy2.mpq) else gmpy2.mpq(width)
+    dy: gmpy2.mpq = (
+      (height if isinstance(height, gmpy2.mpq) else gmpy2.mpq(height)) if height is not None else dx
+    )
     if dx <= 0 or dy <= 0:
       raise Error(f'width and height must be positive, got {dx=} and {dy=}')
     dx, dy = dx / _MPQ_TWO, dy / _MPQ_TWO
-    fr = Frame(top_re=cx - dx, top_im=cy + dy, bottom_re=cx + dx, bottom_im=cy - dy)
+    fr = Frame(
+      fractal=fractal, top_re=cx - dx, top_im=cy + dy, bottom_re=cx + dx, bottom_im=cy - dy
+    )
     if fr.center != (cx, cy):
       raise Error(f'calculated frame center {fr.center} does not match input center ({cx}, {cy})')
     if fr.size != (dx * _MPQ_TWO, dy * _MPQ_TWO):
@@ -248,6 +283,12 @@ class Frame:
     return gmpy2.local_context(gmpy2.context(), precision=self.precision)
 
 
-DEFAULT_FRAME: Frame = Frame.FromCenter(
-  DEFAULT_FRAME_CENTER_RE, DEFAULT_FRAME_CENTER_IM, DEFAULT_FRAME_SIZE
+# the standard/default frames for each fractal
+
+DEFAULT_MANDELBROT_FRAME: Frame = Frame.FromCenter(
+  Fractal.MANDELBROT, DEFAULT_FRAME_CENTER_RE, DEFAULT_FRAME_CENTER_IM, DEFAULT_FRAME_SIZE
 )
+
+DEFAULT_FRAMES: dict[Fractal, Frame] = {
+  Fractal.MANDELBROT: DEFAULT_MANDELBROT_FRAME,
+}

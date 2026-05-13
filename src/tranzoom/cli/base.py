@@ -10,7 +10,7 @@ import pathlib
 import typer
 from transcrypto.cli import clibase
 
-from tranzoom.core import fractal, frame, palette
+from tranzoom.core import ai, fractal, frame, palette
 
 # global CLI data, and some test stuff
 
@@ -84,24 +84,44 @@ IMAGE_INCLUDE_HASH_OPTION: typer.models.OptionInfo = typer.Option(
     'if False, file names will not include the hash; default is True'
   ),
 )
+IMAGE_PRINT_ITERM_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--iterm/--no-iterm',
+  help=(
+    'If True, will output the image to iTerm2 '
+    '(only use on macOS with iTerm2! <https://iterm2.com/documentation-images.html>); '
+    'if False, will not output the image to iTerm2; default is False'
+  ),
+)
+
+# Image: input image
+IMAGE_PATH_INPUT_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  ...,
+  exists=True,
+  file_okay=True,
+  dir_okay=False,
+  readable=True,
+  writable=False,
+  help=('The local input file path, ex: "~/foo/bar/file.png"'),
+)
 
 # Frame: the default frame is the one that shows the whole Mandelbrot set, which is centered at
 # -0.75+0j and has width 2.5; the height is the same as the width by default;
 # The set <https://en.wikipedia.org/wiki/Mandelbrot_set> is contained in the rectangle with corners
 # -2.5-1.25j and 0.5+1.25j, which is exactly our default here
-FRAME_CENTER_RE_OPTION: typer.models.ArgumentInfo = typer.Argument(
+FRAME_CENTER_RE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   frame.DEFAULT_FRAME_CENTER_RE,
   help=f'Real part of the center point; default is {frame.DEFAULT_FRAME_CENTER_RE!r}',
 )
-FRAME_CENTER_IM_OPTION: typer.models.ArgumentInfo = typer.Argument(
+FRAME_CENTER_IM_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   frame.DEFAULT_FRAME_CENTER_IM,
   help=f'Imaginary part of the center point; default is {frame.DEFAULT_FRAME_CENTER_IM!r}',
 )
-FRAME_WIDTH_OPTION: typer.models.ArgumentInfo = typer.Argument(
+FRAME_WIDTH_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   frame.DEFAULT_FRAME_SIZE,
   help=f'Width of the frame in the real plane; default is {frame.DEFAULT_FRAME_SIZE!r}',
 )
-FRAME_HEIGHT_OPTION: typer.models.ArgumentInfo = typer.Argument(
+FRAME_HEIGHT_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   None, help='Height of the frame in the imaginary plane; default is None, i.e, the same as width'
 )
 
@@ -128,6 +148,16 @@ MAX_THREADS_OPTION: typer.models.OptionInfo = typer.Option(
     f'CPU cores; will be limited to {fractal.MAX_CONCURRENCE} threads'
   ),
 )
+MAX_STEPS_OPTION: typer.models.OptionInfo = typer.Option(
+  0,
+  '-n',
+  '--max-steps',
+  min=0,
+  help=(
+    'Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); '
+    'default is 0 (unlimited, run forever)'
+  ),
+)
 
 # Color options
 PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
@@ -136,6 +166,24 @@ PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
   help=(
     f'Color palette to use for rendering; default is {palette.DEFAULT_PALETTE.value!r}; '
     f'available palettes: {sorted(p.value for p in palette.PALETTES)}'
+  ),
+)
+
+# AI Options
+AI_QUERY_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '-q',
+  '--query',
+  help=('Query to be added to the default prompt; default is None, no additional query'),
+)
+MAX_CHAT_MEMORY_OPTION: typer.models.OptionInfo = typer.Option(
+  ai.DEFAULT_MEMORY_SIZE,
+  '--memory',
+  min=0,
+  max=ai.MAX_MEMORY_SIZE,
+  help=(
+    f'Maximum number of iterations the LLM will remember; 0 ≤ m ≤ {ai.MAX_MEMORY_SIZE}; '
+    f'0 (zero) means no memory, every AI call is independent; default is {ai.DEFAULT_MEMORY_SIZE}'
   ),
 )
 
