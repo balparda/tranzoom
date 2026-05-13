@@ -642,7 +642,7 @@ poetry run pytest -m integration -q
 make lint  # poetry run ruff check .
 make fmt   # poetry run ruff format .
 
-poetry run ruff format --check .  # check formatting without rewriting
+poetry run ruff format --check --diff .  # check formatting without rewriting
 ```
 
 #### Type checking

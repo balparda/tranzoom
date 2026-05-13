@@ -107,14 +107,21 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
   *,
   ctx: click.Context,
   image_path: pathlib.Path = base.IMAGE_PATH_INPUT_OPTION,  # type: ignore[assignment]
+  iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity
   config: base.TranZoomConfig = ctx.obj
   image_path = image_path.expanduser().resolve()
-  w, h, png_hash, info = image.GetBasicDataFromPNG(image_path.read_bytes())
+  image_data: bytes = image_path.read_bytes()
+  w, h, png_hash, info = image.GetBasicDataFromPNG(image_data)
   config.console.print()
   config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')
   config.console.print(f'[green]{w}x{h}[/green] (wxh) / [cyan]{png_hash}[/cyan]')
   config.console.print()
-  config.console.print(json.dumps(info, indent=2), style='white', markup=False)
+  if image.META_EVALUATION_KEY in info:
+    info[image.META_EVALUATION_KEY] = json.loads(str(info[image.META_EVALUATION_KEY]))
+  config.console.print_json(data=info, indent=2)
   config.console.print()
+  if iterm:
+    image.PrintITerm2(image_data)
+    config.console.print()

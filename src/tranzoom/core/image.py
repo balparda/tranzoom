@@ -523,7 +523,7 @@ def PrintITerm2(img_data: bytes) -> None:
 
   """
   sys.stdout.write(
-    f'\x1b]1337;File=inline=1;size={len(img_data)}:{base64.b64encode(img_data).decode('ascii')}\a\n'
+    f'\x1b]1337;File=inline=1;size={len(img_data)}:{base64.b64encode(img_data).decode("ascii")}\a\n'
   )
   sys.stdout.flush()
 

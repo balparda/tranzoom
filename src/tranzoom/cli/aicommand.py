@@ -67,7 +67,7 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     config.flash,
     config.kv_cache,
     config.timeout,
-    max_steps=max_steps,
-    iterm=iterm,
-    print_comm=config.console.print,
+    max_steps,
+    iterm,
+    config.console.print,
   )

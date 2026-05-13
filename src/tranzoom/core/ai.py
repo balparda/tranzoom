@@ -9,7 +9,8 @@ from collections import abc
 from typing import cast
 
 import gmpy2
-from transai.core import ai, lms
+from transai.core import ai as transai_ai
+from transai.core import lms
 from transcrypto.utils import base as tbase
 from transcrypto.utils import human, timer
 
@@ -55,17 +56,16 @@ def ZoomLoop(
   flash: bool,
   kv_cache: int | None,
   timeout: float,
-  *,
-  max_steps: int = 0,
-  iterm: bool = False,
-  print_comm: abc.Callable[[str], None] = print,
+  max_steps: int,
+  iterm: bool,
+  print_comm: abc.Callable[[str], None],
 ) -> None:
   """Execute main loop for AI-guided Mandelbrot zoom search.
 
   Args:
     frm: The initial frame for the Mandelbrot zoom search.
-    img_output_path: Optional path to save the rendered images; if None, images will not
-        be saved to disk.
+    img_output_path: Optional path to save the rendered images; if None, images will be
+        saved to current working directory.
     img_use_date: Whether to include the current date in the image filename when saving.
     img_use_hash: Whether to include the image hash in the filename when saving.
     img_path_prefix: A prefix to add to the image filename when saving.
@@ -84,11 +84,9 @@ def ZoomLoop(
     flash: Whether to use flash attention for the model; default is False.
     kv_cache: Optional size of the key-value cache for the model; if None, use the model's default.
     timeout: The timeout (in seconds) for model operations.
-    max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C);
-        default is 0 (unlimited, run forever).
-    iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol;
-        default is False.
-    print_comm: A callable for printing messages; defaults to the built-in print function.
+    max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
+    iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
+    print_comm: A rich console callable for printing messages.
 
   """
   # capture the time and load model
@@ -104,7 +102,7 @@ def ZoomLoop(
   try:
     with lms.LMStudioWorker(timeout=timeout, free_resources=True) as worker:
       worker.LoadModel(
-        ai.MakeAIModelConfig(
+        transai_ai.MakeAIModelConfig(
           vision=True,
           model_id=model,
           seed=seed,
@@ -137,8 +135,8 @@ def ZoomLoop(
           img_use_hash,
           img_path_prefix,
           max_threads,
-          iterm=iterm,
-          print_comm=print_comm,
+          iterm,
+          print_comm,
         )
         # wipe memory of iterations older than _MEMORY_SIZE
         if json_chat is not None:
@@ -164,7 +162,7 @@ def ZoomLoop(
         # save the image, adding the response evaluation as metadata on top of the image
         full_path.write_bytes(image.AddEvaluationMetaToImage(img_data, response.JSON()))
         # implement the move command
-        frm = _MoveCenter(frm, response, tmr, print_comm=print_comm)
+        frm = _MoveCenter(frm, response, tmr, print_comm)
         # stop if we've reached the maximum number of steps
         if max_steps and count >= max_steps:
           print_comm('[yellow]Reached maximum zoom step(s), stopping.[/yellow]')
@@ -184,9 +182,8 @@ def _ComputeMandelbrot(
   img_use_hash: bool,
   img_path_prefix: str,
   max_threads: int | None,
-  *,
-  iterm: bool = False,
-  print_comm: abc.Callable[[str], None] = print,
+  iterm: bool,
+  print_comm: abc.Callable[[str], None],
 ) -> tuple[bytes, pathlib.Path]:
   """Compute the Mandelbrot image for the given frame.
 
@@ -199,11 +196,9 @@ def _ComputeMandelbrot(
     img_use_date: Whether to include the current date in the image filename when saving.
     img_use_hash: Whether to include the image hash in the filename when saving.
     img_path_prefix: A prefix to add to the image filename when saving.
-    max_threads: Optional maximum number of threads to use for rendering; if None, use all
-        available CPU cores.
-    iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol;
-        default is False.
-    print_comm: A callable for printing messages; defaults to the built-in print function.
+    max_threads: Maximum number of threads to use for rendering.
+    iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
+    print_comm: A rich console callable for printing messages.
 
   Returns:
     (bytes, pathlib.Path): A tuple with the PNG image bytes (minus the evaluation) and the
@@ -238,7 +233,6 @@ def _ComputeMandelbrot(
     tm=zoom_tm,
     add_serial=count,
   )
-  print_comm(f'Saved to "{full_path}"')
   print_comm(
     f'\nMandelbrot zoom (#{count}) with frame {frm}, '
     f'precision {frm.precision} bits, {magnification_str} magnification\n'
@@ -254,8 +248,7 @@ def _MoveCenter(  # noqa: C901
   frm: frame.Frame,
   response: queries.ZoomSectorScoring,
   tmr: timer.Timer,
-  *,
-  print_comm: abc.Callable[[str], None] = print,
+  print_comm: abc.Callable[[str], None],
 ) -> frame.Frame:
   """Move the frame center according to the AI response.
 
@@ -263,7 +256,7 @@ def _MoveCenter(  # noqa: C901
     frm: The current frame.
     response: The AI response containing the sector evaluations.
     tmr: The timer for the current operation.
-    print_comm: A callable for printing messages; defaults to the built-in print function.
+    print_comm: A rich console callable for printing messages.
 
   Returns:
     frame.Frame: The new frame with the updated center.
