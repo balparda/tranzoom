@@ -9,10 +9,12 @@ https://pillow.readthedocs.io/en/stable/PIL.html#PIL.PngImagePlugin.PngInfo
 from __future__ import annotations
 
 import array
+import base64
 import io
 import json
 import math
 import pathlib
+import sys
 import time
 from typing import cast
 
@@ -509,6 +511,21 @@ def AddEvaluationMetaToImage(img_data: bytes, response: tbase.JSONDict) -> bytes
   """
   with PILImage.open(io.BytesIO(img_data)) as img:
     return SaveWithMeta(img, extra_meta={META_EVALUATION_KEY: json.dumps(response)})
+
+
+def PrintITerm2(img_data: bytes) -> None:
+  """Print the image to `sys.stdout` in iTerm2, using the iTerm2 inline image protocol.
+
+  <https://iterm2.com/documentation-images.html>
+
+  Args:
+    img_data: The original PNG image data as bytes.
+
+  """
+  sys.stdout.write(
+    f'\x1b]1337;File=inline=1;size={len(img_data)}:{base64.b64encode(img_data).decode("ascii")}\a\n'
+  )
+  sys.stdout.flush()
 
 
 def PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:

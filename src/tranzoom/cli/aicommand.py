@@ -9,6 +9,8 @@ README.md has good examples for different zoom levels.
 
 from __future__ import annotations
 
+import json
+import logging
 import pathlib
 from typing import Literal, cast
 
@@ -28,8 +30,6 @@ from tranzoom.core import fractal, frame, image
 _WIDTH: int = 512  # square frames only!
 _MEMORY_SIZE: int = 3  # number of iterations the LLM will remember
 _MODEL_ID: str = 'qwen3-vl-32b-instruct@q8_0'  # TODO: option
-# _MODEL_ID: str = 'qwen3-vl-32b-instruct@f16'
-# _MODEL_ID: str = 'qwen/qwen3.5-35b-a3b@q8_0'
 
 
 _AI_SETUP_THIRDS_PROMPT: str = """
@@ -115,11 +115,8 @@ class ZoomSectorChoice(pydantic.BaseModel):
 _AI_SETUP_THIRDS_SCORING_PROMPT: str = """
 Evaluate Mandelbrot Set images for an automated zoom search.
 
-Each image is divided by white grid lines into 9 equal sectors:
-
-  1 | 2 | 3
-  4 | 5 | 6
-  7 | 8 | 9
+Each image is divided by white grid lines into 9 equal sectors.
+Each sector in the image is marked in clear green text with its sector number.
 
 Score each sector from 0 to 100 for how promising it is as the next zoom target.
 
@@ -155,11 +152,7 @@ Rules:
 """.strip()
 
 _AI_IMAGE_THIRDS_SCORING_PROMPT: str = """
-Inspect the Mandelbrot image divided into 9 sectors:
-
-  1 | 2 | 3
-  4 | 5 | 6
-  7 | 8 | 9
+Inspect the Mandelbrot image divided into 9 sectors with white grid lines and identified by green text labels.
 
 For each sector, assign a 0 to 100 score for next-zoom promise. Judge mainly by:
 - visible fractal complexity;
@@ -175,7 +168,7 @@ Before returning, compare sectors against the best sector in this image:
 - mostly smooth sectors: usually 50+ points lower.
 
 Return exactly one score and one short reason for each sector.
-""".strip()
+""".strip()  # noqa: E501
 
 
 class SectorEvaluation(pydantic.BaseModel):
@@ -331,6 +324,7 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
   f_width: str = base.FRAME_WIDTH_OPTION,  # type: ignore[assignment]
   f_height: str | None = base.FRAME_HEIGHT_OPTION,  # type: ignore[assignment]
   max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
+  iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
   config: base.TranZoomConfig = ctx.obj
@@ -393,6 +387,8 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
           f'precision {frm.precision} bits, {magnification_str} magnification\n'
           f'{img_hash!r} in {tmr}, escape range {img.escape_range}'
         )
+        if iterm:
+          image.PrintITerm2(img_data)
         # wipe memory of iterations older than _MEMORY_SIZE
         if json_chat is not None:
           messages: list[tbase.JSONDict] = cast('list[tbase.JSONDict]', json_chat['messages'])
@@ -451,6 +447,7 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
         config.console.print(
           f'MODEL: move {direct_step} => {direction}-wards (in {tmr})\n{best.score}/{best.reason}'
         )
+        logging.info(json.dumps(response.JSON(), indent=2))
         # save image
         full_path: pathlib.Path = image.MakeImagePath(
           config.img_output_path,

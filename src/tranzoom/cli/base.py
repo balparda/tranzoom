@@ -84,6 +84,15 @@ IMAGE_INCLUDE_HASH_OPTION: typer.models.OptionInfo = typer.Option(
     'if False, file names will not include the hash; default is True'
   ),
 )
+IMAGE_PRINT_ITERM_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--iterm/--no-iterm',
+  help=(
+    'If True, will output the image to iTerm2 '
+    '(only use on macOS with iTerm2! <https://iterm2.com/documentation-images.html>); '
+    'if False, will not output the image to iTerm2; default is False'
+  ),
+)
 
 # Image: input image
 IMAGE_PATH_INPUT_OPTION: typer.models.ArgumentInfo = typer.Argument(
