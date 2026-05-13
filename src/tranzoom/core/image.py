@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import array
 import io
+import json
 import math
 import pathlib
 import time
@@ -48,6 +49,8 @@ META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'  # float
 META_ITER_DEPTH_MIN_KEY = 'tranzoom:iter_depth:min'  # int
 META_ITER_DEPTH_MAX_KEY = 'tranzoom:iter_depth:max'  # int
 META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:iter_depth:search'  # int, can be "-1" if unknown or not set
+# extra keys added to some images only (for example, when the LLM evaluates the image)
+META_EVALUATION_KEY = 'tranzoom:image:evaluation'  # JSON with evaluation info from LLM
 
 # image constants
 
@@ -207,7 +210,7 @@ class Image:
       else:
         # keep t in [0, 1) so the highest escape bucket does not wrap
         t: float = (cumulative[escaped_at] - 1) / total_exterior
-        r, g, b = _PixelPalette(t, pal)
+        r, g, b = PixelPalette(t, pal)
       pixels[i * 3] = r
       pixels[i * 3 + 1] = g
       pixels[i * 3 + 2] = b
@@ -411,7 +414,7 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
       # for each circle, also draw the label text
       draw.text((x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=_COLOR_GREEN, font=font)
     # done
-    return _SaveWithMeta(img)
+    return SaveWithMeta(img)
 
 
 def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
@@ -443,10 +446,54 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
     draw.line((0, 2 * cy, w, 2 * cy), fill=_COLOR_WHITE, width=_LINE_WIDTH)
     draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
     draw.line((2 * cx, 0, 2 * cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
-    return _SaveWithMeta(img)
+    return SaveWithMeta(img)
 
 
-def _PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:
+def SaveWithMeta(img: PILImage.Image, *, extra_meta: dict[str, str] | None = None) -> bytes:
+  """Save a PIL image to PNG bytes, including its metadata.
+
+  Args:
+    img: The PIL image to save.
+    extra_meta: Optional additional metadata to include in the PNG.
+
+  Returns:
+    The PNG image data as bytes.
+
+  Raises:
+    Error: if there are issues saving the image or with the metadata.
+
+  """
+  # we have to re-copy the metadata from the original image
+  png_meta = PngImagePlugin.PngInfo()
+  for k, v in img.info.items():
+    if not isinstance(k, str):
+      raise Error(f'Unexpected non-string PNG metadata pair: {k!r}: {v!r}')
+    png_meta.add_text(k, str(v))
+  if extra_meta:
+    for k, v in extra_meta.items():
+      png_meta.add_text(k, v)
+  # save to PNG bytes, return
+  output = io.BytesIO()
+  img.save(output, format='PNG', pnginfo=png_meta)
+  return output.getvalue()
+
+
+def AddEvaluationMetaToImage(img_data: bytes, response: tbase.JSONDict) -> bytes:
+  """Add LLM evaluation info to the image metadata and return the modified PNG bytes.
+
+  Args:
+    img_data: The original PNG image data as bytes.
+    response: The LLM evaluation response to add to the metadata.
+
+  Returns:
+    The modified PNG image data as bytes, with the evaluation info added to the metadata.
+
+  """
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    return SaveWithMeta(img, extra_meta={META_EVALUATION_KEY: json.dumps(response)})
+
+
+def PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:
   """Get the RGB color for a histogram-equalized normalized palette position.
 
   Smoothly interpolates between adjacent stops in the specified palette, cycling
@@ -482,16 +529,3 @@ def _PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:
     int(g0 + frac * (g1 - g0)),
     int(b0 + frac * (b1 - b0)),
   )
-
-
-def _SaveWithMeta(img: PILImage.Image) -> bytes:
-  # we have to re-copy the metadata from the original image
-  png_meta = PngImagePlugin.PngInfo()
-  for k, v in img.info.items():
-    if not isinstance(k, str):
-      raise Error(f'Unexpected non-string PNG metadata pair: {k!r}: {v!r}')
-    png_meta.add_text(k, str(v))
-  # save to PNG bytes, return
-  output = io.BytesIO()
-  img.save(output, format='PNG', pnginfo=png_meta)
-  return output.getvalue()

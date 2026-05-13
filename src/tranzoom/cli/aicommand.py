@@ -26,6 +26,10 @@ from tranzoom.core import fractal, frame, image
 
 _WIDTH: int = 512  # square frames only!
 _MEMORY_SIZE: int = 3  # number of iterations the LLM will remember
+_MODEL_ID: str = 'qwen3-vl-32b-instruct@q8_0'  # TODO: option
+# _MODEL_ID: str = 'qwen3-vl-32b-instruct@f16'
+# _MODEL_ID: str = 'qwen/qwen3.5-35b-a3b@q8_0'
+
 
 _AI_SETUP_THIRDS_PROMPT: str = """
 You are guiding an automated zoom through Mandelbrot set images.
@@ -110,60 +114,64 @@ class ZoomSectorChoice(pydantic.BaseModel):
 _AI_SETUP_THIRDS_SCORING_PROMPT: str = """
 Evaluate Mandelbrot Set images for an automated zoom search.
 
-Each image frame is divided by white grid lines into 9 equal sectors:
+Each image is divided by white grid lines into 9 equal sectors:
 
-  NW | N | NE
-   W | C | E
-  SW | S | SE
+  1 | 2 | 3
+  4 | 5 | 6
+  7 | 8 | 9
 
-Score every sector from 0 to 10 according to how promising it is as the next zoom target.
-Score based on visible Mandelbrot structure and long-term zoom promise.
+Score each sector from 0 to 100 for how promising it is as the next zoom target.
 
-High scores should go to sectors with:
-- dense fractal boundary activity;
-- fine filaments, branching, dendrites, antennas, or lace-like structures;
-- spirals, curls, embedded minibrots, bulbs, or repeated self-similar forms;
-- sharp transitions between interior and exterior regions;
-- rich detail at several visible scales;
-- visually distinctive, asymmetric, or novel structures.
+Score high when a sector has:
+- dense visible fractal complexity;
+- fine detail at multiple scales;
+- sharp, intricate boundaries;
+- interesting shapes or visual novelty;
+- enough structure to make a beautiful zoom target.
 
-Low scores should go to sectors dominated by:
+Score low when a sector is dominated by:
 - smooth color bands;
-- large empty exterior regions;
-- large black or solid-color interiors;
-- featureless gradients;
-- blurry, low-detail, or repetitive texture without clear structure.
+- large empty or featureless areas;
+- large black or solid-color regions;
+- detail limited to only a small edge or corner.
 
-Scoring calibration:
-- 9 or 10: exceptional target; dense, beautiful, multi-scale fractal structure.
-- 7 or 8: very strong target; rich boundary detail and interesting forms.
-- 5 or 6: good target; meaningful structure but less exceptional.
-- 3 or 4: moderate; some activity but not a standout.
-- 2: weak; mostly smooth, sparse, or low-detail.
-- 0 or 1: poor; empty, flat, black, or nearly featureless.
+Calibration:
+- 90-100: exceptional; clearly one of the best possible zoom targets in the image.
+- 70-89: strong; rich structure with limited empty area.
+- 50-69: good; some clear structure, but not exceptional.
+- 30-49: weak/moderate; partial structure or large smooth areas.
+- 0-29: poor; mostly smooth, empty, solid, or featureless.
 
-Important:
-- Score all 9 sectors independently based on the sector's visible Mandelbrot structures.
-- Do not give every sector similar scores unless the image truly warrants it.
-- Do not favor the center sector automatically, score based on visible Mandelbrot structure.
-- Do not favor the previous movement direction automatically, score based on visible Mandelbrot structure.
-- Return a brief reason for each sector score.
-""".strip()  # noqa: E501
+Rules:
+- Score only what is visibly inside each sector.
+- Use the full score range.
+- Avoid score compression.
+- Do not favor the center or the previous direction.
+- Usually fewer than three sectors should score above 70.
+- A sector with more than one third smooth/empty area should usually score below 60.
+- A sector with more than half smooth/empty area should usually score below 40.
+- Return one short reason for each sector.
+""".strip()
 
 _AI_IMAGE_THIRDS_SCORING_PROMPT: str = """
-Inspect the current Mandelbrot Set image divided into 9 equal sectors:
+Inspect the Mandelbrot image divided into 9 sectors:
 
-  NW | N | NE
-   W | C | E
-  SW | S | SE
+  1 | 2 | 3
+  4 | 5 | 6
+  7 | 8 | 9
 
-For each sector, assign a score from 0 to 10 based on:
-1. density of Mandelbrot boundary detail;
-2. fine branching, filaments, dendrites, antennas, spirals, curls, or minibrots;
-3. sharp transitions and multi-scale structure;
-4. novelty and visual beauty;
-5. avoidance of empty smooth bands, flat black areas, and featureless regions;
-6. how promising that sector is as the next zoom target.
+For each sector, assign a 0 to 100 score for next-zoom promise. Judge mainly by:
+- visible fractal complexity;
+- amount of fine detail;
+- boundary intricacy;
+- visual beauty or novelty;
+- how much of the sector is smooth, empty, black, or featureless.
+
+Before returning, compare sectors against the best sector in this image:
+- best sector: usually 85+;
+- strong alternatives: usually 10 to 20 points lower;
+- partial detail with large smooth areas: usually 30 to 50 points lower;
+- mostly smooth sectors: usually 50+ points lower.
 
 Return exactly one score and one short reason for each sector.
 """.strip()
@@ -172,7 +180,14 @@ Return exactly one score and one short reason for each sector.
 class SectorEvaluation(pydantic.BaseModel):
   """Visual quality evaluation for one Mandelbrot image sector."""
 
-  sector: ZoomSector = pydantic.Field(description='The sector being evaluated')
+  sector: int = pydantic.Field(
+    ge=1,
+    le=9,
+    description=(
+      'The sector being evaluated, from 1 to 9, '
+      'starting from top-left and going left-to-right, top-to-bottom'
+    ),
+  )
 
   score: int = pydantic.Field(
     ge=0,
@@ -195,7 +210,7 @@ class ZoomSectorScoring(pydantic.BaseModel):
   sectors: list[SectorEvaluation] = pydantic.Field(
     min_length=9,
     max_length=9,
-    description='Exactly one evaluation for each sector: NW, N, NE, W, C, E, SW, S, SE',
+    description='Exactly one evaluation for each sector, from 1 to 9',
   )
 
   @pydantic.model_validator(mode='after')
@@ -209,10 +224,10 @@ class ZoomSectorScoring(pydantic.BaseModel):
       Error: If the sectors do not contain exactly one evaluation for each of the 9 sectors.
 
     """
-    if {item.sector for item in self.sectors} != _FRAME_SECTORS:
-      raise fractal.Error(f'sectors must have exactly these sectors once: {sorted(_FRAME_SECTORS)}')
-    if len(self.sectors) != len(_FRAME_SECTORS):
-      raise fractal.Error('sectors must not contain duplicates')
+    if len(self.sectors) != 9:  # noqa: PLR2004
+      raise fractal.Error('sectors should be exactly 9 and must not contain duplicates')
+    if (sect := {item.sector for item in self.sectors}) != set(range(1, 10)):
+      raise fractal.Error(f'exactly one evaluation for each sector from 1 to 9, got {sorted(sect)}')
     return self
 
   def BestEvaluation(self) -> SectorEvaluation:
@@ -224,14 +239,42 @@ class ZoomSectorScoring(pydantic.BaseModel):
     """
     return max(self.sectors, key=lambda item: item.score)
 
-  def BestSector(self) -> ZoomSector:
-    """Get the sector with the highest score.
+  def JSON(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dict representation of this ZoomSectorScoring.
 
     Returns:
-      The ZoomSector with the highest score.
+      A dict with a "sectors" key containing a list of dicts for each sector evaluation.
 
     """
-    return self.BestEvaluation().sector
+    return {'sectors': [item.model_dump() for item in self.sectors]}
+
+  @staticmethod
+  def FromJSON(json_dict: tbase.JSONDict) -> ZoomSectorScoring:
+    """Create a ZoomSectorScoring instance from a JSON dict.
+
+    Args:
+      json_dict: A dict with a "sectors" key containing a list of dicts for each sector evaluation.
+
+    Returns:
+      A ZoomSectorScoring instance created from the JSON dict.
+
+    Raises:
+      Error: invalid JSON format or missing/invalid fields in the sector evaluations
+
+    """
+    if 'sectors' not in json_dict:
+      raise fractal.Error('missing "sectors" key in JSON dict')
+    if not isinstance(json_dict['sectors'], list):
+      raise fractal.Error('"sectors" key must be a list of sector evaluations')
+    sectors: list[SectorEvaluation] = []
+    for item in json_dict['sectors']:
+      if not isinstance(item, dict):
+        raise fractal.Error('each sector evaluation must be a dict')
+      try:
+        sectors.append(SectorEvaluation.model_validate(item))
+      except pydantic.ValidationError as err:
+        raise fractal.Error(f'invalid sector evaluation: {err}') from err
+    return ZoomSectorScoring(sectors=sectors)
 
 
 _AI_SETUP_CARDINAL_PROMPT: str = """
@@ -303,9 +346,9 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
   with lms.LMStudioWorker(free_resources=True) as worker:
     worker.LoadModel(
       ai.MakeAIModelConfig(
-        model_id='qwen3-vl-32b-instruct@q8_0',
+        model_id=_MODEL_ID,
         vision=True,
-        temperature=0.9,  # only override the ones you care about!
+        temperature=0.2,  # only override the ones you care about!
         # all other fields will have sensible defaults; currently also supported are:
         # seed, context, gpu_ratio, gpu_layers, use_mmap, fp16, flash, spec_tokens, kv_cache
       )
@@ -342,18 +385,6 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
         f'precision {frm.precision} bits, {magnification_str} magnification\n'
         f'{img_hash!r} in {tmr}, escape range {img.escape_range}'
       )
-      # save image?
-      full_path: pathlib.Path = image.MakeImagePath(
-        config.img_output_path,
-        config.img_use_date,
-        config.img_use_hash,
-        config.img_path_prefix,
-        img_hash,
-        tm=zoom_tm,
-        add_serial=count,
-      )
-      full_path.write_bytes(img_data)
-      config.console.print(f'Saved to "{full_path}"')
       # wipe memory of iterations older than _MEMORY_SIZE
       if json_chat is not None:
         messages: list[tbase.JSONDict] = cast('list[tbase.JSONDict]', json_chat['messages'])
@@ -367,7 +398,7 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
       config.console.print()
       with timer.Timer(emit_log=False) as tmr:
         response, json_chat = worker.ModelCall(
-          'qwen3-vl-32b-instruct@q8_0',
+          _MODEL_ID,
           _AI_SETUP_THIRDS_SCORING_PROMPT,
           _AI_IMAGE_THIRDS_SCORING_PROMPT,
           ZoomSectorScoring,
@@ -381,10 +412,9 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
       diagonal_step: gmpy2.mpq = frame_sz * frame.DEFAULT_MPQ_STEP_DIAGONAL
       # now move the center according to the direction, if requested
       best: SectorEvaluation = response.BestEvaluation()
-      import pdb
-
-      pdb.set_trace()
-      direction = best.sector.upper().strip()
+      direction = {1: 'NW', 2: 'N', 3: 'NE', 4: 'W', 5: 'C', 6: 'E', 7: 'SW', 8: 'S', 9: 'SE'}[
+        best.sector
+      ]
       if direction == 'C':
         pass  # no movement, zoom in place
       elif direction == 'N':
@@ -412,6 +442,19 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
       config.console.print(
         f'MODEL: move {direct_step} => {direction}-wards (in {tmr})\n{best.score}/{best.reason}'
       )
+      # save image
+      full_path: pathlib.Path = image.MakeImagePath(
+        config.img_output_path,
+        config.img_use_date,
+        config.img_use_hash,
+        config.img_path_prefix,
+        img_hash,
+        tm=zoom_tm,
+        add_serial=count,
+      )
+      img_data = image.AddEvaluationMetaToImage(img_data, response.JSON())
+      full_path.write_bytes(img_data)
+      config.console.print(f'Saved to "{full_path}"')
       # build the new frame
       frm = frame.Frame.FromCenter(
         frame.Fractal.MANDELBROT, center_mpq_re, center_mpq_im, frame_sz / frame.DEFAULT_MPQ_ZOOM
