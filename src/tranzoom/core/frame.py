@@ -33,13 +33,13 @@ PrecisionContext: abc.Callable[[], gmpy2.context] = lambda: gmpy2.local_context(
 # gmpy2.mpq constants
 _MPQ_TWO: gmpy2.mpq = gmpy2.mpq('2')
 _MPQ_MAX_IMAGE_SIZE: gmpy2.mpq = gmpy2.mpq(MAX_IMAGE_SIZE)
-_MPQ_SQRT_TWO: gmpy2.mpq = gmpy2.mpq('1.4142135623730951')  # good enough for our purposes
+_MPQ_SQRT_TWO_NOT_PRECISE: gmpy2.mpq = gmpy2.mpq('99/70')  # good enough for our purposes
 # constant to divide frame size when zooming one step
 DEFAULT_MPQ_ZOOM: gmpy2.mpq = gmpy2.mpq('4/3')
 # fraction of frame size to move when moving in a cardinal direction
-DEFAULT_STEP_DIRECT: int = 7
+DEFAULT_STEP_DIRECT: int = 3
 DEFAULT_MPQ_STEP_DIRECT: gmpy2.mpq = gmpy2.mpq(f'1/{DEFAULT_STEP_DIRECT}')
-DEFAULT_MPQ_STEP_DIAGONAL: gmpy2.mpq = DEFAULT_MPQ_STEP_DIRECT / _MPQ_SQRT_TWO
+DEFAULT_MPQ_STEP_DIAGONAL: gmpy2.mpq = DEFAULT_MPQ_STEP_DIRECT / _MPQ_SQRT_TWO_NOT_PRECISE
 
 # Frame: the default frame is the one that shows the whole Mandelbrot set, which is centered at
 # -0.75+0j and has width 2.5; the height is the same as the width by default;
