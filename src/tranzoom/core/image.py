@@ -54,6 +54,15 @@ META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:iter_depth:search'  # int, can be "-1" if
 N_BYTES_UINT: int = 4  # we use array of unsigned ints to store pixel data
 type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel data array
 
+# constants for drawing
+
+_SQRT_TWO: float = math.sqrt(2)
+_LINE_WIDTH: int = 2
+_CIRCLE_RADIUS: int = 20
+_LABEL_OFFSET: int = 5
+_COLOR_WHITE: tuple[int, int, int] = (255, 255, 255)
+_COLOR_GREEN: tuple[int, int, int] = (0, 255, 0)
+
 
 class Error(frame.Error):
   """Base image exception."""
@@ -313,6 +322,130 @@ def MakeImagePath(
   return pathlib.Path(filename) if img_output_path is None else img_output_path / filename
 
 
+def GetBasicDataFromPNG(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:
+  """Get basic data from a PNG image, including format, size, hash, and metadata text.
+
+  Args:
+    img_bytes: The PNG image data as bytes.
+
+  Returns:
+    (width, height, hash, metadata) where:
+      - width: The width of the image in pixels.
+      - height: The height of the image in pixels.
+      - hash: A hash of the image data (SHA256 of RGB bytes).
+      - metadata: The extracted metadata from the image.
+
+  Raises:
+    Error: If the image format is unsupported or if there are issues processing the image.
+
+  """
+  with PILImage.open(io.BytesIO(img_bytes)) as img:
+    # make sure format is PNG
+    if (img.format or '').upper() != 'PNG':
+      raise Error(f'Unsupported image format {img.format!r}, expected PNG')
+    # get the internal data we need (size and hash)
+    width: int = img.width
+    height: int = img.height
+    if width < 1 or height < 1:
+      raise Error(f'Invalid image size {width}x{height}')
+    raw_hash: str = hashes.Hash256(img.convert('RGB').tobytes()).hex()  # not 'RGBA'!!
+    # extract metadata from PNG
+    pil_info: tbase.JSONDict = img.info  # type: ignore[assignment]
+  return (width, height, raw_hash, pil_info)
+
+
+def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
+  """Draw an overlay on the (512x512) image with target info for moving the zoom frame.
+
+  Overlays is:
+  - white lines delimiting the quadrants of the image, intersecting at the center
+  - 8 green circles around the center, indicating the 8 cardinal and ordinal directions
+    to move the frame
+  - each circle has a green label with its direction: "N", "NE", "E", "SE", "S", "SW", "W", "NW"
+
+  Works on any size image, but is designed for 512x512, especially because of:
+  - line width and circle radius are fixed
+  - text labels are fixed size and positioned with a fixed offset from the circle's center
+  Fix these and it can work well on other sizes too...
+
+  Args:
+    img_data: The PNG image data as bytes.
+
+  Returns:
+    The modified PNG image data with the overlay drawn.
+
+  """
+  w: int
+  h: int
+  cx: int
+  cy: int
+  x: int
+  y: int
+  # open the image
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    # draw the quadrant lines
+    draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
+    w, h = img.size
+    cx, cy = w // 2, h // 2
+    step_sz: int = w // frame.DEFAULT_STEP_DIRECT
+    draw.line((0, cy, w, cy), fill=_COLOR_WHITE, width=_LINE_WIDTH)
+    draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
+    # draw 8 circles around the center to indicate the 8 cardinal/ordinal directions
+    font: ImageFont.ImageFont = cast('ImageFont.ImageFont', ImageFont.load_default())
+    for dx, dy, direction in [
+      (0, -step_sz, 'N'),
+      (step_sz / _SQRT_TWO, -step_sz / _SQRT_TWO, 'NE'),
+      (step_sz, 0, 'E'),
+      (step_sz / _SQRT_TWO, step_sz / _SQRT_TWO, 'SE'),
+      (0, step_sz, 'S'),
+      (-step_sz / _SQRT_TWO, step_sz / _SQRT_TWO, 'SW'),
+      (-step_sz, 0, 'W'),
+      (-step_sz / _SQRT_TWO, -step_sz / _SQRT_TWO, 'NW'),
+    ]:
+      x, y = int(cx + dx), int(cy + dy)
+      draw.ellipse(
+        (x - _CIRCLE_RADIUS, y - _CIRCLE_RADIUS, x + _CIRCLE_RADIUS, y + _CIRCLE_RADIUS),
+        outline=_COLOR_GREEN,
+        width=_LINE_WIDTH,
+      )
+      # for each circle, also draw the label text
+      draw.text((x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=_COLOR_GREEN, font=font)
+    # done
+    return _SaveWithMeta(img)
+
+
+def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
+  """Draw an overlay on the image with target info for moving the zoom frame.
+
+  Overlays is:
+  - white lines delimiting the 9 sections of the image
+
+  Works on any size image... maybe the fixed line width could adapt, but mostly good.
+
+  Args:
+    img_data: The PNG image data as bytes.
+
+  Returns:
+    The modified PNG image data with the overlay drawn.
+
+  """
+  w: int
+  h: int
+  cx: int
+  cy: int
+  # open the image
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    # draw the thirds lines
+    draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
+    w, h = img.size
+    cx, cy = w // 3, h // 3
+    draw.line((0, cy, w, cy), fill=_COLOR_WHITE, width=_LINE_WIDTH)
+    draw.line((0, 2 * cy, w, 2 * cy), fill=_COLOR_WHITE, width=_LINE_WIDTH)
+    draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
+    draw.line((2 * cx, 0, 2 * cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
+    return _SaveWithMeta(img)
+
+
 def _PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:
   """Get the RGB color for a histogram-equalized normalized palette position.
 
@@ -351,111 +484,14 @@ def _PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:
   )
 
 
-def GetBasicDataFromPNG(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:
-  """Get basic data from a PNG image, including format, size, hash, and metadata text.
-
-  Args:
-    img_bytes: The PNG image data as bytes.
-
-  Returns:
-    (width, height, hash, metadata) where:
-      - width: The width of the image in pixels.
-      - height: The height of the image in pixels.
-      - hash: A hash of the image data (SHA256 of RGB bytes).
-      - metadata: The extracted metadata from the image.
-
-  Raises:
-    Error: If the image format is unsupported or if there are issues processing the image.
-
-  """
-  with PILImage.open(io.BytesIO(img_bytes)) as img:
-    # make sure format is PNG
-    if (img.format or '').upper() != 'PNG':
-      raise Error(f'Unsupported image format {img.format!r}, expected PNG')
-    # get the internal data we need (size and hash)
-    width: int = img.width
-    height: int = img.height
-    if width < 1 or height < 1:
-      raise Error(f'Invalid image size {width}x{height}')
-    raw_hash: str = hashes.Hash256(img.convert('RGB').tobytes()).hex()  # not 'RGBA'!!
-    # extract metadata from PNG
-    pil_info: tbase.JSONDict = img.info  # type: ignore[assignment]
-  return (width, height, raw_hash, pil_info)
-
-
-_SQRT_TWO: float = math.sqrt(2)
-_LINE_WIDTH: int = 2
-_CIRCLE_RADIUS: int = 20
-_LABEL_OFFSET: int = 5
-_COLOR_WHITE: tuple[int, int, int] = (255, 255, 255)
-_COLOR_GREEN: tuple[int, int, int] = (0, 255, 0)
-
-
-def DrawInfoOverlay(img_data: bytes) -> bytes:
-  """Draw an overlay on the (512x512) image with target info for moving the zoom frame.
-
-  Overlays is:
-  - white lines delimiting the quadrants of the image, intersecting at the center
-  - 8 green circles around the center, indicating the 8 cardinal and ordinal directions
-    to move the frame
-  - each circle has a green label with its direction: "N", "NE", "E", "SE", "S", "SW", "W", "NW"
-
-  Works on any size image, but is designed for 512x512, especially because of:
-  - line width and circle radius are fixed
-  - text labels are fixed size and positioned with a fixed offset from the circle's center
-  Fix these and it can work well on other sizes too...
-
-  Args:
-    img_data: The PNG image data as bytes.
-
-  Returns:
-    The modified PNG image data with the overlay drawn.
-
-  Raises:
-    Error: If there are issues processing the image or drawing the overlay.
-
-  """
-  w: int
-  h: int
-  cx: int
-  cy: int
-  x: int
-  y: int
-  # open the image
-  with PILImage.open(io.BytesIO(img_data)) as img:
-    # draw the quadrant lines
-    draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
-    w, h = img.size
-    cx, cy = w // 2, h // 2
-    step_sz: int = w // frame.DEFAULT_STEP_DIRECT
-    draw.line((0, cy, w, cy), fill=_COLOR_WHITE, width=_LINE_WIDTH)
-    draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
-    # draw 8 circles around the center to indicate the 8 cardinal/ordinal directions
-    font: ImageFont.ImageFont = cast('ImageFont.ImageFont', ImageFont.load_default())
-    for dx, dy, direction in [
-      (0, -step_sz, 'N'),
-      (step_sz / _SQRT_TWO, -step_sz / _SQRT_TWO, 'NE'),
-      (step_sz, 0, 'E'),
-      (step_sz / _SQRT_TWO, step_sz / _SQRT_TWO, 'SE'),
-      (0, step_sz, 'S'),
-      (-step_sz / _SQRT_TWO, step_sz / _SQRT_TWO, 'SW'),
-      (-step_sz, 0, 'W'),
-      (-step_sz / _SQRT_TWO, -step_sz / _SQRT_TWO, 'NW'),
-    ]:
-      x, y = int(cx + dx), int(cy + dy)
-      draw.ellipse(
-        (x - _CIRCLE_RADIUS, y - _CIRCLE_RADIUS, x + _CIRCLE_RADIUS, y + _CIRCLE_RADIUS),
-        outline=_COLOR_GREEN,
-        width=_LINE_WIDTH,
-      )
-      # for each circle, also draw the label text
-      draw.text((x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=_COLOR_GREEN, font=font)
-    # done: save and remember to preserve the original metadata
-    png_meta = PngImagePlugin.PngInfo()
-    for k, v in img.info.items():
-      if not isinstance(k, str):
-        raise Error(f'Unexpected non-string PNG metadata pair: {k!r}: {v!r}')
-      png_meta.add_text(k, str(v))
-    output = io.BytesIO()
-    img.save(output, format='PNG', pnginfo=png_meta)
-    return output.getvalue()
+def _SaveWithMeta(img: PILImage.Image) -> bytes:
+  # we have to re-copy the metadata from the original image
+  png_meta = PngImagePlugin.PngInfo()
+  for k, v in img.info.items():
+    if not isinstance(k, str):
+      raise Error(f'Unexpected non-string PNG metadata pair: {k!r}: {v!r}')
+    png_meta.add_text(k, str(v))
+  # save to PNG bytes, return
+  output = io.BytesIO()
+  img.save(output, format='PNG', pnginfo=png_meta)
+  return output.getvalue()
