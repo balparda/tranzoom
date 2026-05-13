@@ -116,5 +116,5 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
   config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')
   config.console.print(f'[green]{w}x{h}[/green] (wxh) / [cyan]{png_hash}[/cyan]')
   config.console.print()
-  config.console.print(f'[white]{json.dumps(info, indent=2)}[/white]')
+  config.console.print(json.dumps(info, indent=2), style='white', markup=False)
   config.console.print()
