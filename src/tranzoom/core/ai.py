@@ -154,7 +154,7 @@ def ZoomLoop(
         print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
         with timer.Timer(emit_log=False) as tmr:
           response, json_chat = worker.ModelCall(
-            _MODEL_ID,
+            model,
             queries.AI_SETUP_THIRDS_SCORING_PROMPT,
             queries.AI_IMAGE_THIRDS_SCORING_PROMPT,
             queries.ZoomSectorScoring,
