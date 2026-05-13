@@ -9,8 +9,6 @@ README.md has good examples for different zoom levels.
 
 from __future__ import annotations
 
-import json
-import logging
 import pathlib
 from typing import Literal, cast
 
@@ -98,6 +96,17 @@ Return only the structured command.
 
 type ZoomSector = Literal['NW', 'N', 'NE', 'W', 'C', 'E', 'SW', 'S', 'SE']
 _FRAME_SECTORS: set[str] = {'NW', 'N', 'NE', 'W', 'C', 'E', 'SW', 'S', 'SE'}
+_DIRECTION_MAP: dict[int, str] = {
+  1: 'NW',
+  2: 'N',
+  3: 'NE',
+  4: 'W',
+  5: 'C',
+  6: 'E',
+  7: 'SW',
+  8: 'S',
+  9: 'SE',
+}
 
 
 class ZoomSectorChoice(pydantic.BaseModel):
@@ -355,7 +364,7 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
         ai.MakeAIModelConfig(
           model_id=_MODEL_ID,
           vision=True,
-          temperature=0.2,  # only override the ones you care about!
+          temperature=0.33,  # TODO: option
           # all other fields will have sensible defaults; currently also supported are:
           # seed, context, gpu_ratio, gpu_layers, use_mmap, fp16, flash, spec_tokens, kv_cache
         )
@@ -403,6 +412,7 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
           f'{img_hash!r} in {tmr}, escape range {img.escape_range}, will save as "{full_path}"'
         )
         if iterm:
+          config.console.print()
           image.PrintITerm2(img_data)
         # wipe memory of iterations older than _MEMORY_SIZE
         if json_chat is not None:
@@ -432,9 +442,7 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
         diagonal_step: gmpy2.mpq = frame_sz * frame.DEFAULT_MPQ_STEP_DIAGONAL
         # now move the center according to the direction, if requested
         best: SectorEvaluation = response.BestEvaluation()
-        direction = {1: 'NW', 2: 'N', 3: 'NE', 4: 'W', 5: 'C', 6: 'E', 7: 'SW', 8: 'S', 9: 'SE'}[
-          best.sector
-        ]
+        direction = _DIRECTION_MAP[best.sector]
         if direction == 'C':
           pass  # no movement, zoom in place
         elif direction == 'N':
@@ -460,12 +468,16 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
         else:
           raise ValueError(f'invalid direction: {direction!r}')
         config.console.print(
-          f'MODEL: move {direct_step} => {direction}-wards (in {tmr})\n{best.score}/{best.reason}'
+          f'[yellow]MODEL: move [bold]{best.sector}/{direction}-wards[/][/] (in {tmr})'
         )
+        for sector_eval in sorted(response.sectors, key=lambda item: item.score, reverse=True):
+          config.console.print(
+            f'#{sector_eval.sector}/[green]{_DIRECTION_MAP[sector_eval.sector]}[/]: '
+            f'{sector_eval.score} - {sector_eval.reason}'
+          )
+        config.console.print()
         # log and save the image, adding the response evaluation as metadata on top of the image
-        response_json: tbase.JSONDict = response.JSON()
-        logging.info(json.dumps(response_json, indent=2))
-        full_path.write_bytes(image.AddEvaluationMetaToImage(img_data, response_json))
+        full_path.write_bytes(image.AddEvaluationMetaToImage(img_data, response.JSON()))
         # stop if we've reached the maximum number of steps
         if max_steps > 0 and count >= max_steps:
           config.console.print('[yellow]Reached maximum zoom step(s), stopping.[/yellow]')
