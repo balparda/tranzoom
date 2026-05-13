@@ -134,11 +134,11 @@ Score low when a sector is dominated by:
 - detail limited to only a small edge or corner.
 
 Calibration:
-- 90-100: exceptional; clearly one of the best possible zoom targets in the image.
-- 70-89: strong; rich structure with limited empty area.
-- 50-69: good; some clear structure, but not exceptional.
-- 30-49: weak/moderate; partial structure or large smooth areas.
-- 0-29: poor; mostly smooth, empty, solid, or featureless.
+- 85 to 100: exceptional; only for the best 1 or 2 sectors in this image.
+- 70 to 84: strong; rich structure, but not the very best.
+- 50 to 69: good; clear structure with some smooth area.
+- 30 to 49: weak/moderate; partial structure or large smooth areas.
+- 0 to 29: poor; mostly smooth, empty, solid, or featureless.
 
 Rules:
 - Score only what is visibly inside each sector.
@@ -149,6 +149,11 @@ Rules:
 - A sector with more than one third smooth/empty area should usually score below 60.
 - A sector with more than half smooth/empty area should usually score below 40.
 - Return one short reason for each sector.
+
+Reasoning rules:
+- Use plain visual descriptions only: dense detail, fine texture, sharp boundary, smooth area, dark area, empty area, edge detail.
+- Avoid naming specific Mandelbrot structures unless they are unmistakable.
+- Scores are relative within the image: normally only the best 1 or 2 sectors should score 90+.
 """.strip()
 
 _AI_IMAGE_THIRDS_SCORING_PROMPT: str = """
