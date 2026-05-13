@@ -119,6 +119,7 @@ For each sector, assign a 0 to 100 score in `fractal_score` for next-zoom promis
 - visible fractal complexity;
 - amount of fine detail;
 - boundary intricacy;
+- not falling into an infinite recursion vanishing point;
 - visual beauty or novelty;
 - how much of the sector is smooth, empty, black, or featureless.
 
