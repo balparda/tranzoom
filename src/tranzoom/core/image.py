@@ -60,7 +60,7 @@ type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel
 # constants for drawing
 
 _SQRT_TWO: float = math.sqrt(2)
-_LINE_WIDTH: int = 2
+_LINE_WIDTH: int = 3
 _CIRCLE_RADIUS: int = 20
 _LABEL_OFFSET: int = 5
 _COLOR_WHITE: tuple[int, int, int] = (255, 255, 255)
@@ -452,16 +452,17 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
     draw.line((2 * cx, 0, 2 * cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
     # draw large number labels centered in each of the 9 sections, left-to-right, top-to-bottom
     label_font: ImageFont.FreeTypeFont = cast(
-      'ImageFont.FreeTypeFont', ImageFont.load_default(size=int(min(cx, cy) / 1.5))
+      'ImageFont.FreeTypeFont', ImageFont.load_default(size=int(min(cx, cy) / 3))
     )
     for row in range(3):
       for col in range(3):
-        label: str = str(row * 3 + col + 1)
-        # compute the center of this section
-        sx: int = col * cx + cx // 2
-        sy: int = row * cy + cy // 2
-        # draw text with 'mm' anchor to center it exactly on (sx, sy)
-        draw.text((sx, sy), label, fill=_COLOR_GREEN, font=label_font, anchor='mm')
+        draw.text(
+          (col * cx + cx // 2, row * cy + cy // 2),  # center of this section
+          str(row * 3 + col + 1),  # label
+          fill=_COLOR_GREEN,
+          font=label_font,
+          anchor='mm',  # center it exactly
+        )
     # done
     return SaveWithMeta(img)
 
