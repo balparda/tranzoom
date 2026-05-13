@@ -382,10 +382,20 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
           img_data = image.DrawThirdsInfoOverlay(img_data)
         last_direction: str = f'Last move was "{direction}": ' if direction is not None else ''
         # log!
+        full_path: pathlib.Path = image.MakeImagePath(
+          config.img_output_path,
+          config.img_use_date,
+          config.img_use_hash,
+          config.img_path_prefix,
+          img_hash,
+          tm=zoom_tm,
+          add_serial=count,
+        )
+        config.console.print(f'Saved to "{full_path}"')
         config.console.print(
           f'\n{last_direction}Mandelbrot zoom (#{count}) with frame {frm}, '
           f'precision {frm.precision} bits, {magnification_str} magnification\n'
-          f'{img_hash!r} in {tmr}, escape range {img.escape_range}'
+          f'{img_hash!r} in {tmr}, escape range {img.escape_range}, will save as "{full_path}"'
         )
         if iterm:
           image.PrintITerm2(img_data)
@@ -447,30 +457,18 @@ def AI(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR09
         config.console.print(
           f'MODEL: move {direct_step} => {direction}-wards (in {tmr})\n{best.score}/{best.reason}'
         )
-        logging.info(json.dumps(response.JSON(), indent=2))
-        # save image
-        full_path: pathlib.Path = image.MakeImagePath(
-          config.img_output_path,
-          config.img_use_date,
-          config.img_use_hash,
-          config.img_path_prefix,
-          img_hash,
-          tm=zoom_tm,
-          add_serial=count,
-        )
-        img_data = image.AddEvaluationMetaToImage(img_data, response.JSON())
-        full_path.write_bytes(img_data)
-        config.console.print(f'Saved to "{full_path}"')
+        # log and save the image, adding the response evaluation as metadata on top of the image
+        response_json: tbase.JSONDict = response.JSON()
+        logging.info(json.dumps(response_json, indent=2))
+        full_path.write_bytes(image.AddEvaluationMetaToImage(img_data, response_json))
+        # stop if we've reached the maximum number of steps
+        if max_steps > 0 and count >= max_steps:
+          config.console.print('[yellow]Reached maximum zoom step(s), stopping.[/yellow]')
+          break
         # build the new frame
         frm = frame.Frame.FromCenter(
           frame.Fractal.MANDELBROT, center_mpq_re, center_mpq_im, frame_sz / frame.DEFAULT_MPQ_ZOOM
         )
-        # stop if we've reached the maximum number of steps
-        if max_steps > 0 and count >= max_steps:
-          config.console.print(
-            f'[yellow]Reached maximum of {max_steps} step(s), stopping.[/yellow]'
-          )
-          break
   except KeyboardInterrupt:
     config.console.print(f'\n[yellow]Interrupted by user on step {count}.[/yellow]')
-  config.console.print(f'AI zoom session ended: {count - 1} step(s) completed, last frame: {frm}')
+  config.console.print(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {frm}\n')
