@@ -58,7 +58,7 @@ Score each sector from 0 to 100 for how promising it is as the next zoom target 
 Return one short reason for each sector in `reason`.
 
 Score `fractal_score` high when a sector has:
-- dense visible fractal complexity;
+- dense visible fractal complexity that is not just endless repetition of the same pattern;
 - fine detail at multiple scales;
 - sharp, intricate boundaries;
 - interesting shapes or visual novelty;
@@ -68,7 +68,8 @@ Score `fractal_score` low when a sector is dominated by:
 - smooth color bands;
 - large empty or featureless areas;
 - large black or solid-color regions;
-- detail limited to only a small edge or corner.
+- detail limited to only a small edge or corner;
+- the central eye of an infinite spiral or infinite recursion.
 
 Calibration of `fractal_score` scores:
 - 85 to 100: exceptional; only for the best 1 or 2 sectors in this image.
@@ -91,6 +92,7 @@ Rules for `fractal_score` scoring:
 Reasoning rules:
 - Use plain visual descriptions only: dense detail, fine texture, sharp boundary, smooth area, dark area, empty area, edge detail.
 - Avoid naming specific Mandelbrot structures unless they are unmistakable.
+- Fractals are often just infinite recursion of the same pattern: stay away from the vanishing point of infinite recursions.
 - `fractal_score` scores are relative within the image: normally only the best 1 or 2 sectors should score 90+.
 """.strip()  # noqa: E501
 
