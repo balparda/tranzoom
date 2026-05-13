@@ -425,7 +425,7 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
 
   Overlays:
   - white lines delimiting the 9 sections of the image
-  - large yellow number labels (1-9) centered in each section, left-to-right, top-to-bottom
+  - large green number labels (1-9) centered in each section, left-to-right, top-to-bottom
 
   Works on any size image apart from the fixed line size. The text labels scale.
 
