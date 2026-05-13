@@ -113,7 +113,10 @@ Usage: mandel read [OPTIONS] IMAGE_PATH
 │ *    image_path      FILE  The local input file path, ex: "~/foo/bar/file.png"                                                                │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --help          Show this message and exit.                                                                                                             │
+│ --iterm    --no-iterm      If True, will output the image to iTerm2 (only use on macOS with iTerm2! <https://iterm2.com/documentation-images.html>); if │
+│                            False, will not output the image to iTerm2; default is False                                                                 │
+│                                                                                                                                      │
+│ --help                     Show this message and exit.                                                                                                  │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 

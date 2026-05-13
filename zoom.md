@@ -109,7 +109,11 @@ Usage: zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
                                                                                                                                                            
  Examples:                                                                                                                                                 
                                                                                                                                                            
- $ poetry run zoom ai
+ $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai                                                                                                      
+ <start with full set and zoom in using model Qwen 32>                                                                                                     
+                                                                                                                                                           
+ $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                         
+ <zoom in using model Qwen 32 with higher temperature 0.7, start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>
 ```
 
 ## `zoom markdown` Command

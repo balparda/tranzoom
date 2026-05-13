@@ -16,10 +16,9 @@ from transcrypto.utils import human, timer
 
 from tranzoom.core import fractal, frame, image, queries
 
-# TODO: add model options!
 _WIDTH: int = 512  # square frames only!
-_MEMORY_SIZE: int = 3  # number of iterations the LLM will remember
-_MODEL_ID: str = 'qwen3-vl-32b-instruct@q8_0'  # TODO: option
+DEFAULT_MEMORY_SIZE: int = 5  # default number of iterations the LLM will remember
+MAX_MEMORY_SIZE: int = 30  # maximum number of iterations the LLM will remember
 _DIRECTION_MAP: dict[int, str] = {
   1: 'NW',
   2: 'N',
@@ -56,6 +55,7 @@ def ZoomLoop(
   flash: bool,
   kv_cache: int | None,
   timeout: float,
+  memory: int,
   max_steps: int,
   iterm: bool,
   print_comm: abc.Callable[[str], None],
@@ -84,6 +84,8 @@ def ZoomLoop(
     flash: Whether to use flash attention for the model; default is False.
     kv_cache: Optional size of the key-value cache for the model; if None, use the model's default.
     timeout: The timeout (in seconds) for model operations.
+    memory: The number of previous iterations the LLM will remember in its chat history;
+        0 means no memory.
     max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
     iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
     print_comm: A rich console callable for printing messages.
@@ -96,7 +98,7 @@ def ZoomLoop(
     'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(
-    f'[yellow]Loading AI model [bold]{_MODEL_ID}[/]...[/] / {timer.TimeStr(zoom_tm)} ({zoom_tm})\n'
+    f'[yellow]Loading AI model [bold]{model}[/]...[/] / {timer.TimeStr(zoom_tm)} ({zoom_tm})\n'
   )
   count: int = 1
   try:
@@ -141,11 +143,13 @@ def ZoomLoop(
         # wipe memory of iterations older than _MEMORY_SIZE
         if json_chat is not None:
           messages: list[tbase.JSONDict] = cast('list[tbase.JSONDict]', json_chat['messages'])
-          if len(messages) > (2 * _MEMORY_SIZE + 1):  # +1 for the system prompt
+          if not memory:
+            json_chat = None  # no memory, start fresh every time
+          elif len(messages) > (2 * memory + 1):  # +1 for the system prompt
             json_chat = {
               # the pattern is: first message is the system prompt,
               # then a 'user' message alternating with 'assistant' messages
-              'messages': [messages[0], *messages[-2 * _MEMORY_SIZE :]]
+              'messages': [messages[0], *messages[-2 * memory :]]
             }
         # get AI verdict
         print_comm('')

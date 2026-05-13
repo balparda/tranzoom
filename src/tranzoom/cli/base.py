@@ -10,7 +10,7 @@ import pathlib
 import typer
 from transcrypto.cli import clibase
 
-from tranzoom.core import fractal, frame, palette
+from tranzoom.core import ai, fractal, frame, palette
 
 # global CLI data, and some test stuff
 
@@ -166,6 +166,18 @@ PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
   help=(
     f'Color palette to use for rendering; default is {palette.DEFAULT_PALETTE.value!r}; '
     f'available palettes: {sorted(p.value for p in palette.PALETTES)}'
+  ),
+)
+
+# AI Options
+MAX_CHAT_MEMORY_OPTION: typer.models.OptionInfo = typer.Option(
+  ai.DEFAULT_MEMORY_SIZE,
+  '--memory',
+  min=0,
+  max=ai.MAX_MEMORY_SIZE,
+  help=(
+    f'Maximum number of iterations the LLM will remember; 0 ≤ m ≤ {ai.MAX_MEMORY_SIZE}; '
+    f'0 (zero) means no memory, every AI call is independent; default is {ai.DEFAULT_MEMORY_SIZE}'
   ),
 )
 

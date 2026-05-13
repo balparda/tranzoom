@@ -67,7 +67,6 @@ _CIRCLE_RADIUS: int = 20
 _LABEL_OFFSET: int = 5
 _COLOR_WHITE: tuple[int, int, int] = (255, 255, 255)
 _COLOR_GREEN: tuple[int, int, int] = (0, 255, 0)
-_COLOR_YELLOW: tuple[int, int, int] = (255, 220, 0)
 
 
 class Error(frame.Error):
