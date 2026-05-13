@@ -118,7 +118,7 @@ def ZoomLoop(
   count: int = 1
   try:
     with lms.LMStudioWorker(timeout=timeout, free_resources=True) as worker:
-      worker.LoadModel(
+      model_config: transai_ai.AIModelConfig = worker.LoadModel(
         transai_ai.MakeAIModelConfig(
           vision=True,
           model_id=model,
@@ -133,7 +133,7 @@ def ZoomLoop(
           spec_tokens=spec_tokens,
           kv_cache=kv_cache,
         )
-      )
+      )[0]
       # main loop: runs until max_steps is reached, or Ctrl+C is pressed
       json_chat: tbase.JSONDict | None = None
       img_data: bytes
@@ -179,7 +179,20 @@ def ZoomLoop(
             chat_history=json_chat,
           )
         # save the image, adding the response evaluation as metadata on top of the image
-        full_path.write_bytes(image.AddEvaluationMetaToImage(img_data, response.JSON()))
+        full_path.write_bytes(
+          image.AddEvaluationMetaToImage(
+            img_data,
+            response.JSON(),
+            model,
+            temperature,
+            model_config['seed'] or 0,
+            memory,
+            setup_query,
+            image_query,
+            query,
+            count,
+          )
+        )
         # implement the move command
         frm = _MoveCenter(frm, query, response, tmr, target_weight, print_comm)
         # stop if we've reached the maximum number of steps

@@ -52,7 +52,15 @@ META_ITER_DEPTH_MIN_KEY = 'tranzoom:iter_depth:min'  # int
 META_ITER_DEPTH_MAX_KEY = 'tranzoom:iter_depth:max'  # int
 META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:iter_depth:search'  # int, can be "-1" if unknown or not set
 # extra keys added to some images only (for example, when the LLM evaluates the image)
-META_EVALUATION_KEY = 'tranzoom:image:evaluation'  # JSON with evaluation info from LLM
+META_LLM_MODEL_KEY = 'tranzoom:llm:model'
+META_LLM_TEMPERATURE_KEY = 'tranzoom:llm:temperature'
+META_LLM_SEED_KEY = 'tranzoom:llm:seed'
+META_LLM_QUERY_MEMORY_KEY = 'tranzoom:llm:query:memory'
+META_LLM_QUERY_SETUP_KEY = 'tranzoom:llm:query:setup'
+META_LLM_QUERY_IMAGE_KEY = 'tranzoom:llm:query:image'
+META_LLM_QUERY_MANUAL_KEY = 'tranzoom:llm:query:manual'
+META_LLM_RESULT_JSON_KEY = 'tranzoom:llm:result:json'  # JSON with evaluation info from LLM
+META_LLM_ZOOM_COUNT_KEY = 'tranzoom:llm:zoom:count'
 
 # image constants
 
@@ -497,19 +505,51 @@ def SaveWithMeta(img: PILImage.Image, *, extra_meta: dict[str, str] | None = Non
   return output.getvalue()
 
 
-def AddEvaluationMetaToImage(img_data: bytes, response: tbase.JSONDict) -> bytes:
+def AddEvaluationMetaToImage(
+  img_data: bytes,
+  response: tbase.JSONDict,
+  model: str,
+  temperature: float,
+  seed: int,
+  query_memory: int,
+  query_setup: str,
+  query_image: str,
+  query_manual: str | None,
+  count: int,
+) -> bytes:
   """Add LLM evaluation info to the image metadata and return the modified PNG bytes.
 
   Args:
     img_data: The original PNG image data as bytes.
     response: The LLM evaluation response to add to the metadata.
+    model: The LLM model used for evaluation.
+    temperature: The temperature setting used for the LLM evaluation.
+    seed: The random seed used for the LLM evaluation.
+    query_memory: The memory parameter used for the LLM evaluation.
+    query_setup: The setup query given to the LLM.
+    query_image: The image query given to the LLM.
+    query_manual: The manual query passed as extra into the query.
+    count: The zoom step count at which this evaluation was made.
 
   Returns:
     The modified PNG image data as bytes, with the evaluation info added to the metadata.
 
   """
   with PILImage.open(io.BytesIO(img_data)) as img:
-    return SaveWithMeta(img, extra_meta={META_EVALUATION_KEY: json.dumps(response)})
+    return SaveWithMeta(
+      img,
+      extra_meta={
+        META_LLM_MODEL_KEY: model,
+        META_LLM_TEMPERATURE_KEY: str(temperature),
+        META_LLM_SEED_KEY: str(seed),
+        META_LLM_QUERY_MEMORY_KEY: str(query_memory),
+        META_LLM_QUERY_SETUP_KEY: query_setup,
+        META_LLM_QUERY_IMAGE_KEY: query_image,
+        META_LLM_QUERY_MANUAL_KEY: query_manual or '',
+        META_LLM_RESULT_JSON_KEY: json.dumps(response),
+        META_LLM_ZOOM_COUNT_KEY: str(count),
+      },
+    )
 
 
 def PrintITerm2(img_data: bytes) -> None:
