@@ -97,14 +97,17 @@ Usage: zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; default is None, i.e, the same as width                                       │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --max-steps  -n                INTEGER RANGE   Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is 0     │
-│                                                      (unlimited, run forever)                                                                           │
+│ --memory                       INTEGER RANGE [0<=x<=30]  Maximum number of iterations the LLM will remember; 0 ≤ m ≤ 30; 0 (zero) means no memory,      │
+│                                                          every AI call is independent; default is 5                                                     │
 │                                                                                                                                             │
-│ --iterm          --no-iterm                          If True, will output the image to iTerm2 (only use on macOS with iTerm2!                           │
-│                                                      <https://iterm2.com/documentation-images.html>); if False, will not output the image to iTerm2;    │
-│                                                      default is False                                                                                   │
+│ --max-steps  -n                INTEGER RANGE       Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is 0 │
+│                                                          (unlimited, run forever)                                                                       │
+│                                                                                                                                             │
+│ --iterm          --no-iterm                              If True, will output the image to iTerm2 (only use on macOS with iTerm2!                       │
+│                                                          <https://iterm2.com/documentation-images.html>); if False, will not output the image to        │
+│                                                          iTerm2; default is False                                                                       │
 │                                                                                                                                      │
-│ --help                                               Show this message and exit.                                                                        │
+│ --help                                                   Show this message and exit.                                                                    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 
