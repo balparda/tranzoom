@@ -65,6 +65,7 @@ _CIRCLE_RADIUS: int = 20
 _LABEL_OFFSET: int = 5
 _COLOR_WHITE: tuple[int, int, int] = (255, 255, 255)
 _COLOR_GREEN: tuple[int, int, int] = (0, 255, 0)
+_COLOR_YELLOW: tuple[int, int, int] = (255, 220, 0)
 
 
 class Error(frame.Error):
@@ -418,12 +419,13 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
 
 
 def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
-  """Draw an overlay on the image with target info for moving the zoom frame.
+  """Draw an overlay on the (512x512) image with target info for moving the zoom frame.
 
-  Overlays is:
+  Overlays:
   - white lines delimiting the 9 sections of the image
+  - large yellow number labels (1-9) centered in each section, left-to-right, top-to-bottom
 
-  Works on any size image... maybe the fixed line width could adapt, but mostly good.
+  Works on any size image apart from the fixed line size. The text labels scale.
 
   Args:
     img_data: The PNG image data as bytes.
@@ -436,6 +438,8 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
   h: int
   cx: int
   cy: int
+  col: int
+  row: int
   # open the image
   with PILImage.open(io.BytesIO(img_data)) as img:
     # draw the thirds lines
@@ -446,6 +450,19 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
     draw.line((0, 2 * cy, w, 2 * cy), fill=_COLOR_WHITE, width=_LINE_WIDTH)
     draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
     draw.line((2 * cx, 0, 2 * cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
+    # draw large number labels centered in each of the 9 sections, left-to-right, top-to-bottom
+    label_font: ImageFont.FreeTypeFont = cast(
+      'ImageFont.FreeTypeFont', ImageFont.load_default(size=int(min(cx, cy) / 1.5))
+    )
+    for row in range(3):
+      for col in range(3):
+        label: str = str(row * 3 + col + 1)
+        # compute the center of this section
+        sx: int = col * cx + cx // 2
+        sy: int = row * cy + cy // 2
+        # draw text with 'mm' anchor to center it exactly on (sx, sy)
+        draw.text((sx, sy), label, fill=_COLOR_GREEN, font=label_font, anchor='mm')
+    # done
     return SaveWithMeta(img)
 
 
