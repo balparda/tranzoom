@@ -305,10 +305,11 @@ Positional arguments (all optional; defaults show the full Mandelbrot set):
 | `F_WIDTH` | Width of the frame in the real plane | `'2.5'` |
 | `F_HEIGHT` | Height of the frame in the imaginary plane | same as `F_WIDTH` |
 
-> **Tip — re-render from a saved image:** pass a tranZoom PNG path as `CENTER_RE` to pick up exactly the same frame:
-> ```sh
-> poetry run mandel gen "/path/to/saved.png"
-> ```
+**Tip — re-render from a saved image:** pass a tranZoom PNG path as `CENTER_RE` to pick up exactly the same frame:
+
+```sh
+poetry run mandel gen "/path/to/saved.png"
+```
 
 Command-level options:
 
