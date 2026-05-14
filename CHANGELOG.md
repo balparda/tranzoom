@@ -29,6 +29,7 @@ This project follows a pragmatic versioning approach:
 ## 1.1.0 - 2026-05-14
 
 - Added
+  - **File-path frame input**: `mandel gen`, `zoom ai`, and `zoom manual` now accept an existing tranZoom PNG file path as the `CENTER_RE` positional argument. When a path is given, the frame coordinates are read from the image's embedded metadata (`tranzoom:frame:*` PNG text chunks), and the other frame arguments (`CENTER_IM`, `F_WIDTH`, `F_HEIGHT`) are ignored. This makes it easy to resume or re-render from any previously saved image.
   - `zoom ai` command: AI-guided Mandelbrot zoom search using a local LLM vision model (via LMStudio). Renders each frame, divides it into 9 sectors using a thirds grid overlay, sends the image to the model for scoring, and navigates toward the most interesting sector. Runs in an infinite loop until Ctrl+C or `--max-steps` is reached.
   - `zoom manual` command: Manually-guided Mandelbrot zoom search. Same iterative loop and frame navigation as `zoom ai`, but the user enters the direction (1–9, numpad layout) at each step instead of an LLM.
   - `zoom ai --query` / `-q` flag: optional natural-language targeted search query sent to the LLM alongside the default fractal-quality scoring prompt, enabling targeted search for specific visual features.

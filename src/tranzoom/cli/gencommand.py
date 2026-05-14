@@ -32,7 +32,9 @@ from tranzoom.core import fractal, frame, image, palette
     'Saved to "mandel-<date>-<hash>.png"\n\n\n\n'
     '$ poetry run mandel -w 512 -h 512 gen " -0.74303" "0.126433" "0.01611"  '
     '# note the space because of the "-"\n\n'
-    '<saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>'
+    '<saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>\n\n\n\n'
+    '$ poetry run mandel gen "/path/to/image.png"\n\n'
+    '<gets the same frame used in "/path/to/image.png" and saves a new image of it to disk>'
   ),
 )
 @clibase.CLIErrorGuard
@@ -49,14 +51,9 @@ def Gen(  # documentation is help/epilog/args  # noqa: D103
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
   config: base.TranZoomConfig = ctx.obj
-  try:
-    frm: frame.Frame = frame.Frame.FromCenter(
-      frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height
-    )
-  except Exception as err:
-    raise click.UsageError(
-      f'Invalid coordinates: {center_re=}, {center_im=}, {f_width=}, {f_height=}'
-    ) from err
+  frm: frame.Frame = base.MakeFrameFromCLIArgs(
+    frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
+  )
   magnification, magnitude = frm.magnification
   magnification_str: str = (
     # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation

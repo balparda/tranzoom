@@ -29,7 +29,9 @@ _MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the 
     '$ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 '
     'ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10\n\n'
     '<zoom in using model Qwen 32 with higher temperature 0.7, '
-    'start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>'
+    'start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>\n\n\n\n'
+    '$ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai "/path/to/image.png"\n\n'
+    '<gets the same frame used in "/path/to/image.png" and starts zoom there>'
   ),
 )
 @clibase.CLIErrorGuard
@@ -48,14 +50,9 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
   config: zoom.TranZoomAIConfig = ctx.obj
-  try:
-    frm: frame.Frame = frame.Frame.FromCenter(
-      frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height
-    )
-  except Exception as err:
-    raise click.UsageError(
-      f'Invalid coordinates: {center_re=}, {center_im=}, {f_width=}, {f_height=}'
-    ) from err
+  frm: frame.Frame = base.MakeFrameFromCLIArgs(
+    frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
+  )
   # we have a valid frame, let's start the AI search loop
   ai.ZoomLoop(
     frm,
@@ -94,7 +91,9 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     '$ poetry run zoom manual\n\n'
     '<start with full set and zoom in manually>\n\n\n\n'
     '$ poetry run zoom manual " -0.7436499" "0.13188204" "0.00073801" --iterm\n\n'
-    '<zoom in manually, start from "Seahorse Tail", print iTerm2 images>'
+    '<zoom in manually, start from "Seahorse Tail", print iTerm2 images>\n\n\n\n'
+    '$ poetry run zoom manual "/path/to/image.png"\n\n'
+    '<gets the same frame used in "/path/to/image.png" and starts zoom there>'
   ),
 )
 @clibase.CLIErrorGuard
@@ -110,14 +109,9 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
   config: zoom.TranZoomAIConfig = ctx.obj
-  try:
-    frm: frame.Frame = frame.Frame.FromCenter(
-      frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height
-    )
-  except Exception as err:
-    raise click.UsageError(
-      f'Invalid coordinates: {center_re=}, {center_im=}, {f_width=}, {f_height=}'
-    ) from err
+  frm: frame.Frame = base.MakeFrameFromCLIArgs(
+    frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
+  )
   # we have a valid frame, let's start the AI search loop
   ai.ManualLoop(
     frm,

@@ -300,10 +300,15 @@ Positional arguments (all optional; defaults show the full Mandelbrot set):
 
 | Argument | Description | Default |
 | --- | --- | --- |
-| `CENTER_RE` | Real part of the center point (string, for exact precision) | `'-0.75'` |
+| `CENTER_RE` | Real part of the center point (string, for exact precision); **or** a path to an existing tranZoom PNG — the frame is then read from that image's metadata, and the remaining frame arguments are ignored | `'-0.75'` |
 | `CENTER_IM` | Imaginary part of the center point (string, for exact precision) | `'0'` |
 | `F_WIDTH` | Width of the frame in the real plane | `'2.5'` |
 | `F_HEIGHT` | Height of the frame in the imaginary plane | same as `F_WIDTH` |
+
+> **Tip — re-render from a saved image:** pass a tranZoom PNG path as `CENTER_RE` to pick up exactly the same frame:
+> ```sh
+> poetry run mandel gen "/path/to/saved.png"
+> ```
 
 Command-level options:
 
@@ -368,7 +373,7 @@ Command-level options:
 
 | Option | Description | Default |
 | --- | --- | --- |
-| `CENTER_RE` | Real part of the starting frame center | `'-0.75'` (full set) |
+| `CENTER_RE` | Real part of the starting frame center; **or** a path to an existing tranZoom PNG (frame is read from image metadata; other frame arguments ignored) | `'-0.75'` (full set) |
 | `CENTER_IM` | Imaginary part of the starting frame center | `'0'` |
 | `F_WIDTH` | Starting frame width | `'2.5'` |
 | `F_HEIGHT` | Starting frame height | same as `F_WIDTH` |
@@ -392,6 +397,12 @@ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 ai \
   -q "spiral" --iterm -n 10
 ```
 
+Example — resume a previous session from a saved tranZoom PNG (frame read from image metadata):
+
+```sh
+poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai "/path/to/saved.png"
+```
+
 ### `zoom manual` — Manually-guided Mandelbrot zoom
 
 ```sh
@@ -399,6 +410,8 @@ poetry run zoom manual [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] [-n STEPS] [
 ```
 
 Same iterative rendering loop as `zoom ai`, but at each step the user types a direction (1–9, numpad layout: 5=center/zoom-in, 8=N, 2=S, 4=W, 6=E, 7=NW, 9=NE, 1=SW, 3=SE) instead of querying an LLM. The evaluation is stored in PNG metadata labeled as `HUMAN`.
+
+Positional frame arguments work the same way as `zoom ai`: pass a tranZoom PNG path as `CENTER_RE` to start the session from the frame stored in that image's metadata.
 
 Note: `zoom manual` does **not** require the AI model flags; it does not load an LLM.
 
