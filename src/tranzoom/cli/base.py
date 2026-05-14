@@ -186,6 +186,15 @@ MAX_CHAT_MEMORY_OPTION: typer.models.OptionInfo = typer.Option(
     f'0 (zero) means no memory, every AI call is independent; default is {ai.DEFAULT_MEMORY_SIZE}'
   ),
 )
+AI_OUTPUT_REASON_FIELD_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--reason/--no-reason',
+  help=(
+    'If True, LLM sector evaluations will include an extra `reason` field for the AI output, '
+    'which is great for debugging and understanding the LLM, but is much slower on the LLM; '
+    'if False, the field will not be included, which is faster; default is False'
+  ),
+)
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)

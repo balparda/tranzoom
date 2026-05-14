@@ -41,6 +41,7 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
   f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]
   f_height: str | None = base.FRAME_HEIGHT_ARGUMENT,  # type: ignore[assignment]
   query: str | None = base.AI_QUERY_OPTION,  # type: ignore[assignment]
+  reason: bool = base.AI_OUTPUT_REASON_FIELD_OPTION,  # type: ignore[assignment]
   memory: int = base.MAX_CHAT_MEMORY_OPTION,  # type: ignore[assignment]
   max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
   iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
@@ -76,6 +77,7 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     config.kv_cache,
     config.timeout,
     query.strip() if query else None,
+    reason,
     memory,
     max_steps,
     iterm,

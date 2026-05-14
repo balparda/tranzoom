@@ -5,6 +5,8 @@
 
 # ignore mandelbrot images (probably test/debug images), but only in repo root
 /*.png
+/*.jpg
+/*.jpeg
 
 # Mac-specific
 .DS_Store

@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
+import abc as abstract
 import json
-from typing import Literal
+from typing import Literal, Self, final
 
 import pydantic
 from transcrypto.utils import base as tbase
@@ -22,10 +23,11 @@ class Error(fractal.Error):
 ####################################################################################################
 
 
-def BuildImageThirdsPrompts(target_search: str | None = None) -> tuple[str, str]:
+def BuildImageThirdsPrompts(reason: bool, target_search: str | None = None) -> tuple[str, str]:
   """Build the AI setup and image prompts for the thirds scoring method.
 
   Args:
+    reason: Whether to include the reasoning field in the prompts
     target_search: Optional string describing the targeted search query;
         if None, targeted search is inactive
 
@@ -33,19 +35,44 @@ def BuildImageThirdsPrompts(target_search: str | None = None) -> tuple[str, str]
     A tuple of (setup_prompt, image_prompt)
 
   """
-  setup_text: str
-  image_text: str
+  # make targeted search blocks
+  query_setup_text: str
+  query_image_text: str
   if target_search:
     query: str = json.dumps(target_search.strip())
-    setup_text = TARGET_THIRDS_SETUP.replace('<<<TARGETED_QUERY>>>', query)
-    image_text = TARGET_THIRDS_IMAGE.replace('<<<TARGETED_QUERY>>>', query)
+    query_setup_text = TARGET_THIRDS_SETUP.replace('<<<TARGETED_QUERY>>>', query)
+    query_image_text = TARGET_THIRDS_IMAGE.replace('<<<TARGETED_QUERY>>>', query)
   else:
-    setup_text = 'Targeted search is NOT active. `target_match_score` is null for all sectors.'
-    image_text = setup_text
-  return (
-    AI_SETUP_THIRDS_SCORING_PROMPT.replace('<<<TARGETED_BLOCK>>>', setup_text.strip()),
-    AI_IMAGE_THIRDS_SCORING_PROMPT.replace('<<<TARGETED_BLOCK>>>', image_text.strip()),
+    query_setup_text = (
+      'Targeted search is NOT active. `target_match_score` is null for all sectors.'
+    )
+    query_image_text = query_setup_text
+  # put these into the main text
+  setup_text: str = AI_SETUP_THIRDS_SCORING_PROMPT.replace(
+    '<<<TARGETED_BLOCK>>>', query_setup_text.strip()
   )
+  image_text: str = AI_IMAGE_THIRDS_SCORING_PROMPT.replace(
+    '<<<TARGETED_BLOCK>>>', query_image_text.strip()
+  )
+  # add the reasoning field
+  if reason:
+    setup_text = setup_text.replace(
+      '<<<REASON_BLOCK_1>>>', 'Return one short reason for each sector in the `reason` field.'
+    )
+    image_text = image_text.replace(
+      '<<<REASON_BLOCK_2>>>',
+      (
+        'Return exactly one `fractal_score`, one `target_match_score`, '
+        'and one short `reason` for each sector.'
+      ),
+    )
+  else:
+    setup_text = setup_text.replace('<<<REASON_BLOCK_1>>>', '')
+    image_text = image_text.replace(
+      '<<<REASON_BLOCK_2>>>',
+      'Return exactly one `fractal_score` and one `target_match_score` for each sector.',
+    )
+  return (setup_text.strip(), image_text.strip())
 
 
 AI_SETUP_THIRDS_SCORING_PROMPT: str = """
@@ -55,7 +82,7 @@ Each image is divided by white grid lines into 9 equal sectors.
 Each sector in the image is marked in clear green text with its sector number.
 
 Score each sector from 0 to 100 for how promising it is as the next zoom target in `fractal_score`.
-Return one short reason for each sector in `reason`.
+<<<REASON_BLOCK_1>>>
 
 Score `fractal_score` high when a sector has:
 - dense visible fractal complexity that is not just endless repetition of the same pattern;
@@ -90,6 +117,7 @@ Rules for `fractal_score` scoring:
 <<<TARGETED_BLOCK>>>
 
 Reasoning rules:
+- Silently compare all sectors against the best visible sector before assigning final scores.
 - Use plain visual descriptions only: dense detail, fine texture, sharp boundary, smooth area, dark area, empty area, edge detail.
 - Avoid naming specific Mandelbrot structures unless they are unmistakable.
 - Fractals are often just infinite recursion of the same pattern: stay away from the vanishing point of infinite recursions.
@@ -131,7 +159,7 @@ Before returning `fractal_score`, compare sectors against the best sector in thi
 
 <<<TARGETED_BLOCK>>>
 
-Return exactly one `fractal_score`, one `target_match_score`, and one short `reason` for each sector.
+<<<REASON_BLOCK_2>>>
 """.strip()  # noqa: E501
 
 TARGET_THIRDS_IMAGE: str = """
@@ -143,7 +171,44 @@ Any `target_match_score` score above 30 should be easily justified and visibly m
 """.strip()  # noqa: E501
 
 
-class SectorEvaluation(pydantic.BaseModel):
+class ImageScore(pydantic.BaseModel, abstract.ABC):
+  """A sector score."""
+
+  sector: int
+  fractal_score: int
+  target_match_score: int | None
+
+  @final
+  def FinalScore(self, *, target_weight: float = 0.8) -> int:
+    """Calculate the final score for this sector, blending fractal_score and target_match_score.
+
+    Args:
+      target_weight: Weight assigned to `target_match_score` when targeted search is active;
+          default is 0.8
+
+    Returns:
+      The final blended score for this sector.
+
+    Raises:
+      Error: on error
+
+    """
+    if not (0.0 <= target_weight <= 1.0):
+      raise Error(f'target_weight must be between 0.0 and 1.0, got {target_weight}')
+    # in the absence of a target match score, we just use the fractal score
+    if self.target_match_score is None:
+      return self.fractal_score
+    # we have a target match score, so we blend it with the fractal score
+    blended: int = round(
+      (1.0 - target_weight) * self.fractal_score + target_weight * self.target_match_score
+    )
+    # prevent very weak fractal regions from winning only because of a vague target match
+    if self.fractal_score < 30:  # noqa: PLR2004
+      blended = min(blended, 45)
+    return blended
+
+
+class SectorEvaluation(ImageScore):
   """Visual quality evaluation for one Mandelbrot image sector."""
 
   sector: int = pydantic.Field(
@@ -171,6 +236,10 @@ class SectorEvaluation(pydantic.BaseModel):
     ),
   )
 
+
+class SectorCompleteEvaluation(SectorEvaluation):
+  """Visual quality evaluation for one Mandelbrot image sector."""
+
   reason: str = pydantic.Field(
     min_length=8,
     max_length=240,
@@ -180,45 +249,18 @@ class SectorEvaluation(pydantic.BaseModel):
     ),
   )
 
-  def FinalScore(self, *, target_weight: float = 0.8) -> int:
-    """Calculate the final score for this sector, blending fractal_score and target_match_score.
 
-    Args:
-      target_weight: Weight assigned to `target_match_score` when targeted search is active;
-          default is 0.8
+class ImageScores[ScoreT: ImageScore](pydantic.BaseModel, abstract.ABC):
+  """A collection of sector scores to make a whole image score."""
 
-    Returns:
-      The final blended score for this sector.
+  sectors: list[ScoreT]
 
-    """
-    # in the absence of a target match score, we just use the fractal score
-    if self.target_match_score is None:
-      return self.fractal_score
-    # we have a target match score, so we blend it with the fractal score
-    blended: int = round(
-      (1.0 - target_weight) * self.fractal_score + target_weight * self.target_match_score
-    )
-    # prevent very weak fractal regions from winning only because of a vague target match
-    if self.fractal_score < 30:  # noqa: PLR2004
-      blended = min(blended, 45)
-    return blended
-
-
-class ZoomSectorScoring(pydantic.BaseModel):
-  """Scores for all 9 Mandelbrot zoom sectors."""
-
-  sectors: list[SectorEvaluation] = pydantic.Field(
-    min_length=9,
-    max_length=9,
-    description='Exactly one evaluation for each sector, from 1 to 9',
-  )
-
-  @pydantic.model_validator(mode='after')
-  def ValidateSectors(self) -> ZoomSectorScoring:
+  @final
+  def _PrivateValidateSectors(self) -> Self:
     """Validate that sectors contain exactly one evaluation for each sector.
 
     Returns:
-      The same ZoomSectorScoring instance if validation passes.
+      The same ImageScores instance if validation passes.
 
     Raises:
       ValueError: If the sectors do not contain exactly one evaluation for each of the 9 sectors.
@@ -230,7 +272,8 @@ class ZoomSectorScoring(pydantic.BaseModel):
       raise ValueError(f'exactly one evaluation for each sector from 1 to 9, got {sorted(sect)}')
     return self
 
-  def BestEvaluation(self, *, target_weight: float = 0.8) -> SectorEvaluation:
+  @final
+  def BestEvaluation(self, *, target_weight: float = 0.8) -> ScoreT:
     """Get the sector evaluation with the highest final score.
 
     If targeted search is inactive, this uses `fractal_score`.
@@ -242,7 +285,7 @@ class ZoomSectorScoring(pydantic.BaseModel):
           default is 0.8
 
     Returns:
-      The SectorEvaluation with the highest final score.
+      The sector evaluation with the highest final score.
 
     Raises:
       Error: If target_weight is not between 0.0 and 1.0
@@ -252,8 +295,9 @@ class ZoomSectorScoring(pydantic.BaseModel):
       raise Error(f'target_weight must be between 0.0 and 1.0, got {target_weight}')
     return max(self.sectors, key=lambda s: s.FinalScore(target_weight=target_weight))
 
+  @final
   def JSON(self) -> tbase.JSONDict:
-    """Get a JSON-serializable dict representation of this ZoomSectorScoring.
+    """Get a JSON-serializable dict representation of this scoring object.
 
     Returns:
       A dict with a "sectors" key containing a list of dicts for each sector evaluation.
@@ -261,33 +305,58 @@ class ZoomSectorScoring(pydantic.BaseModel):
     """
     return {'sectors': [item.model_dump() for item in self.sectors]}
 
-  @staticmethod
-  def FromJSON(json_dict: tbase.JSONDict) -> ZoomSectorScoring:
-    """Create a ZoomSectorScoring instance from a JSON dict.
+  @classmethod
+  def FromJSON(cls, json_dict: tbase.JSONDict) -> Self:
+    """Create a scoring object instance from a JSON dict.
 
     Args:
       json_dict: A dict with a "sectors" key containing a list of dicts for each sector evaluation.
 
     Returns:
-      A ZoomSectorScoring instance created from the JSON dict.
-
-    Raises:
-      Error: invalid JSON format or missing/invalid fields in the sector evaluations
+      A scoring object instance created from the JSON dict.
 
     """
-    if 'sectors' not in json_dict:
-      raise Error('missing "sectors" key in JSON dict')
-    if not isinstance(json_dict['sectors'], list):
-      raise Error('"sectors" key must be a list of sector evaluations')
-    sectors: list[SectorEvaluation] = []
-    for item in json_dict['sectors']:
-      if not isinstance(item, dict):
-        raise Error('each sector evaluation must be a dict')
-      try:
-        sectors.append(SectorEvaluation.model_validate(item))
-      except pydantic.ValidationError as err:
-        raise Error(f'invalid sector evaluation: {err}') from err
-    return ZoomSectorScoring(sectors=sectors)
+    return cls.model_validate(json_dict)
+
+
+class ZoomSectorScoring(ImageScores[SectorEvaluation]):
+  """Scores for all 9 Mandelbrot zoom sectors."""
+
+  sectors: list[SectorEvaluation] = pydantic.Field(
+    min_length=9,
+    max_length=9,
+    description='Exactly one evaluation for each sector, from 1 to 9',
+  )
+
+  @pydantic.model_validator(mode='after')
+  def ValidateSectors(self) -> Self:
+    """Validate that sectors contain exactly one evaluation for each sector.
+
+    Returns:
+      The same ZoomSectorScoring instance if validation passes.
+
+    """
+    return self._PrivateValidateSectors()
+
+
+class ZoomSectorCompleteScoring(ImageScores[SectorCompleteEvaluation]):
+  """Scores for all 9 Mandelbrot zoom sectors."""
+
+  sectors: list[SectorCompleteEvaluation] = pydantic.Field(
+    min_length=9,
+    max_length=9,
+    description='Exactly one evaluation for each sector, from 1 to 9',
+  )
+
+  @pydantic.model_validator(mode='after')
+  def ValidateSectors(self) -> Self:
+    """Validate that sectors contain exactly one evaluation for each sector.
+
+    Returns:
+      The same ZoomSectorCompleteScoring instance if validation passes.
+
+    """
+    return self._PrivateValidateSectors()
 
 
 ####################################################################################################

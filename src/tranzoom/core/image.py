@@ -56,9 +56,10 @@ META_LLM_MODEL_KEY = 'tranzoom:llm:model'  # str (or "HUMAN"/META_LLM_MODEL_VALU
 META_LLM_TEMPERATURE_KEY = 'tranzoom:llm:temperature'  # float
 META_LLM_SEED_KEY = 'tranzoom:llm:seed'  # int (0 if not set)
 META_LLM_QUERY_MEMORY_KEY = 'tranzoom:llm:query:memory'  # int; number of previous steps chat
+META_LLM_QUERY_REASONING_KEY = 'tranzoom:llm:query:reasoning'  # bool; stored as "true"/"false"
 META_LLM_QUERY_SETUP_KEY = 'tranzoom:llm:query:setup'  # str
 META_LLM_QUERY_IMAGE_KEY = 'tranzoom:llm:query:image'  # str
-META_LLM_QUERY_MANUAL_KEY = 'tranzoom:llm:query:manual'  # str
+META_LLM_QUERY_EXTRA_KEY = 'tranzoom:llm:query:extra'  # str
 META_LLM_RESULT_JSON_KEY = 'tranzoom:llm:result:json'  # JSON with evaluation info from LLM or HUMAN
 META_LLM_ZOOM_COUNT_KEY = 'tranzoom:llm:zoom:count'  # int; zoom iteration depth
 # special values
@@ -513,6 +514,7 @@ def AddEvaluationMetaToImage(
   model: str,
   temperature: float,
   seed: int,
+  reason: bool,
   query_memory: int,
   query_setup: str,
   query_image: str,
@@ -525,10 +527,11 @@ def AddEvaluationMetaToImage(
     img_data: The original PNG image data as bytes.
     response: The LLM evaluation response to add to the metadata.
     model: The LLM model used for evaluation; if this is "HUMAN"/META_LLM_MODEL_VALUE_HUMAN,
-        then it will not add temperature, seed, query_memory, query_setup, query_image, or
+        then it will not add temperature, seed, reason, query_memory, query_setup, query_image, nor
         query_manual to the metadata.
     temperature: The temperature setting used for the LLM evaluation.
     seed: The random seed used for the LLM evaluation.
+    reason: Whether the LLM response includes reasoning steps
     query_memory: The memory parameter used for the LLM evaluation.
     query_setup: The setup query given to the LLM.
     query_image: The image query given to the LLM.
@@ -554,7 +557,8 @@ def AddEvaluationMetaToImage(
         META_LLM_QUERY_MEMORY_KEY: str(query_memory),
         META_LLM_QUERY_SETUP_KEY: query_setup,
         META_LLM_QUERY_IMAGE_KEY: query_image,
-        META_LLM_QUERY_MANUAL_KEY: query_manual or '',
+        META_LLM_QUERY_EXTRA_KEY: query_manual or '',
+        META_LLM_QUERY_REASONING_KEY: str(reason).lower(),  # store as "true"/"false"
       }
     )
   with PILImage.open(io.BytesIO(img_data)) as img:
