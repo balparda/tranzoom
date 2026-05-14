@@ -16,7 +16,7 @@ from transcrypto.utils import base as tbase
 
 type ExactInputType = str | float | gmpy2.mpq
 MIN_IMAGE_SIZE: int = 16  # BEWARE: we use this for the "auto" depth calculation, so not too small!
-MAX_IMAGE_SIZE: int = 16 * 1024
+MAX_IMAGE_SIZE: int = 8 * 1024  # BEWARE: changing this changes the frame precision requirements
 DEFAULT_IMAGE_SIZE: int = 1024
 
 # gmpy2.mpfr constants
