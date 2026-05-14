@@ -205,6 +205,117 @@ def ZoomLoop(
   print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {frm}\n')
 
 
+def ManualLoop(
+  frm: frame.Frame,
+  img_output_path: pathlib.Path | None,
+  img_use_date: bool,
+  img_use_hash: bool,
+  img_path_prefix: str,
+  max_threads: int | None,
+  max_steps: int,
+  iterm: bool,
+  print_comm: abc.Callable[[str], None],
+) -> None:
+  """Execute main loop for manually-guided Mandelbrot zoom search.
+
+  Args:
+    frm: The initial frame for the Mandelbrot zoom search.
+    img_output_path: Optional path to save the rendered images; if None, images will be
+        saved to current working directory.
+    img_use_date: Whether to include the current date in the image filename when saving.
+    img_use_hash: Whether to include the image hash in the filename when saving.
+    img_path_prefix: A prefix to add to the image filename when saving.
+    max_threads: Optional maximum number of threads to use for rendering; if None, use all
+        available CPU cores.
+    max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
+    iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
+    print_comm: A rich console callable for printing messages.
+
+  """
+  # capture the time and load model
+  zoom_tm: int = timer.Now()
+  print_comm(
+    f'Will run for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
+    'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
+  )
+  print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})\n')
+  # start
+  count: int = 1
+  try:
+    # main loop: runs until max_steps is reached, or Ctrl+C is pressed
+    img_data: bytes
+    full_path: pathlib.Path
+    count = 0
+    while True:
+      count += 1
+      # render the image for the current frame
+      img_data, full_path = _ComputeMandelbrot(
+        frm,
+        count,
+        zoom_tm,
+        img_output_path,
+        img_use_date,
+        img_use_hash,
+        img_path_prefix,
+        max_threads,
+        iterm,
+        print_comm,
+      )
+      # get AI verdict
+      print_comm('')
+      print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
+      # input direction from user: 1..9 only
+      direction: int = -1
+      user_input: str = ''
+      with timer.Timer(emit_log=False) as tmr:
+        while not (1 <= direction <= 9):  # noqa: PLR2004
+          try:
+            user_input = input(
+              'Enter direction to zoom '
+              '(1-9, like numpad, where 5 is center, 8 is up/North, 6 is right/East, etc.): '
+            ).strip()
+            direction = int(user_input)
+          except ValueError:
+            print_comm(f'[red]Invalid input[/] [bold][yellow]{user_input!r}[/][/]')
+      # build a fake response with the user direction as the "human LLM verdict"
+      response = queries.ZoomSectorScoring(
+        sectors=[
+          queries.SectorEvaluation(
+            sector=i,
+            fractal_score=(100 if i == direction else 0),
+            target_match_score=None,
+            reason=(f'human picked @{timer.Now()}' if i == direction else 'rejected'),
+          )
+          for i in range(1, 10)
+        ],
+      )
+      # save the image, adding the response evaluation as metadata on top of the image
+      full_path.write_bytes(
+        image.AddEvaluationMetaToImage(
+          img_data,
+          response.JSON(),
+          image.META_LLM_MODEL_VALUE_HUMAN,
+          0.0,  # will be ignored
+          0,  # will be ignored
+          0,  # will be ignored
+          '',  # will be ignored
+          '',  # will be ignored
+          None,  # will be ignored
+          count,
+        )
+      )
+      # implement the move command
+      frm = _MoveCenter(frm, None, response, tmr, 0.0, print_comm)
+      # stop if we've reached the maximum number of steps
+      if max_steps and count >= max_steps:
+        print_comm('[yellow]Reached maximum zoom step(s), stopping.[/yellow]')
+        break
+  # we're out of the main loop
+  except KeyboardInterrupt:
+    print_comm(f'\n[yellow]Interrupted by user on step {count}.[/yellow]')
+  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {frm}\n')
+
+
 def _ComputeMandelbrot(
   frm: frame.Frame,
   count: int,

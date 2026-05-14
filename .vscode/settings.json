@@ -181,6 +181,7 @@
     "nodeenv",
     "noqa",
     "nosetests",
+    "numpad",
     "numpy",
     "orjson",
     "panflute",

@@ -52,15 +52,17 @@ META_ITER_DEPTH_MIN_KEY = 'tranzoom:iter_depth:min'  # int
 META_ITER_DEPTH_MAX_KEY = 'tranzoom:iter_depth:max'  # int
 META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:iter_depth:search'  # int, can be "-1" if unknown or not set
 # extra keys added to some images only (for example, when the LLM evaluates the image)
-META_LLM_MODEL_KEY = 'tranzoom:llm:model'
-META_LLM_TEMPERATURE_KEY = 'tranzoom:llm:temperature'
-META_LLM_SEED_KEY = 'tranzoom:llm:seed'
-META_LLM_QUERY_MEMORY_KEY = 'tranzoom:llm:query:memory'
-META_LLM_QUERY_SETUP_KEY = 'tranzoom:llm:query:setup'
-META_LLM_QUERY_IMAGE_KEY = 'tranzoom:llm:query:image'
-META_LLM_QUERY_MANUAL_KEY = 'tranzoom:llm:query:manual'
-META_LLM_RESULT_JSON_KEY = 'tranzoom:llm:result:json'  # JSON with evaluation info from LLM
-META_LLM_ZOOM_COUNT_KEY = 'tranzoom:llm:zoom:count'
+META_LLM_MODEL_KEY = 'tranzoom:llm:model'  # str (or "HUMAN"/META_LLM_MODEL_VALUE_HUMAN for human)
+META_LLM_TEMPERATURE_KEY = 'tranzoom:llm:temperature'  # float
+META_LLM_SEED_KEY = 'tranzoom:llm:seed'  # int (0 if not set)
+META_LLM_QUERY_MEMORY_KEY = 'tranzoom:llm:query:memory'  # int; number of previous steps chat
+META_LLM_QUERY_SETUP_KEY = 'tranzoom:llm:query:setup'  # str
+META_LLM_QUERY_IMAGE_KEY = 'tranzoom:llm:query:image'  # str
+META_LLM_QUERY_MANUAL_KEY = 'tranzoom:llm:query:manual'  # str
+META_LLM_RESULT_JSON_KEY = 'tranzoom:llm:result:json'  # JSON with evaluation info from LLM or HUMAN
+META_LLM_ZOOM_COUNT_KEY = 'tranzoom:llm:zoom:count'  # int; zoom iteration depth
+# special values
+META_LLM_MODEL_VALUE_HUMAN = 'HUMAN'  # used when the evaluation is done by a flesh-and-blood human
 
 # image constants
 
@@ -522,7 +524,9 @@ def AddEvaluationMetaToImage(
   Args:
     img_data: The original PNG image data as bytes.
     response: The LLM evaluation response to add to the metadata.
-    model: The LLM model used for evaluation.
+    model: The LLM model used for evaluation; if this is "HUMAN"/META_LLM_MODEL_VALUE_HUMAN,
+        then it will not add temperature, seed, query_memory, query_setup, query_image, or
+        query_manual to the metadata.
     temperature: The temperature setting used for the LLM evaluation.
     seed: The random seed used for the LLM evaluation.
     query_memory: The memory parameter used for the LLM evaluation.
@@ -535,21 +539,26 @@ def AddEvaluationMetaToImage(
     The modified PNG image data as bytes, with the evaluation info added to the metadata.
 
   """
-  with PILImage.open(io.BytesIO(img_data)) as img:
-    return SaveWithMeta(
-      img,
-      extra_meta={
-        META_LLM_MODEL_KEY: model,
+  # start with the metadata that all zoom images have, for now
+  new_meta: dict[str, str] = {
+    META_LLM_MODEL_KEY: model,  # could be "HUMAN"/META_LLM_MODEL_VALUE_HUMAN
+    META_LLM_RESULT_JSON_KEY: json.dumps(response),
+    META_LLM_ZOOM_COUNT_KEY: str(count),
+  }
+  if model != META_LLM_MODEL_VALUE_HUMAN:
+    new_meta.update(
+      # add the non-human metadata
+      {
         META_LLM_TEMPERATURE_KEY: str(temperature),
         META_LLM_SEED_KEY: str(seed),
         META_LLM_QUERY_MEMORY_KEY: str(query_memory),
         META_LLM_QUERY_SETUP_KEY: query_setup,
         META_LLM_QUERY_IMAGE_KEY: query_image,
         META_LLM_QUERY_MANUAL_KEY: query_manual or '',
-        META_LLM_RESULT_JSON_KEY: json.dumps(response),
-        META_LLM_ZOOM_COUNT_KEY: str(count),
-      },
+      }
     )
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    return SaveWithMeta(img, extra_meta=new_meta)
 
 
 def PrintITerm2(img_data: bytes) -> None:
