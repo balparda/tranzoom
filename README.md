@@ -39,6 +39,7 @@ Built with:
     - [What this tool is](#what-this-tool-is)
     - [What this tool is not](#what-this-tool-is-not)
     - [Key concepts and terminology](#key-concepts-and-terminology)
+      - [Frame Representation](#frame-representation)
     - [Inputs and outputs](#inputs-and-outputs)
       - [Inputs](#inputs)
       - [Outputs](#outputs)
@@ -164,7 +165,7 @@ Starting with version 1.1.0, tranZoom can use local LLM vision models to autonom
 
 ### Key concepts and terminology
 
-- **Frame**: A rectangular region of the complex plane, defined by two corners or a center + width. Stored as `gmpy2.mpq` (exact rationals) to avoid any accumulation of rounding error in coordinates.
+- **[Frame](#frame-representation)**: A rectangular region of the complex plane, defined by a center + width. Stored as `gmpy2.mpq` (exact rationals) to avoid any accumulation of rounding error in coordinates.
 - **Precision**: The number of bits of `mpfr` floating-point precision used for escape-time iteration. Computed automatically from the frame size; never needs to be set manually.
 - **Magnification**: Ratio of the default full-set frame area to the current frame area. 1× = full set; 1G× = zoomed in one billion times.
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
@@ -174,6 +175,37 @@ Starting with version 1.1.0, tranZoom can use local LLM vision models to autonom
 - **Manual zoom session**: The `zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM.
 - **Sector scoring**: Each sector is scored on a 0–100 scale for `fractal_score` (visual complexity / zoom promise). When targeted search is active, an additional `target_match_score` (also 0–100) is blended in with a configurable weight.
 - **Image metadata**: All tranZoom PNG images embed rich metadata (`tranzoom:*` PNG text chunks) including frame coordinates, magnification, palette, precision, and (for AI/manual sessions) the full LLM evaluation, model parameters, prompts, and zoom step count.
+
+#### Frame Representation
+
+A **Frame** is an exact representation of a rectangular region of the complex plane, it is ***your view*** into a fractal, the viewport, the part of the plane to be computed and transformed into an image or visualization. It can be printed by the CLI like:
+
+1. **`[(-3/4, 0) @ 5/2]`** A ***square*** Frame, centered on $-3/4+0j$ and with *width* and *height* of $5/2$, `[(center_re, center_im) @ square_side]`; or
+1. **`[(-3/4, 0) @ (5/2, 5/3)]`** A **rectangular** Frame, centered on $-3/4+0j$ and with *width* of $5/2$ (on the *real* scale) and *height* of $5/3$ (on the *imaginary* scale), `[(center_re, center_im) @ (width_re, height_im)]`.
+
+Frames are stored as [`gmpy2.mpq` (exact rationals)](https://gmpy2.readthedocs.io/en/latest/mpq.html) to avoid any accumulation of rounding error in coordinates. You can provide a `mpq` to the CLI as:
+
+- **`int`** or **`float`**: for example `"23"` or `"23.98205483423723"`. If the float is given as a string like shown here it will be passed as-is to `mpq` and will be converted to arbitrary precision rational, i.e., whatever size fraction is needed to represent all decimal places you gave.
+- **rational** *(recommended)*: for example `" -3/4"` or `"7916615127197/29003906250000"` (note the ***very important*** space before the `-3/4` that allows the string to not be confused with a parameter by the CLI parser).
+
+Here is an example with mixed use:
+
+```txt
+" -0.74303" "0.126433" "1611/100000" "0.0176"
+will create the Frame:
+[(-74303/100000, 126433/1000000) @ (1611/100000, 11/625)]
+```
+
+Here is one example with numbers that would usually *NOT* be representable with regular `float`:
+
+```txt
+" -929554858796448380940239382643467500000001/1250000000000000000000000000000000000000000" "0.13182590420531197049313205638514950000008" "0.00000000000001"
+will create the Frame:
+[(-929554858796448380940239382643467500000001/1250000000000000000000000000000000000000000,
+1647823802566399631164150704814368750001/12500000000000000000000000000000000000000) @ 1/100000000000000]
+```
+
+Frame will keep these numbers exact always, no matter the precision.
 
 ### Inputs and outputs
 
