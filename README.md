@@ -4,12 +4,12 @@
 
 Fractal manipulation with LLMs
 
-- **Primary use case:** Render ultra-deep Mandelbrot fractal images with arbitrary precision, and (planned) use AI/LLMs to guide fractal zoom sequences
-- **Works with:** Local filesystem (PNG output), complex-plane coordinates, AI models (future)
-- **Status:** Early / experimental — core fractal engine is functional; AI guidance is planned
+- **Primary use case:** Render ultra-deep Mandelbrot fractal images with arbitrary precision and use AI/LLMs to guide fractal zoom sequences
+- **Works with:** Local filesystem (PNG output), complex-plane coordinates, local LLM vision models (via LMStudio + `transai`)
+- **Status:** Early / experimental — core fractal engine is functional; AI-guided zoom is functional
 - **License:** Apache-2.0
 
-**tranZoom** is a Python CLI tool for rendering the Mandelbrot set at virtually unlimited zoom depth using arbitrary-precision arithmetic (`gmpy2`). The goal is to be able to zoom so deep that standard double-precision floating point becomes meaningless — tranZoom automatically computes the required precision and renders faithfully at any scale. The long-term vision is to integrate with LLMs (via the `transai` library) to intelligently select and navigate interesting regions of the fractal automatically.
+**tranZoom** is a Python CLI tool for rendering the Mandelbrot set at virtually unlimited zoom depth using arbitrary-precision arithmetic (`gmpy2`), and for navigating it using AI. The goal is to be able to zoom so deep that standard double-precision floating point becomes meaningless — tranZoom automatically computes the required precision and renders faithfully at any scale. The `zoom ai` command uses local LLM vision models (via `transai` / LMStudio) to evaluate each rendered frame, score nine sectors for visual interest, and autonomously navigate toward the most promising region of the fractal.
 
 Since version 1.0.0 it is a PyPI package: <https://pypi.org/project/tranzoom/>
 
@@ -19,7 +19,8 @@ Built with:
 - **gmpy2** for arbitrary-precision (`mpq`/`mpfr`) complex-plane arithmetic
 - **Pillow** for PNG image output
 - **tqdm** for progress bars during rendering
-- **transai** as the foundation for future AI/LLM integration
+- **pydantic** for structured LLM output parsing
+- **transai** for AI/LLM integration (LMStudio vision models)
 - **Typer** + **Rich** for the CLI and terminal output
 - **Transcrypto** for CLI boilerplate, logging, hashing, and config management
 - **Ruff**, **MyPy**, **Pyright**, **typeguard**, **pre-commit**, **GitHub Actions** for quality and CI
@@ -45,9 +46,13 @@ Built with:
     - [Quick start](#quick-start)
     - [Palettes](#palettes)
     - [Command structure](#command-structure)
-    - [Global flags](#global-flags)
+    - [`mandel` global flags](#mandel-global-flags)
+    - [`zoom` global flags](#zoom-global-flags)
     - [CLI Commands Documentation](#cli-commands-documentation)
     - [`mandel gen` — Render a Mandelbrot image](#mandel-gen--render-a-mandelbrot-image)
+    - [`mandel read` — Read a Mandelbrot image](#mandel-read--read-a-mandelbrot-image)
+    - [`zoom ai` — AI-guided Mandelbrot zoom search](#zoom-ai--ai-guided-mandelbrot-zoom-search)
+    - [`zoom manual` — Manually-guided Mandelbrot zoom](#zoom-manual--manually-guided-mandelbrot-zoom)
     - [Comprehensive example images and zooms](#comprehensive-example-images-and-zooms)
       - [Full / Default (×1, 80 bits)](#full--default-1-80-bits)
       - [Seahorse (×155, 83 bits)](#seahorse-155-83-bits)
@@ -91,7 +96,6 @@ Built with:
     - [Enable debug output](#enable-debug-output)
     - [`gmpy2` installation issues](#gmpy2-installation-issues)
     - [Rendering is very slow](#rendering-is-very-slow)
-  - [Appendix 1: Examples](#appendix-1-examples)
 
 ## License
 
@@ -108,6 +112,7 @@ This project includes or depends on third-party software (see `requirements.txt`
 - [gmpy2](https://gmpy2.readthedocs.io/) — Apache-2.0 compatible
 - [Pillow](https://python-pillow.github.io/) — HPND license
 - [tqdm](https://github.com/tqdm/tqdm) — MPL-2.0 / MIT
+- [pydantic](https://docs.pydantic.dev/) — MIT
 - [transai](https://github.com/balparda/transai) — Apache-2.0
 - [transcrypto](https://github.com/balparda/transcrypto) — Apache-2.0
 
@@ -139,7 +144,8 @@ Or install from the repository for development (see [Development Setup](#develop
 - **[tqdm 4.67+](https://pypi.org/project/tqdm/)** — Progress bars — [documentation](https://tqdm.github.io/)
 - **[rich 14.2+](https://pypi.org/project/rich/)** — Terminal formatting — [documentation](https://rich.readthedocs.io/en/latest/)
 - **[typer 0.21+](https://pypi.org/project/typer/)** — CLI parser — [documentation](https://typer.tiangolo.com/)
-- **[transai 1.2+](https://pypi.org/project/transai/)** — AI integration foundation — [documentation](https://github.com/balparda/transai)
+- **[pydantic 2.13+](https://pypi.org/project/pydantic/)** — Structured LLM output parsing — [documentation](https://docs.pydantic.dev/)
+- **[transai 1.2+](https://pypi.org/project/transai/)** — AI/LLM integration (LMStudio vision models) — [documentation](https://github.com/balparda/transai)
 - **[transcrypto 2.1+](https://pypi.org/project/transcrypto/)** — CLI utilities, logging, hashing, config — [documentation](https://github.com/balparda/transcrypto)
 
 ## Context / Problem Space
@@ -148,13 +154,13 @@ Or install from the repository for development (see [Development Setup](#develop
 
 tranZoom is a command-line fractal renderer focused on extreme zoom depth. Standard double-precision (`float64`) floating point has only about 15–16 significant decimal digits, so any zoom below roughly 1e-14 of the full Mandelbrot set will produce incorrect images due to precision loss. tranZoom uses `gmpy2.mpq` (exact rational arithmetic) to represent frame coordinates and `gmpy2.mpfr` (arbitrary-precision floating point) for the escape-time computations, automatically determining how many bits of precision are needed for any given zoom level.
 
-The long-term vision is to use LLMs to autonomously guide the zoom — identifying interesting regions, proposing successive frames, and building navigated zoom sequences without manual coordinate discovery.
+Starting with version 1.1.0, tranZoom can use local LLM vision models to autonomously guide the zoom — identifying visually interesting regions, scoring nine sectors of the current frame, and navigating toward the most promising sector at each step. A manual mode is also available for human-guided zoom sessions with the same iterative frame navigation.
 
 ### What this tool is not
 
 - Not a real-time / interactive fractal explorer (rendering is intentionally CPU-intensive for correctness at depth)
 - Not limited to a fixed precision (unlike most other fractal tools, which cap at `float64`)
-- Not yet AI-guided (that is the planned future direction)
+- Not a cloud-based tool — AI zoom uses local LLM models via LMStudio; no external API calls
 
 ### Key concepts and terminology
 
@@ -164,12 +170,16 @@ The long-term vision is to use LLMs to autonomously guide the zoom — identifyi
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
 - **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
 - **Color palette**: Four built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette`. Positions in the palette are determined by histogram equalization of escape-iteration counts, cycling through the stops `3` times across the range, so the full color range is used regardless of zoom depth or iteration scale. Interior points (never escaped) are always rendered as pure black. Available palettes: `blue-to-yellow-to-brown` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric-ocean` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient).
+- **AI zoom session**: The `zoom ai` command starts an iterative loop: render the current frame as a 512×512 image, draw a 3×3 thirds grid overlay with green sector labels, send the image to a local LLM vision model, parse the 9-sector scoring response, and move the frame center toward the highest-scoring sector. The optional `--query` flag enables targeted search, blending fractal-quality scores with target-match scores. The loop runs until Ctrl+C or `--max-steps` is reached.
+- **Manual zoom session**: The `zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM.
+- **Sector scoring**: Each sector is scored on a 0–100 scale for `fractal_score` (visual complexity / zoom promise). When targeted search is active, an additional `target_match_score` (also 0–100) is blended in with a configurable weight.
+- **Image metadata**: All tranZoom PNG images embed rich metadata (`tranzoom:*` PNG text chunks) including frame coordinates, magnification, palette, precision, and (for AI/manual sessions) the full LLM evaluation, model parameters, prompts, and zoom step count.
 
 ### Inputs and outputs
 
 #### Inputs
 
-- stdin: not used
+- stdin: not used (except the `zoom manual` direction prompt, which reads from stdin)
 - CLI arguments: center coordinates (real + imaginary parts as strings, for exact `mpq` conversion), frame width/height, output image dimensions
 - Config file: stored in the OS-native location via `transcrypto.utils.config`
 
@@ -226,9 +236,10 @@ With the `--palette` flag you can pick your color scheme. We provide the followi
 
 ```sh
 mandel [global flags] <command> [args]
+zoom [global flags] <command> [args]
 ```
 
-### Global flags
+### `mandel` global flags
 
 | Flag | Description | Default |
 | --- | --- | --- |
@@ -243,6 +254,34 @@ mandel [global flags] <command> [args]
 | `--prefix` | Filename prefix | `mandel` |
 | `--date`/`--no-date` | Include date-time (`YYYYMMDDhhmmss`) in filename | `--date` |
 | `--hash`/`--no-hash` | Include 20-char SHA256 hash in filename | `--hash` |
+
+### `zoom` global flags
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `--help` | Show help | off |
+| `--version` | Show version and exit | off |
+| `-v`, `-vv`, `-vvv`, `--verbose` | Verbosity | *ERROR* |
+| `--color`/`--no-color` | Force enable/disable colored output | `--color` |
+| `--threads` | Number of worker processes for rendering | all cores |
+| `-o`/`--out` | Output directory path | current directory |
+| `--prefix` | Filename prefix | `mandel` |
+| `--date`/`--no-date` | Include date-time in filename | `--date` |
+| `--hash`/`--no-hash` | Include 20-char SHA256 hash in filename | `--hash` |
+| `-m`/`--model` | LMStudio model identifier to load | *(required)* |
+| `--spec-tokens` | Speculative decoding tokens | model default |
+| `--seed` | Random seed for the model | random |
+| `-c`/`--context` | Context window size in tokens | model default |
+| `-x`/`--temperature` | Sampling temperature | `0.4` |
+| `--gpu` | GPU usage ratio (`0.0`–`1.0`) | `0.0` |
+| `--gpu-layers` | Number of model layers to offload to GPU | `0` |
+| `--fp16` | Use FP16 precision | off |
+| `--use-mmap` | Use memory-mapped model files | off |
+| `--flash` | Use flash attention | off |
+| `--kv-cache` | Key-value cache size | model default |
+| `--timeout` | Model operation timeout in seconds | `300.0` |
+
+Note: `zoom` images are always **512×512** pixels; the `--width`/`--height` flags are only available on the `mandel` app.
 
 ### CLI Commands Documentation
 
@@ -283,6 +322,85 @@ The command:
 6. Saves the PNG to `<prefix>[-<YYYYMMDDhhmmss>][-<SHA256-20>].png` in the working directory (or the path given by `-o/--out`)
 
 See below for many example outputs.
+
+### `mandel read` — Read a Mandelbrot image
+
+```sh
+poetry run mandel read <IMAGE_PATH> [--iterm]
+```
+
+Reads an existing tranZoom PNG and pretty-prints all embedded metadata:
+
+```sh
+$ poetry run mandel read mandel-38824cdaa58b64496ebf.png
+
+'/path/to/mandel-38824cdaa58b64496ebf.png'
+1024x1024 (wxh) / 38824cdaa58b64496ebfd86facf4d4ba4596ab18db95ac97afd643a7a892ff83
+
+{
+  "tranzoom:version": "1.1.0",
+  "tranzoom:frame:fractal": "Mandelbrot",
+  "tranzoom:frame:top_re": "-7436499/10000000",
+  ...
+}
+```
+
+Use `--iterm` to also display the image inline (macOS + iTerm2 only).
+
+### `zoom ai` — AI-guided Mandelbrot zoom search
+
+```sh
+poetry run zoom -m "<model>" ai [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] \
+  [-n STEPS] [-q QUERY] [--reason] [--memory N] [--iterm]
+```
+
+Starts an AI-guided iterative zoom session:
+
+1. Renders the current frame as a 512×512 image
+2. Draws a 3×3 thirds grid with green sector numbers on top
+3. Sends the image to the LLM vision model with a fractal-scoring prompt
+4. Parses the structured response (9 sector scores)
+5. Navigates the frame toward the highest-scoring sector (by ~1/3 of the frame size)
+6. Saves the image with full LLM evaluation embedded in PNG metadata
+7. Repeats until Ctrl+C or `--max-steps` is reached
+
+Command-level options:
+
+| Option | Description | Default |
+| --- | --- | --- |
+| `CENTER_RE` | Real part of the starting frame center | `'-0.75'` (full set) |
+| `CENTER_IM` | Imaginary part of the starting frame center | `'0'` |
+| `F_WIDTH` | Starting frame width | `'2.5'` |
+| `F_HEIGHT` | Starting frame height | same as `F_WIDTH` |
+| `-n`/`--max-steps` | Max zoom steps; `0` = unlimited (Ctrl+C to stop) | `0` |
+| `-q`/`--query` | Targeted search query added to the scoring prompt | None |
+| `--reason/--no-reason` | Include LLM reasoning text per sector | off |
+| `--memory` | Number of previous steps in LLM chat history | `5` |
+| `--iterm/--no-iterm` | Print image inline in iTerm2 | off |
+
+Example — start from the full set, zoom using Qwen 32B vision:
+
+```sh
+poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai
+```
+
+Example — start from the Seahorse Tail, targeted search, 10 steps, show images:
+
+```sh
+poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 ai \
+  " -0.7436499" "0.13188204" "0.00073801" \
+  -q "spiral" --iterm -n 10
+```
+
+### `zoom manual` — Manually-guided Mandelbrot zoom
+
+```sh
+poetry run zoom manual [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] [-n STEPS] [--iterm]
+```
+
+Same iterative rendering loop as `zoom ai`, but at each step the user types a direction (1–9, numpad layout: 5=center/zoom-in, 8=N, 2=S, 4=W, 6=E, 7=NW, 9=NE, 1=SW, 3=SE) instead of querying an LLM. The evaluation is stored in PNG metadata labeled as `HUMAN`.
+
+Note: `zoom manual` does **not** require the AI model flags; it does not load an LLM.
 
 ### Comprehensive example images and zooms
 
@@ -403,13 +521,17 @@ The CLI respects the `NO_COLOR` environment variable and the `--no-color` / `--c
 
 | Component | Responsibility |
 | --- | --- |
-| `mandel.py` | Mandelbrot CLI, generation, reading, etc |
-| `zoom.py` | Mandelbrot Zoom methods CLI |
-| `cli/base.py` | Shared CLI options, defaults, `DEFAULT_FRAME` |
-| `cli/gencommand.py` | `mandel gen` command implementation |
+| `mandel.py` | Mandelbrot CLI entry point (`mandel gen`, `mandel read`, `mandel markdown`) |
+| `zoom.py` | Mandelbrot zoom CLI entry point (`zoom ai`, `zoom manual`, `zoom markdown`) |
+| `cli/base.py` | Shared CLI options, defaults, `DEFAULT_MANDELBROT_FRAME` |
+| `cli/gencommand.py` | `mandel gen` and `mandel read` command implementations |
+| `cli/aicommand.py` | `zoom ai` and `zoom manual` command implementations |
 | `core/fractal.py` | `Mandelbrot()` renderer — most fractal math |
-| `core/frame.py` | `Frame` class and base math |
-| `core/image.py` | `Image` class |
+| `core/frame.py` | `Frame` class, `Fractal` enum, and base coordinate math |
+| `core/image.py` | `Image` class; image utilities, overlays, iTerm2 printing, metadata helpers |
+| `core/palette.py` | Palette definitions and color mapping |
+| `core/queries.py` | AI prompt templates and Pydantic models for structured LLM responses |
+| `core/ai.py` | `ZoomLoop()` and `ManualLoop()` — iterative AI and manual zoom session logic |
 | `utils/template.py` | Template for new utility modules |
 
 ### Performance characteristics
@@ -453,18 +575,21 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 │   └── tranzoom/
 │       ├── __init__.py           ⟸ version lives here
 |       ├── mandel.py             ⟸ TranZoom mandel CLI
-│       ├── zoom.py               ⟸ TranZoom zoom CLI
+│       ├── zoom.py               ⟸ TranZoom zoom CLI + TranZoomAIConfig
 │       ├── py.typed
 │       ├── cli/
 │       │   ├── __init__.py
-│       │   ├── base.py           ⟸ shared CLI options and frame defaults
-│       │   └── gencommand.py     ⟸ `mandel gen` command implementation
+│       │   ├── aicommand.py      ⟸ `zoom ai` and `zoom manual` command implementations
+│       │   ├── base.py           ⟸ shared CLI options, frame defaults, config dataclasses
+│       │   └── gencommand.py     ⟸ `mandel gen` and `mandel read` command implementations
 │       ├── core/
 │       │   ├── __init__.py
+│       │   ├── ai.py             ⟸ ZoomLoop() and ManualLoop() — zoom session logic
 │       │   ├── fractal.py        ⟸ Mandelbrot() renderer
-│       │   ├── frame.py          ⟸ Frame class; base for computation
-│       │   ├── image.py          ⟸ Image class
-│       │   └── palette.py        ⟸ Palette definitions
+│       │   ├── frame.py          ⟸ Frame class, Fractal enum; base for computation
+│       │   ├── image.py          ⟸ Image class, overlays, iTerm2, metadata helpers
+│       │   ├── palette.py        ⟸ Palette definitions
+│       │   └── queries.py        ⟸ AI prompt templates and Pydantic response models
 │       └── utils/
 │           ├── __init__.py
 │           └── template.py       ⟸ template for new utility modules
@@ -758,14 +883,6 @@ poetry sync
 - Reduce image size: `mandel -w 256 -h 256 gen ...`
 - `max_iter` is auto-scaled with zoom depth; very deep zooms are inherently slow
 - Very high precision (> 1000 bits, i.e., zoom > ~10^300) will always be slow — this is expected
-
-## Appendix 1: Examples
-
-```txt
-[(-162452854280961744293928989494998845672725621110002078293086073/218375681713999306166051894706470193341374397277832031250000000,
-6150565486998248804964531337055568287130721174448488551411/46586812098986518648757737537380307912826538085937500000000) @
-404016274800301610616676185053381249861163/66174449004242213989712695365597028285264968872070312500000000]
-```
 
 ---
 

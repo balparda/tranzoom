@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - YYYY-MM-DD - Placeholder](#vvv---yyyy-mm-dd---placeholder)
+  - [1.1.0 - 2026-05-14](#110---2026-05-14)
   - [1.0.0 - 2026-05-10](#100---2026-05-10)
 
 This project follows a pragmatic versioning approach:
@@ -24,6 +25,50 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future changes.
+
+## 1.1.0 - 2026-05-14
+
+- Added
+  - `zoom ai` command: AI-guided Mandelbrot zoom search using a local LLM vision model (via LMStudio). Renders each frame, divides it into 9 sectors using a thirds grid overlay, sends the image to the model for scoring, and navigates toward the most interesting sector. Runs in an infinite loop until Ctrl+C or `--max-steps` is reached.
+  - `zoom manual` command: Manually-guided Mandelbrot zoom search. Same iterative loop and frame navigation as `zoom ai`, but the user enters the direction (1–9, numpad layout) at each step instead of an LLM.
+  - `zoom ai --query` / `-q` flag: optional natural-language targeted search query sent to the LLM alongside the default fractal-quality scoring prompt, enabling targeted search for specific visual features.
+  - `zoom ai --reason/--no-reason` flag: when enabled, the LLM includes a short textual explanation for each sector's score (useful for debugging); disabled by default for speed.
+  - `zoom ai --memory` flag: number of previous AI steps the LLM retains in its chat history; `0` means stateless (each call is independent); default is `5`; max is `30`.
+  - `-n/--max-steps` flag on both `zoom ai` and `zoom manual`: maximum number of zoom steps to run; `0` means unlimited (run until Ctrl+C); default is `0`.
+  - `--iterm/--no-iterm` flag on `zoom ai`, `zoom manual`, and `mandel gen` / `mandel read`: when enabled on macOS + iTerm2, prints the rendered image inline in the terminal using the iTerm2 inline image protocol.
+  - Full set of AI model flags on the `zoom` global callback (imported from `transai`): `--model` / `-m`, `--spec-tokens`, `--seed`, `--context` / `-c`, `--temperature` / `-x`, `--gpu`, `--gpu-layers`, `--fp16`, `--use-mmap`, `--flash`, `--kv-cache`, `--timeout`.
+  - `mandel read` command: reads an existing tranZoom PNG and pretty-prints its embedded metadata (frame coordinates, magnification, palette, precision, LLM evaluation data, etc.). Optionally displays the image inline with `--iterm`.
+  - `Fractal` enum (`core/frame.py`): all `Frame` objects now carry their fractal type; `Frame.FromCoords()` and `Frame.FromCenter()` require a `Fractal` argument as the first parameter.
+  - Image SHA256 hash now embedded in PNG metadata under key `tranzoom:image:hash`.
+  - Fractal type now embedded in PNG metadata under key `tranzoom:frame:fractal`.
+  - Full LLM evaluation metadata embedded in AI-evaluated images: model name, temperature, seed, memory setting, reasoning flag, setup and image prompts, extra query, zoom step count, and full JSON evaluation result — all under `tranzoom:llm:*` keys.
+  - `MakeImagePath()` utility in `core/image.py`: centralizes image file path construction with optional serial-number suffix for uniqueness in zoom sessions.
+  - `DrawThirdsInfoOverlay()` in `core/image.py`: draws the 3×3 sector grid with green sector number labels on top of a rendered image (used as AI input).
+  - `DrawCardinalInfoOverlay()` in `core/image.py`: draws white grid lines and green directional circles/labels (N, NE, E, …) for the 8 cardinal and ordinal directions (used to visualize movement choices).
+  - `AddEvaluationMetaToImage()` in `core/image.py`: injects LLM or human evaluation data into a PNG's metadata without re-rendering.
+  - `PrintITerm2()` in `core/image.py`: emits an image to the terminal using the iTerm2 inline image protocol.
+  - `PixelPalette()` in `core/image.py`: extracted public helper that maps a `[0.0, 1.0]` position to an `(R, G, B)` tuple for a given palette.
+  - `core/queries.py` module (new): AI prompt templates (`AI_SETUP_THIRDS_SCORING_PROMPT`, `AI_IMAGE_THIRDS_SCORING_PROMPT`, targeted search blocks) and Pydantic models for structured LLM responses (`SectorEvaluation`, `SectorCompleteEvaluation`, `ZoomSectorScoring`, `ZoomSectorCompleteScoring`). Includes `FinalScore()` with configurable `target_weight` for blending fractal quality and targeted-search scores.
+  - `core/ai.py` module (new): implements `ZoomLoop()` and `ManualLoop()` — the main iterative zoom session logic with frame navigation, image rendering, AI calls, metadata saving, and Ctrl+C handling.
+  - `cli/aicommand.py` module (new): registers the `zoom ai` and `zoom manual` commands with the `zoom` Typer app.
+  - `pydantic` added as a production dependency (used by `core/queries.py` for structured AI output parsing).
+  - `ExactInputType` type alias (`str | float | gmpy2.mpq`) in `core/frame.py`: documents the accepted input types for `Frame` coordinate arguments.
+  - Zoom navigation constants in `core/frame.py`: `DEFAULT_MPQ_ZOOM` (zoom factor per step), `DEFAULT_MPQ_STEP_DIRECT`, `DEFAULT_MPQ_STEP_DIAGONAL` (frame-center shift magnitudes for cardinal and diagonal moves).
+  - `DEFAULT_MANDELBROT_FRAME` and `DEFAULT_FRAMES` dict in `core/frame.py` replace the old `DEFAULT_FRAME` constant; `DEFAULT_FRAMES[Fractal.MANDELBROT]` gives the standard whole-set frame.
+
+- Changed
+  - `zoom` app image size is now fixed at 512×512 (the `--width`/`--height` global flags were removed from the `zoom` CLI; they remain on `mandel`). AI and manual zoom sessions always produce square 512×512 images.
+  - `Frame.FromCoords()` and `Frame.FromCenter()` now require a `Fractal` argument as the first positional parameter.
+  - `DEFAULT_FRAME` in `core/frame.py` renamed to `DEFAULT_MANDELBROT_FRAME`; a new `DEFAULT_FRAMES` dict indexed by `Fractal` enum is provided.
+  - `MAX_IMAGE_SIZE` in `core/frame.py` increased from 8192 to 16384 (`16 × 1024`).
+  - Image path generation logic extracted from `cli/gencommand.py` into `core/image.py` (`MakeImagePath()`); supports an optional serial-number suffix for uniqueness within a session.
+  - CLI argument constants in `cli/base.py` renamed from `*_OPTION` to `*_ARGUMENT` (`FRAME_CENTER_RE_ARGUMENT`, `FRAME_CENTER_IM_ARGUMENT`, `FRAME_WIDTH_ARGUMENT`, `FRAME_HEIGHT_ARGUMENT`) to reflect that they are positional Typer arguments, not options.
+  - `zoom` app help text updated to reflect real AI-guided zoom functionality.
+  - `TranZoomAIConfig` dataclass (in `zoom.py`) extends `TranZoomConfig` with all AI model configuration fields; `zoom` callback now creates a `TranZoomAIConfig` context object.
+  - `_MPQ_TWO` and `_MPQ_MAX_IMAGE_SIZE` constants in `core/frame.py` now use `gmpy2.mpq('…')` string construction for improved clarity.
+
+- Fixed
+  - `mandel gen` image path construction now validates the prefix against path traversal (directory separators) through the shared `MakeImagePath()` utility.
 
 ## 1.0.0 - 2026-05-10
 
