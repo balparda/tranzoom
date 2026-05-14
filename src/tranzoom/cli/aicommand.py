@@ -85,7 +85,7 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
 
 @zoom.app.command(
   'manual',
-  help='Use AI to search for an interest point manually.',
+  help='Manually navigate a Mandelbrot zoom search (no AI).',
   epilog=(
     'Examples:\n\n\n\n'
     '$ poetry run zoom manual\n\n'

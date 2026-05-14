@@ -116,7 +116,7 @@ FRAME_CENTER_RE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   frame.DEFAULT_FRAME_CENTER_RE,
   help=(
     'Real part of the center point; '
-    'this can be an float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
     'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
     'ALTERNATIVELY: you can use this to input an existing PNG image path, and it will read the '
     "frame from the given image's metadata (overriding/ignoring the other CLI frame parameters!); "
@@ -127,7 +127,7 @@ FRAME_CENTER_IM_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   frame.DEFAULT_FRAME_CENTER_IM,
   help=(
     'Imaginary part of the center point; '
-    'this can be an float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
     'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
     f'default is {frame.DEFAULT_FRAME_CENTER_IM!r}'
   ),
@@ -136,7 +136,7 @@ FRAME_WIDTH_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   frame.DEFAULT_FRAME_SIZE,
   help=(
     'Width of the frame in the real plane; '
-    'this can be an float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
     'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
     f'default is {frame.DEFAULT_FRAME_SIZE!r}'
   ),
@@ -145,7 +145,7 @@ FRAME_HEIGHT_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   None,
   help=(
     'Height of the frame in the imaginary plane; '
-    'this can be an float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
     'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
     'default is None, i.e, the same as width'
   ),

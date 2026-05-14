@@ -31,7 +31,10 @@ app = typer.Typer(
     'Saved to "mandel-<date>-<hash>.png"\n\n\n\n'
     '$ poetry run mandel -w 512 -h 512 gen " -0.74303" "0.126433" "0.01611"  '
     '# note the space because of the "-"\n\n'
-    '<saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>'
+    '<saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>\n\n\n\n'
+    '$ poetry run mandel read /path/to/image.png\n\n'
+    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
+    '...'
   ),
 )
 

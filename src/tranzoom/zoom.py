@@ -42,8 +42,21 @@ class TranZoomAIConfig(base.TranZoomConfig):
 app = typer.Typer(
   add_completion=True,
   no_args_is_help=True,
-  help='TranZoom will do things!',  # keep in sync with Main() app.callback help
-  # TODO: add epilog and actual help
+  # keep in sync with Main() app.callback help
+  help='TranZoom: `zoom` CLI can infinitely zoom into the Mandelbrot set, with AI or manually',
+  epilog=(
+    'Examples:\n\n\n\n'
+    '$ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai\n\n'
+    '<start with full set and zoom in using model Qwen 32>\n\n\n\n'
+    '$ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 '
+    'ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10\n\n'
+    '<zoom in using model Qwen 32 with higher temperature 0.7, '
+    'start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>\n\n\n\n'
+    '$ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai "/path/to/image.png"\n\n'
+    '<gets the same frame used in "/path/to/image.png" and starts zoom there>\n\n\n\n'
+    '$ poetry run zoom manual "/path/to/image.png"\n\n'
+    '<gets the same frame used in "/path/to/image.png" and starts zoom there>'
+  ),
 )
 
 
@@ -54,8 +67,8 @@ def Run() -> None:
 
 @app.callback(
   invoke_without_command=True,
-  help='TranZoom will do things!',  # keep in sync with app help
-  # TODO: add actual help
+  # keep in sync with app help
+  help='TranZoom: `zoom` CLI can infinitely zoom into the Mandelbrot set, with AI or manually',
 )  # have only one; this is the "constructor"
 @clibase.CLIErrorGuard
 def Main(  # documentation is help/epilog/args # noqa: D103

@@ -100,7 +100,7 @@ def Gen(  # documentation is help/epilog/args  # noqa: D103
     'Examples:\n\n\n\n'
     '$ poetry run mandel read /path/to/image.png\n\n'
     '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
-    '...\n\n'
+    '...'
   ),
 )
 @clibase.CLIErrorGuard

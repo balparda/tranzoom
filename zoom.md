@@ -6,7 +6,7 @@
 ```text
 Usage: zoom [OPTIONS] COMMAND [ARGS]...                                                                                                                   
                                                                                                                                                            
- TranZoom will do things!                                                                                                                                  
+ TranZoom: `zoom` CLI can infinitely zoom into the Mandelbrot set, with AI or manually                                                                     
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --version                                                                 Show version and exit.                                                        │
@@ -80,8 +80,22 @@ Usage: zoom [OPTIONS] COMMAND [ARGS]...
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ markdown  Emit Markdown docs for the CLI (see README.md section "Versioning and releases").                                                             │
 │ ai        Use AI to search for an interest point.                                                                                                       │
-│ manual    Use AI to search for an interest point manually.                                                                                              │
+│ manual    Manually navigate a Mandelbrot zoom search (no AI).                                                                                           │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Examples:                                                                                                                                                 
+                                                                                                                                                           
+ $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai                                                                                                      
+ <start with full set and zoom in using model Qwen 32>                                                                                                     
+                                                                                                                                                           
+ $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                         
+ <zoom in using model Qwen 32 with higher temperature 0.7, start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>                           
+                                                                                                                                                           
+ $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai "/path/to/image.png"                                                                                 
+ <gets the same frame used in "/path/to/image.png" and starts zoom there>                                                                                  
+                                                                                                                                                           
+ $ poetry run zoom manual "/path/to/image.png"                                                                                                             
+ <gets the same frame used in "/path/to/image.png" and starts zoom there>
 ```
 
 ## `zoom ai` Command
@@ -92,18 +106,18 @@ Usage: zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  Use AI to search for an interest point.                                                                                                                   
                                                                                                                                                            
 ╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│   center_re      [CENTER_RE]  Real part of the center point; this can be an float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451")   │
+│   center_re      [CENTER_RE]  Real part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451")    │
 │                               and the number will be fed directly to multi-precision arithmetic so no precision is lost; ALTERNATIVELY: you can use     │
 │                               this to input an existing PNG image path, and it will read the frame from the given image's metadata (overriding/ignoring │
 │                               the other CLI frame parameters!); default is '-0.75'                                                                      │
 │                                                                                                                                         │
-│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be an float (ex: "0.34") or a fraction of ints (rational number, ex:         │
+│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:          │
 │                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '0'      │
 │                                                                                                                                             │
-│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be an float (ex: "0.34") or a fraction of ints (rational number, ex:       │
+│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:        │
 │                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '2.5'    │
 │                                                                                                                                           │
-│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be an float (ex: "0.34") or a fraction of ints (rational number, ex: │
+│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:  │
 │                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is None,    │
 │                               i.e, the same as width                                                                                                    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
@@ -143,21 +157,21 @@ Usage: zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 ```text
 Usage: zoom manual [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]                                                                                 
                                                                                                                                                            
- Use AI to search for an interest point manually.                                                                                                          
+ Manually navigate a Mandelbrot zoom search (no AI).                                                                                                       
                                                                                                                                                            
 ╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│   center_re      [CENTER_RE]  Real part of the center point; this can be an float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451")   │
+│   center_re      [CENTER_RE]  Real part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451")    │
 │                               and the number will be fed directly to multi-precision arithmetic so no precision is lost; ALTERNATIVELY: you can use     │
 │                               this to input an existing PNG image path, and it will read the frame from the given image's metadata (overriding/ignoring │
 │                               the other CLI frame parameters!); default is '-0.75'                                                                      │
 │                                                                                                                                         │
-│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be an float (ex: "0.34") or a fraction of ints (rational number, ex:         │
+│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:          │
 │                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '0'      │
 │                                                                                                                                             │
-│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be an float (ex: "0.34") or a fraction of ints (rational number, ex:       │
+│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:        │
 │                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '2.5'    │
 │                                                                                                                                           │
-│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be an float (ex: "0.34") or a fraction of ints (rational number, ex: │
+│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:  │
 │                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is None,    │
 │                               i.e, the same as width                                                                                                    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

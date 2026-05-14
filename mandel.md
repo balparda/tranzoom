@@ -47,7 +47,11 @@ Usage: mandel [OPTIONS] COMMAND [ARGS]...
  Saved to "mandel-<date>-<hash>.png"                                                                                                                       
                                                                                                                                                            
  $ poetry run mandel -w 512 -h 512 gen " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                               
- <saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>
+ <saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>                                                                              
+                                                                                                                                                           
+ $ poetry run mandel read /path/to/image.png                                                                                                               
+ 1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...                                                                                                       
+ ...
 ```
 
 ## `mandel gen` Command
@@ -58,18 +62,18 @@ Usage: mandel gen [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  Generate a Mandelbrot image.                                                                                                                              
                                                                                                                                                            
 ╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│   center_re      [CENTER_RE]  Real part of the center point; this can be an float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451")   │
+│   center_re      [CENTER_RE]  Real part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451")    │
 │                               and the number will be fed directly to multi-precision arithmetic so no precision is lost; ALTERNATIVELY: you can use     │
 │                               this to input an existing PNG image path, and it will read the frame from the given image's metadata (overriding/ignoring │
 │                               the other CLI frame parameters!); default is '-0.75'                                                                      │
 │                                                                                                                                         │
-│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be an float (ex: "0.34") or a fraction of ints (rational number, ex:         │
+│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:          │
 │                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '0'      │
 │                                                                                                                                             │
-│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be an float (ex: "0.34") or a fraction of ints (rational number, ex:       │
+│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:        │
 │                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '2.5'    │
 │                                                                                                                                           │
-│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be an float (ex: "0.34") or a fraction of ints (rational number, ex: │
+│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:  │
 │                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is None,    │
 │                               i.e, the same as width                                                                                                    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
