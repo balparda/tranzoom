@@ -91,12 +91,10 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
   help='Use AI to search for an interest point manually.',
   epilog=(
     'Examples:\n\n\n\n'
-    '$ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai\n\n'  # TODO
-    '<start with full set and zoom in using model Qwen 32>\n\n\n\n'
-    '$ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 '
-    'ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10\n\n'
-    '<zoom in using model Qwen 32 with higher temperature 0.7, '
-    'start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>'
+    '$ poetry run zoom manual\n\n'
+    '<start with full set and zoom in manually>\n\n\n\n'
+    '$ poetry run zoom manual " -0.7436499" "0.13188204" "0.00073801" --iterm\n\n'
+    '<zoom in manually, start from "Seahorse Tail", print iTerm2 images>'
   ),
 )
 @clibase.CLIErrorGuard
