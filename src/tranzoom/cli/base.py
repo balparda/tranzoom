@@ -6,11 +6,14 @@ from __future__ import annotations
 
 import dataclasses
 import pathlib
+from collections import abc
 
+import click
 import typer
 from transcrypto.cli import clibase
+from transcrypto.utils import base as tbase
 
-from tranzoom.core import ai, fractal, frame, palette
+from tranzoom.core import ai, fractal, frame, image, palette
 
 # global CLI data, and some test stuff
 
@@ -111,18 +114,41 @@ IMAGE_PATH_INPUT_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
 # -2.5-1.25j and 0.5+1.25j, which is exactly our default here
 FRAME_CENTER_RE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   frame.DEFAULT_FRAME_CENTER_RE,
-  help=f'Real part of the center point; default is {frame.DEFAULT_FRAME_CENTER_RE!r}',
+  help=(
+    'Real part of the center point; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    'ALTERNATIVELY: you can use this to input an existing PNG image path, and it will read the '
+    "frame from the given image's metadata (overriding/ignoring the other CLI frame parameters!); "
+    f'default is {frame.DEFAULT_FRAME_CENTER_RE!r}'
+  ),
 )
 FRAME_CENTER_IM_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   frame.DEFAULT_FRAME_CENTER_IM,
-  help=f'Imaginary part of the center point; default is {frame.DEFAULT_FRAME_CENTER_IM!r}',
+  help=(
+    'Imaginary part of the center point; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_FRAME_CENTER_IM!r}'
+  ),
 )
 FRAME_WIDTH_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   frame.DEFAULT_FRAME_SIZE,
-  help=f'Width of the frame in the real plane; default is {frame.DEFAULT_FRAME_SIZE!r}',
+  help=(
+    'Width of the frame in the real plane; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_FRAME_SIZE!r}'
+  ),
 )
 FRAME_HEIGHT_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
-  None, help='Height of the frame in the imaginary plane; default is None, i.e, the same as width'
+  None,
+  help=(
+    'Height of the frame in the imaginary plane; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    'default is None, i.e, the same as width'
+  ),
 )
 
 # Computation Options
@@ -186,6 +212,15 @@ MAX_CHAT_MEMORY_OPTION: typer.models.OptionInfo = typer.Option(
     f'0 (zero) means no memory, every AI call is independent; default is {ai.DEFAULT_MEMORY_SIZE}'
   ),
 )
+AI_OUTPUT_REASON_FIELD_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--reason/--no-reason',
+  help=(
+    'If True, LLM sector evaluations will include an extra `reason` field for the AI output, '
+    'which is great for debugging and understanding the LLM, but is much slower on the LLM; '
+    'if False, the field will not be included, which is faster; default is False'
+  ),
+)
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
@@ -199,3 +234,70 @@ class TranZoomConfig(clibase.CLIConfig):
   img_use_hash: bool
   img_path_prefix: str
   max_threads: int | None
+
+
+def MakeFrameFromCLIArgs(
+  fractal: frame.Fractal,
+  center_re: str,
+  center_im: str,
+  f_width: str,
+  f_height: str | None,
+  print_call: abc.Callable[[str], None],
+) -> frame.Frame:
+  """Make a frame or die. Tries float/mpq first, then tries reading from a file metadata.
+
+  Args:
+    fractal: the fractal type to create the frame for
+    center_re: the real part of the center, or an image path to read the frame from
+    center_im: the imaginary part of the center (ignored if center_re is an image path)
+    f_width: the width of the frame (ignored if center_re is an image path)
+    f_height: the height of the frame (ignored if center_re is an image path)
+    print_call: a callable to print messages, used for logging during frame creation
+
+  Returns:
+    A valid frame object
+
+  Raises:
+    click.UsageError: if arguments can't be turned into a valid frame
+    ValueError: internally (but this is caught and turned into UsageError with a helpful message)
+
+  """
+  try:
+    # the happy path is one line... if these coords work, we return the frame and we're done
+    return frame.Frame.FromCenter(fractal, center_re, center_im, f_width, f_height)
+  except ValueError as err:
+    if 'invalid' not in str(err).lower():
+      raise click.UsageError(f'Error: {center_re=}, {center_im=}, {f_width=}, {f_height=}') from err
+    # maybe the user gave us an image path instead of coordinates? let's try to read it as image
+    try:
+      # convert and validate path
+      img_path: pathlib.Path = pathlib.Path(center_re).expanduser().resolve()
+      if not img_path.exists() or not img_path.is_file():
+        raise ValueError(f'Image "{img_path}" does not exist or is not a file')  # noqa: TRY301
+      # make sure we have the needed metadata
+      info: tbase.JSONDict = image.GetBasicDataFromPNG(img_path.read_bytes())[-1]
+      if (
+        image.META_CENTER_RE_KEY not in info
+        or image.META_CENTER_IM_KEY not in info
+        or image.META_WIDTH_RE_KEY not in info
+        or image.META_HEIGHT_IM_KEY not in info
+      ):
+        raise ValueError(f'Image "{img_path}" missing tranZoom frame metadata keys')  # noqa: TRY301
+      version: str = str(info.get(image.META_VERSION_KEY, '')) or 'UNKNOWN'
+      fract: str = str(info.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
+      print_call(
+        f'Reading frame from "{img_path}", [red]tranZoom version {version}[/], {fract} fractal...'
+      )
+      return frame.Frame.FromCenter(
+        fractal,
+        str(info[image.META_CENTER_RE_KEY]),
+        str(info[image.META_CENTER_IM_KEY]),
+        str(info[image.META_WIDTH_RE_KEY]),
+        str(info[image.META_HEIGHT_IM_KEY]),
+      )
+    except Exception as err2:  # this error we cannot forgive
+      raise click.UsageError(
+        f'Error/not path: {center_re=}, {center_im=}, {f_width=}, {f_height=}'
+      ) from err2
+  except Exception as err:  # this error we cannot forgive
+    raise click.UsageError(f'Error: {center_re=}, {center_im=}, {f_width=}, {f_height=}') from err

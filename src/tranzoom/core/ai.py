@@ -57,6 +57,7 @@ def ZoomLoop(
   kv_cache: int | None,
   timeout: float,
   query: str | None,
+  reason: bool,
   memory: int,
   max_steps: int,
   iterm: bool,
@@ -88,6 +89,7 @@ def ZoomLoop(
     kv_cache: Optional size of the key-value cache for the model; if None, use the model's default.
     timeout: The timeout (in seconds) for model operations.
     query: Optional query to be added to the default prompt; if None, no additional query.
+    reason: Whether to include the `reason` field in the AI output.
     memory: The number of previous iterations the LLM will remember in its chat history;
         0 means no memory.
     max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
@@ -101,8 +103,9 @@ def ZoomLoop(
   # capture the time and load model
   zoom_tm: int = timer.Now()
   print_comm(
-    f'Will run for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
-    'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
+    f'Will run for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
+    + ('include reason field. ' if reason else '[cyan]NOT[/] include reason field. ')
+    + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(
     f'[yellow]Loading AI model [bold]{model}[/]...[/] / {timer.TimeStr(zoom_tm)} ({zoom_tm})\n'
@@ -111,14 +114,14 @@ def ZoomLoop(
   setup_query: str
   image_query: str
   query = query.strip() if query else None
-  setup_query, image_query = queries.BuildImageThirdsPrompts(query)
+  setup_query, image_query = queries.BuildImageThirdsPrompts(reason, query)
   logging.debug(f'AI setup query:\n{setup_query}\n')
   logging.debug(f'AI image query:\n{image_query}\n')
   # start
   count: int = 1
   try:
     with lms.LMStudioWorker(timeout=timeout, free_resources=True) as worker:
-      worker.LoadModel(
+      model_config: transai_ai.AIModelConfig = worker.LoadModel(
         transai_ai.MakeAIModelConfig(
           vision=True,
           model_id=model,
@@ -133,11 +136,11 @@ def ZoomLoop(
           spec_tokens=spec_tokens,
           kv_cache=kv_cache,
         )
-      )
+      )[0]
       # main loop: runs until max_steps is reached, or Ctrl+C is pressed
       json_chat: tbase.JSONDict | None = None
       img_data: bytes
-      response: queries.ZoomSectorScoring
+      response: queries.ZoomSectorScoring | queries.ZoomSectorCompleteScoring
       full_path: pathlib.Path
       count = 0
       while True:
@@ -174,18 +177,144 @@ def ZoomLoop(
             model,
             setup_query,
             image_query,
-            queries.ZoomSectorScoring,
+            queries.ZoomSectorCompleteScoring if reason else queries.ZoomSectorScoring,
             images=[img_data],
             chat_history=json_chat,
           )
         # save the image, adding the response evaluation as metadata on top of the image
-        full_path.write_bytes(image.AddEvaluationMetaToImage(img_data, response.JSON()))
+        full_path.write_bytes(
+          image.AddEvaluationMetaToImage(
+            img_data,
+            response.JSON(),
+            model,
+            temperature,
+            model_config['seed'] or 0,
+            reason,
+            memory,
+            setup_query,
+            image_query,
+            query,
+            count,
+          )
+        )
         # implement the move command
         frm = _MoveCenter(frm, query, response, tmr, target_weight, print_comm)
         # stop if we've reached the maximum number of steps
         if max_steps and count >= max_steps:
           print_comm('[yellow]Reached maximum zoom step(s), stopping.[/yellow]')
           break
+  # we're out of the main loop
+  except KeyboardInterrupt:
+    print_comm(f'\n[yellow]Interrupted by user on step {count}.[/yellow]')
+  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {frm}\n')
+
+
+def ManualLoop(
+  frm: frame.Frame,
+  img_output_path: pathlib.Path | None,
+  img_use_date: bool,
+  img_use_hash: bool,
+  img_path_prefix: str,
+  max_threads: int | None,
+  max_steps: int,
+  iterm: bool,
+  print_comm: abc.Callable[[str], None],
+) -> None:
+  """Execute main loop for manually-guided Mandelbrot zoom search.
+
+  Args:
+    frm: The initial frame for the Mandelbrot zoom search.
+    img_output_path: Optional path to save the rendered images; if None, images will be
+        saved to current working directory.
+    img_use_date: Whether to include the current date in the image filename when saving.
+    img_use_hash: Whether to include the image hash in the filename when saving.
+    img_path_prefix: A prefix to add to the image filename when saving.
+    max_threads: Optional maximum number of threads to use for rendering; if None, use all
+        available CPU cores.
+    max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
+    iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
+    print_comm: A rich console callable for printing messages.
+
+  """
+  # capture the time and load model
+  zoom_tm: int = timer.Now()
+  print_comm(
+    f'Will run for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
+    'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
+  )
+  print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})\n')
+  # start
+  count: int = 1
+  try:
+    # main loop: runs until max_steps is reached, or Ctrl+C is pressed
+    img_data: bytes
+    full_path: pathlib.Path
+    response: queries.ZoomSectorScoring  # response here never needs the `reason` field b/c human!
+    count = 0
+    while True:
+      count += 1
+      # render the image for the current frame
+      img_data, full_path = _ComputeMandelbrot(
+        frm,
+        count,
+        zoom_tm,
+        img_output_path,
+        img_use_date,
+        img_use_hash,
+        img_path_prefix,
+        max_threads,
+        iterm,
+        print_comm,
+      )
+      # get AI verdict
+      print_comm('')
+      print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
+      # input direction from user: 1..9 only
+      direction: int = -1
+      user_input: str = ''
+      with timer.Timer(emit_log=False) as tmr:
+        while not (1 <= direction <= 9):  # noqa: PLR2004
+          try:
+            user_input = input(
+              'Enter direction to zoom '
+              '(1-9, like numpad, where 5 is center, 8 is up/North, 6 is right/East, etc.): '
+            ).strip()
+            direction = int(user_input)
+          except ValueError:
+            print_comm(f'[red]Invalid input[/] [bold][yellow]{user_input!r}[/][/]')
+      # build a fake response with the user direction as the "human LLM verdict"
+      response = queries.ZoomSectorScoring(
+        sectors=[
+          queries.SectorEvaluation(
+            sector=i,
+            fractal_score=(100 if i == direction else 0),
+            target_match_score=None,
+          )
+          for i in range(1, 10)
+        ],
+      )
+      # save the image, adding the response evaluation as metadata on top of the image
+      full_path.write_bytes(
+        image.AddEvaluationMetaToImage(
+          img_data,
+          response.JSON(),
+          image.META_LLM_MODEL_VALUE_HUMAN,
+          0.0,  # will be ignored
+          0,  # will be ignored
+          False,  # will be ignored
+          0,  # will be ignored
+          '',  # will be ignored
+          '',  # will be ignored
+          None,  # will be ignored
+          count,
+        )
+      )
+      # implement the move command
+      frm = _MoveCenter(frm, None, response, tmr, 0.0, print_comm)
+      # stop if we've reached the maximum number of steps
+      if max_steps and count >= max_steps:
+        print_comm('[yellow]Reached maximum zoom step(s), stopping.[/yellow]')
+        break
   # we're out of the main loop
   except KeyboardInterrupt:
     print_comm(f'\n[yellow]Interrupted by user on step {count}.[/yellow]')
@@ -266,7 +395,7 @@ def _ComputeMandelbrot(
 def _MoveCenter(  # noqa: C901
   frm: frame.Frame,
   query: str | None,
-  response: queries.ZoomSectorScoring,
+  response: queries.ZoomSectorScoring | queries.ZoomSectorCompleteScoring,
   tmr: timer.Timer,
   target_weight: float,
   print_comm: abc.Callable[[str], None],
@@ -298,7 +427,9 @@ def _MoveCenter(  # noqa: C901
   direct_step: gmpy2.mpq = frame_sz * frame.DEFAULT_MPQ_STEP_DIRECT
   diagonal_step: gmpy2.mpq = frame_sz * frame.DEFAULT_MPQ_STEP_DIAGONAL
   # now move the center according to the direction, if requested
-  best: queries.SectorEvaluation = response.BestEvaluation(target_weight=target_weight)
+  best: queries.SectorCompleteEvaluation | queries.SectorEvaluation = response.BestEvaluation(
+    target_weight=target_weight
+  )
   direction: str = _DIRECTION_MAP[best.sector]
   if direction == 'C':
     pass  # no movement, zoom in place
@@ -333,9 +464,12 @@ def _MoveCenter(  # noqa: C901
     )
     if sector_eval.target_match_score and query is None:
       raise Error(f'Match score given but no query; LLM scoring inconsistent!\n{response.JSON()}')
+    reason: str = (
+      sector_eval.reason if isinstance(sector_eval, queries.SectorCompleteEvaluation) else 'N/A'
+    )
     print_comm(
       f'#{sector_eval.sector}/[green]{_DIRECTION_MAP[sector_eval.sector]}[/]: '
-      f'{sector_eval.fractal_score}{target_score} - {sector_eval.reason}'
+      f'{sector_eval.fractal_score}{target_score} - {reason}'
     )
   print_comm('')
   # build the new frame

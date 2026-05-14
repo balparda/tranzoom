@@ -6,7 +6,7 @@
 ```text
 Usage: zoom [OPTIONS] COMMAND [ARGS]...                                                                                                                   
                                                                                                                                                            
- TranZoom will do things!                                                                                                                                  
+ TranZoom: `zoom` CLI can infinitely zoom into the Mandelbrot set, with AI or manually                                                                     
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --version                                                                 Show version and exit.                                                        │
@@ -80,7 +80,22 @@ Usage: zoom [OPTIONS] COMMAND [ARGS]...
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ markdown  Emit Markdown docs for the CLI (see README.md section "Versioning and releases").                                                             │
 │ ai        Use AI to search for an interest point.                                                                                                       │
+│ manual    Manually navigate a Mandelbrot zoom search (no AI).                                                                                           │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Examples:                                                                                                                                                 
+                                                                                                                                                           
+ $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai                                                                                                      
+ <start with full set and zoom in using model Qwen 32>                                                                                                     
+                                                                                                                                                           
+ $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                         
+ <zoom in using model Qwen 32 with higher temperature 0.7, start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>                           
+                                                                                                                                                           
+ $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai "/path/to/image.png"                                                                                 
+ <gets the same frame used in "/path/to/image.png" and starts zoom there>                                                                                  
+                                                                                                                                                           
+ $ poetry run zoom manual "/path/to/image.png"                                                                                                             
+ <gets the same frame used in "/path/to/image.png" and starts zoom there>
 ```
 
 ## `zoom ai` Command
@@ -91,24 +106,38 @@ Usage: zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  Use AI to search for an interest point.                                                                                                                   
                                                                                                                                                            
 ╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│   center_re      [CENTER_RE]  Real part of the center point; default is '-0.75'                                                         │
-│   center_im      [CENTER_IM]  Imaginary part of the center point; default is '0'                                                            │
-│   f_width        [F_WIDTH]    Width of the frame in the real plane; default is '2.5'                                                      │
-│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; default is None, i.e, the same as width                                       │
+│   center_re      [CENTER_RE]  Real part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451")    │
+│                               and the number will be fed directly to multi-precision arithmetic so no precision is lost; ALTERNATIVELY: you can use     │
+│                               this to input an existing PNG image path, and it will read the frame from the given image's metadata (overriding/ignoring │
+│                               the other CLI frame parameters!); default is '-0.75'                                                                      │
+│                                                                                                                                         │
+│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:          │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '0'      │
+│                                                                                                                                             │
+│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:        │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '2.5'    │
+│                                                                                                                                           │
+│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:  │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is None,    │
+│                               i.e, the same as width                                                                                                    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --query      -q                TEXT                      Query to be added to the default prompt; default is None, no additional query                  │
-│ --memory                       INTEGER RANGE [0<=x<=30]  Maximum number of iterations the LLM will remember; 0 ≤ m ≤ 30; 0 (zero) means no memory,      │
-│                                                          every AI call is independent; default is 5                                                     │
+│ --query      -q                 TEXT                      Query to be added to the default prompt; default is None, no additional query                 │
+│ --reason         --no-reason                              If True, LLM sector evaluations will include an extra `reason` field for the AI output, which │
+│                                                           is great for debugging and understanding the LLM, but is much slower on the LLM; if False,    │
+│                                                           the field will not be included, which is faster; default is False                             │
+│                                                                                                                                     │
+│ --memory                        INTEGER RANGE [0<=x<=30]  Maximum number of iterations the LLM will remember; 0 ≤ m ≤ 30; 0 (zero) means no memory,     │
+│                                                           every AI call is independent; default is 5                                                    │
 │                                                                                                                                             │
-│ --max-steps  -n                INTEGER RANGE       Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is 0 │
-│                                                          (unlimited, run forever)                                                                       │
+│ --max-steps  -n                 INTEGER RANGE       Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is  │
+│                                                           0 (unlimited, run forever)                                                                    │
 │                                                                                                                                             │
-│ --iterm          --no-iterm                              If True, will output the image to iTerm2 (only use on macOS with iTerm2!                       │
-│                                                          <https://iterm2.com/documentation-images.html>); if False, will not output the image to        │
-│                                                          iTerm2; default is False                                                                       │
+│ --iterm          --no-iterm                               If True, will output the image to iTerm2 (only use on macOS with iTerm2!                      │
+│                                                           <https://iterm2.com/documentation-images.html>); if False, will not output the image to       │
+│                                                           iTerm2; default is False                                                                      │
 │                                                                                                                                      │
-│ --help                                                   Show this message and exit.                                                                    │
+│ --help                                                    Show this message and exit.                                                                   │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 
@@ -117,7 +146,56 @@ Usage: zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  <start with full set and zoom in using model Qwen 32>                                                                                                     
                                                                                                                                                            
  $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                         
- <zoom in using model Qwen 32 with higher temperature 0.7, start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>
+ <zoom in using model Qwen 32 with higher temperature 0.7, start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>                           
+                                                                                                                                                           
+ $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai "/path/to/image.png"                                                                                 
+ <gets the same frame used in "/path/to/image.png" and starts zoom there>
+```
+
+## `zoom manual` Command
+
+```text
+Usage: zoom manual [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]                                                                                 
+                                                                                                                                                           
+ Manually navigate a Mandelbrot zoom search (no AI).                                                                                                       
+                                                                                                                                                           
+╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│   center_re      [CENTER_RE]  Real part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451")    │
+│                               and the number will be fed directly to multi-precision arithmetic so no precision is lost; ALTERNATIVELY: you can use     │
+│                               this to input an existing PNG image path, and it will read the frame from the given image's metadata (overriding/ignoring │
+│                               the other CLI frame parameters!); default is '-0.75'                                                                      │
+│                                                                                                                                         │
+│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:          │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '0'      │
+│                                                                                                                                             │
+│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:        │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '2.5'    │
+│                                                                                                                                           │
+│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:  │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is None,    │
+│                               i.e, the same as width                                                                                                    │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --max-steps  -n                INTEGER RANGE   Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is 0     │
+│                                                      (unlimited, run forever)                                                                           │
+│                                                                                                                                             │
+│ --iterm          --no-iterm                          If True, will output the image to iTerm2 (only use on macOS with iTerm2!                           │
+│                                                      <https://iterm2.com/documentation-images.html>); if False, will not output the image to iTerm2;    │
+│                                                      default is False                                                                                   │
+│                                                                                                                                      │
+│ --help                                               Show this message and exit.                                                                        │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Examples:                                                                                                                                                 
+                                                                                                                                                           
+ $ poetry run zoom manual                                                                                                                                  
+ <start with full set and zoom in manually>                                                                                                                
+                                                                                                                                                           
+ $ poetry run zoom manual " -0.7436499" "0.13188204" "0.00073801" --iterm                                                                                  
+ <zoom in manually, start from "Seahorse Tail", print iTerm2 images>                                                                                       
+                                                                                                                                                           
+ $ poetry run zoom manual "/path/to/image.png"                                                                                                             
+ <gets the same frame used in "/path/to/image.png" and starts zoom there>
 ```
 
 ## `zoom markdown` Command

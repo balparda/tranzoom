@@ -47,7 +47,11 @@ Usage: mandel [OPTIONS] COMMAND [ARGS]...
  Saved to "mandel-<date>-<hash>.png"                                                                                                                       
                                                                                                                                                            
  $ poetry run mandel -w 512 -h 512 gen " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                               
- <saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>
+ <saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>                                                                              
+                                                                                                                                                           
+ $ poetry run mandel read /path/to/image.png                                                                                                               
+ 1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...                                                                                                       
+ ...
 ```
 
 ## `mandel gen` Command
@@ -58,20 +62,34 @@ Usage: mandel gen [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  Generate a Mandelbrot image.                                                                                                                              
                                                                                                                                                            
 ╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│   center_re      [CENTER_RE]  Real part of the center point; default is '-0.75'                                                         │
-│   center_im      [CENTER_IM]  Imaginary part of the center point; default is '0'                                                            │
-│   f_width        [F_WIDTH]    Width of the frame in the real plane; default is '2.5'                                                      │
-│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; default is None, i.e, the same as width                                       │
+│   center_re      [CENTER_RE]  Real part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451")    │
+│                               and the number will be fed directly to multi-precision arithmetic so no precision is lost; ALTERNATIVELY: you can use     │
+│                               this to input an existing PNG image path, and it will read the frame from the given image's metadata (overriding/ignoring │
+│                               the other CLI frame parameters!); default is '-0.75'                                                                      │
+│                                                                                                                                         │
+│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:          │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '0'      │
+│                                                                                                                                             │
+│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:        │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '2.5'    │
+│                                                                                                                                           │
+│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:  │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is None,    │
+│                               i.e, the same as width                                                                                                    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --iter     -i      INTEGER RANGE [1000<=x<=4294967295]                   Maximum iterations (depth) to compute before determining escape; 1000 ≤ iter ≤ │
-│                                                                          4294967295; default is None (automatic search for optimal iterations ---       │
-│                                                                          recommended)                                                                   │
-│ --palette            Color palette to use for rendering; default is 'blue-to-yellow-to-brown';      │
-│                                                                          available palettes: ['blue-to-yellow-to-brown', 'electric-ocean', 'lava',      │
-│                                                                          'sunset']                                                                      │
+│ --iter     -i                INTEGER RANGE [1000<=x<=4294967295]                   Maximum iterations (depth) to compute before determining escape;     │
+│                                                                                    1000 ≤ iter ≤ 4294967295; default is None (automatic search for      │
+│                                                                                    optimal iterations --- recommended)                                  │
+│ --palette                      Color palette to use for rendering; default is                       │
+│                                                                                    'blue-to-yellow-to-brown'; available palettes:                       │
+│                                                                                    ['blue-to-yellow-to-brown', 'electric-ocean', 'lava', 'sunset']      │
 │                                                                                                                       │
-│ --help                                                                   Show this message and exit.                                                    │
+│ --iterm        --no-iterm                                                          If True, will output the image to iTerm2 (only use on macOS with     │
+│                                                                                    iTerm2! <https://iterm2.com/documentation-images.html>); if False,   │
+│                                                                                    will not output the image to iTerm2; default is False                │
+│                                                                                                                                      │
+│ --help                                                                             Show this message and exit.                                          │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 
@@ -82,7 +100,10 @@ Usage: mandel gen [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  Saved to "mandel-<date>-<hash>.png"                                                                                                                       
                                                                                                                                                            
  $ poetry run mandel -w 512 -h 512 gen " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                               
- <saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>
+ <saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>                                                                              
+                                                                                                                                                           
+ $ poetry run mandel gen "/path/to/image.png"                                                                                                              
+ <gets the same frame used in "/path/to/image.png" and saves a new image of it to disk>
 ```
 
 ## `mandel markdown` Command
