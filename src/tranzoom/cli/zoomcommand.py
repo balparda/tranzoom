@@ -12,14 +12,14 @@ from __future__ import annotations
 import click
 from transcrypto.cli import clibase
 
-from tranzoom import zoom
+from tranzoom import tranz
 from tranzoom.cli import base
 from tranzoom.core import ai, frame
 
 _MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the fractal score
 
 
-@zoom.app.command(
+@tranz.app.command(
   'ai',
   help='Use AI to search for an interest point.',
   epilog=(
@@ -49,7 +49,7 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
   iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
-  config: zoom.TranZoomAIConfig = ctx.obj
+  config: tranz.TranZoomAIConfig = ctx.obj
   frm: frame.Frame = base.MakeFrameFromCLIArgs(
     frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
   )
@@ -83,7 +83,7 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
   )
 
 
-@zoom.app.command(
+@tranz.app.command(
   'manual',
   help='Manually navigate a Mandelbrot zoom search (no AI).',
   epilog=(
@@ -108,7 +108,7 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
-  config: zoom.TranZoomAIConfig = ctx.obj
+  config: tranz.TranZoomAIConfig = ctx.obj
   frm: frame.Frame = base.MakeFrameFromCLIArgs(
     frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
   )

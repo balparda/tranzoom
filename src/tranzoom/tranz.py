@@ -164,4 +164,4 @@ def Markdown(*, ctx: click.Context) -> None:  # documentation is help/epilog/arg
 
 
 # Import CLI modules to register their commands with the app
-from tranzoom.cli import aicommand  # pyright: ignore[reportUnusedImport] # noqa: E402, F401
+from tranzoom.cli import zoomcommand  # pyright: ignore[reportUnusedImport] # noqa: E402, F401
