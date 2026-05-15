@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - YYYY-MM-DD - Placeholder](#vvv---yyyy-mm-dd---placeholder)
-  - [1.2.0 - 2026-05-??](#120---2026-05-)
+  - [1.2.0 - 2026-05-15](#120---2026-05-15)
   - [1.1.0 - 2026-05-14](#110---2026-05-14)
   - [1.0.0 - 2026-05-10](#100---2026-05-10)
 
