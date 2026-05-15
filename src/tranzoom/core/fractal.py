@@ -23,13 +23,6 @@ from tranzoom.core import frame, image
 
 # TODO: make a way of coloring the black inside with grayscale base on the max value [0..4] of |x|
 
-# iteration constants
-
-MIN_ITER: int = 1000
-DEFAULT_ITER: int = 1000
-HIGH_ITERS: list[int] = [100_000, 1_000_000, 10_000_000]  # these are very high iteration counts
-MAX_ITER: int = 2 ** (image.N_BYTES_UINT * 8) - 1  # 4_294_967_295, max value for array('I'), uint32
-
 # automated search for iter
 
 _ITER_SAFETY_FACTOR: float = 1.5  # we multiply the estimated iter by this to be safe
@@ -158,8 +151,8 @@ class MandelbrotTaskInput:
         f'{frame.MIN_IMAGE_SIZE} and {frame.MAX_IMAGE_SIZE}'
       )
     # sanity check iter_limit: if error, it came from the user (b/c adaptive clamps to the limits)
-    if not (MIN_ITER <= self.max_iter <= MAX_ITER):
-      raise Error(f'{self.max_iter=} must be between {MIN_ITER} and {MAX_ITER}')
+    if not (frame.MIN_ITER <= self.max_iter <= frame.MAX_ITER):
+      raise Error(f'{self.max_iter=} must be between {frame.MIN_ITER} and {frame.MAX_ITER}')
     # check task numbers
     if not (1 <= self.n_task <= self.total_tasks):
       raise Error(f'{self.n_task=} must be between 1 and {self.total_tasks}')
@@ -190,6 +183,7 @@ def _MandelbrotComputation(inp: MandelbrotTaskInput) -> MandelbrotTaskOutput:  #
   is_preprocess: bool = inp.width == frame.MIN_IMAGE_SIZE and inp.height == frame.MIN_IMAGE_SIZE
   # create image; will also check the parameters and frame validity in the Image constructor
   img: image.Image = image.Image(inp.frm, inp.width, inp.height)
+  img.SetDepth(inp.max_iter)  # set the depth of the image to the max_iter we will use
   # compute pixel size in complex plane and check frame validity; exact computation (gmpy2.mpq)
   dx: gmpy2.mpq
   dy: gmpy2.mpq
@@ -198,7 +192,7 @@ def _MandelbrotComputation(inp: MandelbrotTaskInput) -> MandelbrotTaskOutput:  #
   if dx <= 0 or dy <= 0:
     raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
   # start the mpfr context for floating-point computations with the precision needed
-  with inp.frm.context:
+  with img.context:
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
     # are relatively expensive and we can reuse the x values across rows ("inner for loop");
     # also, this is where the "X" (real) coordinates are converted mpq->mpfr
@@ -265,7 +259,6 @@ def _MandelbrotComputation(inp: MandelbrotTaskInput) -> MandelbrotTaskOutput:  #
         p_bar.update(1)  # we touched a pixel, so update the progress bar
   # done
   p_bar.close()
-  img.SetDepth(inp.max_iter)  # set the depth of the image to the max_iter we used
   return MandelbrotTaskOutput(img=img, n_task=inp.n_task, total_tasks=inp.total_tasks)
 
 
@@ -295,8 +288,8 @@ def _MandelbrotAdaptiveIterations(frm: frame.Frame, progress_bar: bool) -> int:
     Error: if the estimated max_iter exceeds the adaptive limit
 
   """
-  max_iter: int = MAX_ITER
-  for high_iter in HIGH_ITERS:
+  max_iter: int = frame.MAX_ITER
+  for high_iter in frame.HIGH_ITERS:
     # make the smallest image
     img16: image.Image = Mandelbrot(
       frm,
@@ -317,7 +310,7 @@ def _MandelbrotAdaptiveIterations(frm: frame.Frame, progress_bar: bool) -> int:
       histogram[-1][0] if histogram[-1][0] != high_iter or len(histogram) == 1 else histogram[-2][0]
     )
     # apply safety factor and clamp
-    max_iter = min(MAX_ITER, max(MIN_ITER, int(max_iter * _ITER_SAFETY_FACTOR)))
+    max_iter = min(frame.MAX_ITER, max(frame.MIN_ITER, int(max_iter * _ITER_SAFETY_FACTOR)))
     if max_iter < high_iter:
       # we found a winner!
       if len(histogram) > 7:  # noqa: PLR2004 ; 7 is 3 before, the middle, and 3 after
@@ -336,6 +329,6 @@ def _MandelbrotAdaptiveIterations(frm: frame.Frame, progress_bar: bool) -> int:
     # here we didn't find, so we loop to the next higher limit...
   # if we exhausted all the high_iters without finding a suitable max_iter, we have to give up
   raise Error(
-    f'Estimated {max_iter=} is above the adaptive limit of {HIGH_ITERS[-1]}; '
+    f'Estimated {max_iter=} is above the adaptive limit of {frame.HIGH_ITERS[-1]}; '
     'maybe this frame is interior-only (all pixels are non-escaping)'
   )

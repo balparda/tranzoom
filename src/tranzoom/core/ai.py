@@ -398,7 +398,7 @@ def _ComputeMandelbrot(
   )
   print_comm(
     f'\nMandelbrot zoom (#{count}) with frame {frm}, '
-    f'precision {frm.precision} bits, {magnification_str} magnification\n'
+    f'precision {img.precision} bits, {magnification_str} magnification\n'
     f'{img_hash!r} in {tmr}, escape range {img.escape_range}, will save as "{full_path}"'
   )
   if iterm:

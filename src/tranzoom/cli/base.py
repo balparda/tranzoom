@@ -179,11 +179,11 @@ MAX_ITERATIONS_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '-i',
   '--iter',
-  min=fractal.MIN_ITER,
-  max=fractal.MAX_ITER,
+  min=frame.MIN_ITER,
+  max=frame.MAX_ITER,
   help=(
     'Maximum iterations (depth) to compute before determining escape; '
-    f'{fractal.MIN_ITER} ≤ iter ≤ {fractal.MAX_ITER}; '
+    f'{frame.MIN_ITER} ≤ iter ≤ {frame.MAX_ITER}; '
     f'default is None (automatic search for optimal iterations --- recommended)'
   ),
 )

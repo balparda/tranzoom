@@ -18,7 +18,7 @@ import sys
 import time
 from typing import cast
 
-from gmpy2 import mpq
+import gmpy2
 from PIL import Image as PILImage
 from PIL import ImageDraw, ImageFont, PngImagePlugin
 from transcrypto.core import hashes
@@ -70,10 +70,8 @@ META_LLM_MODEL_VALUE_HUMAN = 'HUMAN'  # used when the evaluation is done by a fl
 
 # TODO: Julia Set + ability to read either the frame or the center (Julia point) from existing img
 
-
 # image constants
 
-N_BYTES_UINT: int = 4  # we use array of unsigned ints to store pixel data
 type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel data array
 
 # constants for drawing
@@ -130,8 +128,8 @@ class Image:
     self._depth: int | None = None  # may be set later by the fractal rendering function
     # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
     self.escape: ImageUInt32Array = array.array('I', (0 for _ in range(width * height)))
-    if self.escape.itemsize != N_BYTES_UINT:
-      raise Error(f'unsupported platform: array of unsigned ints is not {N_BYTES_UINT} bytes')
+    if self.escape.itemsize != frame.N_BYTES_UINT:
+      raise Error(f'unsupported platform: array of unsigned ints is not {frame.N_BYTES_UINT} bytes')
 
   def SetEscape(self, x: int, y: int, escaped_at: int) -> None:
     """Set the escape iteration for a given pixel.
@@ -160,6 +158,28 @@ class Image:
 
     """
     return (min(self.escape), max(self.escape))
+
+  @property
+  def precision(self) -> int:
+    """Estimate the MPFR precision needed to render this image. See Frame.Precision() for details.
+
+    Returns:
+      int: The estimated number of bits of MPFR precision needed.
+
+    """
+    return self._frame.Precision(
+      self._width, self._height, max_iter=self._depth or frame.DEFAULT_ITER
+    )
+
+  @property
+  def context(self) -> gmpy2.context:
+    """Get gmpy2 context with precision to distinguish adjacent pixels in smaller complex-plane dim.
+
+    Returns:
+      gmpy2.context: A context with the estimated number of bits of precision needed.
+
+    """
+    return gmpy2.local_context(gmpy2.context(), precision=self.precision)
 
   def SetDepth(self, depth: int) -> None:
     """Set the maximum iteration depth for the image. Should be called after image is complete.
@@ -267,14 +287,14 @@ class Image:
     png_meta.add_text(META_BOTTOM_RE_KEY, str(self._frame.bottom_re))
     png_meta.add_text(META_BOTTOM_IM_KEY, str(self._frame.bottom_im))
     # frame as center + size
-    center: tuple[mpq, mpq] = self._frame.center
-    sz: tuple[mpq, mpq] = self._frame.size
+    center: tuple[gmpy2.mpq, gmpy2.mpq] = self._frame.center
+    sz: tuple[gmpy2.mpq, gmpy2.mpq] = self._frame.size
     png_meta.add_text(META_CENTER_RE_KEY, str(center[0]))
     png_meta.add_text(META_CENTER_IM_KEY, str(center[1]))
     png_meta.add_text(META_WIDTH_RE_KEY, str(sz[0]))
     png_meta.add_text(META_HEIGHT_IM_KEY, str(sz[1]))
     # precision and magnification
-    png_meta.add_text(META_PRECISION_KEY, str(self._frame.precision))
+    png_meta.add_text(META_PRECISION_KEY, str(self.precision))
     magnification, magnitude = self._frame.magnification
     png_meta.add_text(META_MAGNIFICATION_KEY, str(float(magnification)))  # huge if not converted!
     png_meta.add_text(META_MAGNIFICATION_ORDER_KEY, str(magnitude))

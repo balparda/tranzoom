@@ -96,7 +96,8 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
   )
   config.console.print(
     f'\n{config.img_width}x{config.img_height} Mandelbrot in frame {frm}, '
-    f'precision {frm.precision} bits, {magnification_str} magnification, '
+    f'precision ± {frm.Precision(config.img_width, config.img_height)} bits, '  # approx.: b/c iters
+    f'{magnification_str} magnification, '
     f'{"AUTO" if config.max_iter is None else config.max_iter} iterations...\n'
   )
   # render the image
