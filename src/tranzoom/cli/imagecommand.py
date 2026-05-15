@@ -47,15 +47,28 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
   img_height: int = base.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
   max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
   pal: palette.Palette = base.PALETTE_OPTION,  # type: ignore[assignment]
+  mark_coords: str | None = base.MARK_COORDINATES_OPTION,  # type: ignore[assignment]
+  mark_color: str = base.MARK_COLOR_OPTION,  # type: ignore[assignment]
+  mark_width: int = base.MARK_WIDTH_OPTION,  # type: ignore[assignment]
 ) -> None:
   # store this command's options in the shared config so all sub-commands can read it
   if ctx.invoked_subcommand is not None and ctx.obj is not None:
+    # check color so it won't raise plain KeyError
+    col: str = mark_color.strip().upper()
+    if col not in image.Color.__members__:
+      raise click.ClickException(
+        f'Invalid mark color {mark_color!r}; available colors: '
+        + ', '.join(sorted(repr(c.name.lower()) for c in image.Color))
+      )
     ctx.obj = dataclasses.replace(
       ctx.obj,
       img_width=img_width,
       img_height=img_height,
       max_iter=max_iter,
       pal=pal,
+      mark_coords=mark_coords,
+      mark_color=image.Color[col],
+      mark_width=mark_width,
     )
 
 
@@ -89,6 +102,11 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
   frm: frame.Frame = base.MakeFrameFromCLIArgs(
     frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
   )
+  mark_coords: tuple[int, int] | None = (
+    frm.CoordsTupleToPixel(config.mark_coords, config.img_width, config.img_height)
+    if config.mark_coords  # do this early to check the inputs ASAP
+    else None
+  )
   magnification, magnitude = frm.magnification
   magnification_str: str = (
     # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation
@@ -101,6 +119,8 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
     f'{"AUTO" if config.max_iter is None else config.max_iter} iterations...\n'
   )
   # render the image
+  raw_png: bytes
+  raw_hash: str
   with timer.Timer(emit_log=False) as tmr:
     img: image.Image = fractal.Mandelbrot(
       frm,
@@ -109,15 +129,14 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
       max_iter=config.max_iter,
       n_processes=config.max_threads,
     )
+    # Mandelbrot is ready, convert to PNG
     raw_png, raw_hash = img.AsPNG(pal=config.pal)
+    if mark_coords:
+      # we were asked to mark a coordinate with a crosshair overlay: do it
+      raw_png = image.DrawCrossOverlay(
+        raw_png, mark_coords[0], mark_coords[1], col=config.mark_color, lw=config.mark_width
+      )
   config.console.print(f'Mandelbrot image {raw_hash!r} in {tmr}, escape range {img.escape_range}')
-  # check we can recover the hash from the PNG: should never fail unless we have a bug
-  w, h, png_hash, _ = image.GetBasicDataFromPNG(raw_png)
-  if png_hash != raw_hash or w != config.img_width or h != config.img_height:
-    raise click.ClickException(
-      f'Mismatch: expected {config.img_width}x{config.img_height}/{raw_hash!r} but '
-      f'got {w}x{h}/{png_hash!r} from PNG; this should never happen, please report this as a bug'
-    )
   # save the image to a file named by its time/hash
   full_path: pathlib.Path = image.MakeImagePath(
     config.img_output_path,

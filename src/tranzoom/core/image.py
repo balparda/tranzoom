@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import array
 import base64
+import enum
 import io
 import json
 import math
@@ -66,9 +67,9 @@ META_LLM_ZOOM_COUNT_KEY = 'tranzoom:llm:zoom:count'  # int; zoom iteration depth
 # special values
 META_LLM_MODEL_VALUE_HUMAN = 'HUMAN'  # used when the evaluation is done by a flesh-and-blood human
 
-# TODO: ability to mark a point in an image
-
 # TODO: Julia Set + ability to read either the frame or the center (Julia point) from existing img
+
+# TODO: animated gif or videos of zooms
 
 # image constants
 
@@ -80,8 +81,28 @@ _SQRT_TWO: float = math.sqrt(2)
 _LINE_WIDTH_RATIO: int = 150  # line width will be max(1, sz//_LINE_WIDTH_RATIO) of the image width
 _CIRCLE_RADIUS: int = 20
 _LABEL_OFFSET: int = 5
-_COLOR_WHITE: tuple[int, int, int] = (255, 255, 255)
-_COLOR_GREEN: tuple[int, int, int] = (0, 255, 0)
+
+
+class Color(enum.Enum):
+  """Color enum."""
+
+  BLACK = (0, 0, 0)
+  WHITE = (255, 255, 255)
+  RED = (255, 0, 0)
+  GREEN = (0, 255, 0)
+  BLUE = (0, 0, 255)
+  YELLOW = (255, 255, 0)
+  CYAN = (0, 255, 255)
+  MAGENTA = (255, 0, 255)
+
+
+# color constants
+
+
+DEFAULT_MARK_COLOR: Color = Color.RED
+DEFAULT_MARK_WIDTH: int = 1
+MIN_MARK_WIDTH: int = 1
+MAX_MARK_WIDTH: int = 50
 
 
 class Error(frame.Error):
@@ -433,8 +454,8 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
     cx, cy = w // 2, h // 2
     step_sz: int = w // frame.DEFAULT_STEP_DIRECT
     lw = max(1, max(w, h) // _LINE_WIDTH_RATIO)
-    draw.line((0, cy, w, cy), fill=_COLOR_WHITE, width=lw)
-    draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=lw)
+    draw.line((0, cy, w, cy), fill=Color.WHITE.value, width=lw)
+    draw.line((cx, 0, cx, h), fill=Color.WHITE.value, width=lw)
     # draw 8 circles around the center to indicate the 8 cardinal/ordinal directions
     font: ImageFont.ImageFont = cast('ImageFont.ImageFont', ImageFont.load_default())
     for dx, dy, direction in [
@@ -450,11 +471,13 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
       x, y = int(cx + dx), int(cy + dy)
       draw.ellipse(
         (x - _CIRCLE_RADIUS, y - _CIRCLE_RADIUS, x + _CIRCLE_RADIUS, y + _CIRCLE_RADIUS),
-        outline=_COLOR_GREEN,
+        outline=Color.GREEN.value,
         width=lw,
       )
       # for each circle, also draw the label text
-      draw.text((x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=_COLOR_GREEN, font=font)
+      draw.text(
+        (x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=Color.GREEN.value, font=font
+      )
     # done, save remembering to add metadata that this image has an overlay
     return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
 
@@ -487,10 +510,10 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
     w, h = img.size
     cx, cy = w // 3, h // 3
     lw = max(1, max(w, h) // _LINE_WIDTH_RATIO)
-    draw.line((0, cy, w, cy), fill=_COLOR_WHITE, width=lw)
-    draw.line((0, 2 * cy, w, 2 * cy), fill=_COLOR_WHITE, width=lw)
-    draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=lw)
-    draw.line((2 * cx, 0, 2 * cx, h), fill=_COLOR_WHITE, width=lw)
+    draw.line((0, cy, w, cy), fill=Color.WHITE.value, width=lw)
+    draw.line((0, 2 * cy, w, 2 * cy), fill=Color.WHITE.value, width=lw)
+    draw.line((cx, 0, cx, h), fill=Color.WHITE.value, width=lw)
+    draw.line((2 * cx, 0, 2 * cx, h), fill=Color.WHITE.value, width=lw)
     # draw large number labels centered in each of the 9 sections, left-to-right, top-to-bottom
     label_font: ImageFont.FreeTypeFont = cast(
       'ImageFont.FreeTypeFont', ImageFont.load_default(size=int(max(cx, cy) / 3))
@@ -500,10 +523,49 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
         draw.text(
           (col * cx + cx // 2, row * cy + cy // 2),  # center of this section
           str(row * 3 + col + 1),  # label
-          fill=_COLOR_GREEN,
+          fill=Color.GREEN.value,
           font=label_font,
           anchor='mm',  # center it exactly
         )
+    # done, save remembering to add metadata that this image has an overlay
+    return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
+
+
+def DrawCrossOverlay(
+  img_data: bytes, x: int, y: int, *, col: Color = DEFAULT_MARK_COLOR, lw: int = DEFAULT_MARK_WIDTH
+) -> bytes:
+  """Draw a cross overlay on an image at the specified coordinates.
+
+  Overlays:
+  - white lines delimiting the 9 sections of the image
+  - large green number labels (1-9) centered in each section, left-to-right, top-to-bottom
+
+  Args:
+    img_data: The PNG image data as bytes.
+    x: The x-coordinate of the center of the cross.
+    y: The y-coordinate of the center of the cross.
+    col: The color of the cross.
+    lw: The line width of the cross.
+
+  Returns:
+    The modified PNG image data with the overlay drawn.
+
+  Raises:
+    Error: If the coordinates are out of bounds or if there are issues processing the image.
+
+  """
+  w: int
+  h: int
+  # open the image
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    # check the coords
+    draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
+    w, h = img.size
+    if not (0 <= x < w) or not (0 <= y < h):
+      raise Error(f'Invalid coordinates for cross overlay: {x=}, {y=}, image size {w}x{h}')
+    # draw the cross lines
+    draw.line((0, y, w, y), fill=col.value, width=lw)
+    draw.line((x, 0, x, h), fill=col.value, width=lw)
     # done, save remembering to add metadata that this image has an overlay
     return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
 

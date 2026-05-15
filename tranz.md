@@ -124,16 +124,26 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
  poetry run tranz image read /path/to/image.png                                                                                                            
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --width    -w      INTEGER RANGE [16<=x<=16384]                          Width of the image; 16 ≤ w ≤ 16384; default is 1024             │
-│ --height   -h      INTEGER RANGE [16<=x<=16384]                          Height of the image; 16 ≤ h ≤ 16384; default is 1024            │
-│ --iter     -i      INTEGER RANGE [1000<=x<=4294967295]                   Maximum iterations (depth) to compute before determining escape; 1000 ≤ iter ≤ │
-│                                                                          4294967295; default is None (automatic search for optimal iterations ---       │
-│                                                                          recommended)                                                                   │
-│ --palette            Color palette to use for rendering; default is 'blue-to-yellow-to-brown';      │
-│                                                                          available palettes: ['blue-to-yellow-to-brown', 'electric-ocean', 'lava',      │
-│                                                                          'sunset']                                                                      │
+│ --width       -w      INTEGER RANGE [16<=x<=16384]                          Width of the image; 16 ≤ w ≤ 16384; default is 1024          │
+│ --height      -h      INTEGER RANGE [16<=x<=16384]                          Height of the image; 16 ≤ h ≤ 16384; default is 1024         │
+│ --iter        -i      INTEGER RANGE [1000<=x<=4294967295]                   Maximum iterations (depth) to compute before determining escape; 1000 ≤     │
+│                                                                             iter ≤ 4294967295; default is None (automatic search for optimal iterations │
+│                                                                             --- recommended)                                                            │
+│ --palette               Color palette to use for rendering; default is 'blue-to-yellow-to-brown';   │
+│                                                                             available palettes: ['blue-to-yellow-to-brown', 'electric-ocean', 'lava',   │
+│                                                                             'sunset']                                                                   │
 │                                                                                                                       │
-│ --help                                                                   Show this message and exit.                                                    │
+│ --mark                TEXT                                                  A point formatted as "(re, im)" to add a crosshair overlay, `re` and `im`   │
+│                                                                             multi-precision; this can be a float (ex: "(0.34, -0.56)") or a fraction of │
+│                                                                             ints (rational numbers, ex: "(123/451, 789/1011)") or any combination of    │
+│                                                                             these, and the numbers will be fed directly to multi-precision arithmetic   │
+│                                                                             so no precision is lost; default is None, i.e., do not mark overlay on the  │
+│                                                                             image                                                                       │
+│ --mark-color          TEXT                                                  Color of the crosshair overlay; default is "red"; available colors:         │
+│                                                                             'black', 'blue', 'cyan', 'green', 'magenta', 'red', 'white', 'yellow'       │
+│                                                                                                                                           │
+│ --mark-width          INTEGER RANGE [1<=x<=50]                              Width of the crosshair overlay; 1 ≤ w ≤ 50; default is 1        │
+│ --help                                                                      Show this message and exit.                                                 │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ mandel  Generate a Mandelbrot image.                                                                                                                    │

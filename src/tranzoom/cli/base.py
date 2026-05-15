@@ -175,6 +175,35 @@ FRAME_HEIGHT_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
     'default is None, i.e, the same as width'
   ),
 )
+MARK_COORDINATES_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '--mark',
+  help=(
+    'A point formatted as "(re, im)" to add a crosshair overlay, `re` and `im` multi-precision; '
+    'this can be a float (ex: "(0.34, -0.56)") or a fraction of ints '
+    '(rational numbers, ex: "(123/451, 789/1011)") or any combination of these, and '
+    'the numbers will be fed directly to multi-precision arithmetic so no precision is lost; '
+    'default is None, i.e., do not mark overlay on the image'
+  ),
+)
+MARK_COLOR_OPTION: typer.models.OptionInfo = typer.Option(
+  image.DEFAULT_MARK_COLOR.name.lower(),
+  '--mark-color',
+  help=(
+    f'Color of the crosshair overlay; default is "{image.DEFAULT_MARK_COLOR.name.lower()}"; '
+    'available colors: ' + ', '.join(sorted(repr(c.name.lower()) for c in image.Color))
+  ),
+)
+MARK_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
+  image.DEFAULT_MARK_WIDTH,
+  '--mark-width',
+  min=image.MIN_MARK_WIDTH,
+  max=image.MAX_MARK_WIDTH,
+  help=(
+    f'Width of the crosshair overlay; {image.MIN_MARK_WIDTH} ≤ w ≤ {image.MAX_MARK_WIDTH}; '
+    f'default is {image.DEFAULT_MARK_WIDTH}'
+  ),
+)
 
 # Computation Options
 MAX_ITERATIONS_OPTION: typer.models.OptionInfo = typer.Option(
@@ -288,6 +317,9 @@ class TranZoomConfig(clibase.CLIConfig):
 
   max_iter: int | None = None  # for `image` command
   pal: palette.Palette = palette.DEFAULT_PALETTE  # for `image` command
+  mark_coords: str | None = None  # for `image` command
+  mark_color: image.Color = image.DEFAULT_MARK_COLOR  # for `image` command
+  mark_width: int = image.DEFAULT_MARK_WIDTH  # for `image` command
 
   max_steps: int = 0  # for `zoom` command
 

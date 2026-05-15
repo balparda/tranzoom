@@ -37,5 +37,5 @@ for n in $(seq 1 16); do
     else
         zoom=$(printf "0.%0*d25" "$((3 * n - 4))" 0)  # then "0.0025", "0.0000025", etc.
     fi
-    poetry run tranz --no-date --no-hash --prefix "$prefix" -o tests/data/images image -w 512 -h 512 mandel "$CX" "$CY" "$zoom"
+    poetry run tranz --no-date --no-hash --prefix "$prefix" -o tests/data/images image -w 512 -h 512 --mark "($CX,$CY)" mandel "$CX" "$CY" "$zoom"
 done

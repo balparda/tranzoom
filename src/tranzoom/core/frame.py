@@ -269,6 +269,81 @@ class Frame:
       raise Error(f'calculated frame size {fr.size} does not match input size ({dx * 2}, {dy * 2})')
     return fr
 
+  def CoordToPixel(
+    self, re_inp: ExactInputType, im_inp: ExactInputType, pixel_width: int, pixel_height: int
+  ) -> tuple[int, int]:
+    """Convert complex-plane coordinates to pixel coordinates in the image.
+
+    Calculate pixel coordinates, with (0, 0) at the top-left corner of the image and
+    (pixel_width-1, pixel_height-1) at the bottom-right corner; we use floor to ensure
+    that coordinates on the boundary between two pixels are assigned to the pixel above/left,
+    which is important for consistency and to avoid out-of-bounds pixel coordinates;
+    the calculations are exact mpq. Formula is:
+
+    x = floor((re - top_re) / (bottom_re - top_re) * pixel_width)
+    y = floor((top_im - im) / (top_im - bottom_im) * pixel_height)
+
+    Args:
+      re_inp (ExactInputType): Real part of the complex coordinate.
+      im_inp (ExactInputType): Imaginary part of the complex coordinate.
+      pixel_width (int): Width of the image in pixels.
+      pixel_height (int): Height of the image in pixels.
+
+    Returns:
+      tuple[int, int]: The (x, y) pixel coordinates corresponding to the complex coordinate.
+
+    Raises:
+      Error: If the input coordinates are outside the frame or if the image dimensions are invalid.
+
+    """
+    re: gmpy2.mpq = re_inp if isinstance(re_inp, gmpy2.mpq) else gmpy2.mpq(re_inp)
+    im: gmpy2.mpq = im_inp if isinstance(im_inp, gmpy2.mpq) else gmpy2.mpq(im_inp)
+    # check parameters
+    if not (self.top_re <= re <= self.bottom_re) or not (self.bottom_im <= im <= self.top_im):
+      raise Error(f'coordinates ({re}, {im}) are outside the frame {self}')
+    if not (MIN_IMAGE_SIZE <= pixel_width <= MAX_IMAGE_SIZE) or not (
+      MIN_IMAGE_SIZE <= pixel_height <= MAX_IMAGE_SIZE
+    ):
+      raise Error(
+        f'{pixel_width=} and {pixel_height=} must be between {MIN_IMAGE_SIZE} and {MAX_IMAGE_SIZE}'
+      )
+    # do computation
+    return (
+      int(
+        gmpy2.floor((re - self.top_re) / (self.bottom_re - self.top_re) * gmpy2.mpq(pixel_width))
+      ),
+      int(
+        gmpy2.floor((self.top_im - im) / (self.top_im - self.bottom_im) * gmpy2.mpq(pixel_height))
+      ),
+    )
+
+  def CoordsTupleToPixel(self, inp: str, pixel_width: int, pixel_height: int) -> tuple[int, int]:
+    """Parse a complex-plane tuple coordinates to pixel coordinates in the image.
+
+    See CoordToPixel() for more details.
+
+    Args:
+      inp (str): A string representing the complex coordinate in the format "(re, im)".
+      pixel_width (int): Width of the image in pixels.
+      pixel_height (int): Height of the image in pixels.
+
+    Returns:
+      tuple[int, int]: The (x, y) pixel coordinates corresponding to the complex coordinate
+
+    Raises:
+      Error: If the input string is not in the correct format or if the coordinates are invalid
+
+    """
+    # parse and check the mark_coords, which should be in the format "(re,im)"
+    co_re: str
+    co_im: str
+    co_re, co_im = inp.split(',')
+    co_re, co_im = co_re.strip(), co_im.strip()
+    if not co_re.startswith('(') or not co_im.endswith(')'):
+      raise Error(f'Expected "(re,im)" input got {inp!r}')
+    # convert the coordinate to pixel and draw the overlay
+    return self.CoordToPixel(co_re[1:], co_im[:-1], pixel_width, pixel_height)
+
   def Precision(self, pixel_width: int, pixel_height: int, *, max_iter: int = DEFAULT_ITER) -> int:
     """Estimate the MPFR precision needed to render this frame at the requested image size.
 
