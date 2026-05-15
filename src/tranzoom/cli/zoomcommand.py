@@ -9,6 +9,8 @@ README.md has good examples for different zoom levels.
 
 from __future__ import annotations
 
+import dataclasses
+
 import click
 import typer
 from transcrypto.cli import clibase
@@ -37,6 +39,26 @@ zoom_app = typer.Typer(
 tranz.app.add_typer(zoom_app, name='zoom')
 
 
+@zoom_app.callback(invoke_without_command=True)
+@clibase.CLIErrorGuard
+def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
+  *,
+  ctx: click.Context,
+  # note that these are the zoom image options, with default of 512x512
+  img_width: int = base.IMAGE_ZOOM_WIDTH_OPTION,  # type: ignore[assignment]
+  img_height: int = base.IMAGE_ZOOM_HEIGHT_OPTION,  # type: ignore[assignment]
+  max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
+) -> None:
+  # store this command's options in the shared config so all sub-commands can read it
+  if ctx.invoked_subcommand is not None and ctx.obj is not None:
+    ctx.obj = dataclasses.replace(
+      ctx.obj,
+      img_width=img_width,
+      img_height=img_height,
+      max_steps=max_steps,
+    )
+
+
 @zoom_app.command(
   'ai',
   help='Use AI to search for an interest point.',
@@ -63,8 +85,6 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
   query: str | None = base.AI_QUERY_OPTION,  # type: ignore[assignment]
   reason: bool = base.AI_OUTPUT_REASON_FIELD_OPTION,  # type: ignore[assignment]
   memory: int = base.MAX_CHAT_MEMORY_OPTION,  # type: ignore[assignment]
-  max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
-  iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
   config: base.TranZoomConfig = ctx.obj
@@ -74,6 +94,8 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
   # we have a valid frame, let's start the AI search loop
   ai.ZoomLoop(
     frm,
+    config.img_width,
+    config.img_height,
     config.img_output_path,
     config.img_use_date,
     config.img_use_hash,
@@ -94,8 +116,8 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     query.strip() if query else None,
     reason,
     memory,
-    max_steps,
-    iterm,
+    config.max_steps,
+    config.iterm,
     _MANUAL_QUERY_WEIGHT,
     config.console.print,
   )
@@ -122,8 +144,6 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   center_im: str = base.FRAME_CENTER_IM_ARGUMENT,  # type: ignore[assignment]
   f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]
   f_height: str | None = base.FRAME_HEIGHT_ARGUMENT,  # type: ignore[assignment]
-  max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
-  iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
   config: base.TranZoomConfig = ctx.obj
@@ -133,12 +153,14 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   # we have a valid frame, let's start the AI search loop
   ai.ManualLoop(
     frm,
+    config.img_width,
+    config.img_height,
     config.img_output_path,
     config.img_use_date,
     config.img_use_hash,
     config.img_path_prefix,
     config.max_threads,
-    max_steps,
-    iterm,
+    config.max_steps,
+    config.iterm,
     config.console.print,
   )

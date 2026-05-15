@@ -24,6 +24,7 @@ SEAHORSE_TAIL_HASH: str = '38824cdaa58b64496ebfd86facf4d4ba4596ab18db95ac97afd64
 # CLI options that can be re-used
 
 DEFAULT_IMAGE_PREFIX: str = 'mandel'
+DEFAULT_VISION_MODEL: str = 'qwen3-vl-32b-instruct@q8_0'
 
 # Image: output image
 IMAGE_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
@@ -46,6 +47,28 @@ IMAGE_HEIGHT_OPTION: typer.models.OptionInfo = typer.Option(
   help=(
     f'Height of the image; {frame.MIN_IMAGE_SIZE} ≤ h ≤ {frame.MAX_IMAGE_SIZE}; '
     f'default is {frame.DEFAULT_IMAGE_SIZE}'
+  ),
+)
+IMAGE_ZOOM_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
+  frame.DEFAULT_ZOOM_SIZE,
+  '-w',
+  '--width',
+  min=frame.MIN_IMAGE_SIZE,
+  max=frame.MAX_IMAGE_SIZE,
+  help=(
+    f'Width of the image; {frame.MIN_IMAGE_SIZE} ≤ w ≤ {frame.MAX_IMAGE_SIZE}; '
+    f'default is {frame.DEFAULT_ZOOM_SIZE}'
+  ),
+)
+IMAGE_ZOOM_HEIGHT_OPTION: typer.models.OptionInfo = typer.Option(
+  frame.DEFAULT_ZOOM_SIZE,
+  '-h',
+  '--height',
+  min=frame.MIN_IMAGE_SIZE,
+  max=frame.MAX_IMAGE_SIZE,
+  help=(
+    f'Height of the image; {frame.MIN_IMAGE_SIZE} ≤ h ≤ {frame.MAX_IMAGE_SIZE}; '
+    f'default is {frame.DEFAULT_ZOOM_SIZE}'
   ),
 )
 IMAGE_PATH_OUTPUT_OPTION: typer.models.OptionInfo = typer.Option(
@@ -196,6 +219,18 @@ PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
 )
 
 # AI Options
+MODEL_OPTION: typer.models.OptionInfo = typer.Option(
+  DEFAULT_VISION_MODEL,
+  '-m',
+  '--model',
+  help=(
+    'LLM vision model to load and use: '
+    'the model must be compatible with the LMStudio client libraries and must support vision; '
+    'will NOT get the model for you, so make sure you either have it available in your LMStudio; '
+    'should be a string you would use with `lms get <THIS>` or `https://huggingface.co/<THIS>`; '
+    f'default: {DEFAULT_VISION_MODEL!r}, a good general-purpose vision model'
+  ),
+)
 AI_QUERY_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '-q',
@@ -227,8 +262,6 @@ AI_OUTPUT_REASON_FIELD_OPTION: typer.models.OptionInfo = typer.Option(
 class TranZoomConfig(clibase.CLIConfig):
   """TranZoom global context, storing the configuration."""
 
-  img_width: int
-  img_height: int
   img_output_path: pathlib.Path | None
   img_use_date: bool
   img_use_hash: bool
@@ -246,6 +279,15 @@ class TranZoomConfig(clibase.CLIConfig):
   flash: bool
   kv_cache: int | None
   timeout: float
+  iterm: bool
+
+  img_width: int = frame.DEFAULT_IMAGE_SIZE  # both `image` and `zoom` use, different defaults
+  img_height: int = frame.DEFAULT_IMAGE_SIZE  # both `image` and `zoom` use, different defaults
+
+  max_iter: int | None = None  # for `image` command
+  pal: palette.Palette = palette.DEFAULT_PALETTE  # for `image` command
+
+  max_steps: int = 0  # for `zoom` command
 
 
 def MakeFrameFromCLIArgs(

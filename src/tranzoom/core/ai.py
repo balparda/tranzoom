@@ -17,7 +17,6 @@ from transcrypto.utils import human, timer
 
 from tranzoom.core import fractal, frame, image, queries
 
-_WIDTH: int = 512  # square frames only!
 DEFAULT_MEMORY_SIZE: int = 5  # default number of iterations the LLM will remember
 MAX_MEMORY_SIZE: int = 30  # maximum number of iterations the LLM will remember
 _DIRECTION_MAP: dict[int, str] = {
@@ -39,6 +38,8 @@ class Error(queries.Error):
 
 def ZoomLoop(
   frm: frame.Frame,
+  width: int,
+  height: int,
   img_output_path: pathlib.Path | None,
   img_use_date: bool,
   img_use_hash: bool,
@@ -68,6 +69,8 @@ def ZoomLoop(
 
   Args:
     frm: The initial frame for the Mandelbrot zoom search.
+    width: The width of the image to render.
+    height: The height of the image to render.
     img_output_path: Optional path to save the rendered images; if None, images will be
         saved to current working directory.
     img_use_date: Whether to include the current date in the image filename when saving.
@@ -103,7 +106,7 @@ def ZoomLoop(
   # capture the time and load model
   zoom_tm: int = timer.Now()
   print_comm(
-    f'Will run for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
+    f'Will run {width} x {height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
     + ('include reason field. ' if reason else '[cyan]NOT[/] include reason field. ')
     + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
@@ -148,6 +151,8 @@ def ZoomLoop(
         # render the image for the current frame
         img_data, full_path = _ComputeMandelbrot(
           frm,
+          width,
+          height,
           count,
           zoom_tm,
           img_output_path,
@@ -211,6 +216,8 @@ def ZoomLoop(
 
 def ManualLoop(
   frm: frame.Frame,
+  width: int,
+  height: int,
   img_output_path: pathlib.Path | None,
   img_use_date: bool,
   img_use_hash: bool,
@@ -224,6 +231,8 @@ def ManualLoop(
 
   Args:
     frm: The initial frame for the Mandelbrot zoom search.
+    width: The width of the image to render.
+    height: The height of the image to render.
     img_output_path: Optional path to save the rendered images; if None, images will be
         saved to current working directory.
     img_use_date: Whether to include the current date in the image filename when saving.
@@ -239,7 +248,7 @@ def ManualLoop(
   # capture the time and load model
   zoom_tm: int = timer.Now()
   print_comm(
-    f'Will run for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
+    f'Will run {width} x {height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
     'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})\n')
@@ -256,6 +265,8 @@ def ManualLoop(
       # render the image for the current frame
       img_data, full_path = _ComputeMandelbrot(
         frm,
+        width,
+        height,
         count,
         zoom_tm,
         img_output_path,
@@ -323,6 +334,8 @@ def ManualLoop(
 
 def _ComputeMandelbrot(
   frm: frame.Frame,
+  width: int,
+  height: int,
   count: int,
   zoom_tm: int,
   img_output_path: pathlib.Path | None,
@@ -337,6 +350,8 @@ def _ComputeMandelbrot(
 
   Args:
     frm: The frame for which to compute the Mandelbrot image.
+    width: The width of the image to render.
+    height: The height of the image to render.
     count: The current zoom step count, used for logging and image naming.
     zoom_tm: The timestamp when the zoom session started, used for logging and image naming.
     img_output_path: Optional path to save the rendered image; if None, the image will not be
@@ -366,7 +381,7 @@ def _ComputeMandelbrot(
   # render the image for the current frame
   with timer.Timer(emit_log=False) as tmr:
     img: image.Image = fractal.Mandelbrot(
-      frm, _WIDTH, _WIDTH, max_iter=None, progress_bar=True, n_processes=max_threads
+      frm, width, height, max_iter=None, progress_bar=True, n_processes=max_threads
     )
     # get PNG and overlay info on top of it
     img_data, img_hash = img.AsPNG()

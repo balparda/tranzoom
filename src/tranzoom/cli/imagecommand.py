@@ -9,6 +9,7 @@ README.md has good examples for different zoom levels.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import pathlib
 
@@ -36,6 +37,28 @@ image_app = typer.Typer(
 tranz.app.add_typer(image_app, name='image')
 
 
+@image_app.callback(invoke_without_command=True)
+@clibase.CLIErrorGuard
+def ImageOptions(  # documentation is in help/epilog  # noqa: D103
+  *,
+  ctx: click.Context,
+  # note that these are the image options, with default of 1024x1024
+  img_width: int = base.IMAGE_WIDTH_OPTION,  # type: ignore[assignment]
+  img_height: int = base.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
+  max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
+  pal: palette.Palette = base.PALETTE_OPTION,  # type: ignore[assignment]
+) -> None:
+  # store this command's options in the shared config so all sub-commands can read it
+  if ctx.invoked_subcommand is not None and ctx.obj is not None:
+    ctx.obj = dataclasses.replace(
+      ctx.obj,
+      img_width=img_width,
+      img_height=img_height,
+      max_iter=max_iter,
+      pal=pal,
+    )
+
+
 @image_app.command(
   'mandel',
   help='Generate a Mandelbrot image.',
@@ -60,9 +83,6 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
   center_im: str = base.FRAME_CENTER_IM_ARGUMENT,  # type: ignore[assignment]
   f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]
   f_height: str | None = base.FRAME_HEIGHT_ARGUMENT,  # type: ignore[assignment]
-  max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
-  pal: palette.Palette = base.PALETTE_OPTION,  # type: ignore[assignment]
-  iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
   config: base.TranZoomConfig = ctx.obj
@@ -77,14 +97,18 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
   config.console.print(
     f'\n{config.img_width}x{config.img_height} Mandelbrot in frame {frm}, '
     f'precision {frm.precision} bits, {magnification_str} magnification, '
-    f'{"AUTO" if max_iter is None else max_iter} iterations...\n'
+    f'{"AUTO" if config.max_iter is None else config.max_iter} iterations...\n'
   )
   # render the image
   with timer.Timer(emit_log=False) as tmr:
     img: image.Image = fractal.Mandelbrot(
-      frm, config.img_width, config.img_height, max_iter=max_iter, n_processes=config.max_threads
+      frm,
+      config.img_width,
+      config.img_height,
+      max_iter=config.max_iter,
+      n_processes=config.max_threads,
     )
-    raw_png, raw_hash = img.AsPNG(pal=pal)
+    raw_png, raw_hash = img.AsPNG(pal=config.pal)
   config.console.print(f'Mandelbrot image {raw_hash!r} in {tmr}, escape range {img.escape_range}')
   # check we can recover the hash from the PNG: should never fail unless we have a bug
   w, h, png_hash, _ = image.GetBasicDataFromPNG(raw_png)
@@ -103,7 +127,7 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
   )
   full_path.write_bytes(raw_png)
   config.console.print(f'Saved to "{full_path}"\n')
-  if iterm:
+  if config.iterm:
     image.PrintITerm2(raw_png)
     config.console.print()
 
@@ -123,7 +147,6 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
   *,
   ctx: click.Context,
   image_path: pathlib.Path = base.IMAGE_PATH_INPUT_ARGUMENT,  # type: ignore[assignment]
-  iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity
   config: base.TranZoomConfig = ctx.obj
@@ -138,6 +161,6 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
     info[image.META_LLM_RESULT_JSON_KEY] = json.loads(str(info[image.META_LLM_RESULT_JSON_KEY]))
   config.console.print_json(data=info, indent=2)
   config.console.print()
-  if iterm:
+  if config.iterm:
     image.PrintITerm2(image_data)
     config.console.print()
