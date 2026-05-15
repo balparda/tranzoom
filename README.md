@@ -39,6 +39,7 @@ Built with:
     - [What this tool is not](#what-this-tool-is-not)
     - [Key concepts and terminology](#key-concepts-and-terminology)
       - [Frame Representation](#frame-representation)
+      - [Precision](#precision)
     - [Inputs and outputs](#inputs-and-outputs)
       - [Inputs](#inputs)
       - [Outputs](#outputs)
@@ -47,6 +48,8 @@ Built with:
     - [Palettes](#palettes)
     - [Command structure](#command-structure)
     - [`tranz` global flags](#tranz-global-flags)
+    - [`tranz image` subgroup flags](#tranz-image-subgroup-flags)
+    - [`tranz zoom` subgroup flags](#tranz-zoom-subgroup-flags)
     - [CLI Commands Documentation](#cli-commands-documentation)
     - [`tranz image mandel` — Render a Mandelbrot image](#tranz-image-mandel--render-a-mandelbrot-image)
     - [`tranz image read` — Read a Mandelbrot image](#tranz-image-read--read-a-mandelbrot-image)
@@ -163,7 +166,7 @@ Starting with version 1.1.0, tranZoom can use local LLM vision models to autonom
 ### Key concepts and terminology
 
 - **[Frame](#frame-representation)**: A rectangular region of the complex plane, defined by a center + width. Stored as `gmpy2.mpq` (exact rationals) to avoid any accumulation of rounding error in coordinates.
-- **Precision**: The number of bits of `mpfr` floating-point precision used for escape-time iteration. Computed automatically from the frame size; never needs to be set manually.
+- **[Precision](#precision)**: The number of bits of `mpfr` floating-point precision used for escape-time iteration. Computed automatically from the frame size; never needs to be set manually.
 - **Magnification**: Ratio of the default full-set frame area to the current frame area. 1× = full set; 1G× = zoomed in one billion times.
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
 - **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
@@ -203,6 +206,33 @@ will create the Frame:
 ```
 
 Frame will keep these numbers exact always, no matter the precision.
+
+#### Precision
+
+**Precision** is the number of [MPFR (arbitrary-precision floating-point)](https://www.mpfr.org/) **bits** used during fractal iteration. Mandelbrot computation involves repeated complex-plane arithmetic starting from the frame's coordinates; insufficient floating-point precision causes visible artifacts — pixels classified as escaped or non-escaped incorrectly — especially at high magnification where neighboring pixels differ only in the final bits of their coordinates.
+
+TransZoom computes the required precision automatically for every `(frame, image size, max-iteration)` combination via `Frame.Precision()` and `Image.precision`. You never need to set it manually. The estimate is conservative by design: it aims to keep numerical noise far below one output pixel.
+
+The formula is:
+
+$$\text{precision} = \max\!\Big( P_{\min},\; \lceil \log_2(M / h) \rceil + 2\,\lceil \log_2(N+1) \rceil + G \Big)$$
+
+where:
+
+- $h = \min\!\left(\dfrac{\text{frame\_width}}{\text{pixel\_width}},\; \dfrac{\text{frame\_height}}{\text{pixel\_height}}\right)$ — the smaller complex-plane distance that maps to one output pixel (the tighter precision constraint)
+- $M = \max\!\left(|\text{top\_re}|,\, |\text{bottom\_re}|,\, |\text{top\_im}|,\, |\text{bottom\_im}|,\, 1\right)$ — the largest coordinate magnitude in the frame; because MPFR precision is *relative* (not absolute), frames far from the origin need more bits to represent fine detail at a given scale
+- $N$ — `max_iter`, the iteration ceiling for the render; the $2\,\lceil\log_2(N+1)\rceil$ term is an iteration guard that grows logarithmically to account for accumulated rounding error over many iterations
+- $G = 88$ — `_MPFR_MIN_GUARD_BITS`, a fixed safety margin of 88 extra bits beyond the bare minimum to distinguish neighboring pixels
+- $P_{\min} = 140$ — `_MPFR_MIN_PRECISION`, the floor (≈42 decimal digits), active for low-magnification frames where the base term is small
+
+The maximum allowed precision is `_MPFR_MAX_PRECISION = 300 000` bits (≈90 000 decimal digits). Requesting a frame smaller than that limit raises an error. In practice, deep zooms at moderate image sizes stay well below a few thousand bits.
+
+The computed precision is exposed as:
+
+- `Frame.Precision(pixel_width, pixel_height, max_iter=...)` → `int` bits
+- `Frame.Context(pixel_width, pixel_height, max_iter=...)` → ready-to-use `gmpy2.context`
+- `Image.precision` → `int` bits (uses the image's own dimensions and current depth)
+- `Image.context` → ready-to-use `gmpy2.context` (same)
 
 ### Inputs and outputs
 

@@ -124,8 +124,8 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
  poetry run tranz image read /path/to/image.png                                                                                                            
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --width    -w      INTEGER RANGE [16<=x<=8192]                           Width of the image; 16 ≤ w ≤ 8192; default is 1024              │
-│ --height   -h      INTEGER RANGE [16<=x<=8192]                           Height of the image; 16 ≤ h ≤ 8192; default is 1024             │
+│ --width    -w      INTEGER RANGE [16<=x<=16384]                          Width of the image; 16 ≤ w ≤ 16384; default is 1024             │
+│ --height   -h      INTEGER RANGE [16<=x<=16384]                          Height of the image; 16 ≤ h ≤ 16384; default is 1024            │
 │ --iter     -i      INTEGER RANGE [1000<=x<=4294967295]                   Maximum iterations (depth) to compute before determining escape; 1000 ≤ iter ≤ │
 │                                                                          4294967295; default is None (automatic search for optimal iterations ---       │
 │                                                                          recommended)                                                                   │
@@ -237,12 +237,12 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
  poetry run tranz zoom manual "/path/to/image.png"                                                                                                         
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --width      -w      INTEGER RANGE [16<=x<=8192]  Width of the image; 16 ≤ w ≤ 8192; default is 512                                       │
-│ --height     -h      INTEGER RANGE [16<=x<=8192]  Height of the image; 16 ≤ h ≤ 8192; default is 512                                      │
-│ --max-steps  -n      INTEGER RANGE          Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is 0        │
-│                                                   (unlimited, run forever)                                                                              │
+│ --width      -w      INTEGER RANGE [16<=x<=16384]  Width of the image; 16 ≤ w ≤ 16384; default is 512                                     │
+│ --height     -h      INTEGER RANGE [16<=x<=16384]  Height of the image; 16 ≤ h ≤ 16384; default is 512                                    │
+│ --max-steps  -n      INTEGER RANGE           Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is 0       │
+│                                                    (unlimited, run forever)                                                                             │
 │                                                                                                                                             │
-│ --help                                            Show this message and exit.                                                                           │
+│ --help                                             Show this message and exit.                                                                          │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ai      Use AI to search for an interest point.                                                                                                         │
