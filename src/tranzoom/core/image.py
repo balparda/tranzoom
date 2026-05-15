@@ -35,7 +35,8 @@ META_VERSION_KEY = 'tranzoom:version'  # str, like "1.1.0"
 META_IMAGE_WIDTH_KEY = 'tranzoom:image:width'  # int, in pixels
 META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
 META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
-META_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
+META_IMAGE_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
+META_IMAGE_OVERLAY_KEY = 'tranzoom:image:overlay'  # bool; stored as "true"/"false"
 META_FRACTAL_KEY = 'tranzoom:frame:fractal'  # str, like "Mandelbrot", one of frame.Fractal
 META_TOP_RE_KEY = 'tranzoom:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
 META_TOP_IM_KEY = 'tranzoom:frame:top_im'  # gmpy2.mpq
@@ -78,7 +79,7 @@ type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel
 # constants for drawing
 
 _SQRT_TWO: float = math.sqrt(2)
-_LINE_WIDTH: int = 3
+_LINE_WIDTH_RATIO: int = 150  # line width will be max(1, sz//_LINE_WIDTH_RATIO) of the image width
 _CIRCLE_RADIUS: int = 20
 _LABEL_OFFSET: int = 5
 _COLOR_WHITE: tuple[int, int, int] = (255, 255, 255)
@@ -256,7 +257,8 @@ class Image:
     png_meta.add_text(META_IMAGE_WIDTH_KEY, str(self._width))
     png_meta.add_text(META_IMAGE_HEIGHT_KEY, str(self._height))
     png_meta.add_text(META_IMAGE_HASH_KEY, img_data_hash)
-    png_meta.add_text(META_PALETTE_KEY, pal.value)
+    png_meta.add_text(META_IMAGE_PALETTE_KEY, pal.value)
+    png_meta.add_text(META_IMAGE_OVERLAY_KEY, 'false')  # if it comes from this, it has no overlay
     # frame type
     png_meta.add_text(META_FRACTAL_KEY, self._frame.fractal.value)
     # frame as corners
@@ -385,7 +387,7 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
   - each circle has a green label with its direction: "N", "NE", "E", "SE", "S", "SW", "W", "NW"
 
   Works on any size image, but is designed for 512x512, especially because of:
-  - line width and circle radius are fixed
+  - circle radius is fixed
   - text labels are fixed size and positioned with a fixed offset from the circle's center
   Fix these and it can work well on other sizes too...
 
@@ -402,6 +404,7 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
   cy: int
   x: int
   y: int
+  lw: int
   # open the image
   with PILImage.open(io.BytesIO(img_data)) as img:
     # draw the quadrant lines
@@ -409,8 +412,9 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
     w, h = img.size
     cx, cy = w // 2, h // 2
     step_sz: int = w // frame.DEFAULT_STEP_DIRECT
-    draw.line((0, cy, w, cy), fill=_COLOR_WHITE, width=_LINE_WIDTH)
-    draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
+    lw = max(1, max(w, h) // _LINE_WIDTH_RATIO)
+    draw.line((0, cy, w, cy), fill=_COLOR_WHITE, width=lw)
+    draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=lw)
     # draw 8 circles around the center to indicate the 8 cardinal/ordinal directions
     font: ImageFont.ImageFont = cast('ImageFont.ImageFont', ImageFont.load_default())
     for dx, dy, direction in [
@@ -427,22 +431,20 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
       draw.ellipse(
         (x - _CIRCLE_RADIUS, y - _CIRCLE_RADIUS, x + _CIRCLE_RADIUS, y + _CIRCLE_RADIUS),
         outline=_COLOR_GREEN,
-        width=_LINE_WIDTH,
+        width=lw,
       )
       # for each circle, also draw the label text
       draw.text((x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=_COLOR_GREEN, font=font)
-    # done
-    return SaveWithMeta(img)
+    # done, save remembering to add metadata that this image has an overlay
+    return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
 
 
 def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
-  """Draw an overlay on the (512x512) image with target info for moving the zoom frame.
+  """Draw an overlay on an image of any size, with target info for moving the zoom frame.
 
   Overlays:
   - white lines delimiting the 9 sections of the image
   - large green number labels (1-9) centered in each section, left-to-right, top-to-bottom
-
-  Works on any size image apart from the fixed line size. The text labels scale.
 
   Args:
     img_data: The PNG image data as bytes.
@@ -457,19 +459,21 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
   cy: int
   col: int
   row: int
+  lw: int
   # open the image
   with PILImage.open(io.BytesIO(img_data)) as img:
     # draw the thirds lines
     draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
     w, h = img.size
     cx, cy = w // 3, h // 3
-    draw.line((0, cy, w, cy), fill=_COLOR_WHITE, width=_LINE_WIDTH)
-    draw.line((0, 2 * cy, w, 2 * cy), fill=_COLOR_WHITE, width=_LINE_WIDTH)
-    draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
-    draw.line((2 * cx, 0, 2 * cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
+    lw = max(1, max(w, h) // _LINE_WIDTH_RATIO)
+    draw.line((0, cy, w, cy), fill=_COLOR_WHITE, width=lw)
+    draw.line((0, 2 * cy, w, 2 * cy), fill=_COLOR_WHITE, width=lw)
+    draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=lw)
+    draw.line((2 * cx, 0, 2 * cx, h), fill=_COLOR_WHITE, width=lw)
     # draw large number labels centered in each of the 9 sections, left-to-right, top-to-bottom
     label_font: ImageFont.FreeTypeFont = cast(
-      'ImageFont.FreeTypeFont', ImageFont.load_default(size=int(min(cx, cy) / 3))
+      'ImageFont.FreeTypeFont', ImageFont.load_default(size=int(max(cx, cy) / 3))
     )
     for row in range(3):
       for col in range(3):
@@ -480,8 +484,8 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
           font=label_font,
           anchor='mm',  # center it exactly
         )
-    # done
-    return SaveWithMeta(img)
+    # done, save remembering to add metadata that this image has an overlay
+    return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
 
 
 def SaveWithMeta(img: PILImage.Image, *, extra_meta: dict[str, str] | None = None) -> bytes:
