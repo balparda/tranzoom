@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - YYYY-MM-DD - Placeholder](#vvv---yyyy-mm-dd---placeholder)
+  - [1.3.0 - 2026-05-15](#130---2026-05-15)
   - [1.2.0 - 2026-05-15](#120---2026-05-15)
   - [1.1.0 - 2026-05-14](#110---2026-05-14)
   - [1.0.0 - 2026-05-10](#100---2026-05-10)
@@ -26,6 +27,22 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future changes.
+
+## 1.3.0 - 2026-05-15
+
+- Added
+  - `zoom ai` and `zoom manual` can now handle any size zoom, but default is still 512x512.-
+  - Overlay-or-not info in metadata.
+  - TODO: ?
+
+- Changed
+  - TODO: many command options moved around, so summarize them
+  - `-m/--model` option now has a vision model as default.
+  - TODO: ?
+
+- Fixed
+  - Overlay line width is now dynamic, making overlay scalable with image size.
+  - TODO: ?
 
 ## 1.2.0 - 2026-05-15
 
