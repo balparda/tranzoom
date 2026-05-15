@@ -13,8 +13,6 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │ --verbose             -v                INTEGER RANGE [0<=x<=3]           Verbosity (nothing=ERROR, -v=WARNING, -vv=INFO, -vvv=DEBUG).      │
 │ --color                   --no-color                                      Force enable/disable colored output (respects NO_COLOR env var if not         │
 │                                                                           provided). Defaults to having colors.                                         │
-│ --width               -w                INTEGER RANGE [16<=x<=8192]       Width of the image; 16 ≤ w ≤ 8192; default is 1024             │
-│ --height              -h                INTEGER RANGE [16<=x<=8192]       Height of the image; 16 ≤ h ≤ 8192; default is 1024            │
 │ --out                 -o                DIRECTORY                         The local output root directory path, ex: "~/foo/bar/"; if not given, the     │
 │                                                                           image will be saved in the current working directory                          │
 │ --prefix                                TEXT                              Image save prefix; default: 'mandel' (the final file name will be             │
@@ -29,13 +27,13 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                                                          │
 │ --threads                               INTEGER RANGE [1<=x<=16]          Number of threads to use for rendering; default is None, which means to use   │
 │                                                                           all available CPU cores; will be limited to 16 threads                        │
-│ --model               -m                TEXT                              LLM model to load and use: the model must be compatible with the              │
-│                                                                           llama.cpp/LMStudio client libraries; will NOT get the model for you, so make  │
-│                                                                           sure you either have it available in your LMStudio or the model files are     │
-│                                                                           under the specified models root path (`-r/--root` option); should be a string │
-│                                                                           you would use with `lms get <THIS>` or `https://huggingface.co/<THIS>`;       │
-│                                                                           default: 'qwen3-8b@Q8_0', a good general-purpose text (non-vision) model      │
-│                                                                                                                                 │
+│ --model               -m                TEXT                              LLM vision model to load and use: the model must be compatible with the       │
+│                                                                           LMStudio client libraries and must support vision; will NOT get the model for │
+│                                                                           you, so make sure you either have it available in your LMStudio; should be a  │
+│                                                                           string you would use with `lms get <THIS>` or                                 │
+│                                                                           `https://huggingface.co/<THIS>`; default: 'qwen3-vl-32b-instruct@q8_0', a     │
+│                                                                           good general-purpose vision model                                             │
+│                                                                                                                    │
 │ --tokens              -t                INTEGER RANGE [2<=x<=200]         Speculative Decoding: controls how many tokens the model should generate in   │
 │                                                                           advance during auto-tagging; if you do not define this flag then speculative  │
 │                                                                           decoding will be disabled; usually this is a small value, like 4 or 8, and it │
@@ -74,6 +72,10 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │ --timeout                               FLOAT RANGE [0.0<=x<=86400.0]     Timeout, in seconds, for AI calls; zero, or <1s, means no timeout (infinite); │
 │                                                                           default: 300.0 seconds                                                        │
 │                                                                                                                                         │
+│ --iterm                   --no-iterm                                      If True, will output the image to iTerm2 (only use on macOS with iTerm2!      │
+│                                                                           <https://iterm2.com/documentation-images.html>); if False, will not output    │
+│                                                                           the image to iTerm2; default is False                                         │
+│                                                                                                                                      │
 │ --install-completion                                                      Install completion for the current shell.                                     │
 │ --show-completion                                                         Show completion for the current shell, to copy it or customize the            │
 │                                                                           installation.                                                                 │
@@ -122,7 +124,16 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
  poetry run tranz image read /path/to/image.png                                                                                                            
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --help          Show this message and exit.                                                                                                             │
+│ --width    -w      INTEGER RANGE [16<=x<=8192]                           Width of the image; 16 ≤ w ≤ 8192; default is 1024              │
+│ --height   -h      INTEGER RANGE [16<=x<=8192]                           Height of the image; 16 ≤ h ≤ 8192; default is 1024             │
+│ --iter     -i      INTEGER RANGE [1000<=x<=4294967295]                   Maximum iterations (depth) to compute before determining escape; 1000 ≤ iter ≤ │
+│                                                                          4294967295; default is None (automatic search for optimal iterations ---       │
+│                                                                          recommended)                                                                   │
+│ --palette            Color palette to use for rendering; default is 'blue-to-yellow-to-brown';      │
+│                                                                          available palettes: ['blue-to-yellow-to-brown', 'electric-ocean', 'lava',      │
+│                                                                          'sunset']                                                                      │
+│                                                                                                                       │
+│ --help                                                                   Show this message and exit.                                                    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ mandel  Generate a Mandelbrot image.                                                                                                                    │
@@ -154,18 +165,7 @@ Usage: tranz image mandel [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │                               i.e, the same as width                                                                                                    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --iter     -i                INTEGER RANGE [1000<=x<=4294967295]                   Maximum iterations (depth) to compute before determining escape;     │
-│                                                                                    1000 ≤ iter ≤ 4294967295; default is None (automatic search for      │
-│                                                                                    optimal iterations --- recommended)                                  │
-│ --palette                      Color palette to use for rendering; default is                       │
-│                                                                                    'blue-to-yellow-to-brown'; available palettes:                       │
-│                                                                                    ['blue-to-yellow-to-brown', 'electric-ocean', 'lava', 'sunset']      │
-│                                                                                                                       │
-│ --iterm        --no-iterm                                                          If True, will output the image to iTerm2 (only use on macOS with     │
-│                                                                                    iTerm2! <https://iterm2.com/documentation-images.html>); if False,   │
-│                                                                                    will not output the image to iTerm2; default is False                │
-│                                                                                                                                      │
-│ --help                                                                             Show this message and exit.                                          │
+│ --help          Show this message and exit.                                                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 
@@ -193,10 +193,7 @@ Usage: tranz image read [OPTIONS] IMAGE_PATH
 │ *    image_path      FILE  The local input file path, ex: "~/foo/bar/file.png"                                                                │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --iterm    --no-iterm      If True, will output the image to iTerm2 (only use on macOS with iTerm2! <https://iterm2.com/documentation-images.html>); if │
-│                            False, will not output the image to iTerm2; default is False                                                                 │
-│                                                                                                                                      │
-│ --help                     Show this message and exit.                                                                                                  │
+│ --help          Show this message and exit.                                                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 
@@ -240,7 +237,12 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
  poetry run tranz zoom manual "/path/to/image.png"                                                                                                         
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --help          Show this message and exit.                                                                                                             │
+│ --width      -w      INTEGER RANGE [16<=x<=8192]  Width of the image; 16 ≤ w ≤ 8192; default is 512                                       │
+│ --height     -h      INTEGER RANGE [16<=x<=8192]  Height of the image; 16 ≤ h ≤ 8192; default is 512                                      │
+│ --max-steps  -n      INTEGER RANGE          Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is 0        │
+│                                                   (unlimited, run forever)                                                                              │
+│                                                                                                                                             │
+│ --help                                            Show this message and exit.                                                                           │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ai      Use AI to search for an interest point.                                                                                                         │
@@ -272,22 +274,15 @@ Usage: tranz zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │                               i.e, the same as width                                                                                                    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --query      -q                 TEXT                      Query to be added to the default prompt; default is None, no additional query                 │
-│ --reason         --no-reason                              If True, LLM sector evaluations will include an extra `reason` field for the AI output, which │
-│                                                           is great for debugging and understanding the LLM, but is much slower on the LLM; if False,    │
-│                                                           the field will not be included, which is faster; default is False                             │
+│ --query   -q                 TEXT                      Query to be added to the default prompt; default is None, no additional query                    │
+│ --reason      --no-reason                              If True, LLM sector evaluations will include an extra `reason` field for the AI output, which is │
+│                                                        great for debugging and understanding the LLM, but is much slower on the LLM; if False, the      │
+│                                                        field will not be included, which is faster; default is False                                    │
 │                                                                                                                                     │
-│ --memory                        INTEGER RANGE [0<=x<=30]  Maximum number of iterations the LLM will remember; 0 ≤ m ≤ 30; 0 (zero) means no memory,     │
-│                                                           every AI call is independent; default is 5                                                    │
+│ --memory                     INTEGER RANGE [0<=x<=30]  Maximum number of iterations the LLM will remember; 0 ≤ m ≤ 30; 0 (zero) means no memory, every  │
+│                                                        AI call is independent; default is 5                                                             │
 │                                                                                                                                             │
-│ --max-steps  -n                 INTEGER RANGE       Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is  │
-│                                                           0 (unlimited, run forever)                                                                    │
-│                                                                                                                                             │
-│ --iterm          --no-iterm                               If True, will output the image to iTerm2 (only use on macOS with iTerm2!                      │
-│                                                           <https://iterm2.com/documentation-images.html>); if False, will not output the image to       │
-│                                                           iTerm2; default is False                                                                      │
-│                                                                                                                                      │
-│ --help                                                    Show this message and exit.                                                                   │
+│ --help                                                 Show this message and exit.                                                                      │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 
@@ -326,14 +321,7 @@ Usage: tranz zoom manual [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │                               i.e, the same as width                                                                                                    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --max-steps  -n                INTEGER RANGE   Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is 0     │
-│                                                      (unlimited, run forever)                                                                           │
-│                                                                                                                                             │
-│ --iterm          --no-iterm                          If True, will output the image to iTerm2 (only use on macOS with iTerm2!                           │
-│                                                      <https://iterm2.com/documentation-images.html>); if False, will not output the image to iTerm2;    │
-│                                                      default is False                                                                                   │
-│                                                                                                                                      │
-│ --help                                               Show this message and exit.                                                                        │
+│ --help          Show this message and exit.                                                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 
