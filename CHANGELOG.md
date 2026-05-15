@@ -31,18 +31,20 @@ This project follows a pragmatic versioning approach:
 ## 1.3.0 - 2026-05-15
 
 - Added
-  - `zoom ai` and `zoom manual` can now handle any size zoom, but default is still 512x512.-
-  - Overlay-or-not info in metadata.
-  - TODO: ?
+  - `tranz zoom ai` and `tranz zoom manual` now accept any output image size, configured via `-w`/`--width` and `-h`/`--height` on the `tranz zoom` subgroup callback; default is still 512×512.
+  - New `tranzoom:image:overlay` PNG metadata key records whether the saved image has a grid/direction overlay drawn on it (`"true"`) or not (`"false"`).
+  - New `DEFAULT_ZOOM_SIZE = 512` constant in `core/frame.py` separates the zoom default from the `image mandel` default (`DEFAULT_IMAGE_SIZE = 1024`).
 
 - Changed
-  - TODO: many command options moved around, so summarize them
-  - `-m/--model` option now has a vision model as default.
-  - TODO: ?
+  - **Breaking**: `-w`/`--width` and `-h`/`--height` moved out of the global `tranz` callback and into per-subgroup callbacks: `tranz image [-w W] [-h H] mandel ...` (default 1024×1024) and `tranz zoom [-w W] [-h H] ai|manual ...` (default 512×512).
+  - **Breaking**: `--iter`/`-i` (max iterations) and `--palette` moved from `tranz image mandel` to the `tranz image` subgroup callback: `tranz image [--iter N] [--palette NAME] mandel ...`.
+  - **Breaking**: `-n`/`--max-steps` moved from `tranz zoom ai` and `tranz zoom manual` to the `tranz zoom` subgroup callback: `tranz zoom [-n N] ai|manual ...`.
+  - **Breaking**: `--iterm`/`--no-iterm` moved from the individual `tranz image mandel`, `tranz image read`, `tranz zoom ai`, and `tranz zoom manual` commands to the global `tranz` callback: `tranz [--iterm] ...`.
+  - **Breaking**: PNG metadata key `tranzoom:image:palette` replaces the old key `tranzoom:palette`; images written by older versions will show `null` for the palette when read back by this version.
+  - `-m`/`--model` now defaults to `'qwen3-vl-32b-instruct@q8_0'` (a good general-purpose vision model) instead of requiring explicit specification for AI zoom.
 
 - Fixed
-  - Overlay line width is now dynamic, making overlay scalable with image size.
-  - TODO: ?
+  - Overlay line width is now dynamic (`max(1, max(w, h) // 150)`) so overlays scale correctly with any image size, not just 512×512.
 
 ## 1.2.0 - 2026-05-15
 

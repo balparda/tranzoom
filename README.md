@@ -240,7 +240,7 @@ Saved to "mandel-bd77ee8874aa425422a9.png"
 
 As can be seen, the `Frame` is stored as rational numbers with arbitrary precision, `[(-3/4, 0) @ 5/2]`, so it is guaranteed to be exact (centered in $-0.75+0j$ and with width of $2.5$). It will pick a precision, in bits, which is the internal `float` representation (mantissa), and will pick the (max) number of iterations for the generation. The magnification here is 1 because it is the full Mandelbrot set. There will be a progress bar, counting the horizontal lines being produced. The generated image data will be hashed and then saved to a PNG on disk.
 
-Render a [well-known zoom ("Seahorse", ~155× magnification)](#seahorse-155-83-bits):
+Render a [well-known zoom ("Seahorse", ~155× magnification)](#seahorse-155-83-bits) at the default 1024×1024:
 
 ```sh
 poetry run tranz image mandel " -0.74303" "0.126433" "0.01611"
@@ -275,27 +275,53 @@ tranz [global flags] <subgroup> <command> [args]
 | `--version` | Show version and exit | off |
 | `-v`, `-vv`, `-vvv`, `--verbose` | Verbosity (nothing=*ERROR*, `-v`=*WARNING*, `-vv`=*INFO*, `-vvv`=*DEBUG*) | *ERROR* |
 | `--color`/`--no-color` | Force enable/disable colored output (respects `NO_COLOR` env var if not provided) | `--color` |
-| `-w`/`--width` | Output image width in pixels (16–8192); only used by `tranz image mandel` | 1024 |
-| `-h`/`--height` | Output image height in pixels (16–8192); only used by `tranz image mandel` | 1024 |
 | `--threads` | Number of worker processes for rendering (1–N, default: all available cores) | all cores |
 | `-o`/`--out` | Output directory path | current directory |
 | `--prefix` | Filename prefix | `mandel` |
 | `--date`/`--no-date` | Include date-time (`YYYYMMDDhhmmss`) in filename | `--date` |
 | `--hash`/`--no-hash` | Include 20-char SHA256 hash in filename | `--hash` |
-| `-m`/`--model` | LMStudio model identifier to load | *(required for AI zoom)* |
+| `--iterm`/`--no-iterm` | Print image inline in iTerm2 (macOS + iTerm2 only) | off |
+| `-m`/`--model` | LMStudio vision model identifier to load | `qwen3-vl-32b-instruct@q8_0` |
 | `--spec-tokens` | Speculative decoding tokens | model default |
 | `--seed` | Random seed for the model | random |
 | `-c`/`--context` | Context window size in tokens | model default |
-| `-x`/`--temperature` | Sampling temperature | `0.4` |
-| `--gpu` | GPU usage ratio (`0.0`–`1.0`) | `0.0` |
-| `--gpu-layers` | Number of model layers to offload to GPU | `0` |
+| `-x`/`--temperature` | Sampling temperature | `0.15` |
+| `--gpu` | GPU usage ratio (`0.0`–`1.0`) | `0.80` |
+| `--gpu-layers` | Number of model layers to offload to GPU | `-1` (as many as possible) |
 | `--fp16` | Use FP16 precision | off |
-| `--use-mmap` | Use memory-mapped model files | off |
-| `--flash` | Use flash attention | off |
+| `--mmap`/`--no-mmap` | Use memory-mapped model files | on |
+| `--flash`/`--no-flash` | Use flash attention | on |
 | `--kv-cache` | Key-value cache size | model default |
 | `--timeout` | Model operation timeout in seconds | `300.0` |
 
-Note: `tranz zoom` images are always **512×512** pixels; `-w`/`--width` and `-h`/`--height` only affect `tranz image mandel`.
+### `tranz image` subgroup flags
+
+These flags apply to all `tranz image` commands and must be placed **between `image` and the sub-command name**:
+
+```sh
+tranz [global flags] image [-w W] [-h H] [--iter N] [--palette NAME] <mandel|read> [args]
+```
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `-w`/`--width` | Output image width in pixels (16–8192) | 1024 |
+| `-h`/`--height` | Output image height in pixels (16–8192) | 1024 |
+| `-i`/`--iter` | Override max iterations (depth); `1000`–4294967295 | automatic adaptive search |
+| `--palette` | Color palette name | `blue-to-yellow-to-brown` |
+
+### `tranz zoom` subgroup flags
+
+These flags apply to all `tranz zoom` commands and must be placed **between `zoom` and the sub-command name**:
+
+```sh
+tranz [global flags] zoom [-w W] [-h H] [-n STEPS] <ai|manual> [args]
+```
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `-w`/`--width` | Output image width in pixels (16–8192) | 512 |
+| `-h`/`--height` | Output image height in pixels (16–8192) | 512 |
+| `-n`/`--max-steps` | Max zoom steps; `0` = unlimited (Ctrl+C to stop) | `0` |
 
 ### CLI Commands Documentation
 
@@ -306,7 +332,7 @@ Auto-generated CLI reference:
 ### `tranz image mandel` — Render a Mandelbrot image
 
 ```sh
-poetry run tranz [-w WIDTH] [-h HEIGHT] image mandel [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] [--iter N] [--palette NAME]
+poetry run tranz [global flags] image [-w WIDTH] [-h HEIGHT] [--iter N] [--palette NAME] mandel [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 ```
 
 Positional arguments (all optional; defaults show the full Mandelbrot set):
@@ -318,18 +344,13 @@ Positional arguments (all optional; defaults show the full Mandelbrot set):
 | `F_WIDTH` | Width of the frame in the real plane | `'2.5'` |
 | `F_HEIGHT` | Height of the frame in the imaginary plane | same as `F_WIDTH` |
 
+Image size and render options are set at the `tranz image` subgroup level (see [above](#tranz-image-subgroup-flags)).
+
 **Tip — re-render from a saved image:** pass a tranZoom PNG path as `CENTER_RE` to pick up exactly the same frame:
 
 ```sh
 poetry run tranz image mandel "/path/to/saved.png"
 ```
-
-Command-level options:
-
-| Option | Description | Default |
-| --- | --- | --- |
-| `-i`/`--iter` | Override max iterations (depth); `1000`–4294967295 | automatic adaptive search |
-| `--palette` | Color palette name | `blue-to-yellow-to-brown` |
 
 The command:
 
@@ -345,7 +366,7 @@ See below for many example outputs.
 ### `tranz image read` — Read a Mandelbrot image
 
 ```sh
-poetry run tranz image read <IMAGE_PATH> [--iterm]
+poetry run tranz [--iterm] image read <IMAGE_PATH>
 ```
 
 Reads an existing tranZoom PNG and pretty-prints all embedded metadata:
@@ -364,18 +385,18 @@ $ poetry run tranz image read mandel-38824cdaa58b64496ebf.png
 }
 ```
 
-Use `--iterm` to also display the image inline (macOS + iTerm2 only).
+Use `--iterm` (global flag) to also display the image inline (macOS + iTerm2 only).
 
 ### `tranz zoom ai` — AI-guided Mandelbrot zoom search
 
 ```sh
-poetry run tranz -m "<model>" zoom ai [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] \
-  [-n STEPS] [-q QUERY] [--reason] [--memory N] [--iterm]
+poetry run tranz [global flags] zoom [-w WIDTH] [-h HEIGHT] [-n STEPS] ai \
+  [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] [-q QUERY] [--reason] [--memory N]
 ```
 
 Starts an AI-guided iterative zoom session:
 
-1. Renders the current frame as a 512×512 image
+1. Renders the current frame (default: 512×512, configurable via `tranz zoom -w/-h`)
 2. Draws a 3×3 thirds grid with green sector numbers on top
 3. Sends the image to the LLM vision model with a fractal-scoring prompt
 4. Parses the structured response (9 sector scores)
@@ -383,44 +404,50 @@ Starts an AI-guided iterative zoom session:
 6. Saves the image with full LLM evaluation embedded in PNG metadata
 7. Repeats until Ctrl+C or `--max-steps` is reached
 
-Command-level options:
+Positional frame arguments:
 
-| Option | Description | Default |
+| Argument | Description | Default |
 | --- | --- | --- |
 | `CENTER_RE` | Real part of the starting frame center; **or** a path to an existing tranZoom PNG (frame is read from image metadata; other frame arguments ignored) | `'-0.75'` (full set) |
 | `CENTER_IM` | Imaginary part of the starting frame center | `'0'` |
 | `F_WIDTH` | Starting frame width | `'2.5'` |
 | `F_HEIGHT` | Starting frame height | same as `F_WIDTH` |
-| `-n`/`--max-steps` | Max zoom steps; `0` = unlimited (Ctrl+C to stop) | `0` |
+
+Command-level options (on `tranz zoom ai` only):
+
+| Option | Description | Default |
+| --- | --- | --- |
 | `-q`/`--query` | Targeted search query added to the scoring prompt | None |
 | `--reason/--no-reason` | Include LLM reasoning text per sector | off |
 | `--memory` | Number of previous steps in LLM chat history | `5` |
-| `--iterm/--no-iterm` | Print image inline in iTerm2 | off |
 
-Example — start from the full set, zoom using Qwen 32B vision:
+Image size and step count are set at the `tranz zoom` subgroup level (see [above](#tranz-zoom-subgroup-flags)); `--iterm` is a global flag.
+
+Example — start from the full set, zoom using default model at default 512×512:
 
 ```sh
-poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai
+poetry run tranz zoom ai
 ```
 
-Example — start from the Seahorse Tail, targeted search, 10 steps, show images:
+Example — start from the Seahorse Tail, targeted search, 10 steps, show images, custom model:
 
 ```sh
-poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai \
+poetry run tranz --iterm -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai \
   " -0.7436499" "0.13188204" "0.00073801" \
-  -q "spiral" --iterm -n 10
+  -q "spiral"
 ```
 
 Example — resume a previous session from a saved tranZoom PNG (frame read from image metadata):
 
 ```sh
-poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/saved.png"
+poetry run tranz zoom ai "/path/to/saved.png"
 ```
 
 ### `tranz zoom manual` — Manually-guided Mandelbrot zoom
 
 ```sh
-poetry run tranz zoom manual [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] [-n STEPS] [--iterm]
+poetry run tranz [--iterm] zoom [-w WIDTH] [-h HEIGHT] [-n STEPS] manual \
+  [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 ```
 
 Same iterative rendering loop as `tranz zoom ai`, but at each step the user types a direction (1–9, numpad layout: 5=center/zoom-in, 8=N, 2=S, 4=W, 6=E, 7=NW, 9=NE, 1=SW, 3=SE) instead of querying an LLM. The evaluation is stored in PNG metadata labeled as `HUMAN`.
@@ -475,7 +502,7 @@ Saved to "mandel-0cf52a6f78b4a883727c.png"
 
 ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail.png)
 
-Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tail_part.jpg) to a 512×512 image:
+Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tail_part.jpg) at default 1024×1024:
 
 ```sh
 $ poetry run tranz image mandel " -0.7436499" "0.13188204" "0.00073801"

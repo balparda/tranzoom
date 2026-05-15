@@ -27,12 +27,12 @@ zoom_app = typer.Typer(
   help=(
     'Examples:\n\n\n\n'
     '# --- LLM-Guided Fractal Zoom ---\n'
-    'poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai\n'
-    'poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai '
-    '" -0.7436499" "0.13188204" "0.00073801" --iterm -n 10\n'
-    'poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"\n\n'
+    'poetry run tranz zoom ai\n'
+    'poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai '
+    '" -0.7436499" "0.13188204" "0.00073801"\n'
+    'poetry run tranz --iterm zoom ai "/path/to/image.png"\n\n'
     '# --- Human/Manual-Guided Fractal Zoom ---\n'
-    'poetry run tranz zoom manual " -0.74303" "0.126433" "0.01611"\n'
+    'poetry run tranz --iterm zoom manual " -0.74303" "0.126433" "0.01611"\n'
     'poetry run tranz zoom manual "/path/to/image.png"'
   ),
 )
@@ -64,14 +64,14 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
   help='Use AI to search for an interest point.',
   epilog=(
     'Examples:\n\n\n\n'
-    '$ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai\n\n'
+    '$ poetry run tranz zoom ai\n\n'
     '<start with full set and zoom in using model Qwen 32>\n\n\n\n'
     '$ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 '
-    'zoom ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10\n\n'
+    'zoom -n 10 ai " -0.7436499" "0.13188204" "0.00073801"\n\n'
     '<zoom in using model Qwen 32 with higher temperature 0.7, '
-    'start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>\n\n\n\n'
-    '$ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"\n\n'
-    '<gets the same frame used in "/path/to/image.png" and starts zoom there>'
+    'start from "Seahorse Tail", stop after 10 steps>\n\n\n\n'
+    '$ poetry run tranz --iterm zoom ai "/path/to/image.png"\n\n'
+    '<gets the same frame used in "/path/to/image.png" and starts zoom there, print iTerm2 images>'
   ),
 )
 @clibase.CLIErrorGuard
@@ -130,7 +130,7 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     'Examples:\n\n\n\n'
     '$ poetry run tranz zoom manual\n\n'
     '<start with full set and zoom in manually>\n\n\n\n'
-    '$ poetry run tranz zoom manual " -0.7436499" "0.13188204" "0.00073801" --iterm\n\n'
+    '$ poetry run tranz --iterm zoom manual " -0.7436499" "0.13188204" "0.00073801"\n\n'
     '<zoom in manually, start from "Seahorse Tail", print iTerm2 images>\n\n\n\n'
     '$ poetry run tranz zoom manual "/path/to/image.png"\n\n'
     '<gets the same frame used in "/path/to/image.png" and starts zoom there>'

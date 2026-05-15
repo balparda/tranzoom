@@ -91,18 +91,18 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
                                                                                                                                                            
  # --- Mandelbrot Image Generation ---                                                                                                                     
  poetry run tranz image mandel                                                                                                                             
- poetry run tranz -w 512 -h 512 image mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                         
+ poetry run tranz image -w 512 -h 512 mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                         
                                                                                                                                                            
  # --- TranZoom Fractal Image Data Reading / Visualization ---                                                                                             
  poetry run tranz image read /path/to/image.png                                                                                                            
                                                                                                                                                            
  # --- LLM-Guided Fractal Zoom ---                                                                                                                         
- poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai                                                                                                  
- poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                     
- poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"                                                                             
+ poetry run tranz zoom ai                                                                                                                                  
+ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai " -0.7436499" "0.13188204" "0.00073801"                                             
+ poetry run tranz --iterm zoom ai "/path/to/image.png"                                                                                                     
                                                                                                                                                            
  # --- Human/Manual-Guided Fractal Zoom ---                                                                                                                
- poetry run tranz zoom manual " -0.74303" "0.126433" "0.01611"                                                                                             
+ poetry run tranz --iterm zoom manual " -0.74303" "0.126433" "0.01611"                                                                                     
  poetry run tranz zoom manual "/path/to/image.png"                                                                                                         
                                                                                                                                                            
  # --- Markdown Help ---                                                                                                                                   
@@ -118,7 +118,7 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
                                                                                                                                                            
  # --- Mandelbrot Image Generation ---                                                                                                                     
  poetry run tranz image mandel                                                                                                                             
- poetry run tranz -w 512 -h 512 image mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                         
+ poetry run tranz image -w 512 -h 512 mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                         
                                                                                                                                                            
  # --- TranZoom Fractal Image Data Reading / Visualization ---                                                                                             
  poetry run tranz image read /path/to/image.png                                                                                                            
@@ -175,7 +175,7 @@ Usage: tranz image mandel [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  ...                                                                                                                                                       
  Saved to "mandel-<date>-<hash>.png"                                                                                                                       
                                                                                                                                                            
- $ poetry run tranz -w 512 -h 512 image mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                       
+ $ poetry run tranz image -w 512 -h 512 mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                       
  <saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>                                                                              
                                                                                                                                                            
  $ poetry run tranz image mandel "/path/to/image.png"                                                                                                      
@@ -228,12 +228,12 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
  Examples:                                                                                                                                                 
                                                                                                                                                            
  # --- LLM-Guided Fractal Zoom ---                                                                                                                         
- poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai                                                                                                  
- poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                     
- poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"                                                                             
+ poetry run tranz zoom ai                                                                                                                                  
+ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai " -0.7436499" "0.13188204" "0.00073801"                                             
+ poetry run tranz --iterm zoom ai "/path/to/image.png"                                                                                                     
                                                                                                                                                            
  # --- Human/Manual-Guided Fractal Zoom ---                                                                                                                
- poetry run tranz zoom manual " -0.74303" "0.126433" "0.01611"                                                                                             
+ poetry run tranz --iterm zoom manual " -0.74303" "0.126433" "0.01611"                                                                                     
  poetry run tranz zoom manual "/path/to/image.png"                                                                                                         
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -287,14 +287,14 @@ Usage: tranz zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
                                                                                                                                                            
  Examples:                                                                                                                                                 
                                                                                                                                                            
- $ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai                                                                                                
+ $ poetry run tranz zoom ai                                                                                                                                
  <start with full set and zoom in using model Qwen 32>                                                                                                     
                                                                                                                                                            
- $ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                   
- <zoom in using model Qwen 32 with higher temperature 0.7, start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>                           
+ $ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai " -0.7436499" "0.13188204" "0.00073801"                                           
+ <zoom in using model Qwen 32 with higher temperature 0.7, start from "Seahorse Tail", stop after 10 steps>                                                
                                                                                                                                                            
- $ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"                                                                           
- <gets the same frame used in "/path/to/image.png" and starts zoom there>
+ $ poetry run tranz --iterm zoom ai "/path/to/image.png"                                                                                                   
+ <gets the same frame used in "/path/to/image.png" and starts zoom there, print iTerm2 images>
 ```
 
 ### `tranz zoom manual` Sub-Command
@@ -329,7 +329,7 @@ Usage: tranz zoom manual [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  $ poetry run tranz zoom manual                                                                                                                            
  <start with full set and zoom in manually>                                                                                                                
                                                                                                                                                            
- $ poetry run tranz zoom manual " -0.7436499" "0.13188204" "0.00073801" --iterm                                                                            
+ $ poetry run tranz --iterm zoom manual " -0.7436499" "0.13188204" "0.00073801"                                                                            
  <zoom in manually, start from "Seahorse Tail", print iTerm2 images>                                                                                       
                                                                                                                                                            
  $ poetry run tranz zoom manual "/path/to/image.png"                                                                                                       
