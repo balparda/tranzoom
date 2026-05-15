@@ -9,7 +9,7 @@ Fractal manipulation with LLMs
 - **Status:** Early / experimental — core fractal engine is functional; AI-guided zoom is functional
 - **License:** Apache-2.0
 
-**tranZoom** is a Python CLI tool for rendering the Mandelbrot set at virtually unlimited zoom depth using arbitrary-precision arithmetic (`gmpy2`), and for navigating it using AI. The goal is to be able to zoom so deep that standard double-precision floating point becomes meaningless — tranZoom automatically computes the required precision and renders faithfully at any scale. The `zoom ai` command uses local LLM vision models (via `transai` / LMStudio) to evaluate each rendered frame, score nine sectors for visual interest, and autonomously navigate toward the most promising region of the fractal.
+**tranZoom** is a Python CLI tool for rendering the Mandelbrot set at virtually unlimited zoom depth using arbitrary-precision arithmetic (`gmpy2`), and for navigating it using AI. The goal is to be able to zoom so deep that standard double-precision floating point becomes meaningless — tranZoom automatically computes the required precision and renders faithfully at any scale. The `tranz zoom ai` command uses local LLM vision models (via `transai` / LMStudio) to evaluate each rendered frame, score nine sectors for visual interest, and autonomously navigate toward the most promising region of the fractal.
 
 Since version 1.0.0 it is a PyPI package: <https://pypi.org/project/tranzoom/>
 
@@ -19,7 +19,6 @@ Built with:
 - **gmpy2** for arbitrary-precision (`mpq`/`mpfr`) complex-plane arithmetic
 - **Pillow** for PNG image output
 - **tqdm** for progress bars during rendering
-- **pydantic** for structured LLM output parsing
 - **transai** for AI/LLM integration (LMStudio vision models)
 - **Typer** + **Rich** for the CLI and terminal output
 - **Transcrypto** for CLI boilerplate, logging, hashing, and config management
@@ -141,13 +140,12 @@ Or install from the repository for development (see [Development Setup](#develop
 
 - **[python 3.12+](https://python.org/)** — [documentation](https://docs.python.org/3.12/)
 - **[gmpy2 2.3+](https://pypi.org/project/gmpy2/)** — Arbitrary-precision arithmetic using GMP/MPFR/MPC — [documentation](https://gmpy2.readthedocs.io/en/latest/)
-- **[Pillow 12+](https://pypi.org/project/Pillow/)** — PNG image generation — [documentation](https://pillow.readthedocs.io/)
+- **[Pillow 12.2+](https://pypi.org/project/Pillow/)** — PNG image generation — [documentation](https://pillow.readthedocs.io/)
 - **[tqdm 4.67+](https://pypi.org/project/tqdm/)** — Progress bars — [documentation](https://tqdm.github.io/)
-- **[rich 14.2+](https://pypi.org/project/rich/)** — Terminal formatting — [documentation](https://rich.readthedocs.io/en/latest/)
-- **[typer 0.21+](https://pypi.org/project/typer/)** — CLI parser — [documentation](https://typer.tiangolo.com/)
-- **[pydantic 2.13+](https://pypi.org/project/pydantic/)** — Structured LLM output parsing — [documentation](https://docs.pydantic.dev/)
-- **[transai 1.2+](https://pypi.org/project/transai/)** — AI/LLM integration (LMStudio vision models) — [documentation](https://github.com/balparda/transai)
-- **[transcrypto 2.1+](https://pypi.org/project/transcrypto/)** — CLI utilities, logging, hashing, config — [documentation](https://github.com/balparda/transcrypto)
+- **[rich 15.0+](https://pypi.org/project/rich/)** — Terminal formatting — [documentation](https://rich.readthedocs.io/en/latest/)
+- **[typer 0.25+](https://pypi.org/project/typer/)** — CLI parser — [documentation](https://typer.tiangolo.com/)
+- **[transai 1.3+](https://pypi.org/project/transai/)** — AI/LLM integration (LMStudio vision models) — [documentation](https://github.com/balparda/transai)
+- **[transcrypto 2.6.1+](https://pypi.org/project/transcrypto/)** — CLI utilities, logging, hashing, config — [documentation](https://github.com/balparda/transcrypto)
 
 ## Context / Problem Space
 
@@ -171,8 +169,8 @@ Starting with version 1.1.0, tranZoom can use local LLM vision models to autonom
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
 - **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
 - **Color palette**: Four built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette`. Positions in the palette are determined by histogram equalization of escape-iteration counts, cycling through the stops `3` times across the range, so the full color range is used regardless of zoom depth or iteration scale. Interior points (never escaped) are always rendered as pure black. Available palettes: `blue-to-yellow-to-brown` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric-ocean` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient).
-- **AI zoom session**: The `zoom ai` command starts an iterative loop: render the current frame as a 512×512 image, draw a 3×3 thirds grid overlay with green sector labels, send the image to a local LLM vision model, parse the 9-sector scoring response, and move the frame center toward the highest-scoring sector. The optional `--query` flag enables targeted search, blending fractal-quality scores with target-match scores. The loop runs until Ctrl+C or `--max-steps` is reached.
-- **Manual zoom session**: The `zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM.
+- **AI zoom session**: The `tranz zoom ai` command starts an iterative loop: render the current frame as a 512×512 image, draw a 3×3 thirds grid overlay with green sector labels, send the image to a local LLM vision model, parse the 9-sector scoring response, and move the frame center toward the highest-scoring sector. The optional `--query` flag enables targeted search, blending fractal-quality scores with target-match scores. The loop runs until Ctrl+C or `--max-steps` is reached.
+- **Manual zoom session**: The `tranz zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM.
 - **Sector scoring**: Each sector is scored on a 0–100 scale for `fractal_score` (visual complexity / zoom promise). When targeted search is active, an additional `target_match_score` (also 0–100) is blended in with a configurable weight.
 - **Image metadata**: All tranZoom PNG images embed rich metadata (`tranzoom:*` PNG text chunks) including frame coordinates, magnification, palette, precision, and (for AI/manual sessions) the full LLM evaluation, model parameters, prompts, and zoom step count.
 
@@ -211,7 +209,7 @@ Frame will keep these numbers exact always, no matter the precision.
 
 #### Inputs
 
-- stdin: not used (except the `zoom manual` direction prompt, which reads from stdin)
+- stdin: not used (except the `tranz zoom manual` direction prompt, which reads from stdin)
 - CLI arguments: center coordinates (real + imaginary parts as strings, for exact `mpq` conversion), frame width/height, output image dimensions
 - Config file: stored in the OS-native location via `transcrypto.utils.config`
 
@@ -230,7 +228,7 @@ Frame will keep these numbers exact always, no matter the precision.
 Render the [full Mandelbrot set](#full--default-1-80-bits) (default, 1024×1024):
 
 ```sh
-$ poetry run mandel gen
+$ poetry run tranz image mandel
 
 1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, AUTO iterations...
 
@@ -246,7 +244,7 @@ As can be seen, the `Frame` is stored as rational numbers with arbitrary precisi
 Render a [well-known zoom ("Seahorse", ~155× magnification)](#seahorse-155-83-bits):
 
 ```sh
-poetry run mandel gen " -0.74303" "0.126433" "0.01611"
+poetry run tranz image mandel " -0.74303" "0.126433" "0.01611"
 ```
 
 ![Seahorse](tests/data/images/demo-mandel-seahorse.png)
@@ -267,11 +265,10 @@ With the `--palette` flag you can pick your color scheme. We provide the followi
 ### Command structure
 
 ```sh
-mandel [global flags] <command> [args]
-zoom [global flags] <command> [args]
+tranz [global flags] <subgroup> <command> [args]
 ```
 
-### `mandel` global flags
+### `tranz` global flags
 
 | Flag | Description | Default |
 | --- | --- | --- |
@@ -279,28 +276,14 @@ zoom [global flags] <command> [args]
 | `--version` | Show version and exit | off |
 | `-v`, `-vv`, `-vvv`, `--verbose` | Verbosity (nothing=*ERROR*, `-v`=*WARNING*, `-vv`=*INFO*, `-vvv`=*DEBUG*) | *ERROR* |
 | `--color`/`--no-color` | Force enable/disable colored output (respects `NO_COLOR` env var if not provided) | `--color` |
-| `-w`/`--width` | Output image width in pixels (16–8192) | 1024 |
-| `-h`/`--height` | Output image height in pixels (16–8192) | 1024 |
+| `-w`/`--width` | Output image width in pixels (16–8192); only used by `tranz image mandel` | 1024 |
+| `-h`/`--height` | Output image height in pixels (16–8192); only used by `tranz image mandel` | 1024 |
 | `--threads` | Number of worker processes for rendering (1–N, default: all available cores) | all cores |
 | `-o`/`--out` | Output directory path | current directory |
 | `--prefix` | Filename prefix | `mandel` |
 | `--date`/`--no-date` | Include date-time (`YYYYMMDDhhmmss`) in filename | `--date` |
 | `--hash`/`--no-hash` | Include 20-char SHA256 hash in filename | `--hash` |
-
-### `zoom` global flags
-
-| Flag | Description | Default |
-| --- | --- | --- |
-| `--help` | Show help | off |
-| `--version` | Show version and exit | off |
-| `-v`, `-vv`, `-vvv`, `--verbose` | Verbosity | *ERROR* |
-| `--color`/`--no-color` | Force enable/disable colored output | `--color` |
-| `--threads` | Number of worker processes for rendering | all cores |
-| `-o`/`--out` | Output directory path | current directory |
-| `--prefix` | Filename prefix | `mandel` |
-| `--date`/`--no-date` | Include date-time in filename | `--date` |
-| `--hash`/`--no-hash` | Include 20-char SHA256 hash in filename | `--hash` |
-| `-m`/`--model` | LMStudio model identifier to load | *(required)* |
+| `-m`/`--model` | LMStudio model identifier to load | *(required for AI zoom)* |
 | `--spec-tokens` | Speculative decoding tokens | model default |
 | `--seed` | Random seed for the model | random |
 | `-c`/`--context` | Context window size in tokens | model default |
@@ -313,19 +296,18 @@ zoom [global flags] <command> [args]
 | `--kv-cache` | Key-value cache size | model default |
 | `--timeout` | Model operation timeout in seconds | `300.0` |
 
-Note: `zoom` images are always **512×512** pixels; the `--width`/`--height` flags are only available on the `mandel` app.
+Note: `tranz zoom` images are always **512×512** pixels; `-w`/`--width` and `-h`/`--height` only affect `tranz image mandel`.
 
 ### CLI Commands Documentation
 
 Auto-generated CLI reference:
 
-- [**`mandel` documentation**](mandel.md)
-- [**`zoom` documentation**](zoom.md)
+- [**`tranz` documentation**](tranz.md)
 
-### `mandel gen` — Render a Mandelbrot image
+### `tranz image mandel` — Render a Mandelbrot image
 
 ```sh
-poetry run mandel [-w WIDTH] [-h HEIGHT] gen [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] [--iter N] [--palette NAME]
+poetry run tranz [-w WIDTH] [-h HEIGHT] image mandel [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] [--iter N] [--palette NAME]
 ```
 
 Positional arguments (all optional; defaults show the full Mandelbrot set):
@@ -340,7 +322,7 @@ Positional arguments (all optional; defaults show the full Mandelbrot set):
 **Tip — re-render from a saved image:** pass a tranZoom PNG path as `CENTER_RE` to pick up exactly the same frame:
 
 ```sh
-poetry run mandel gen "/path/to/saved.png"
+poetry run tranz image mandel "/path/to/saved.png"
 ```
 
 Command-level options:
@@ -361,16 +343,16 @@ The command:
 
 See below for many example outputs.
 
-### `mandel read` — Read a Mandelbrot image
+### `tranz image read` — Read a Mandelbrot image
 
 ```sh
-poetry run mandel read <IMAGE_PATH> [--iterm]
+poetry run tranz image read <IMAGE_PATH> [--iterm]
 ```
 
 Reads an existing tranZoom PNG and pretty-prints all embedded metadata:
 
 ```sh
-$ poetry run mandel read mandel-38824cdaa58b64496ebf.png
+$ poetry run tranz image read mandel-38824cdaa58b64496ebf.png
 
 '/path/to/mandel-38824cdaa58b64496ebf.png'
 1024x1024 (wxh) / 38824cdaa58b64496ebfd86facf4d4ba4596ab18db95ac97afd643a7a892ff83
@@ -385,10 +367,10 @@ $ poetry run mandel read mandel-38824cdaa58b64496ebf.png
 
 Use `--iterm` to also display the image inline (macOS + iTerm2 only).
 
-### `zoom ai` — AI-guided Mandelbrot zoom search
+### `tranz zoom ai` — AI-guided Mandelbrot zoom search
 
 ```sh
-poetry run zoom -m "<model>" ai [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] \
+poetry run tranz -m "<model>" zoom ai [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] \
   [-n STEPS] [-q QUERY] [--reason] [--memory N] [--iterm]
 ```
 
@@ -419,13 +401,13 @@ Command-level options:
 Example — start from the full set, zoom using Qwen 32B vision:
 
 ```sh
-poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai
+poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai
 ```
 
 Example — start from the Seahorse Tail, targeted search, 10 steps, show images:
 
 ```sh
-poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 ai \
+poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai \
   " -0.7436499" "0.13188204" "0.00073801" \
   -q "spiral" --iterm -n 10
 ```
@@ -433,20 +415,20 @@ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 ai \
 Example — resume a previous session from a saved tranZoom PNG (frame read from image metadata):
 
 ```sh
-poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai "/path/to/saved.png"
+poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/saved.png"
 ```
 
-### `zoom manual` — Manually-guided Mandelbrot zoom
+### `tranz zoom manual` — Manually-guided Mandelbrot zoom
 
 ```sh
-poetry run zoom manual [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] [-n STEPS] [--iterm]
+poetry run tranz zoom manual [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] [-n STEPS] [--iterm]
 ```
 
-Same iterative rendering loop as `zoom ai`, but at each step the user types a direction (1–9, numpad layout: 5=center/zoom-in, 8=N, 2=S, 4=W, 6=E, 7=NW, 9=NE, 1=SW, 3=SE) instead of querying an LLM. The evaluation is stored in PNG metadata labeled as `HUMAN`.
+Same iterative rendering loop as `tranz zoom ai`, but at each step the user types a direction (1–9, numpad layout: 5=center/zoom-in, 8=N, 2=S, 4=W, 6=E, 7=NW, 9=NE, 1=SW, 3=SE) instead of querying an LLM. The evaluation is stored in PNG metadata labeled as `HUMAN`.
 
-Positional frame arguments work the same way as `zoom ai`: pass a tranZoom PNG path as `CENTER_RE` to start the session from the frame stored in that image's metadata.
+Positional frame arguments work the same way as `tranz zoom ai`: pass a tranZoom PNG path as `CENTER_RE` to start the session from the frame stored in that image's metadata.
 
-Note: `zoom manual` does **not** require the AI model flags; it does not load an LLM.
+Note: `tranz zoom manual` does **not** require the AI model flags; it does not load an LLM.
 
 ### Comprehensive example images and zooms
 
@@ -459,7 +441,7 @@ You can run all these at once by executing `scripts/make_examples.sh`.
 Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) with all the default values (image size 1024×1024, centered in $-0.75+0j$ and with width of $2.5$, a good frame that contains the whole set):
 
 ```sh
-$ poetry run mandel gen
+$ poetry run tranz image mandel
 
 1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, AUTO iterations...
 
@@ -479,7 +461,7 @@ This is what tranZoom considers ***"1 magnification"***, and will measure other 
 Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mandel_zoom_03_seehorse.jpg) to a 1024×1024 image (default size):
 
 ```sh
-$ poetry run mandel gen " -0.74303" "0.126433" "0.01611"
+$ poetry run tranz image mandel " -0.74303" "0.126433" "0.01611"
 
 1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) @ 1611/100000], precision 83 bits, 155.183 magnification, AUTO iterations...
 
@@ -497,7 +479,7 @@ Saved to "mandel-0cf52a6f78b4a883727c.png"
 Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tail_part.jpg) to a 512×512 image:
 
 ```sh
-$ poetry run mandel gen " -0.7436499" "0.13188204" "0.00073801"
+$ poetry run tranz image mandel " -0.7436499" "0.13188204" "0.00073801"
 
 1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) @ 73801/100000000], precision 88 bits, 3.387 k magnification, AUTO iterations...
 
@@ -567,11 +549,10 @@ The CLI respects the `NO_COLOR` environment variable and the `--no-color` / `--c
 
 | Component | Responsibility |
 | --- | --- |
-| `mandel.py` | Mandelbrot CLI entry point (`mandel gen`, `mandel read`, `mandel markdown`) |
-| `zoom.py` | Mandelbrot zoom CLI entry point (`zoom ai`, `zoom manual`, `zoom markdown`) |
+| `tranz.py` | `tranz` CLI entry point — global options, `tranz markdown` |
 | `cli/base.py` | Shared CLI options, defaults, `DEFAULT_MANDELBROT_FRAME` |
-| `cli/gencommand.py` | `mandel gen` and `mandel read` command implementations |
-| `cli/aicommand.py` | `zoom ai` and `zoom manual` command implementations |
+| `cli/imagecommand.py` | `tranz image mandel` and `tranz image read` command implementations |
+| `cli/zoomcommand.py` | `tranz zoom ai` and `tranz zoom manual` command implementations |
 | `core/fractal.py` | `Mandelbrot()` renderer — most fractal math |
 | `core/frame.py` | `Frame` class, `Fractal` enum, and base coordinate math |
 | `core/image.py` | `Image` class; image utilities, overlays, iTerm2 printing, metadata helpers |
@@ -595,8 +576,7 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 ├── CHANGELOG.md                  ⟸ latest changes/releases
 ├── LICENSE
 ├── Makefile
-├── mandel.md                     ⟸ auto-generated CLI doc (by `make docs` or `make ci`)
-├── zoom.md                       ⟸ auto-generated CLI doc (by `make docs` or `make ci`)
+├── tranz.md                      ⟸ auto-generated CLI doc (by `make docs` or `make ci`)
 ├── poetry.lock                   ⟸ maintained by Poetry; do not manually edit
 ├── pyproject.toml                ⟸ most important configurations live here
 ├── README.md                     ⟸ this documentation
@@ -620,14 +600,13 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 ├── src/
 │   └── tranzoom/
 │       ├── __init__.py           ⟸ version lives here
-|       ├── mandel.py             ⟸ TranZoom mandel CLI
-│       ├── zoom.py               ⟸ TranZoom zoom CLI + TranZoomAIConfig
+|       ├── tranz.py              ⟸ TranZoom `tranz` CLI entry point
 │       ├── py.typed
 │       ├── cli/
 │       │   ├── __init__.py
-│       │   ├── aicommand.py      ⟸ `zoom ai` and `zoom manual` command implementations
 │       │   ├── base.py           ⟸ shared CLI options, frame defaults, config dataclasses
-│       │   └── gencommand.py     ⟸ `mandel gen` and `mandel read` command implementations
+│       │   ├── imagecommand.py   ⟸ `tranz image mandel` and `tranz image read` implementations
+│       │   └── zoomcommand.py    ⟸ `tranz zoom ai` and `tranz zoom manual` implementations
 │       ├── core/
 │       │   ├── __init__.py
 │       │   ├── ai.py             ⟸ ZoomLoop() and ManualLoop() — zoom session logic
@@ -640,11 +619,10 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 │           ├── __init__.py
 │           └── template.py       ⟸ template for new utility modules
 ├── tests/
-│   ├── mandel_test.py
-│   ├── zoom_test.py
+│   ├── tranz_test.py
 │   ├── cli/
 │   │   ├── base_test.py          ⟸ seahorse tail hash regression test
-│   │   └── gencommand_test.py
+│   │   └── imagecommand_test.py
 │   └── data/
 │       └── images/               ⟸ example renders at 7 zoom levels and powers of 1000
 └── tests_integration/
@@ -709,8 +687,7 @@ cd tranzoom
 poetry env use python3.12    # creates the .venv with the correct Python version
 poetry sync                  # install all dependencies from poetry.lock
 poetry env info              # verify environment
-poetry run mandel --help     # smoke test
-poetry run zoom --help       # smoke test
+poetry run tranz --help      # smoke test
 make ci                      # should pass on clean repo
 ```
 
@@ -747,8 +724,8 @@ poetry build   # builds wheel + sdist in dist/
 ### Run locally
 
 ```sh
-poetry run mandel --help
-poetry run mandel gen    # full set, 1024×1024
+poetry run tranz --help
+poetry run tranz image mandel    # full set, 1024×1024
 ```
 
 ### Testing
@@ -827,10 +804,9 @@ make type  # poetry run mypy src tests tests_integration
 CLI reference is auto-generated from the CLI source code:
 
 ```sh
-make docs  # regenerates mandel.md & zoom.md
+make docs  # regenerates tranz.md
 # or:
-poetry run mandel markdown > mandel.md
-poetry run zoom markdown > zoom.md
+poetry run tranz markdown > tranz.md
 ```
 
 Always run `make ci` before committing — it runs linting, type checking, tests, and regenerates docs and `requirements.txt`.
@@ -905,7 +881,7 @@ The project uses [**CodeQL**](https://codeql.github.com/docs/) (weekly + on ever
 ### Enable debug output
 
 ```sh
-poetry run mandel -vvv gen ...   # DEBUG level logging
+poetry run tranz -vvv image mandel ...   # DEBUG level logging
 ```
 
 ### `gmpy2` installation issues
@@ -926,7 +902,7 @@ poetry sync
 
 ### Rendering is very slow
 
-- Reduce image size: `mandel -w 256 -h 256 gen ...`
+- Reduce image size: `tranz -w 256 -h 256 image mandel ...`
 - `max_iter` is auto-scaled with zoom depth; very deep zooms are inherently slow
 - Very high precision (> 1000 bits, i.e., zoom > ~10^300) will always be slow — this is expected
 
