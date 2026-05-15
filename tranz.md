@@ -1,18 +1,20 @@
 <!-- cspell:disable -->
 <!-- auto-generated; DO NOT EDIT! see base.GenerateTyperHelpMarkdown() -->
 
-# `zoom` Command-Line Interface
+# `tranz` Command-Line Interface
 
 ```text
-Usage: zoom [OPTIONS] COMMAND [ARGS]...                                                                                                                   
+Usage: tranz [OPTIONS] COMMAND [ARGS]...                                                                                                                  
                                                                                                                                                            
- TranZoom: `zoom` CLI can infinitely zoom into the Mandelbrot set, with AI or manually                                                                     
+ TranZoom: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features                                                                  
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --version                                                                 Show version and exit.                                                        │
 │ --verbose             -v                INTEGER RANGE [0<=x<=3]           Verbosity (nothing=ERROR, -v=WARNING, -vv=INFO, -vvv=DEBUG).      │
 │ --color                   --no-color                                      Force enable/disable colored output (respects NO_COLOR env var if not         │
 │                                                                           provided). Defaults to having colors.                                         │
+│ --width               -w                INTEGER RANGE [16<=x<=8192]       Width of the image; 16 ≤ w ≤ 8192; default is 1024             │
+│ --height              -h                INTEGER RANGE [16<=x<=8192]       Height of the image; 16 ≤ h ≤ 8192; default is 1024            │
 │ --out                 -o                DIRECTORY                         The local output root directory path, ex: "~/foo/bar/"; if not given, the     │
 │                                                                           image will be saved in the current working directory                          │
 │ --prefix                                TEXT                              Image save prefix; default: 'mandel' (the final file name will be             │
@@ -79,29 +81,177 @@ Usage: zoom [OPTIONS] COMMAND [ARGS]...
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ markdown  Emit Markdown docs for the CLI (see README.md section "Versioning and releases").                                                             │
-│ ai        Use AI to search for an interest point.                                                                                                       │
-│ manual    Manually navigate a Mandelbrot zoom search (no AI).                                                                                           │
+│ image     Examples:                                                                                                                                     │
+│ zoom      Examples:                                                                                                                                     │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 
                                                                                                                                                            
- $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai                                                                                                      
- <start with full set and zoom in using model Qwen 32>                                                                                                     
+ # --- Mandelbrot Image Generation ---                                                                                                                     
+ poetry run tranz image mandel                                                                                                                             
+ poetry run tranz -w 512 -h 512 image mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                         
                                                                                                                                                            
- $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                         
- <zoom in using model Qwen 32 with higher temperature 0.7, start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>                           
+ # --- TranZoom Fractal Image Data Reading / Visualization ---                                                                                             
+ poetry run tranz image read /path/to/image.png                                                                                                            
                                                                                                                                                            
- $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai "/path/to/image.png"                                                                                 
- <gets the same frame used in "/path/to/image.png" and starts zoom there>                                                                                  
+ # --- LLM-Guided Fractal Zoom ---                                                                                                                         
+ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai                                                                                                  
+ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                     
+ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"                                                                             
                                                                                                                                                            
- $ poetry run zoom manual "/path/to/image.png"                                                                                                             
- <gets the same frame used in "/path/to/image.png" and starts zoom there>
+ # --- Human/Manual-Guided Fractal Zoom ---                                                                                                                
+ poetry run tranz zoom manual " -0.74303" "0.126433" "0.01611"                                                                                             
+ poetry run tranz zoom manual "/path/to/image.png"                                                                                                         
+                                                                                                                                                           
+ # --- Markdown Help ---                                                                                                                                   
+ poetry run tranz markdown > tranz.md
 ```
 
-## `zoom ai` Command
+## `tranz image` Command
 
 ```text
-Usage: zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]                                                                                     
+Usage: tranz image [OPTIONS] COMMAND [ARGS]...                                                                                                            
+                                                                                                                                                           
+ Examples:                                                                                                                                                 
+                                                                                                                                                           
+ # --- Mandelbrot Image Generation ---                                                                                                                     
+ poetry run tranz image mandel                                                                                                                             
+ poetry run tranz -w 512 -h 512 image mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                         
+                                                                                                                                                           
+ # --- TranZoom Fractal Image Data Reading / Visualization ---                                                                                             
+ poetry run tranz image read /path/to/image.png                                                                                                            
+                                                                                                                                                           
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ mandel  Generate a Mandelbrot image.                                                                                                                    │
+│ read    Read a TranZoom fractal image.                                                                                                                  │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+### `tranz image mandel` Sub-Command
+
+```text
+Usage: tranz image mandel [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]                                                                          
+                                                                                                                                                           
+ Generate a Mandelbrot image.                                                                                                                              
+                                                                                                                                                           
+╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│   center_re      [CENTER_RE]  Real part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451")    │
+│                               and the number will be fed directly to multi-precision arithmetic so no precision is lost; ALTERNATIVELY: you can use     │
+│                               this to input an existing PNG image path, and it will read the frame from the given image's metadata (overriding/ignoring │
+│                               the other CLI frame parameters!); default is '-0.75'                                                                      │
+│                                                                                                                                         │
+│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:          │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '0'      │
+│                                                                                                                                             │
+│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:        │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '2.5'    │
+│                                                                                                                                           │
+│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:  │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is None,    │
+│                               i.e, the same as width                                                                                                    │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --iter     -i                INTEGER RANGE [1000<=x<=4294967295]                   Maximum iterations (depth) to compute before determining escape;     │
+│                                                                                    1000 ≤ iter ≤ 4294967295; default is None (automatic search for      │
+│                                                                                    optimal iterations --- recommended)                                  │
+│ --palette                      Color palette to use for rendering; default is                       │
+│                                                                                    'blue-to-yellow-to-brown'; available palettes:                       │
+│                                                                                    ['blue-to-yellow-to-brown', 'electric-ocean', 'lava', 'sunset']      │
+│                                                                                                                       │
+│ --iterm        --no-iterm                                                          If True, will output the image to iTerm2 (only use on macOS with     │
+│                                                                                    iTerm2! <https://iterm2.com/documentation-images.html>); if False,   │
+│                                                                                    will not output the image to iTerm2; default is False                │
+│                                                                                                                                      │
+│ --help                                                                             Show this message and exit.                                          │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Examples:                                                                                                                                                 
+                                                                                                                                                           
+ $ poetry run tranz image mandel                                                                                                                           
+ 1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...                                                                                                       
+ ...                                                                                                                                                       
+ Saved to "mandel-<date>-<hash>.png"                                                                                                                       
+                                                                                                                                                           
+ $ poetry run tranz -w 512 -h 512 image mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                       
+ <saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>                                                                              
+                                                                                                                                                           
+ $ poetry run tranz image mandel "/path/to/image.png"                                                                                                      
+ <gets the same frame used in "/path/to/image.png" and saves a new image of it to disk>
+```
+
+### `tranz image read` Sub-Command
+
+```text
+Usage: tranz image read [OPTIONS] IMAGE_PATH                                                                                                              
+                                                                                                                                                           
+ Read a TranZoom fractal image.                                                                                                                            
+                                                                                                                                                           
+╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ *    image_path      FILE  The local input file path, ex: "~/foo/bar/file.png"                                                                │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --iterm    --no-iterm      If True, will output the image to iTerm2 (only use on macOS with iTerm2! <https://iterm2.com/documentation-images.html>); if │
+│                            False, will not output the image to iTerm2; default is False                                                                 │
+│                                                                                                                                      │
+│ --help                     Show this message and exit.                                                                                                  │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Examples:                                                                                                                                                 
+                                                                                                                                                           
+ $ poetry run tranz image read /path/to/image.png                                                                                                          
+ 1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...                                                                                                       
+ ...
+```
+
+## `tranz markdown` Command
+
+```text
+Usage: tranz markdown [OPTIONS]                                                                                                                           
+                                                                                                                                                           
+ Emit Markdown docs for the CLI (see README.md section "Versioning and releases").                                                                         
+                                                                                                                                                           
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Example:                                                                                                                                                  
+                                                                                                                                                           
+ $ poetry run tranz markdown > tranz.md                                                                                                                    
+ <<saves CLI doc>>
+```
+
+## `tranz zoom` Command
+
+```text
+Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...                                                                                                             
+                                                                                                                                                           
+ Examples:                                                                                                                                                 
+                                                                                                                                                           
+ # --- LLM-Guided Fractal Zoom ---                                                                                                                         
+ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai                                                                                                  
+ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                     
+ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"                                                                             
+                                                                                                                                                           
+ # --- Human/Manual-Guided Fractal Zoom ---                                                                                                                
+ poetry run tranz zoom manual " -0.74303" "0.126433" "0.01611"                                                                                             
+ poetry run tranz zoom manual "/path/to/image.png"                                                                                                         
+                                                                                                                                                           
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ai      Use AI to search for an interest point.                                                                                                         │
+│ manual  Manually navigate a Mandelbrot zoom search (no AI).                                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+### `tranz zoom ai` Sub-Command
+
+```text
+Usage: tranz zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]                                                                               
                                                                                                                                                            
  Use AI to search for an interest point.                                                                                                                   
                                                                                                                                                            
@@ -142,20 +292,20 @@ Usage: zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
                                                                                                                                                            
  Examples:                                                                                                                                                 
                                                                                                                                                            
- $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai                                                                                                      
+ $ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai                                                                                                
  <start with full set and zoom in using model Qwen 32>                                                                                                     
                                                                                                                                                            
- $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                         
+ $ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                   
  <zoom in using model Qwen 32 with higher temperature 0.7, start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>                           
                                                                                                                                                            
- $ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai "/path/to/image.png"                                                                                 
+ $ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"                                                                           
  <gets the same frame used in "/path/to/image.png" and starts zoom there>
 ```
 
-## `zoom manual` Command
+### `tranz zoom manual` Sub-Command
 
 ```text
-Usage: zoom manual [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]                                                                                 
+Usage: tranz zoom manual [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]                                                                           
                                                                                                                                                            
  Manually navigate a Mandelbrot zoom search (no AI).                                                                                                       
                                                                                                                                                            
@@ -188,29 +338,12 @@ Usage: zoom manual [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
                                                                                                                                                            
  Examples:                                                                                                                                                 
                                                                                                                                                            
- $ poetry run zoom manual                                                                                                                                  
+ $ poetry run tranz zoom manual                                                                                                                            
  <start with full set and zoom in manually>                                                                                                                
                                                                                                                                                            
- $ poetry run zoom manual " -0.7436499" "0.13188204" "0.00073801" --iterm                                                                                  
+ $ poetry run tranz zoom manual " -0.7436499" "0.13188204" "0.00073801" --iterm                                                                            
  <zoom in manually, start from "Seahorse Tail", print iTerm2 images>                                                                                       
                                                                                                                                                            
- $ poetry run zoom manual "/path/to/image.png"                                                                                                             
+ $ poetry run tranz zoom manual "/path/to/image.png"                                                                                                       
  <gets the same frame used in "/path/to/image.png" and starts zoom there>
-```
-
-## `zoom markdown` Command
-
-```text
-Usage: zoom markdown [OPTIONS]                                                                                                                            
-                                                                                                                                                           
- Emit Markdown docs for the CLI (see README.md section "Versioning and releases").                                                                         
-                                                                                                                                                           
-╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --help          Show this message and exit.                                                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-                                                                                                                                                           
- Example:                                                                                                                                                  
-                                                                                                                                                           
- $ poetry run zoom markdown > zoom.md                                                                                                                      
- <<saves CLI doc>>
 ```

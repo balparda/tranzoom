@@ -65,6 +65,11 @@ META_LLM_ZOOM_COUNT_KEY = 'tranzoom:llm:zoom:count'  # int; zoom iteration depth
 # special values
 META_LLM_MODEL_VALUE_HUMAN = 'HUMAN'  # used when the evaluation is done by a flesh-and-blood human
 
+# TODO: ability to mark a point in an image
+
+# TODO: Julia Set + ability to read either the frame or the center (Julia point) from existing img
+
+
 # image constants
 
 N_BYTES_UINT: int = 4  # we use array of unsigned ints to store pixel data

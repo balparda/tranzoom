@@ -31,9 +31,8 @@ precommit:
 	poetry run pre-commit run --all-files
 
 docs:
-	@echo "Generating mandel.md & zoom.md"
-	poetry run mandel markdown > mandel.md
-	poetry run zoom markdown > zoom.md
+	@echo "Generating tranz.md"
+	poetry run tranz markdown > tranz.md
 
 req:
 	poetry export --format requirements.txt --without-hashes --output requirements.txt

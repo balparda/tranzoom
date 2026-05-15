@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""CLI: Mandelbrot generation command.
+"""CLI: Fractal image utils command.
 
 <https://en.wikipedia.org/wiki/Mandelbrot_set>
 
@@ -13,32 +13,47 @@ import json
 import pathlib
 
 import click
+import typer
 from transcrypto.cli import clibase
 from transcrypto.utils import human, timer
 
-from tranzoom import mandel
+from tranzoom import tranz
 from tranzoom.cli import base
 from tranzoom.core import fractal, frame, image, palette
 
+image_app = typer.Typer(
+  no_args_is_help=True,
+  help=(
+    'Examples:\n\n\n\n'
+    '# --- Mandelbrot Image Generation ---\n'
+    'poetry run tranz image mandel\n'
+    'poetry run tranz -w 512 -h 512 image mandel " -0.74303" "0.126433" "0.01611"  '
+    '# note the space because of the "-"\n\n'
+    '# --- TranZoom Fractal Image Data Reading / Visualization ---\n'
+    'poetry run tranz image read /path/to/image.png'
+  ),
+)
+tranz.app.add_typer(image_app, name='image')
 
-@mandel.app.command(
-  'gen',
+
+@image_app.command(
+  'mandel',
   help='Generate a Mandelbrot image.',
   epilog=(
     'Examples:\n\n\n\n'
-    '$ poetry run mandel gen\n\n'
+    '$ poetry run tranz image mandel\n\n'
     '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
     '...\n\n'
     'Saved to "mandel-<date>-<hash>.png"\n\n\n\n'
-    '$ poetry run mandel -w 512 -h 512 gen " -0.74303" "0.126433" "0.01611"  '
+    '$ poetry run tranz -w 512 -h 512 image mandel " -0.74303" "0.126433" "0.01611"  '
     '# note the space because of the "-"\n\n'
     '<saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>\n\n\n\n'
-    '$ poetry run mandel gen "/path/to/image.png"\n\n'
+    '$ poetry run tranz image mandel "/path/to/image.png"\n\n'
     '<gets the same frame used in "/path/to/image.png" and saves a new image of it to disk>'
   ),
 )
 @clibase.CLIErrorGuard
-def Gen(  # documentation is help/epilog/args  # noqa: D103
+def Mandel(  # documentation is help/epilog/args  # noqa: D103
   *,
   ctx: click.Context,
   center_re: str = base.FRAME_CENTER_RE_ARGUMENT,  # type: ignore[assignment]
@@ -70,7 +85,7 @@ def Gen(  # documentation is help/epilog/args  # noqa: D103
       frm, config.img_width, config.img_height, max_iter=max_iter, n_processes=config.max_threads
     )
     raw_png, raw_hash = img.AsPNG(pal=pal)
-  config.console.print(f'\nGenerated image {raw_hash!r} in {tmr}, escape range {img.escape_range}')
+  config.console.print(f'Mandelbrot image {raw_hash!r} in {tmr}, escape range {img.escape_range}')
   # check we can recover the hash from the PNG: should never fail unless we have a bug
   w, h, png_hash, _ = image.GetBasicDataFromPNG(raw_png)
   if png_hash != raw_hash or w != config.img_width or h != config.img_height:
@@ -93,12 +108,12 @@ def Gen(  # documentation is help/epilog/args  # noqa: D103
     config.console.print()
 
 
-@mandel.app.command(
+@image_app.command(
   'read',
-  help='Read a Mandelbrot image.',
+  help='Read a TranZoom fractal image.',
   epilog=(
     'Examples:\n\n\n\n'
-    '$ poetry run mandel read /path/to/image.png\n\n'
+    '$ poetry run tranz image read /path/to/image.png\n\n'
     '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
     '...'
   ),

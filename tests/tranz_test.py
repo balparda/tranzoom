@@ -12,7 +12,7 @@ from transcrypto.utils import config as app_config
 from transcrypto.utils import logging as cli_logging
 from typer import testing
 
-from tranzoom import zoom
+from tranzoom import tranz
 
 
 @pytest.fixture(autouse=True)
@@ -32,7 +32,7 @@ def CallCLI(args: list[str]) -> click_testing.Result:
       click_testing.Result: CLI result.
 
   """
-  return testing.CliRunner().invoke(zoom.app, args)
+  return testing.CliRunner().invoke(tranz.app, args)
 
 
 def PrintedValue(console_mock: mock.Mock) -> object:
@@ -59,8 +59,8 @@ def test_version_flag() -> None:
 
 def test_run_function() -> None:
   """Test Run function calls app."""
-  with mock.patch.object(zoom, 'app') as app_mock:
-    zoom.Run()
+  with mock.patch.object(tranz, 'app') as app_mock:
+    tranz.Run()
     app_mock.assert_called_once()
 
 

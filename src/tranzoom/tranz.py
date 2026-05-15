@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""Entry point for the TranZoom Mandelbrot CLI."""
+"""Entry point for the TranZoom Mandelbrot zoom renderer."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import pathlib
 import click
 import typer
 from rich import console as rich_console
+from transai import transai
 from transcrypto.cli import clibase
 from transcrypto.utils import config as app_config
 from transcrypto.utils import logging as cli_logging
@@ -22,19 +23,25 @@ app = typer.Typer(
   add_completion=True,
   no_args_is_help=True,
   # keep in sync with Main() app.callback help
-  help='TranZoom: `mandel` CLI generates and has utilities for Mandelbrot Set computations',
+  help='TranZoom: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features',
   epilog=(
     'Examples:\n\n\n\n'
-    '$ poetry run mandel gen\n\n'
-    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
-    '...\n\n'
-    'Saved to "mandel-<date>-<hash>.png"\n\n\n\n'
-    '$ poetry run mandel -w 512 -h 512 gen " -0.74303" "0.126433" "0.01611"  '
-    '# note the space because of the "-"\n\n'
-    '<saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>\n\n\n\n'
-    '$ poetry run mandel read /path/to/image.png\n\n'
-    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
-    '...'
+    '# --- Mandelbrot Image Generation ---\n\n'
+    'poetry run tranz image mandel\n\n'
+    'poetry run tranz -w 512 -h 512 image mandel " -0.74303" "0.126433" "0.01611"  '
+    '# note the space because of the "-"\n\n\n\n'
+    '# --- TranZoom Fractal Image Data Reading / Visualization ---\n\n'
+    'poetry run tranz image read /path/to/image.png\n\n\n\n'
+    '# --- LLM-Guided Fractal Zoom ---\n\n'
+    'poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai\n\n'
+    'poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai '
+    '" -0.7436499" "0.13188204" "0.00073801" --iterm -n 10\n\n'
+    'poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"\n\n\n\n'
+    '# --- Human/Manual-Guided Fractal Zoom ---\n\n'
+    'poetry run tranz zoom manual " -0.74303" "0.126433" "0.01611"\n\n'
+    'poetry run tranz zoom manual "/path/to/image.png"\n\n\n\n'
+    '# --- Markdown Help ---\n\n'
+    'poetry run tranz markdown > tranz.md'
   ),
 )
 
@@ -47,7 +54,7 @@ def Run() -> None:
 @app.callback(
   invoke_without_command=True,
   # keep in sync with app help
-  help='TranZoom: `mandel` CLI generates and has utilities for Mandelbrot Set computations',
+  help='TranZoom: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features',
 )  # have only one; this is the "constructor"
 @clibase.CLIErrorGuard
 def Main(  # documentation is help/epilog/args # noqa: D103
@@ -71,6 +78,9 @@ def Main(  # documentation is help/epilog/args # noqa: D103
       'Defaults to having colors.'  # state default because None default means docs don't show it
     ),
   ),
+  # TODO: consider some way of using width/height in zoom, instead of fixed 512x512!
+  # TODO: computation bits are calculated for max image size; small image zooms are penalized;
+  #    find a way to either have an override or depend on image size
   img_width: int = base.IMAGE_WIDTH_OPTION,  # type: ignore[assignment]
   img_height: int = base.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
   img_output_path: pathlib.Path | None = base.IMAGE_PATH_OUTPUT_OPTION,  # type: ignore[assignment]
@@ -78,6 +88,19 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   img_use_date: bool = base.IMAGE_INCLUDE_DATE_OPTION,  # type: ignore[assignment]
   img_use_hash: bool = base.IMAGE_INCLUDE_HASH_OPTION,  # type: ignore[assignment]
   max_threads: int | None = base.MAX_THREADS_OPTION,  # type: ignore[assignment]
+  # AI parameters from transai:
+  model: str = transai.MODEL_OPTION,  # type: ignore[assignment]
+  spec_tokens: int | None = transai.SPEC_TOKENS_OPTION,  # type: ignore[assignment]
+  seed: int | None = transai.SEED_OPTION,  # type: ignore[assignment]
+  context: int = transai.CONTEXT_OPTION,  # type: ignore[assignment]
+  temperature: float = transai.TEMPERATURE_OPTION,  # type: ignore[assignment]
+  gpu: float = transai.GPU_OPTION,  # type: ignore[assignment]
+  gpu_layers: int = transai.GPU_LAYERS_OPTION,  # type: ignore[assignment]
+  fp16: bool = transai.FP16_OPTION,  # type: ignore[assignment]
+  use_mmap: bool = transai.USE_MMAP_OPTION,  # type: ignore[assignment]
+  flash: bool = transai.FLASH_OPTION,  # type: ignore[assignment]
+  kv_cache: int | None = transai.KV_CACHE_OPTION,  # type: ignore[assignment]
+  timeout: float = transai.TIMEOUT_OPTION,  # type: ignore[assignment]
 ) -> None:
   if version:
     typer.echo(__version__)
@@ -102,6 +125,18 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     img_use_date=img_use_date,
     img_use_hash=img_use_hash,
     max_threads=max_threads,
+    model=model,
+    spec_tokens=spec_tokens,
+    seed=seed,
+    context=context,
+    temperature=temperature,
+    gpu=gpu,
+    gpu_layers=gpu_layers,
+    fp16=fp16,
+    use_mmap=use_mmap,
+    flash=flash,
+    kv_cache=kv_cache,
+    timeout=timeout,
   )
   # even though this is a convenient place to print(), beware that this runs even when
   # a subcommand is invoked; so prefer logging.debug/info/warning/error instead of print();
@@ -111,13 +146,16 @@ def Main(  # documentation is help/epilog/args # noqa: D103
 @app.command(
   'markdown',
   help='Emit Markdown docs for the CLI (see README.md section "Versioning and releases").',
-  epilog=('Example:\n\n\n\n$ poetry run mandel markdown > mandel.md\n\n<<saves CLI doc>>'),
+  epilog=('Example:\n\n\n\n$ poetry run tranz markdown > tranz.md\n\n<<saves CLI doc>>'),
 )
 @clibase.CLIErrorGuard
 def Markdown(*, ctx: click.Context) -> None:  # documentation is help/epilog/args # noqa: D103
   config: base.TranZoomConfig = ctx.obj
-  config.console.print(clibase.GenerateTyperHelpMarkdown(app, prog_name='mandel'))
+  config.console.print(clibase.GenerateTyperHelpMarkdown(app, prog_name='tranz'))
 
 
 # Import CLI modules to register their commands with the app
-from tranzoom.cli import gencommand  # pyright: ignore[reportUnusedImport] # noqa: E402, F401
+from tranzoom.cli import (  # noqa: E402
+  imagecommand,  # pyright: ignore[reportUnusedImport] # noqa: F401
+  zoomcommand,  # pyright: ignore[reportUnusedImport] # noqa: F401
+)

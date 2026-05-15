@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - YYYY-MM-DD - Placeholder](#vvv---yyyy-mm-dd---placeholder)
+  - [1.2.0 - 2026-05-15](#120---2026-05-15)
   - [1.1.0 - 2026-05-14](#110---2026-05-14)
   - [1.0.0 - 2026-05-10](#100---2026-05-10)
 
@@ -25,6 +26,25 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future changes.
+
+## 1.2.0 - 2026-05-15
+
+- Added
+  - Better explanation of Frames in README, with examples of exact rational inputs.
+
+- Changed
+  - **Breaking**: `mandel` and `zoom` CLI apps merged into a single unified `tranz` CLI entry point.
+  - **Breaking**: `mandel gen` → `tranz image mandel`; `mandel read` → `tranz image read`; `mandel markdown` → `tranz markdown`.
+  - **Breaking**: `zoom ai` → `tranz zoom ai`; `zoom manual` → `tranz zoom manual`.
+  - All AI model flags (`-m`/`--model`, `--spec-tokens`, `--seed`, `-c`/`--context`, `-x`/`--temperature`, `--gpu`, `--gpu-layers`, `--fp16`, `--use-mmap`, `--flash`, `--kv-cache`, `--timeout`) moved from the `zoom` CLI callback to the `tranz` global callback, making them available to all subcommands.
+  - `mandel.py` and `zoom.py` replaced by `tranz.py` as the single CLI entry point.
+  - `cli/gencommand.py` → `cli/imagecommand.py` (registers `tranz image` subgroup: `mandel` and `read` commands).
+  - `cli/aicommand.py` → `cli/zoomcommand.py` (registers `tranz zoom` subgroup: `ai` and `manual` commands).
+  - `mandel.md` + `zoom.md` auto-generated docs → `tranz.md`.
+  - Dependency updates: `click>=8.3`, `cryptography>=48.0` (new), `Pillow>=12.2`, `rich>=15.0`, `transcrypto>=2.6.1`, `typer>=0.25`.
+
+- Fixed
+  - N/A
 
 ## 1.1.0 - 2026-05-14
 

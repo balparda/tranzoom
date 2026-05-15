@@ -1,12 +1,14 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for: gencommand.py."""
+"""Tests for: zoomcommand.py."""
 
 from __future__ import annotations
 
 import pytest
 from transcrypto.utils import config as app_config
 from transcrypto.utils import logging as cli_logging
+
+from tranzoom.cli import zoomcommand  # pyright: ignore[reportUnusedImport] # noqa: F401
 
 
 @pytest.fixture(autouse=True)
