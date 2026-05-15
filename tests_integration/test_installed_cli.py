@@ -28,7 +28,7 @@ from tranzoom.cli import base
 from tranzoom.core import image
 
 _APP_NAME: str = 'tranzoom'  # this is the directory name, the package name
-_APP_NAMES: set[str] = {'mandel', 'zoom'}  # this is the console scripts names
+_APP_NAMES: set[str] = {'tranz'}  # this is the console scripts names
 
 
 @pytest.mark.slow
@@ -54,17 +54,18 @@ def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path
       r = tbase.Run(
         # call the console script directly to test the installed CLI
         [
-          str(cli_paths['mandel']),
+          str(cli_paths['tranz']),
           '--no-date',
           '--out',
           tmp_dir,
+          'image',
           'gen',
           ' -0.7436499',
           '0.13188204',
           '0.00073801',
         ]
       )
-      assert r.returncode == 0, f'mandel gen failed:\n{r.stderr}'
+      assert r.returncode == 0, f'tranz gen failed:\n{r.stderr}'
       # we check that the image is the same by trusting the 20-character hash in the file name;
       # the hash is from the internal representation and should only depend on our implementation;
       # resist the temptation of checking the PNG because PIL behaves differently across platforms

@@ -47,15 +47,15 @@ dependencies = [
   # best place for project dependencies, if possible
   # development-only dependencies go in the [tool.poetry.group.dev.dependencies] section below
 
-  "transcrypto>=2.1",
-  "transai>=1.3.0",
-
-  "click>=8.1",
-  "rich>=14.2",
-  "typer>=0.21",
+  "click>=8.3",
+  "cryptography>=48.0",
   "gmpy2>=2.3",
+  "Pillow>=12.2",
+  "rich>=15.0",
   "tqdm>=4.67",
-  "Pillow>=12",
+  "transai>=1.3.0",
+  "transcrypto>=2.6.1",
+  "typer>=0.25",   # if this changes, also change: [tool.poetry.dependencies]
 
 ]
 
@@ -102,18 +102,20 @@ include = [
 # prefer to add dependencies inside the [project.dependencies] section
 
 python = "^3.12"  # if version changes, remember to change README.md
+typer = { version = "^0.25", extras = ["all"] }
 
 [tool.poetry.group.dev.dependencies]
 
 # basic, all projects should have
-ruff = "^0.15"
+
 mypy = "^2.1"
+pyinstrument = "^5.1"
+pyright = "^1.1"
 pytest = "^9.0"
 pytest-cov = "^7.1"
 pytest-flakefinder = "^1.1"
-pyright = "^1.1"
 pre-commit = "^4.6"
-pyinstrument = "^5.1"
+ruff = "^0.15"
 typeguard = "^4.5"
 
 # project-specific dev-only

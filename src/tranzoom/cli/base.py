@@ -234,6 +234,18 @@ class TranZoomConfig(clibase.CLIConfig):
   img_use_hash: bool
   img_path_prefix: str
   max_threads: int | None
+  model: str
+  spec_tokens: int | None
+  seed: int | None
+  context: int
+  temperature: float
+  gpu: float
+  gpu_layers: int
+  fp16: bool
+  use_mmap: bool
+  flash: bool
+  kv_cache: int | None
+  timeout: float
 
 
 def MakeFrameFromCLIArgs(

@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - YYYY-MM-DD - Placeholder](#vvv---yyyy-mm-dd---placeholder)
+  - [1.2.0 - 2026-05-??](#120---2026-05-)
   - [1.1.0 - 2026-05-14](#110---2026-05-14)
   - [1.0.0 - 2026-05-10](#100---2026-05-10)
 
@@ -25,6 +26,19 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future changes.
+
+## 1.2.0 - 2026-05-??
+
+- Added
+  - Better explanation of Frames in README.
+  - TODO
+
+- Changed
+  - Complete refactor of CLI interface.
+  - TODO: more
+
+- Fixed
+  - TODO
 
 ## 1.1.0 - 2026-05-14
 

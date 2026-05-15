@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import pathlib
 
 import click
@@ -19,33 +18,24 @@ from tranzoom.cli import base
 
 from . import __version__
 
-
-@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class TranZoomAIConfig(base.TranZoomConfig):
-  """TranZoom AI context, storing the configuration."""
-
-  model: str
-  spec_tokens: int | None
-  seed: int | None
-  context: int
-  temperature: float
-  gpu: float
-  gpu_layers: int
-  fp16: bool
-  use_mmap: bool
-  flash: bool
-  kv_cache: int | None
-  timeout: float
-
-
 # CLI app setup, this is an important object and can be imported elsewhere and called
 app = typer.Typer(
   add_completion=True,
   no_args_is_help=True,
   # keep in sync with Main() app.callback help
-  help='TranZoom: `zoom` CLI can infinitely zoom into the Mandelbrot set, with AI or manually',
+  help='TranZoom: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features',
   epilog=(
     'Examples:\n\n\n\n'
+    '$ poetry run mandel gen\n\n'
+    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
+    '...\n\n'
+    'Saved to "mandel-<date>-<hash>.png"\n\n\n\n'
+    '$ poetry run mandel -w 512 -h 512 gen " -0.74303" "0.126433" "0.01611"  '
+    '# note the space because of the "-"\n\n'
+    '<saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>\n\n\n\n'
+    '$ poetry run mandel read /path/to/image.png\n\n'
+    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
+    '...\n\n\n\n'
     '$ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" ai\n\n'
     '<start with full set and zoom in using model Qwen 32>\n\n\n\n'
     '$ poetry run zoom -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 '
@@ -68,7 +58,7 @@ def Run() -> None:
 @app.callback(
   invoke_without_command=True,
   # keep in sync with app help
-  help='TranZoom: `zoom` CLI can infinitely zoom into the Mandelbrot set, with AI or manually',
+  help='TranZoom: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features',
 )  # have only one; this is the "constructor"
 @clibase.CLIErrorGuard
 def Main(  # documentation is help/epilog/args # noqa: D103
@@ -92,6 +82,11 @@ def Main(  # documentation is help/epilog/args # noqa: D103
       'Defaults to having colors.'  # state default because None default means docs don't show it
     ),
   ),
+  # TODO: consider some way of using width/height in zoom, instead of fixed 512x512!
+  # TODO: computation bits are calculated for max image size; small image zooms are penalized;
+  #    find a way to either have an override or depend on image size
+  img_width: int = base.IMAGE_WIDTH_OPTION,  # type: ignore[assignment]
+  img_height: int = base.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
   img_output_path: pathlib.Path | None = base.IMAGE_PATH_OUTPUT_OPTION,  # type: ignore[assignment]
   img_path_prefix: str = base.IMAGE_PREFIX_OPTION,  # type: ignore[assignment]
   img_use_date: bool = base.IMAGE_INCLUDE_DATE_OPTION,  # type: ignore[assignment]
@@ -122,13 +117,13 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     soft_wrap=False,  # decide if you want soft wrapping of long lines
   )
   # create context with the arguments we received
-  ctx.obj = TranZoomAIConfig(
+  ctx.obj = base.TranZoomConfig(
     console=console,
     verbose=verbose,
     color=color,
     appconfig=app_config.InitConfig('tranzoom', 'config.bin'),
-    img_width=512,  # fixed!
-    img_height=512,  # and square!
+    img_width=img_width,
+    img_height=img_height,
     img_output_path=None if img_output_path is None else img_output_path.expanduser().resolve(),
     img_path_prefix=img_path_prefix,
     img_use_date=img_use_date,
@@ -155,13 +150,16 @@ def Main(  # documentation is help/epilog/args # noqa: D103
 @app.command(
   'markdown',
   help='Emit Markdown docs for the CLI (see README.md section "Versioning and releases").',
-  epilog=('Example:\n\n\n\n$ poetry run zoom markdown > zoom.md\n\n<<saves CLI doc>>'),
+  epilog=('Example:\n\n\n\n$ poetry run tranz markdown > tranz.md\n\n<<saves CLI doc>>'),
 )
 @clibase.CLIErrorGuard
 def Markdown(*, ctx: click.Context) -> None:  # documentation is help/epilog/args # noqa: D103
-  config: TranZoomAIConfig = ctx.obj
-  config.console.print(clibase.GenerateTyperHelpMarkdown(app, prog_name='zoom'))
+  config: base.TranZoomConfig = ctx.obj
+  config.console.print(clibase.GenerateTyperHelpMarkdown(app, prog_name='tranz'))
 
 
 # Import CLI modules to register their commands with the app
-from tranzoom.cli import zoomcommand  # pyright: ignore[reportUnusedImport] # noqa: E402, F401
+from tranzoom.cli import (  # noqa: E402
+  imagecommand,  # pyright: ignore[reportUnusedImport] # noqa: F401
+  zoomcommand,  # pyright: ignore[reportUnusedImport] # noqa: F401
+)

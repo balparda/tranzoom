@@ -17,7 +17,7 @@ Notes
 
 from __future__ import annotations
 
-from tranzoom import mandel
+from tranzoom import tranz
 
 
 def Main() -> int:
@@ -27,7 +27,7 @@ def Main() -> int:
     int: Exit code
 
   """
-  mandel.app()
+  tranz.app()
   return 0
 
 

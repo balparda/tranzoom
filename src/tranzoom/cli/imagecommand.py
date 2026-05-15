@@ -13,15 +13,34 @@ import json
 import pathlib
 
 import click
+import typer
 from transcrypto.cli import clibase
 from transcrypto.utils import human, timer
 
-from tranzoom import mandel
+from tranzoom import tranz
 from tranzoom.cli import base
 from tranzoom.core import fractal, frame, image, palette
 
+image_app = typer.Typer(
+  no_args_is_help=True,
+  help=(
+    'Examples:\n\n\n\n'
+    '$ poetry run mandel gen\n\n'
+    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
+    '...\n\n'
+    'Saved to "mandel-<date>-<hash>.png"\n\n\n\n'
+    '$ poetry run mandel -w 512 -h 512 gen " -0.74303" "0.126433" "0.01611"  '
+    '# note the space because of the "-"\n\n'
+    '<saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>\n\n\n\n'
+    '$ poetry run mandel read /path/to/image.png\n\n'
+    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
+    '...'
+  ),
+)
+tranz.app.add_typer(image_app, name='image')
 
-@mandel.app.command(
+
+@image_app.command(
   'gen',
   help='Generate a Mandelbrot image.',
   epilog=(
@@ -93,7 +112,7 @@ def Gen(  # documentation is help/epilog/args  # noqa: D103
     config.console.print()
 
 
-@mandel.app.command(
+@image_app.command(
   'read',
   help='Read a Mandelbrot image.',
   epilog=(
