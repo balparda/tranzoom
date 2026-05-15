@@ -275,15 +275,12 @@ class Frame:
     This method chooses a conservative MPFR precision, in bits, for Mandelbrot-style arbitrary
     precision computations over this frame. The goal is not merely to store the frame coordinates,
     but to perform repeated fractal iteration with enough numerical precision that arithmetic error
-    is far smaller than a rendered pixel.
-
-    The estimate is based on the smallest complex-plane distance represented by one output pixel:
+    is far smaller than a rendered pixel. The estimate is based on the smallest complex-plane
+    distance represented by one output pixel and on the largest coordinate magnitude appearing in
+    the frame:
 
         pixel_size = min( frame_width / pixel_width , frame_height / pixel_height )
-
-    and on the largest coordinate magnitude appearing in the frame:
-
-        coordinate_magnitude = max( abs(re) , abs(im) , 1 )
+        coordinates_magnitude = max( abs(top_re), abs(bottom_re), abs(top_im), abs(bottom_im) , 1 )
 
     MPFR precision is relative, not absolute. Around a value with magnitude M, the spacing between
     adjacent representable MPFR numbers is approximately proportional to M * 2**-precision.
@@ -299,13 +296,10 @@ class Frame:
     The resulting precision is:
 
         max(
-
           _MPFR_MIN_PRECISION,
-
-          ceil(log2(coordinate_magnitude / pixel_size)) +
+          ceil(log2(coordinates_magnitude / pixel_size)) +
           2 * ceil(log2(max_iter + 1)) +
           _MPFR_MIN_GUARD_BITS
-
         )
 
     Assumptions:
@@ -318,7 +312,7 @@ class Frame:
       * max_iter is the expected upper bound for the number of fractal iterations performed per
         pixel.
       * The computation is intended for Mandelbrot-like iteration near ordinary complex-plane
-        magnitudes, but the coordinate magnitude term makes the estimate valid for frames whose
+        magnitudes, but the coordinates_magnitude term makes the estimate valid for frames whose
         coordinates are far from the origin as well.
 
     Promise:
