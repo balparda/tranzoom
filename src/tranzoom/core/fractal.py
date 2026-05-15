@@ -19,6 +19,10 @@ import tqdm
 
 from tranzoom.core import frame, image
 
+# TODO: add Julia
+
+# TODO: make a way of coloring the black inside with grayscale base on the max value [0..4] of |x|
+
 # iteration constants
 
 MIN_ITER: int = 1000

@@ -59,13 +59,13 @@ def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path
           '--out',
           tmp_dir,
           'image',
-          'gen',
+          'mandel',
           ' -0.7436499',
           '0.13188204',
           '0.00073801',
         ]
       )
-      assert r.returncode == 0, f'tranz gen failed:\n{r.stderr}'
+      assert r.returncode == 0, f'tranz image mandel failed:\n{r.stderr}'
       # we check that the image is the same by trusting the 20-character hash in the file name;
       # the hash is from the internal representation and should only depend on our implementation;
       # resist the temptation of checking the PNG because PIL behaves differently across platforms
