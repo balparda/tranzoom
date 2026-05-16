@@ -47,6 +47,7 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
   # note that these are the zoom image options, with default of 512x512
   img_width: int = base.IMAGE_ZOOM_WIDTH_OPTION,  # type: ignore[assignment]
   img_height: int = base.IMAGE_ZOOM_HEIGHT_OPTION,  # type: ignore[assignment]
+  img_size: int | None = base.IMAGE_SIZE_OPTION,  # type: ignore[assignment]
   max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
 ) -> None:
   # store this command's options in the shared config so all sub-commands can read it
@@ -55,6 +56,7 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
       ctx.obj,
       img_width=img_width,
       img_height=img_height,
+      img_size=img_size,
       max_steps=max_steps,
     )
 
@@ -91,11 +93,19 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
   frm: frame.Frame = base.MakeFrameFromCLIArgs(
     frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
   )
+  # determine width and height
+  width: int
+  height: int
+  width, height = (
+    frm.PixelDimensionsFromSize(config.img_size)
+    if config.img_size
+    else (config.img_width, config.img_height)
+  )
   # we have a valid frame, let's start the AI search loop
   ai.ZoomLoop(
     frm,
-    config.img_width,
-    config.img_height,
+    width,
+    height,
     config.img_output_path,
     config.img_use_date,
     config.img_use_hash,
@@ -150,11 +160,19 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   frm: frame.Frame = base.MakeFrameFromCLIArgs(
     frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
   )
+  # determine width and height
+  width: int
+  height: int
+  width, height = (
+    frm.PixelDimensionsFromSize(config.img_size)
+    if config.img_size
+    else (config.img_width, config.img_height)
+  )
   # we have a valid frame, let's start the AI search loop
   ai.ManualLoop(
     frm,
-    config.img_width,
-    config.img_height,
+    width,
+    height,
     config.img_output_path,
     config.img_use_date,
     config.img_use_hash,

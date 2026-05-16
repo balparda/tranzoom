@@ -51,6 +51,21 @@ IMAGE_HEIGHT_OPTION: typer.models.OptionInfo = typer.Option(
     f'default is {frame.DEFAULT_IMAGE_SIZE}'
   ),
 )
+IMAGE_SIZE_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '-s',
+  '--size',
+  min=frame.MIN_IMAGE_SIZE,
+  max=frame.MAX_IMAGE_SIZE,
+  help=(
+    'Size of the image: *overrides* both `-w/--width` and `-h/--height` by determining the '
+    'max pixel length of the final image, which will be proportional to the given frame, i.e., '
+    'the final dimensions will be scaled accordingly and, given a size S, will be either '
+    '(S, x), (x, S) or (S, S), where x < S, and will make the final image ratio/proportion be '
+    f'the same as the frame; {frame.MIN_IMAGE_SIZE} ≤ S ≤ {frame.MAX_IMAGE_SIZE}; '
+    'default is None, i.e., follow the explicit `-w/--width` and `-h/--height` options'
+  ),
+)
 IMAGE_ZOOM_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
   frame.DEFAULT_ZOOM_SIZE,
   '-w',
@@ -173,6 +188,62 @@ FRAME_HEIGHT_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
     'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
     'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
     'default is None, i.e, the same as width'
+  ),
+)
+JULIA_RE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  frame.DEFAULT_JULIA_RE,
+  help=(
+    'Real part of the Julia Set constant; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_JULIA_RE!r}'
+  ),
+)
+JULIA_IM_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  frame.DEFAULT_JULIA_IM,
+  help=(
+    'Imaginary part of the Julia Set constant; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_JULIA_IM!r}'
+  ),
+)
+JULIA_CENTER_RE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  frame.DEFAULT_JULIA_CENTER_RE,
+  help=(
+    'Real part of the center point; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    'ALTERNATIVELY: you can use this to input an existing PNG image path, and it will read the '
+    "frame from the given image's metadata (overriding/ignoring the other CLI frame parameters!); "
+    f'default is {frame.DEFAULT_JULIA_CENTER_RE!r}'
+  ),
+)
+JULIA_CENTER_IM_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  frame.DEFAULT_JULIA_CENTER_IM,
+  help=(
+    'Imaginary part of the center point; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_JULIA_CENTER_IM!r}'
+  ),
+)
+JULIA_WIDTH_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  frame.DEFAULT_JULIA_WIDTH,
+  help=(
+    'Width of the frame in the real plane; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_JULIA_WIDTH!r}'
+  ),
+)
+JULIA_HEIGHT_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  frame.DEFAULT_JULIA_HEIGHT,
+  help=(
+    'Height of the frame in the imaginary plane; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_JULIA_HEIGHT!r}'
   ),
 )
 MARK_COORDINATES_OPTION: typer.models.OptionInfo = typer.Option(
@@ -314,6 +385,7 @@ class TranZoomConfig(clibase.CLIConfig):
 
   img_width: int = frame.DEFAULT_IMAGE_SIZE  # both `image` and `zoom` use, different defaults
   img_height: int = frame.DEFAULT_IMAGE_SIZE  # both `image` and `zoom` use, different defaults
+  img_size: int | None = None  # for `image` and `zoom` commands, overrides width/height if given
 
   max_iter: int | None = None  # for `image` command
   pal: palette.Palette = palette.DEFAULT_PALETTE  # for `image` command

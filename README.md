@@ -180,8 +180,8 @@ Starting with version 1.1.0, tranZoom can use local LLM vision models to autonom
 
 A **Frame** is an exact representation of a rectangular region of the complex plane, it is ***your view*** into a fractal, the viewport, the part of the plane to be computed and transformed into an image or visualization. It can be printed by the CLI like:
 
-1. **`[(-3/4, 0) @ 5/2]`** A ***square*** Frame, centered on $-3/4+0j$ and with *width* and *height* of $5/2$, `[(center_re, center_im) @ square_side]`; or
-1. **`[(-3/4, 0) @ (5/2, 5/3)]`** A **rectangular** Frame, centered on $-3/4+0j$ and with *width* of $5/2$ (on the *real* scale) and *height* of $5/3$ (on the *imaginary* scale), `[(center_re, center_im) @ (width_re, height_im)]`.
+1. **`[(-3/4, 0) ± 5/2]`** A ***square*** Frame, centered on $-3/4+0j$ and with *width* and *height* of $5/2$, `[(center_re, center_im) ± square_side]`; or
+1. **`[(-3/4, 0) ± (5/2, 5/3)]`** A **rectangular** Frame, centered on $-3/4+0j$ and with *width* of $5/2$ (on the *real* scale) and *height* of $5/3$ (on the *imaginary* scale), `[(center_re, center_im) ± (width_re, height_im)]`.
 
 Frames are stored as [`gmpy2.mpq` (exact rationals)](https://gmpy2.readthedocs.io/en/latest/mpq.html) to avoid any accumulation of rounding error in coordinates. You can provide a `mpq` to the CLI as:
 
@@ -193,7 +193,7 @@ Here is an example with mixed use:
 ```txt
 " -0.74303" "0.126433" "1611/100000" "0.0176"
 will create the Frame:
-[(-74303/100000, 126433/1000000) @ (1611/100000, 11/625)]
+[(-74303/100000, 126433/1000000) ± (1611/100000, 11/625)]
 ```
 
 Here is one example with numbers that would usually *NOT* be representable with regular `float`:
@@ -202,10 +202,18 @@ Here is one example with numbers that would usually *NOT* be representable with 
 " -929554858796448380940239382643467500000001/1250000000000000000000000000000000000000000" "0.13182590420531197049313205638514950000008" "0.00000000000001"
 will create the Frame:
 [(-929554858796448380940239382643467500000001/1250000000000000000000000000000000000000000,
-1647823802566399631164150704814368750001/12500000000000000000000000000000000000000) @ 1/100000000000000]
+1647823802566399631164150704814368750001/12500000000000000000000000000000000000000) ± 1/100000000000000]
 ```
 
 Frame will keep these numbers exact always, no matter the precision.
+
+For Julia and other uses the Frame can also receive an extra complex number, a point, determined by real and image parts. It will be represented as:
+
+`[(center_re, center_im) ± (width_re, height_im) @ (point_re, point_im)]`
+
+where the `(point_re, point_im)` part is added after an `@`. For example:
+
+`[(-3/4, 0) ± (5/2, 5/3) @ (13667/50000, 371/50000)]`
 
 #### Precision
 
@@ -259,7 +267,7 @@ Render the [full Mandelbrot set](#full--default-1-80-bits) (default, 1024×1024)
 ```sh
 $ poetry run tranz image mandel
 
-1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision 80 bits, 1 magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 1011.19px/s]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:13<00:00, 78912.96px/s]
@@ -268,7 +276,7 @@ Generated image 'bd77ee8874aa425422a9ea92867c53937f28534898d49a56b9e4d1dca7b5dd5
 Saved to "mandel-bd77ee8874aa425422a9.png"
 ```
 
-As can be seen, the `Frame` is stored as rational numbers with arbitrary precision, `[(-3/4, 0) @ 5/2]`, so it is guaranteed to be exact (centered in $-0.75+0j$ and with width of $2.5$). It will pick a precision, in bits, which is the internal `float` representation (mantissa), and will pick the (max) number of iterations for the generation. The magnification here is 1 because it is the full Mandelbrot set. There will be a progress bar, counting the horizontal lines being produced. The generated image data will be hashed and then saved to a PNG on disk.
+As can be seen, the `Frame` is stored as rational numbers with arbitrary precision, `[(-3/4, 0) ± 5/2]`, so it is guaranteed to be exact (centered in $-0.75+0j$ and with width of $2.5$). It will pick a precision, in bits, which is the internal `float` representation (mantissa), and will pick the (max) number of iterations for the generation. The magnification here is 1 because it is the full Mandelbrot set. There will be a progress bar, counting the horizontal lines being produced. The generated image data will be hashed and then saved to a PNG on disk.
 
 Render a [well-known zoom ("Seahorse", ~155× magnification)](#seahorse-155-83-bits) at the default 1024×1024:
 
@@ -499,7 +507,7 @@ Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) w
 ```sh
 $ poetry run tranz image mandel
 
-1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision 80 bits, 1 magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 962134.25px/s]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:01<00:00, 593762.44px/s]
@@ -519,7 +527,7 @@ Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mande
 ```sh
 $ poetry run tranz image mandel " -0.74303" "0.126433" "0.01611"
 
-1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) @ 1611/100000], precision 83 bits, 155.183 magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) ± 1611/100000], precision 83 bits, 155.183 magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 2575.92px/s]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:36<00:00, 28721.25px/s]
@@ -537,7 +545,7 @@ Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tai
 ```sh
 $ poetry run tranz image mandel " -0.7436499" "0.13188204" "0.00073801"
 
-1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) @ 73801/100000000], precision 88 bits, 3.387 k magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) ± 73801/100000000], precision 88 bits, 3.387 k magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 101834.39px/s]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:05<00:00, 199725.00px/s]
@@ -556,7 +564,7 @@ $-0.7436438870371587047521915061147740000000008 + 0.1318259042053119704931320563
 
 or, if you want to use as parameters:
 
-`" -0.7436438870371587047521915061147740000000008" "0.13182590420531197049313205638514950000008"`
+`"(-0.7436438870371587047521915061147740000000008, 0.13182590420531197049313205638514950000008)"`
 
 We have, for fun, generated a sequence of powers of 1000, demonstrating the amazing power of the infinite. The view size of each image is always $2.5$ times some power of 1000.
 

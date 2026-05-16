@@ -57,6 +57,12 @@ DEFAULT_MPQ_STEP_DIAGONAL: gmpy2.mpq = DEFAULT_MPQ_STEP_DIRECT / _MPQ_SQRT_TWO_N
 DEFAULT_FRAME_CENTER_RE: str = '-0.75'
 DEFAULT_FRAME_CENTER_IM: str = '0'
 DEFAULT_FRAME_SIZE: str = '2.5'
+DEFAULT_JULIA_RE: str = '0.27334'
+DEFAULT_JULIA_IM: str = '0.00742'
+DEFAULT_JULIA_CENTER_RE: str = '0'
+DEFAULT_JULIA_CENTER_IM: str = '0'
+DEFAULT_JULIA_WIDTH: str = '1.8'
+DEFAULT_JULIA_HEIGHT: str = '2.2'
 
 
 class Error(tbase.Error):
@@ -67,6 +73,7 @@ class Fractal(enum.Enum):
   """Fractal enum."""
 
   MANDELBROT = 'Mandelbrot'
+  JULIA = 'Julia'
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
@@ -185,7 +192,7 @@ class Frame:
     """
     cx, cy = self.center
     dx, dy = self.size
-    return f'[({cx}, {cy}) @ {dx}]' if dx == dy else f'[({cx}, {cy}) @ ({dx}, {dy})]'
+    return f'[({cx}, {cy}) ± {dx}]' if dx == dy else f'[({cx}, {cy}) ± ({dx}, {dy})]'
 
   @staticmethod
   def FromCoords(
@@ -268,6 +275,35 @@ class Frame:
     if fr.size != (dx * _MPQ_TWO, dy * _MPQ_TWO):
       raise Error(f'calculated frame size {fr.size} does not match input size ({dx * 2}, {dy * 2})')
     return fr
+
+  def PixelDimensionsFromSize(self, pixel_size: int) -> tuple[int, int]:
+    """Calculate pixel dimensions for a image pixel size given its max dimension side.
+
+    Args:
+      pixel_size (int): The desired maximum dimension in pixels.
+
+    Returns:
+      tuple[int, int]: The calculated image (width, height) in pixels.
+
+    Raises:
+      Error: if the input pixel size is outside the allowed range.
+
+    """
+    # check px size is valid
+    if not (MIN_IMAGE_SIZE <= pixel_size <= MAX_IMAGE_SIZE):
+      raise Error(f'{pixel_size=} must be between {MIN_IMAGE_SIZE} and {MAX_IMAGE_SIZE}')
+    # get the size of the frame in complex-plane units
+    dx: gmpy2.mpq
+    dy: gmpy2.mpq
+    dx, dy = self.size
+    # trivial case, a square
+    if dx == dy:
+      return (pixel_size, pixel_size)
+    # rectangle case
+    sz: gmpy2.mpq = gmpy2.mpq(pixel_size)
+    if dx > dy:
+      return (pixel_size, min(int(gmpy2.ceil(sz * dy / dx)), pixel_size))
+    return (min(int(gmpy2.ceil(sz * dx / dy)), pixel_size), pixel_size)
 
   def CoordToPixel(
     self, re_inp: ExactInputType, im_inp: ExactInputType, pixel_width: int, pixel_height: int
@@ -468,6 +504,86 @@ DEFAULT_MANDELBROT_FRAME: Frame = Frame.FromCenter(
   Fractal.MANDELBROT, DEFAULT_FRAME_CENTER_RE, DEFAULT_FRAME_CENTER_IM, DEFAULT_FRAME_SIZE
 )
 
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class FrameAndPoint(Frame):
+  """Defines a rectangular region and a point of the complex plane, with arbitrary precision. Exact.
+
+  The point is not required to be inside the rectangle; it is just an additional coordinate
+  that can be used for various purposes, such as marking a specific location in the image or
+  providing additional data like for the Julia fractal.
+  """
+
+  point_re: gmpy2.mpq
+  point_im: gmpy2.mpq
+
+  def __str__(self) -> str:
+    """Get string representation of the frame.
+
+    Returns:
+      str: String representation of the frame.
+
+    """
+    cx, cy = self.center
+    dx, dy = self.size
+    return (
+      f'[({cx}, {cy}) ± {dx} @ ({self.point_re}, {self.point_im})]'
+      if dx == dy
+      else f'[({cx}, {cy}) ± ({dx}, {dy}) @ ({self.point_re}, {self.point_im})]'
+    )
+
+  @staticmethod
+  def FromCenterAndPoint(
+    fractal: Fractal,
+    point_re: ExactInputType,
+    point_im: ExactInputType,
+    center_re: ExactInputType,
+    center_im: ExactInputType,
+    width: ExactInputType,
+    height: ExactInputType | None = None,
+  ) -> FrameAndPoint:
+    """Create a FrameAndPoint from a point, a center point, and dimensions.
+
+    Args:
+      fractal (Fractal): The type of fractal.
+      point_re (ExactInputType): Real part of the point.
+      point_im (ExactInputType): Imaginary part of the point.
+      center_re (ExactInputType): Real part of the center point.
+      center_im (ExactInputType): Imaginary part of the center point.
+      width (ExactInputType): Width of the frame in the real direction.
+      height (ExactInputType | None): Height of the frame in the imaginary direction. If None,
+          height will be equal to width.
+
+    Returns:
+      FrameAndPoint: A FrameAndPoint object representing the rectangle+point.
+
+    """
+    re: gmpy2.mpq = point_re if isinstance(point_re, gmpy2.mpq) else gmpy2.mpq(point_re)
+    im: gmpy2.mpq = point_im if isinstance(point_im, gmpy2.mpq) else gmpy2.mpq(point_im)
+    frm: Frame = Frame.FromCenter(fractal, center_re, center_im, width, height)
+    return FrameAndPoint(
+      fractal=frm.fractal,
+      top_re=frm.top_re,
+      top_im=frm.top_im,
+      bottom_re=frm.bottom_re,
+      bottom_im=frm.bottom_im,
+      point_re=re,
+      point_im=im,
+    )
+
+
+DEFAULT_JULIA_FRAME: FrameAndPoint = FrameAndPoint.FromCenterAndPoint(
+  Fractal.JULIA,
+  DEFAULT_JULIA_RE,
+  DEFAULT_JULIA_IM,
+  DEFAULT_JULIA_CENTER_RE,
+  DEFAULT_JULIA_CENTER_IM,
+  DEFAULT_JULIA_WIDTH,
+  DEFAULT_JULIA_HEIGHT,
+)
+
+
 DEFAULT_FRAMES: dict[Fractal, Frame] = {
   Fractal.MANDELBROT: DEFAULT_MANDELBROT_FRAME,
+  Fractal.JULIA: DEFAULT_JULIA_FRAME,
 }
