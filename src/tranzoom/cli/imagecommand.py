@@ -14,6 +14,7 @@ import json
 import pathlib
 
 import click
+import gmpy2
 import typer
 from transcrypto.cli import clibase
 from transcrypto.utils import human, timer
@@ -140,8 +141,12 @@ def Julia(  # documentation is help/epilog/args  # noqa: D103
   frm: frame.Frame = base.MakeFrameFromCLIArgs(  # remember: this will read from file too...
     frame.Fractal.JULIA, center_re, center_im, f_width, f_height, config.console.print
   )
+  # load Julia point and make frame
+  cx: gmpy2.mpq
+  cy: gmpy2.mpq
+  cx, cy = base.MakePointFromCLIArgs(point_re, point_im, config.console.print)
   frm = frame.FrameAndPoint.FromCenterAndPoint(
-    frame.Fractal.JULIA, point_re, point_im, frm.center[0], frm.center[1], frm.size[0], frm.size[1]
+    frame.Fractal.JULIA, cx, cy, frm.center[0], frm.center[1], frm.size[0], frm.size[1]
   )
   # we have the frame, now feed it to the producer
   _ProduceFractalImage(frm, config)

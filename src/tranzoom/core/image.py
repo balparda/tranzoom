@@ -69,8 +69,6 @@ META_LLM_ZOOM_COUNT_KEY = 'tranzoom:llm:zoom:count'  # int; zoom iteration depth
 # special values
 META_LLM_MODEL_VALUE_HUMAN = 'HUMAN'  # used when the evaluation is done by a flesh-and-blood human
 
-# TODO: Julia Set + ability to read either the frame or the center (Julia point) from existing img
-
 # TODO: animated gif or videos of zooms
 
 # image constants

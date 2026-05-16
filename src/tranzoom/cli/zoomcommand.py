@@ -99,11 +99,11 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
   frm: frame.Frame = base.MakeFrameFromCLIArgs(
     config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
   )
+  # if it is a Julia, make the Julia point and add it to the frame
   frm = (
     frame.FrameAndPoint.FromCenterAndPoint(
       frame.Fractal.JULIA,
-      config.julia_re,
-      config.julia_im,
+      *base.MakePointFromCLIArgs(config.julia_re, config.julia_im, config.console.print),
       frm.center[0],
       frm.center[1],
       frm.size[0],
@@ -179,11 +179,11 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   frm: frame.Frame = base.MakeFrameFromCLIArgs(
     config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
   )
+  # if it is a Julia, make the Julia point and add it to the frame
   frm = (
     frame.FrameAndPoint.FromCenterAndPoint(
       frame.Fractal.JULIA,
-      config.julia_re,
-      config.julia_im,
+      *base.MakePointFromCLIArgs(config.julia_re, config.julia_im, config.console.print),
       frm.center[0],
       frm.center[1],
       frm.size[0],

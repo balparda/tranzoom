@@ -9,6 +9,7 @@ import pathlib
 from collections import abc
 
 import click
+import gmpy2
 import typer
 from transcrypto.cli import clibase
 from transcrypto.utils import base as tbase
@@ -492,3 +493,56 @@ def MakeFrameFromCLIArgs(
       ) from err2
   except Exception as err:  # this error we cannot forgive
     raise click.UsageError(f'Error: {center_re=}, {center_im=}, {f_width=}, {f_height=}') from err
+
+
+def MakePointFromCLIArgs(
+  point_re: frame.ExactInputType,
+  point_im: frame.ExactInputType,
+  print_call: abc.Callable[[str], None],
+) -> tuple[gmpy2.mpq, gmpy2.mpq]:
+  """Make a point or die. Tries float/mpq first, then tries reading from a file metadata.
+
+  Args:
+    point_re: the real part of the point
+    point_im: the imaginary part of the point
+    print_call: a callable to print messages, used for logging during frame creation
+
+  Returns:
+    A valid point
+
+  Raises:
+    click.UsageError: if arguments can't be turned into a valid point
+    ValueError: internally (but this is caught and turned into UsageError with a helpful message)
+
+  """
+  try:
+    # the happy path is simple... if these conversions work, we return the point and we're done
+    cx: gmpy2.mpq = point_re if isinstance(point_re, gmpy2.mpq) else gmpy2.mpq(point_re)
+    cy: gmpy2.mpq = point_im if isinstance(point_im, gmpy2.mpq) else gmpy2.mpq(point_im)
+    return (cx, cy)
+  except ValueError as err:
+    if 'invalid' not in str(err).lower():
+      raise click.UsageError(f'Error: {point_re=}, {point_im=}') from err
+    # maybe the user gave us an image path instead of coordinates? let's try to read it as image
+    try:
+      # convert and validate path
+      img_path: pathlib.Path = pathlib.Path(str(point_re)).expanduser().resolve()
+      if not img_path.exists() or not img_path.is_file():
+        raise ValueError(f'Image "{img_path}" does not exist or is not a file')  # noqa: TRY301
+      # make sure we have the needed metadata
+      info: tbase.JSONDict = image.GetBasicDataFromPNG(img_path.read_bytes())[-1]
+      if image.META_CENTER_RE_KEY not in info or image.META_CENTER_IM_KEY not in info:
+        raise ValueError(f'Image "{img_path}" missing tranZoom frame metadata keys')  # noqa: TRY301
+      version: str = str(info.get(image.META_VERSION_KEY, '')) or 'UNKNOWN'
+      fract: str = str(info.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
+      print_call(
+        f'Reading frame from "{img_path}", [red]tranZoom version {version}[/], {fract} fractal...'
+      )
+      return (
+        gmpy2.mpq(str(info[image.META_CENTER_RE_KEY])),
+        gmpy2.mpq(str(info[image.META_CENTER_IM_KEY])),
+      )
+    except Exception as err2:  # this error we cannot forgive
+      raise click.UsageError(f'Error/not path: {point_re=}, {point_im=}') from err2
+  except Exception as err:  # this error we cannot forgive
+    raise click.UsageError(f'Error: {point_re=}, {point_im=}') from err
