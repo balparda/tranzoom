@@ -190,6 +190,24 @@ FRAME_HEIGHT_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
     'default is None, i.e, the same as width'
   ),
 )
+JULIA_RE_OPTION: typer.models.OptionInfo = typer.Option(
+  frame.DEFAULT_JULIA_RE,
+  help=(
+    'Real part of the Julia Set constant; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_JULIA_RE!r}'
+  ),
+)
+JULIA_IM_OPTION: typer.models.OptionInfo = typer.Option(
+  frame.DEFAULT_JULIA_IM,
+  help=(
+    'Imaginary part of the Julia Set constant; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_JULIA_IM!r}'
+  ),
+)
 JULIA_RE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   frame.DEFAULT_JULIA_RE,
   help=(
@@ -277,6 +295,16 @@ MARK_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
 )
 
 # Computation Options
+FRACTAL_TYPE_OPTION: typer.models.OptionInfo = typer.Option(
+  frame.DEFAULT_FRACTAL,
+  '-f',
+  '--fractal',
+  help=(
+    f'Fractal type to generate; '
+    f'possible values: {", ".join(repr(f.value) for f in frame.Fractal)}; '
+    f'default: {frame.DEFAULT_FRACTAL.value!r}'
+  ),
+)
 MAX_ITERATIONS_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '-i',
@@ -394,6 +422,9 @@ class TranZoomConfig(clibase.CLIConfig):
   mark_width: int = image.DEFAULT_MARK_WIDTH  # for `image` command
 
   max_steps: int = 0  # for `zoom` command
+  fractal_type: frame.Fractal = frame.DEFAULT_FRACTAL  # for `zoom` command
+  julia_re: str = frame.DEFAULT_JULIA_RE  # for `zoom` command
+  julia_im: str = frame.DEFAULT_JULIA_IM  # for `zoom` command
 
 
 def MakeFrameFromCLIArgs(

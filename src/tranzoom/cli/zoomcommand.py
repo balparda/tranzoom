@@ -45,19 +45,25 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
   *,
   ctx: click.Context,
   # note that these are the zoom image options, with default of 512x512
+  fractal_type: frame.Fractal = base.FRACTAL_TYPE_OPTION,  # type: ignore[assignment]
   img_width: int = base.IMAGE_ZOOM_WIDTH_OPTION,  # type: ignore[assignment]
   img_height: int = base.IMAGE_ZOOM_HEIGHT_OPTION,  # type: ignore[assignment]
   img_size: int | None = base.IMAGE_SIZE_OPTION,  # type: ignore[assignment]
   max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
+  julia_re: str = base.JULIA_RE_OPTION,  # type: ignore[assignment]
+  julia_im: str = base.JULIA_IM_OPTION,  # type: ignore[assignment]
 ) -> None:
   # store this command's options in the shared config so all sub-commands can read it
   if ctx.invoked_subcommand is not None and ctx.obj is not None:
     ctx.obj = dataclasses.replace(
       ctx.obj,
+      fractal_type=fractal_type,
       img_width=img_width,
       img_height=img_height,
       img_size=img_size,
       max_steps=max_steps,
+      julia_re=julia_re,
+      julia_im=julia_im,
     )
 
 
@@ -91,7 +97,20 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
   # check sanity, create frame, and print info about the image we're going to generate
   config: base.TranZoomConfig = ctx.obj
   frm: frame.Frame = base.MakeFrameFromCLIArgs(
-    frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
+    config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
+  )
+  frm = (
+    frame.FrameAndPoint.FromCenterAndPoint(
+      frame.Fractal.JULIA,
+      config.julia_re,
+      config.julia_im,
+      frm.center[0],
+      frm.center[1],
+      frm.size[0],
+      frm.size[1],
+    )
+    if config.fractal_type == frame.Fractal.JULIA
+    else frm
   )
   # determine width and height
   width: int
@@ -158,7 +177,20 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   # check sanity, create frame, and print info about the image we're going to generate
   config: base.TranZoomConfig = ctx.obj
   frm: frame.Frame = base.MakeFrameFromCLIArgs(
-    frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
+    config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
+  )
+  frm = (
+    frame.FrameAndPoint.FromCenterAndPoint(
+      frame.Fractal.JULIA,
+      config.julia_re,
+      config.julia_im,
+      frm.center[0],
+      frm.center[1],
+      frm.size[0],
+      frm.size[1],
+    )
+    if config.fractal_type == frame.Fractal.JULIA
+    else frm
   )
   # determine width and height
   width: int

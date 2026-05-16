@@ -104,60 +104,8 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
   frm: frame.Frame = base.MakeFrameFromCLIArgs(
     frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
   )
-  # determine width and height
-  width: int
-  height: int
-  width, height = (
-    frm.PixelDimensionsFromSize(config.img_size)
-    if config.img_size
-    else (config.img_width, config.img_height)
-  )
-  # add the mark?
-  mark_coords: tuple[int, int] | None = (
-    frm.CoordsTupleToPixel(config.mark_coords, width, height)
-    if config.mark_coords  # do this early to check the inputs ASAP
-    else None
-  )
-  # log
-  magnification, magnitude = frm.magnification
-  magnification_str: str = (
-    # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation
-    human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
-  )
-  config.console.print(
-    f'\n{width}x{height} Mandelbrot in frame {frm}, '
-    f'precision ± {frm.Precision(width, height)} bits, '  # approx.: b/c iters
-    f'{magnification_str} magnification, '
-    f'{"AUTO" if config.max_iter is None else config.max_iter} iterations...\n'
-  )
-  # render the image
-  raw_png: bytes
-  raw_hash: str
-  with timer.Timer(emit_log=False) as tmr:
-    img: image.Image = fractal.Mandelbrot(
-      frm, width, height, max_iter=config.max_iter, n_processes=config.max_threads
-    )
-    # Mandelbrot is ready, convert to PNG
-    raw_png, raw_hash = img.AsPNG(pal=config.pal)
-    if mark_coords:
-      # we were asked to mark a coordinate with a crosshair overlay: do it
-      raw_png = image.DrawCrossOverlay(
-        raw_png, mark_coords[0], mark_coords[1], col=config.mark_color, lw=config.mark_width
-      )
-  config.console.print(f'Mandelbrot image {raw_hash!r} in {tmr}, escape range {img.escape_range}')
-  # save the image to a file named by its time/hash
-  full_path: pathlib.Path = image.MakeImagePath(
-    config.img_output_path,
-    config.img_use_date,
-    config.img_use_hash,
-    config.img_path_prefix,
-    raw_hash,
-  )
-  full_path.write_bytes(raw_png)
-  config.console.print(f'Saved to "{full_path}"\n')
-  if config.iterm:
-    image.PrintITerm2(raw_png)
-    config.console.print()
+  # we have the frame, now feed it to the producer
+  _ProduceFractalImage(frm, config)
 
 
 @image_app.command(
@@ -192,32 +140,37 @@ def Julia(  # documentation is help/epilog/args  # noqa: D103
   frm: frame.Frame = base.MakeFrameFromCLIArgs(  # remember: this will read from file too...
     frame.Fractal.JULIA, center_re, center_im, f_width, f_height, config.console.print
   )
-  jfrm: frame.FrameAndPoint = frame.FrameAndPoint.FromCenterAndPoint(
+  frm = frame.FrameAndPoint.FromCenterAndPoint(
     frame.Fractal.JULIA, point_re, point_im, frm.center[0], frm.center[1], frm.size[0], frm.size[1]
   )
+  # we have the frame, now feed it to the producer
+  _ProduceFractalImage(frm, config)
+
+
+def _ProduceFractalImage(frm: frame.Frame, config: base.TranZoomConfig) -> None:
   # determine width and height
   width: int
   height: int
   width, height = (
-    jfrm.PixelDimensionsFromSize(config.img_size)
+    frm.PixelDimensionsFromSize(config.img_size)
     if config.img_size
     else (config.img_width, config.img_height)
   )
   # add the mark?
   mark_coords: tuple[int, int] | None = (
-    jfrm.CoordsTupleToPixel(config.mark_coords, width, height)
+    frm.CoordsTupleToPixel(config.mark_coords, width, height)
     if config.mark_coords  # do this early to check the inputs ASAP
     else None
   )
   # log
-  magnification, magnitude = jfrm.magnification
+  magnification, magnitude = frm.magnification
   magnification_str: str = (
     # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation
     human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
   )
   config.console.print(
-    f'\n{width}x{height} Julia in frame {jfrm}, '
-    f'precision ± {jfrm.Precision(width, height)} bits, '  # approx: b/c iters
+    f'\n{width}x{height} {frm.fractal.value.capitalize()} in '
+    f'frame {frm}, precision ± {frm.Precision(width, height)} bits, '  # approx: b/c iters
     f'{magnification_str} magnification, '
     f'{"AUTO" if config.max_iter is None else config.max_iter} iterations...\n'
   )
@@ -225,17 +178,26 @@ def Julia(  # documentation is help/epilog/args  # noqa: D103
   raw_png: bytes
   raw_hash: str
   with timer.Timer(emit_log=False) as tmr:
-    img: image.Image = fractal.Julia(
-      jfrm, width, height, max_iter=config.max_iter, n_processes=config.max_threads
+    img: image.Image = {
+      frame.Fractal.MANDELBROT: fractal.Mandelbrot,
+      frame.Fractal.JULIA: fractal.Julia,
+    }[frm.fractal](
+      frm,  # type: ignore[arg-type]  # we know this is the right type of frame
+      width,
+      height,
+      max_iter=config.max_iter,
+      n_processes=config.max_threads,
     )
-    # Julia is ready, convert to PNG
+    # fractal is ready, convert to PNG
     raw_png, raw_hash = img.AsPNG(pal=config.pal)
     if mark_coords:
       # we were asked to mark a coordinate with a crosshair overlay: do it
       raw_png = image.DrawCrossOverlay(
         raw_png, mark_coords[0], mark_coords[1], col=config.mark_color, lw=config.mark_width
       )
-  config.console.print(f'Julia image {raw_hash!r} in {tmr}, escape range {img.escape_range}')
+  config.console.print(
+    f'{frm.fractal.value.capitalize()} image {raw_hash!r} in {tmr}, escape range {img.escape_range}'
+  )
   # save the image to a file named by its time/hash
   full_path: pathlib.Path = image.MakeImagePath(
     config.img_output_path,

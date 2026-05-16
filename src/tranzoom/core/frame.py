@@ -72,8 +72,11 @@ class Error(tbase.Error):
 class Fractal(enum.Enum):
   """Fractal enum."""
 
-  MANDELBROT = 'Mandelbrot'
-  JULIA = 'Julia'
+  MANDELBROT = 'mandelbrot'
+  JULIA = 'julia'
+
+
+DEFAULT_FRACTAL: Fractal = Fractal.MANDELBROT
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)

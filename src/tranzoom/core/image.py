@@ -38,7 +38,7 @@ META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
 META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
 META_IMAGE_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
 META_IMAGE_OVERLAY_KEY = 'tranzoom:image:overlay'  # bool; stored as "true"/"false"
-META_FRACTAL_KEY = 'tranzoom:frame:fractal'  # str, like "Mandelbrot", one of frame.Fractal
+META_FRACTAL_KEY = 'tranzoom:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal, lowercase
 META_TOP_RE_KEY = 'tranzoom:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
 META_TOP_IM_KEY = 'tranzoom:frame:top_im'  # gmpy2.mpq
 META_BOTTOM_RE_KEY = 'tranzoom:frame:bottom_re'  # gmpy2.mpq
@@ -54,6 +54,8 @@ META_ITER_DEPTH_MIN_KEY = 'tranzoom:iter_depth:min'  # int
 META_ITER_DEPTH_MAX_KEY = 'tranzoom:iter_depth:max'  # int
 META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:iter_depth:search'  # int, can be "-1" if unknown or not set
 # extra keys added to some images only (for example, when the LLM evaluates the image)
+META_JULIA_RE_KEY = 'tranzoom:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
+META_JULIA_IM_KEY = 'tranzoom:frame:julia_im'  # gmpy2.mpq, only added for Julia Set frames
 META_LLM_MODEL_KEY = 'tranzoom:llm:model'  # str (or "HUMAN"/META_LLM_MODEL_VALUE_HUMAN for human)
 META_LLM_TEMPERATURE_KEY = 'tranzoom:llm:temperature'  # float
 META_LLM_SEED_KEY = 'tranzoom:llm:seed'  # int (0 if not set)
@@ -285,6 +287,9 @@ class Image:
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
 
+    Raises:
+      Error: on error
+
     """
     # convert the raw pixel data to a PNG using PIL
     raw_img: bytes = self.AsPixels(pal=pal)
@@ -301,7 +306,12 @@ class Image:
     png_meta.add_text(META_IMAGE_PALETTE_KEY, pal.value)
     png_meta.add_text(META_IMAGE_OVERLAY_KEY, 'false')  # if it comes from this, it has no overlay
     # frame type
-    png_meta.add_text(META_FRACTAL_KEY, self._frame.fractal.value)
+    png_meta.add_text(META_FRACTAL_KEY, self._frame.fractal.value.lower())
+    if self._frame.fractal == frame.Fractal.JULIA:
+      if not isinstance(self._frame, frame.FrameAndPoint):
+        raise Error(f'Expected FrameAndPoint for Julia Set frame, got {type(self._frame)}')
+      png_meta.add_text(META_JULIA_RE_KEY, str(self._frame.point_re))
+      png_meta.add_text(META_JULIA_IM_KEY, str(self._frame.point_im))
     # frame as corners
     png_meta.add_text(META_TOP_RE_KEY, str(self._frame.top_re))
     png_meta.add_text(META_TOP_IM_KEY, str(self._frame.top_im))

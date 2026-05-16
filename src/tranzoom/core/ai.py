@@ -65,10 +65,10 @@ def ZoomLoop(
   target_weight: float,
   print_comm: abc.Callable[[str], None],
 ) -> None:
-  """Execute main loop for AI-guided Mandelbrot zoom search.
+  """Execute main loop for AI-guided fractal zoom search.
 
   Args:
-    frm: The initial frame for the Mandelbrot zoom search.
+    frm: The initial frame for the fractal zoom search.
     width: The width of the image to render.
     height: The height of the image to render.
     img_output_path: Optional path to save the rendered images; if None, images will be
@@ -149,7 +149,7 @@ def ZoomLoop(
       while True:
         count += 1
         # render the image for the current frame
-        img_data, full_path = _ComputeMandelbrot(
+        img_data, full_path = _ComputeFractal(
           frm,
           width,
           height,
@@ -227,10 +227,10 @@ def ManualLoop(
   iterm: bool,
   print_comm: abc.Callable[[str], None],
 ) -> None:
-  """Execute main loop for manually-guided Mandelbrot zoom search.
+  """Execute main loop for manually-guided fractal zoom search.
 
   Args:
-    frm: The initial frame for the Mandelbrot zoom search.
+    frm: The initial frame for the fractal zoom search.
     width: The width of the image to render.
     height: The height of the image to render.
     img_output_path: Optional path to save the rendered images; if None, images will be
@@ -263,7 +263,7 @@ def ManualLoop(
     while True:
       count += 1
       # render the image for the current frame
-      img_data, full_path = _ComputeMandelbrot(
+      img_data, full_path = _ComputeFractal(
         frm,
         width,
         height,
@@ -332,7 +332,7 @@ def ManualLoop(
   print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {frm}\n')
 
 
-def _ComputeMandelbrot(
+def _ComputeFractal(
   frm: frame.Frame,
   width: int,
   height: int,
@@ -346,10 +346,10 @@ def _ComputeMandelbrot(
   iterm: bool,
   print_comm: abc.Callable[[str], None],
 ) -> tuple[bytes, pathlib.Path]:
-  """Compute the Mandelbrot image for the given frame.
+  """Compute the Mandelbrot or Julia image for the given frame.
 
   Args:
-    frm: The frame for which to compute the Mandelbrot image.
+    frm: The frame for which to compute the Mandelbrot or Julia image.
     width: The width of the image to render.
     height: The height of the image to render.
     count: The current zoom step count, used for logging and image naming.
@@ -380,8 +380,16 @@ def _ComputeMandelbrot(
   )
   # render the image for the current frame
   with timer.Timer(emit_log=False) as tmr:
-    img: image.Image = fractal.Mandelbrot(
-      frm, width, height, max_iter=None, progress_bar=True, n_processes=max_threads
+    img: image.Image = {
+      frame.Fractal.MANDELBROT: fractal.Mandelbrot,
+      frame.Fractal.JULIA: fractal.Julia,
+    }[frm.fractal](
+      frm,  # type: ignore[arg-type]  # we know this should be fine
+      width,
+      height,
+      max_iter=None,
+      progress_bar=True,
+      n_processes=max_threads,
     )
     # get PNG and overlay info on top of it
     img_data, img_hash = img.AsPNG()
@@ -397,8 +405,8 @@ def _ComputeMandelbrot(
     add_serial=count,
   )
   print_comm(
-    f'\nMandelbrot zoom (#{count}) with frame {frm}, '
-    f'precision {img.precision} bits, {magnification_str} magnification\n'
+    f'\n{frm.fractal.value.capitalize()} zoom (#{count}) '
+    f'with frame {frm}, precision {img.precision} bits, {magnification_str} magnification\n'
     f'{img_hash!r} in {tmr}, escape range {img.escape_range}, will save as "{full_path}"'
   )
   if iterm:
@@ -407,7 +415,7 @@ def _ComputeMandelbrot(
   return (img_data, full_path)
 
 
-def _MoveCenter(  # noqa: C901
+def _MoveCenter(  # noqa: C901, PLR0912
   frm: frame.Frame,
   query: str | None,
   response: queries.ZoomSectorScoring | queries.ZoomSectorCompleteScoring,
@@ -437,10 +445,14 @@ def _MoveCenter(  # noqa: C901
   # implement the move command: first the scale of the step
   center_mpq_re: gmpy2.mpq
   center_mpq_im: gmpy2.mpq
+  frame_width: gmpy2.mpq
+  frame_height: gmpy2.mpq
   center_mpq_re, center_mpq_im = frm.center
-  frame_sz: gmpy2.mpq = frm.size[0]  # only works for square!
-  direct_step: gmpy2.mpq = frame_sz * frame.DEFAULT_MPQ_STEP_DIRECT
-  diagonal_step: gmpy2.mpq = frame_sz * frame.DEFAULT_MPQ_STEP_DIAGONAL
+  frame_width, frame_height = frm.size
+  width_step: gmpy2.mpq = frame_width * frame.DEFAULT_MPQ_STEP_DIRECT
+  height_step: gmpy2.mpq = frame_height * frame.DEFAULT_MPQ_STEP_DIRECT
+  w_diagonal_step: gmpy2.mpq = width_step * frame.DEFAULT_MPQ_STEP_DIAGONAL
+  h_diagonal_step: gmpy2.mpq = height_step * frame.DEFAULT_MPQ_STEP_DIAGONAL
   # now move the center according to the direction, if requested
   best: queries.SectorCompleteEvaluation | queries.SectorEvaluation = response.BestEvaluation(
     target_weight=target_weight
@@ -449,25 +461,25 @@ def _MoveCenter(  # noqa: C901
   if direction == 'C':
     pass  # no movement, zoom in place
   elif direction == 'N':
-    center_mpq_im += direct_step
+    center_mpq_im += height_step
   elif direction == 'NE':
-    center_mpq_re += diagonal_step
-    center_mpq_im += diagonal_step
+    center_mpq_re += w_diagonal_step
+    center_mpq_im += h_diagonal_step
   elif direction == 'E':
-    center_mpq_re += direct_step
+    center_mpq_re += width_step
   elif direction == 'SE':
-    center_mpq_re += diagonal_step
-    center_mpq_im -= diagonal_step
+    center_mpq_re += w_diagonal_step
+    center_mpq_im -= h_diagonal_step
   elif direction == 'S':
-    center_mpq_im -= direct_step
+    center_mpq_im -= height_step
   elif direction == 'SW':
-    center_mpq_re -= diagonal_step
-    center_mpq_im -= diagonal_step
+    center_mpq_re -= w_diagonal_step
+    center_mpq_im -= h_diagonal_step
   elif direction == 'W':
-    center_mpq_re -= direct_step
+    center_mpq_re -= width_step
   elif direction == 'NW':
-    center_mpq_re -= diagonal_step
-    center_mpq_im += diagonal_step
+    center_mpq_re -= w_diagonal_step
+    center_mpq_im += h_diagonal_step
   else:
     raise Error(f'invalid direction: {direction!r}')
   print_comm(f'[yellow]MODEL: move [bold]{best.sector}/{direction}-wards[/][/] (in {tmr})')
@@ -488,6 +500,20 @@ def _MoveCenter(  # noqa: C901
     )
   print_comm('')
   # build the new frame
+  if isinstance(frm, frame.FrameAndPoint):
+    return frame.FrameAndPoint.FromCenterAndPoint(
+      frm.fractal,
+      frm.point_re,
+      frm.point_im,
+      center_mpq_re,
+      center_mpq_im,
+      frame_width / frame.DEFAULT_MPQ_ZOOM,
+      frame_height / frame.DEFAULT_MPQ_ZOOM,
+    )
   return frame.Frame.FromCenter(
-    frame.Fractal.MANDELBROT, center_mpq_re, center_mpq_im, frame_sz / frame.DEFAULT_MPQ_ZOOM
+    frm.fractal,
+    center_mpq_re,
+    center_mpq_im,
+    frame_width / frame.DEFAULT_MPQ_ZOOM,
+    frame_height / frame.DEFAULT_MPQ_ZOOM,
   )
