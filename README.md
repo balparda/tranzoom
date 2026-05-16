@@ -56,9 +56,10 @@ Built with:
     - [`tranz zoom ai` — AI-guided Mandelbrot zoom search](#tranz-zoom-ai--ai-guided-mandelbrot-zoom-search)
     - [`tranz zoom manual` — Manually-guided Mandelbrot zoom](#tranz-zoom-manual--manually-guided-mandelbrot-zoom)
     - [Comprehensive example images and zooms](#comprehensive-example-images-and-zooms)
-      - [Full / Default (×1, 80 bits)](#full--default-1-80-bits)
-      - [Seahorse (×155, 83 bits)](#seahorse-155-83-bits)
-      - [Seahorse Tail (×3k, 88 bits)](#seahorse-tail-3k-88-bits)
+      - [Full / Default (×1)](#full--default-1)
+      - [Seahorse (×155)](#seahorse-155)
+      - [Seahorse Tail (×3k)](#seahorse-tail-3k)
+      - [Julia Suzana (×1)](#julia-suzana-1)
       - [Powers of 1000](#powers-of-1000)
     - [Configuration](#configuration)
     - [Color and formatting](#color-and-formatting)
@@ -498,7 +499,7 @@ Note: `tranz zoom manual` does **not** require the AI model flags; it does not l
 
 You can run all these at once by executing `scripts/make_examples.sh`.
 
-#### Full / Default (×1, 80 bits)
+#### Full / Default (×1)
 
 ![Full / Default](tests/data/images/demo-mandel-whole-set.png)
 
@@ -507,18 +508,18 @@ Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) w
 ```sh
 $ poetry run tranz image mandel
 
-1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision 80 bits, 1 magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision 140 bits, 1 magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 962134.25px/s]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:01<00:00, 593762.44px/s]
 
-Generated image 'bd77ee8874aa425422a9ea92867c53937f28534898d49a56b9e4d1dca7b5dd54' in 3.135 s, escape range (1, 1000)
-Saved to "mandel-bd77ee8874aa425422a9.png"
+Generated image 'b934ff27c4e6dede0ecdea8c746ab8f626553ba40e1a402506935e2fd0354f1b' in 3.135 s, escape range (1, 1000)
+Saved to "mandel-b934ff27c4e6dede0ecd.png"
 ```
 
 This is what tranZoom considers ***"1 magnification"***, and will measure other magnifications against this size.
 
-#### Seahorse (×155, 83 bits)
+#### Seahorse (×155)
 
 ![Seahorse](tests/data/images/demo-mandel-seahorse.png)
 
@@ -527,16 +528,16 @@ Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mande
 ```sh
 $ poetry run tranz image mandel " -0.74303" "0.126433" "0.01611"
 
-1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) ± 1611/100000], precision 83 bits, 155.183 magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) ± 1611/100000], precision 140 bits, 155.183 magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 2575.92px/s]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:36<00:00, 28721.25px/s]
 
-Generated image '0cf52a6f78b4a883727c553da286b9f0f446a3671b01a6e364e3ae8f9b2391b3' in 38.291 s, escape range (24, 9276)
-Saved to "mandel-0cf52a6f78b4a883727c.png"
+Generated image 'e70bc149bc2fd3aff8ce4d8aed79c878f373bb5f5ee82fb866584e0cf9858793' in 38.291 s, escape range (24, 9276)
+Saved to "mandel-e70bc149bc2fd3aff8ce.png"
 ```
 
-#### Seahorse Tail (×3k, 88 bits)
+#### Seahorse Tail (×3k)
 
 ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail.png)
 
@@ -545,16 +546,33 @@ Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tai
 ```sh
 $ poetry run tranz image mandel " -0.7436499" "0.13188204" "0.00073801"
 
-1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) ± 73801/100000000], precision 88 bits, 3.387 k magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) ± 73801/100000000], precision 140 bits, 3.387 k magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 101834.39px/s]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:05<00:00, 199725.00px/s]
 
-Generated image '38824cdaa58b64496ebfd86facf4d4ba4596ab18db95ac97afd643a7a892ff83' in 6.797 s, escape range (36, 1000)
-Saved to "mandel-38824cdaa58b64496ebf.png"
+Generated image '9191d8e0946361b47e25dbe4cb21246d3e21b27a2d7dec800b4e25fd699d6814' in 6.797 s, escape range (36, 1000)
+Saved to "mandel-9191d8e0946361b47e25.png"
 ```
 
 This image is relatively fast to generate (despite the zoom level, it has very little interior regions), so we use it in the unit and integration tests to make sure we are operating consistently. If the hash of this image changes, remember to change it in `src/tranzoom/cli/base.py`.
+
+#### Julia Suzana (×1)
+
+![Julia Suzana](tests/data/images/demo-julia-suzana.png)
+
+Render a "Julia Suzana" at `-s/--size` 1024:
+
+```sh
+$ poetry run tranz image -s 1024 --palette electric-ocean julia
+
+838x1024 Julia in frame [(0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)], precision ± 140 bits, 1 magnification, AUTO iterations...
+
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 175.98px/s]
+Img: 100%|█████████████████████████████████████████████| 858112/858112 [00:23<00:00, 36878.43px/s]
+Julia image '28f147dcfc6190d94bbbfece396c56ae074bb3cae14be5040446dc5fb40984f8' in 25.542 s, escape range (2, 1000)
+Saved to "mandel-28f147dcfc6190d94bbb.png"
+```
 
 #### Powers of 1000
 
