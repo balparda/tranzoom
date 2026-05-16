@@ -193,6 +193,7 @@ def _ProduceFractalImage(frm: frame.Frame, config: base.TranZoomConfig) -> None:
       height,
       max_iter=config.max_iter,
       n_processes=config.max_threads,
+      print_comm=config.console.print,
     )
     # fractal is ready, convert to PNG
     raw_png, raw_hash = img.AsPNG(pal=config.pal)

@@ -117,7 +117,7 @@ def ZoomLoop(
   setup_query: str
   image_query: str
   query = query.strip() if query else None
-  setup_query, image_query = queries.BuildImageThirdsPrompts(reason, query)
+  setup_query, image_query = queries.BuildImageThirdsPrompts(frm, reason, query)
   logging.debug(f'AI setup query:\n{setup_query}\n')
   logging.debug(f'AI image query:\n{image_query}\n')
   # start
@@ -390,6 +390,7 @@ def _ComputeFractal(
       max_iter=None,
       progress_bar=True,
       n_processes=max_threads,
+      print_comm=print_comm,
     )
     # get PNG and overlay info on top of it
     img_data, img_hash = img.AsPNG()

@@ -11,6 +11,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import os
+from collections import abc
 from concurrent import futures
 from typing import NoReturn
 
@@ -52,6 +53,7 @@ def Mandelbrot(
   max_iter: int | None = None,
   progress_bar: bool = True,
   n_processes: int | None = None,
+  print_comm: abc.Callable[[str], None] = print,
 ) -> image.Image:
   """Render the Mandelbrot frame rectangle to an Image.
 
@@ -64,6 +66,7 @@ def Mandelbrot(
     progress_bar (bool, optional): Whether to show a progress bar. Defaults to True.
     n_processes (int | None, optional): The number of processes to use for rendering. Defaults
         to None, which means to use all available CPU cores. Will be limited to MAX_CONCURRENCE.
+    print_comm (Callable[[str], None], optional): A callable to print messages. Defaults to print.
 
   Returns:
     image.Image: The rendered fractal image.
@@ -76,7 +79,9 @@ def Mandelbrot(
     raise Error(f'{n_processes=} must be a positive integer or None')
   # if max_iter is None, we do an adaptive iteration limit calculation based on a small test render
   # BEWARE: the method call will call Mandelbrot() recursively, but with a fixed max_iter!
-  max_iter = _FractalAdaptiveIterations(frm, progress_bar) if max_iter is None else max_iter
+  max_iter = (
+    _FractalAdaptiveIterations(frm, progress_bar, print_comm) if max_iter is None else max_iter
+  )
   # determine processes
   is_preprocess: bool = width == frame.MIN_IMAGE_SIZE and height == frame.MIN_IMAGE_SIZE
   n_processes = n_processes or AVAILABLE_CPU
@@ -129,6 +134,7 @@ def Julia(
   max_iter: int | None = None,
   progress_bar: bool = True,
   n_processes: int | None = None,
+  print_comm: abc.Callable[[str], None] = print,
 ) -> image.Image:
   """Render the Julia frame rectangle to an Image.
 
@@ -141,6 +147,7 @@ def Julia(
     progress_bar (bool, optional): Whether to show a progress bar. Defaults to True.
     n_processes (int | None, optional): The number of processes to use for rendering. Defaults
         to None, which means to use all available CPU cores. Will be limited to MAX_CONCURRENCE.
+    print_comm (Callable[[str], None], optional): A callable to print messages. Defaults to print.
 
   Returns:
     image.Image: The rendered fractal image.
@@ -153,7 +160,9 @@ def Julia(
     raise Error(f'{n_processes=} must be a positive integer or None')
   # if max_iter is None, we do an adaptive iteration limit calculation based on a small test render
   # BEWARE: the method call will call Julia() recursively, but with a fixed max_iter!
-  max_iter = _FractalAdaptiveIterations(frm, progress_bar) if max_iter is None else max_iter
+  max_iter = (
+    _FractalAdaptiveIterations(frm, progress_bar, print_comm) if max_iter is None else max_iter
+  )
   # determine processes
   is_preprocess: bool = width == frame.MIN_IMAGE_SIZE and height == frame.MIN_IMAGE_SIZE
   n_processes = n_processes or AVAILABLE_CPU
@@ -198,7 +207,9 @@ def Julia(
   return img
 
 
-def _FractalAdaptiveIterations(frm: frame.Frame, progress_bar: bool) -> int:
+def _FractalAdaptiveIterations(
+  frm: frame.Frame, progress_bar: bool, print_comm: abc.Callable[[str], None]
+) -> int:
   """Estimate a suitable max_iter for the full image by rendering a small test image.
 
   Current algorithm:
@@ -216,6 +227,7 @@ def _FractalAdaptiveIterations(frm: frame.Frame, progress_bar: bool) -> int:
   Args:
     frm (Frame): The frame to render.
     progress_bar (bool): Whether to show a progress bar during the test render.
+    print_comm (Callable[[str], None]): A callable to print messages
 
   Returns:
     int: The estimated max_iter for the full image, based on the escape histogram of the test render
@@ -235,6 +247,7 @@ def _FractalAdaptiveIterations(frm: frame.Frame, progress_bar: bool) -> int:
       frame.MIN_IMAGE_SIZE,
       max_iter=high_iter,
       progress_bar=progress_bar,
+      print_comm=print_comm,
     )
     # estimate the needed iterations for the full image based on the smallest image;
     # make the histogram of escape iterations for the smallest image, and find the highest escape
@@ -258,10 +271,10 @@ def _FractalAdaptiveIterations(frm: frame.Frame, progress_bar: bool) -> int:
           ('...', sum(count for _, count in histogram[3:-3])),
           *histogram[-3:],
         ]
-        logging.warning(f'Picked {max_iter=}: histogram {summary_histogram}')
+        print_comm(f'Picked depth {max_iter}, histogram {summary_histogram}')
       else:
         # probably a pretty rare thing, but then we can show all
-        logging.warning(f'Picked {max_iter=}: histogram {histogram}')
+        print_comm(f'Picked depth {max_iter}, histogram {histogram}')
       # stop here
       return max_iter
     # here we didn't find, so we loop to the next higher limit...

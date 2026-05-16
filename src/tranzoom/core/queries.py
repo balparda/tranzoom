@@ -11,7 +11,7 @@ from typing import Literal, Self, final
 import pydantic
 from transcrypto.utils import base as tbase
 
-from tranzoom.core import fractal
+from tranzoom.core import fractal, frame
 
 
 class Error(fractal.Error):
@@ -23,10 +23,13 @@ class Error(fractal.Error):
 ####################################################################################################
 
 
-def BuildImageThirdsPrompts(reason: bool, target_search: str | None = None) -> tuple[str, str]:
+def BuildImageThirdsPrompts(
+  frm: frame.Frame, reason: bool, target_search: str | None = None
+) -> tuple[str, str]:
   """Build the AI setup and image prompts for the thirds scoring method.
 
   Args:
+    frm: The current frame for the fractal zoom search.
     reason: Whether to include the reasoning field in the prompts
     target_search: Optional string describing the targeted search query;
         if None, targeted search is inactive
@@ -72,11 +75,15 @@ def BuildImageThirdsPrompts(reason: bool, target_search: str | None = None) -> t
       '<<<REASON_BLOCK_2>>>',
       'Return exactly one `fractal_score` and one `target_match_score` for each sector.',
     )
+  # replace fractal type
+  fractal_type_str: str = frm.fractal.value.capitalize()
+  setup_text = setup_text.replace('<<<FRACTAL_TYPE>>>', fractal_type_str)
+  image_text = image_text.replace('<<<FRACTAL_TYPE>>>', fractal_type_str)
   return (setup_text.strip(), image_text.strip())
 
 
 AI_SETUP_THIRDS_SCORING_PROMPT: str = """
-Evaluate Mandelbrot Set images for an automated zoom search.
+Evaluate <<<FRACTAL_TYPE>>> Set images for an automated zoom search.
 
 Each image is divided by white grid lines into 9 equal sectors.
 Each sector in the image is marked in clear green text with its sector number.
@@ -119,7 +126,7 @@ Rules for `fractal_score` scoring:
 Reasoning rules:
 - Silently compare all sectors against the best visible sector before assigning final scores.
 - Use plain visual descriptions only: dense detail, fine texture, sharp boundary, smooth area, dark area, empty area, edge detail.
-- Avoid naming specific Mandelbrot structures unless they are unmistakable.
+- Avoid naming specific <<<FRACTAL_TYPE>>> structures unless they are unmistakable.
 - Fractals are often just infinite recursion of the same pattern: stay away from the vanishing point of infinite recursions.
 - `fractal_score` scores are relative within the image: normally only the best 1 or 2 sectors should score 90+.
 """.strip()  # noqa: E501
@@ -141,7 +148,7 @@ Rules for `target_match_score`:
 """.strip()  # noqa: E501
 
 AI_IMAGE_THIRDS_SCORING_PROMPT: str = """
-Inspect the Mandelbrot image divided into 9 sectors with white grid lines and identified by green text labels.
+Inspect the <<<FRACTAL_TYPE>>> image divided into 9 sectors with white grid lines and identified by green text labels.
 
 For each sector, assign a 0 to 100 score in `fractal_score` for next-zoom promise. Judge mainly by:
 - visible fractal complexity;
@@ -211,7 +218,7 @@ class ImageScore(pydantic.BaseModel, abstract.ABC):
 
 
 class SectorEvaluation(ImageScore):
-  """Visual quality evaluation for one Mandelbrot image sector."""
+  """Visual quality evaluation for one fractal image sector."""
 
   sector: int = pydantic.Field(
     ge=1,
@@ -240,14 +247,14 @@ class SectorEvaluation(ImageScore):
 
 
 class SectorCompleteEvaluation(SectorEvaluation):
-  """Visual quality evaluation for one Mandelbrot image sector."""
+  """Visual quality evaluation for one fractal image sector."""
 
   reason: str = pydantic.Field(
     min_length=8,
     max_length=240,
     description=(
       'Brief reason for the score, '
-      'based only on visible Mandelbrot structure and optional target match'
+      'based only on visible fractal structure and optional target match'
     ),
   )
 
@@ -322,7 +329,7 @@ class ImageScores[ScoreT: ImageScore](pydantic.BaseModel, abstract.ABC):
 
 
 class ZoomSectorScoring(ImageScores[SectorEvaluation]):
-  """Scores for all 9 Mandelbrot zoom sectors."""
+  """Scores for all 9 fractal sectors."""
 
   sectors: list[SectorEvaluation] = pydantic.Field(
     min_length=9,
@@ -342,7 +349,7 @@ class ZoomSectorScoring(ImageScores[SectorEvaluation]):
 
 
 class ZoomSectorCompleteScoring(ImageScores[SectorCompleteEvaluation]):
-  """Scores for all 9 Mandelbrot zoom sectors."""
+  """Scores for all 9 fractal sectors."""
 
   sectors: list[SectorCompleteEvaluation] = pydantic.Field(
     min_length=9,

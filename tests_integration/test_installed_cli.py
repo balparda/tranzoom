@@ -85,7 +85,7 @@ def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path
         'tranzoom:image:palette': 'blue-to-yellow-to-brown',
         'tranzoom:image:hash': base.SEAHORSE_TAIL_HASH,
         'tranzoom:image:overlay': 'false',
-        'tranzoom:frame:fractal': 'Mandelbrot',
+        'tranzoom:frame:fractal': 'mandelbrot',
         'tranzoom:frame:top_re': '-148803781/200000000',
         'tranzoom:frame:top_im': '26450209/200000000',
         'tranzoom:frame:bottom_re': '-148656179/200000000',

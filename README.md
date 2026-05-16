@@ -272,6 +272,7 @@ $ poetry run tranz image mandel
 1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision 80 bits, 1 magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 1011.19px/s]
+Picked depth 1000, histogram [(1, 24), (2, 26), (3, 58), ('...', 86), (57, 2), (222, 2), (100000, 58)]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:13<00:00, 78912.96px/s]
 
 Generated image 'bd77ee8874aa425422a9ea92867c53937f28534898d49a56b9e4d1dca7b5dd54' in 14.120 s, escape range (1, 1000)
@@ -555,6 +556,7 @@ $ poetry run tranz image mandel
 1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision 140 bits, 1 magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 962134.25px/s]
+Picked depth 1000, histogram [(1, 24), (2, 26), (3, 58), ('...', 86), (57, 2), (222, 2), (100000, 58)]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:01<00:00, 593762.44px/s]
 
 Generated image 'b934ff27c4e6dede0ecdea8c746ab8f626553ba40e1a402506935e2fd0354f1b' in 3.135 s, escape range (1, 1000)
@@ -575,6 +577,7 @@ $ poetry run tranz image mandel " -0.74303" "0.126433" "0.01611"
 1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) ± 1611/100000], precision 140 bits, 155.183 magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 2575.92px/s]
+Picked depth 9276, histogram [(24, 7), (25, 14), (26, 14), ('...', 153), (3215, 1), (6184, 1), (100000, 66)]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:36<00:00, 28721.25px/s]
 
 Generated image 'e70bc149bc2fd3aff8ce4d8aed79c878f373bb5f5ee82fb866584e0cf9858793' in 38.291 s, escape range (24, 9276)
@@ -593,6 +596,7 @@ $ poetry run tranz image mandel " -0.7436499" "0.13188204" "0.00073801"
 1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) ± 73801/100000000], precision 140 bits, 3.387 k magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 101834.39px/s]
+Picked depth 1000, histogram [(36, 5), (37, 9), (38, 15), ('...', 224), (415, 1), (464, 1), (649, 1)]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:05<00:00, 199725.00px/s]
 
 Generated image '9191d8e0946361b47e25dbe4cb21246d3e21b27a2d7dec800b4e25fd699d6814' in 6.797 s, escape range (36, 1000)
@@ -613,6 +617,7 @@ $ poetry run tranz image -s 1024 --palette electric-ocean julia
 838x1024 Julia in frame [(0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)], precision ± 140 bits, 1 magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 175.98px/s]
+Picked depth 1000, histogram [(2, 20), (3, 32), (4, 18), ('...', 58), (44, 2), (45, 2), (100000, 124)]
 Img: 100%|█████████████████████████████████████████████| 858112/858112 [00:23<00:00, 36878.43px/s]
 Julia image '28f147dcfc6190d94bbbfece396c56ae074bb3cae14be5040446dc5fb40984f8' in 25.542 s, escape range (2, 1000)
 Saved to "julia-28f147dcfc6190d94bbb.png"

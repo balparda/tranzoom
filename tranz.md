@@ -15,10 +15,10 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                           provided). Defaults to having colors.                                         │
 │ --out                 -o                DIRECTORY                         The local output root directory path, ex: "~/foo/bar/"; if not given, the     │
 │                                                                           image will be saved in the current working directory                          │
-│ --prefix                                TEXT                              Image save prefix; default: 'mandel' (the final file name will be             │
+│ --prefix                                TEXT                              Image save prefix; default: None, meaning use "mandel" for Mandelbrot and     │
+│                                                                           "julia" for Julia (the final file name will be                                │
 │                                                                           "<prefix>[-<date>][-<hash20>].png", note the date and the hash can be turned  │
 │                                                                           off with --no-date and --no-hash, respectively)                               │
-│                                                                                                                                        │
 │ --date                    --no-date                                       If True, file names will include the date-time as YYYYMMDDhhmmss; if False,   │
 │                                                                           file names will not include the date-time; default is True                    │
 │                                                                                                                                          │
@@ -126,6 +126,13 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --width       -w      INTEGER RANGE [16<=x<=16384]                          Width of the image; 16 ≤ w ≤ 16384; default is 1024          │
 │ --height      -h      INTEGER RANGE [16<=x<=16384]                          Height of the image; 16 ≤ h ≤ 16384; default is 1024         │
+│ --size        -s      INTEGER RANGE [16<=x<=16384]                          Size of the image: *overrides* both `-w/--width` and `-h/--height` by       │
+│                                                                             determining the max pixel length of the final image, which will be          │
+│                                                                             proportional to the given frame, i.e., the final dimensions will be scaled  │
+│                                                                             accordingly and, given a size S, will be either (S, x), (x, S) or (S, S),   │
+│                                                                             where x < S, and will make the final image ratio/proportion be the same as  │
+│                                                                             the frame; 16 ≤ S ≤ 16384; default is None, i.e., follow the explicit       │
+│                                                                             `-w/--width` and `-h/--height` options                                      │
 │ --iter        -i      INTEGER RANGE [1000<=x<=4294967295]                   Maximum iterations (depth) to compute before determining escape; 1000 ≤     │
 │                                                                             iter ≤ 4294967295; default is None (automatic search for optimal iterations │
 │                                                                             --- recommended)                                                            │
@@ -147,8 +154,60 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ mandel  Generate a Mandelbrot image.                                                                                                                    │
+│ julia   Generate a Julia image.                                                                                                                         │
 │ read    Read a TranZoom fractal image.                                                                                                                  │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+### `tranz image julia` Sub-Command
+
+```text
+Usage: tranz image julia [OPTIONS] [POINT_RE] [POINT_IM] [CENTER_RE] [CENTER_IM]                                                                          
+                          [F_WIDTH] [F_HEIGHT]                                                                                                             
+                                                                                                                                                           
+ Generate a Julia image.                                                                                                                                   
+                                                                                                                                                           
+╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│   point_re       [POINT_RE]   Real part of the Julia Set constant; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:         │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; ALTERNATIVELY: you  │
+│                               can use this to input an existing PNG image path, and it will read the Julia Set constant from the given image's metadata │
+│                               frame *CENTER* '(overriding/ignoring the imaginary parameter part!); default is '0.27334'                                 │
+│                                                                                                                                       │
+│   point_im       [POINT_IM]   Imaginary part of the Julia Set constant; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:    │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is          │
+│                               '0.00742'                                                                                                                 │
+│                                                                                                                                       │
+│   center_re      [CENTER_RE]  Real part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451")    │
+│                               and the number will be fed directly to multi-precision arithmetic so no precision is lost; ALTERNATIVELY: you can use     │
+│                               this to input an existing PNG image path, and it will read the frame from the given image's metadata (overriding/ignoring │
+│                               the other CLI frame parameters!); default is '0'                                                                          │
+│                                                                                                                                             │
+│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:          │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '0'      │
+│                                                                                                                                             │
+│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:        │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '1.8'    │
+│                                                                                                                                           │
+│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:  │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '2.2'    │
+│                                                                                                                                           │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Examples:                                                                                                                                                 
+                                                                                                                                                           
+ $ poetry run tranz image julia                                                                                                                            
+ 1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...                                                                                                       
+ ...                                                                                                                                                       
+ Saved to "julia-<date>-<hash>.png"                                                                                                                        
+                                                                                                                                                           
+ $ poetry run tranz image -w 512 -h 512 julia " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                        
+ <saves Julia to disk with center --0.74303+0.126433j and width 0.01611>                                                                                   
+                                                                                                                                                           
+ $ poetry run tranz image julia "/path/to/image.png"                                                                                                       
+ <gets the same frame used in "/path/to/image.png" and saves a new image of it to disk>
 ```
 
 ### `tranz image mandel` Sub-Command
@@ -247,11 +306,28 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
  poetry run tranz zoom manual "/path/to/image.png"                                                                                                         
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --fractal    -f                  Fractal type to generate; possible values: 'mandelbrot', 'julia'; default: 'mandelbrot'              │
+│                                                                                                                                    │
 │ --width      -w      INTEGER RANGE [16<=x<=16384]  Width of the image; 16 ≤ w ≤ 16384; default is 512                                     │
 │ --height     -h      INTEGER RANGE [16<=x<=16384]  Height of the image; 16 ≤ h ≤ 16384; default is 512                                    │
+│ --size       -s      INTEGER RANGE [16<=x<=16384]  Size of the image: *overrides* both `-w/--width` and `-h/--height` by determining the max pixel      │
+│                                                    length of the final image, which will be proportional to the given frame, i.e., the final dimensions │
+│                                                    will be scaled accordingly and, given a size S, will be either (S, x), (x, S) or (S, S), where x <   │
+│                                                    S, and will make the final image ratio/proportion be the same as the frame; 16 ≤ S ≤ 16384; default  │
+│                                                    is None, i.e., follow the explicit `-w/--width` and `-h/--height` options                            │
 │ --max-steps  -n      INTEGER RANGE           Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is 0       │
 │                                                    (unlimited, run forever)                                                                             │
 │                                                                                                                                             │
+│ --julia-re           TEXT                          Real part of the Julia Set constant; this can be a float (ex: "0.34") or a fraction of ints          │
+│                                                    (rational number, ex: "123/451") and the number will be fed directly to multi-precision arithmetic   │
+│                                                    so no precision is lost; ALTERNATIVELY: you can use this to input an existing PNG image path, and it │
+│                                                    will read the Julia Set constant from the given image's metadata frame *CENTER*                      │
+│                                                    '(overriding/ignoring the imaginary parameter part!); default is '0.27334'                           │
+│                                                                                                                                       │
+│ --julia-im           TEXT                          Imaginary part of the Julia Set constant; this can be a float (ex: "0.34") or a fraction of ints     │
+│                                                    (rational number, ex: "123/451") and the number will be fed directly to multi-precision arithmetic   │
+│                                                    so no precision is lost; default is '0.00742'                                                        │
+│                                                                                                                                       │
 │ --help                                             Show this message and exit.                                                                          │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
