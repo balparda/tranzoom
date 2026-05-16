@@ -45,6 +45,7 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
   # note that these are the image options, with default of 1024x1024
   img_width: int = base.IMAGE_WIDTH_OPTION,  # type: ignore[assignment]
   img_height: int = base.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
+  img_size: int | None = base.IMAGE_SIZE_OPTION,  # type: ignore[assignment]
   max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
   pal: palette.Palette = base.PALETTE_OPTION,  # type: ignore[assignment]
   mark_coords: str | None = base.MARK_COORDINATES_OPTION,  # type: ignore[assignment]
@@ -64,6 +65,7 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
       ctx.obj,
       img_width=img_width,
       img_height=img_height,
+      img_size=img_size,
       max_iter=max_iter,
       pal=pal,
       mark_coords=mark_coords,
@@ -102,19 +104,29 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
   frm: frame.Frame = base.MakeFrameFromCLIArgs(
     frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
   )
+  # determine width and height
+  width: int
+  height: int
+  width, height = (
+    frm.PixelDimensionsFromSize(config.img_size)
+    if config.img_size
+    else (config.img_width, config.img_height)
+  )
+  # add the mark?
   mark_coords: tuple[int, int] | None = (
-    frm.CoordsTupleToPixel(config.mark_coords, config.img_width, config.img_height)
+    frm.CoordsTupleToPixel(config.mark_coords, width, height)
     if config.mark_coords  # do this early to check the inputs ASAP
     else None
   )
+  # log
   magnification, magnitude = frm.magnification
   magnification_str: str = (
     # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation
     human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
   )
   config.console.print(
-    f'\n{config.img_width}x{config.img_height} Mandelbrot in frame {frm}, '
-    f'precision ± {frm.Precision(config.img_width, config.img_height)} bits, '  # approx.: b/c iters
+    f'\n{width}x{height} Mandelbrot in frame {frm}, '
+    f'precision ± {frm.Precision(width, height)} bits, '  # approx.: b/c iters
     f'{magnification_str} magnification, '
     f'{"AUTO" if config.max_iter is None else config.max_iter} iterations...\n'
   )
@@ -123,11 +135,7 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
   raw_hash: str
   with timer.Timer(emit_log=False) as tmr:
     img: image.Image = fractal.Mandelbrot(
-      frm,
-      config.img_width,
-      config.img_height,
-      max_iter=config.max_iter,
-      n_processes=config.max_threads,
+      frm, width, height, max_iter=config.max_iter, n_processes=config.max_threads
     )
     # Mandelbrot is ready, convert to PNG
     raw_png, raw_hash = img.AsPNG(pal=config.pal)
@@ -137,6 +145,97 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
         raw_png, mark_coords[0], mark_coords[1], col=config.mark_color, lw=config.mark_width
       )
   config.console.print(f'Mandelbrot image {raw_hash!r} in {tmr}, escape range {img.escape_range}')
+  # save the image to a file named by its time/hash
+  full_path: pathlib.Path = image.MakeImagePath(
+    config.img_output_path,
+    config.img_use_date,
+    config.img_use_hash,
+    config.img_path_prefix,
+    raw_hash,
+  )
+  full_path.write_bytes(raw_png)
+  config.console.print(f'Saved to "{full_path}"\n')
+  if config.iterm:
+    image.PrintITerm2(raw_png)
+    config.console.print()
+
+
+@image_app.command(
+  'julia',
+  help='Generate a Julia image.',
+  epilog=(
+    'Examples:\n\n\n\n'
+    '$ poetry run tranz image mandel\n\n'
+    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
+    '...\n\n'
+    'Saved to "mandel-<date>-<hash>.png"\n\n\n\n'
+    '$ poetry run tranz image -w 512 -h 512 mandel " -0.74303" "0.126433" "0.01611"  '
+    '# note the space because of the "-"\n\n'
+    '<saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>\n\n\n\n'
+    '$ poetry run tranz image mandel "/path/to/image.png"\n\n'
+    '<gets the same frame used in "/path/to/image.png" and saves a new image of it to disk>'
+  ),
+)
+@clibase.CLIErrorGuard
+def Julia(  # documentation is help/epilog/args  # noqa: D103
+  *,
+  ctx: click.Context,
+  point_re: str = base.JULIA_RE_ARGUMENT,  # type: ignore[assignment]
+  point_im: str = base.JULIA_IM_ARGUMENT,  # type: ignore[assignment]
+  center_re: str = base.JULIA_CENTER_RE_ARGUMENT,  # type: ignore[assignment]
+  center_im: str = base.JULIA_CENTER_IM_ARGUMENT,  # type: ignore[assignment]
+  f_width: str = base.JULIA_WIDTH_ARGUMENT,  # type: ignore[assignment]
+  f_height: str | None = base.JULIA_HEIGHT_ARGUMENT,  # type: ignore[assignment]
+) -> None:
+  # check sanity, create frame, and print info about the image we're going to generate
+  config: base.TranZoomConfig = ctx.obj
+  frm: frame.Frame = base.MakeFrameFromCLIArgs(  # remember: this will read from file too...
+    frame.Fractal.JULIA, center_re, center_im, f_width, f_height, config.console.print
+  )
+  jfrm: frame.FrameAndPoint = frame.FrameAndPoint.FromCenterAndPoint(
+    frame.Fractal.JULIA, point_re, point_im, frm.center[0], frm.center[1], frm.size[0], frm.size[1]
+  )
+  # determine width and height
+  width: int
+  height: int
+  width, height = (
+    jfrm.PixelDimensionsFromSize(config.img_size)
+    if config.img_size
+    else (config.img_width, config.img_height)
+  )
+  # add the mark?
+  mark_coords: tuple[int, int] | None = (
+    jfrm.CoordsTupleToPixel(config.mark_coords, width, height)
+    if config.mark_coords  # do this early to check the inputs ASAP
+    else None
+  )
+  # log
+  magnification, magnitude = jfrm.magnification
+  magnification_str: str = (
+    # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation
+    human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
+  )
+  config.console.print(
+    f'\n{width}x{height} Julia in frame {jfrm}, '
+    f'precision ± {jfrm.Precision(width, height)} bits, '  # approx: b/c iters
+    f'{magnification_str} magnification, '
+    f'{"AUTO" if config.max_iter is None else config.max_iter} iterations...\n'
+  )
+  # render the image
+  raw_png: bytes
+  raw_hash: str
+  with timer.Timer(emit_log=False) as tmr:
+    img: image.Image = fractal.Julia(
+      jfrm, width, height, max_iter=config.max_iter, n_processes=config.max_threads
+    )
+    # Julia is ready, convert to PNG
+    raw_png, raw_hash = img.AsPNG(pal=config.pal)
+    if mark_coords:
+      # we were asked to mark a coordinate with a crosshair overlay: do it
+      raw_png = image.DrawCrossOverlay(
+        raw_png, mark_coords[0], mark_coords[1], col=config.mark_color, lw=config.mark_width
+      )
+  config.console.print(f'Julia image {raw_hash!r} in {tmr}, escape range {img.escape_range}')
   # save the image to a file named by its time/hash
   full_path: pathlib.Path = image.MakeImagePath(
     config.img_output_path,

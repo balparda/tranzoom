@@ -158,6 +158,7 @@
     "isort",
     "itemsize",
     "iterm",
+    "jfrm",
     "libgmp",
     "libmpc",
     "libmpfr",
