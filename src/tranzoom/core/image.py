@@ -545,8 +545,8 @@ def DrawCrossOverlay(
   """Draw a cross overlay on an image at the specified coordinates.
 
   Overlays:
-  - white lines delimiting the 9 sections of the image
-  - large green number labels (1-9) centered in each section, left-to-right, top-to-bottom
+  - a horizontal line spanning the image at the given y-coordinate
+  - a vertical line spanning the image at the given x-coordinate
 
   Args:
     img_data: The PNG image data as bytes.
