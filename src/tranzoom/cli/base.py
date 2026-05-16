@@ -26,7 +26,10 @@ SEAHORSE_TAIL_HASH: str = '9191d8e0946361b47e25dbe4cb21246d3e21b27a2d7dec800b4e2
 
 # CLI options that can be re-used
 
-DEFAULT_IMAGE_PREFIX: str = 'mandel'
+DEFAULT_IMAGE_PREFIX: dict[frame.Fractal, str] = {
+  frame.Fractal.MANDELBROT: 'mandel',
+  frame.Fractal.JULIA: 'julia',
+}
 DEFAULT_VISION_MODEL: str = 'qwen3-vl-32b-instruct@q8_0'
 
 # Image: output image
@@ -104,10 +107,10 @@ IMAGE_PATH_OUTPUT_OPTION: typer.models.OptionInfo = typer.Option(
   ),
 )
 IMAGE_PREFIX_OPTION: typer.models.OptionInfo = typer.Option(
-  DEFAULT_IMAGE_PREFIX,
+  None,
   '--prefix',
   help=(
-    f'Image save prefix; default: {DEFAULT_IMAGE_PREFIX!r} '
+    'Image save prefix; default: None, meaning use "mandel" for Mandelbrot and "julia" for Julia '
     '(the final file name will be "<prefix>[-<date>][-<hash20>].png", note the date and the hash '
     'can be turned off with --no-date and --no-hash, respectively)'
   ),
@@ -191,16 +194,29 @@ FRAME_HEIGHT_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
     'default is None, i.e, the same as width'
   ),
 )
+JULIA_RE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  frame.DEFAULT_JULIA_RE,
+  help=(
+    'Real part of the Julia Set constant; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    'ALTERNATIVELY: you can use this to input an existing PNG image path, and it will read the '
+    "Julia Set constant from the given image's metadata frame *CENTER* '"
+    f'(overriding/ignoring the imaginary parameter part!); default is {frame.DEFAULT_JULIA_RE!r}'
+  ),
+)
 JULIA_RE_OPTION: typer.models.OptionInfo = typer.Option(
   frame.DEFAULT_JULIA_RE,
   help=(
     'Real part of the Julia Set constant; '
     'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
     'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
-    f'default is {frame.DEFAULT_JULIA_RE!r}'
+    'ALTERNATIVELY: you can use this to input an existing PNG image path, and it will read the '
+    "Julia Set constant from the given image's metadata frame *CENTER* '"
+    f'(overriding/ignoring the imaginary parameter part!); default is {frame.DEFAULT_JULIA_RE!r}'
   ),
 )
-JULIA_IM_OPTION: typer.models.OptionInfo = typer.Option(
+JULIA_IM_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   frame.DEFAULT_JULIA_IM,
   help=(
     'Imaginary part of the Julia Set constant; '
@@ -209,16 +225,7 @@ JULIA_IM_OPTION: typer.models.OptionInfo = typer.Option(
     f'default is {frame.DEFAULT_JULIA_IM!r}'
   ),
 )
-JULIA_RE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
-  frame.DEFAULT_JULIA_RE,
-  help=(
-    'Real part of the Julia Set constant; '
-    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
-    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
-    f'default is {frame.DEFAULT_JULIA_RE!r}'
-  ),
-)
-JULIA_IM_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+JULIA_IM_OPTION: typer.models.OptionInfo = typer.Option(
   frame.DEFAULT_JULIA_IM,
   help=(
     'Imaginary part of the Julia Set constant; '
@@ -396,7 +403,7 @@ class TranZoomConfig(clibase.CLIConfig):
   img_output_path: pathlib.Path | None
   img_use_date: bool
   img_use_hash: bool
-  img_path_prefix: str
+  img_path_prefix: str | None
   max_threads: int | None
   model: str
   spec_tokens: int | None

@@ -14,7 +14,6 @@ import json
 import pathlib
 
 import click
-import gmpy2
 import typer
 from transcrypto.cli import clibase
 from transcrypto.utils import human, timer
@@ -114,14 +113,14 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
   help='Generate a Julia image.',
   epilog=(
     'Examples:\n\n\n\n'
-    '$ poetry run tranz image mandel\n\n'
+    '$ poetry run tranz image julia\n\n'
     '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
     '...\n\n'
-    'Saved to "mandel-<date>-<hash>.png"\n\n\n\n'
-    '$ poetry run tranz image -w 512 -h 512 mandel " -0.74303" "0.126433" "0.01611"  '
+    'Saved to "julia-<date>-<hash>.png"\n\n\n\n'
+    '$ poetry run tranz image -w 512 -h 512 julia " -0.74303" "0.126433" "0.01611"  '
     '# note the space because of the "-"\n\n'
-    '<saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>\n\n\n\n'
-    '$ poetry run tranz image mandel "/path/to/image.png"\n\n'
+    '<saves Julia to disk with center --0.74303+0.126433j and width 0.01611>\n\n\n\n'
+    '$ poetry run tranz image julia "/path/to/image.png"\n\n'
     '<gets the same frame used in "/path/to/image.png" and saves a new image of it to disk>'
   ),
 )
@@ -142,11 +141,13 @@ def Julia(  # documentation is help/epilog/args  # noqa: D103
     frame.Fractal.JULIA, center_re, center_im, f_width, f_height, config.console.print
   )
   # load Julia point and make frame
-  cx: gmpy2.mpq
-  cy: gmpy2.mpq
-  cx, cy = base.MakePointFromCLIArgs(point_re, point_im, config.console.print)
   frm = frame.FrameAndPoint.FromCenterAndPoint(
-    frame.Fractal.JULIA, cx, cy, frm.center[0], frm.center[1], frm.size[0], frm.size[1]
+    frame.Fractal.JULIA,
+    *base.MakePointFromCLIArgs(point_re, point_im, config.console.print),
+    frm.center[0],
+    frm.center[1],
+    frm.size[0],
+    frm.size[1],
   )
   # we have the frame, now feed it to the producer
   _ProduceFractalImage(frm, config)
@@ -208,7 +209,7 @@ def _ProduceFractalImage(frm: frame.Frame, config: base.TranZoomConfig) -> None:
     config.img_output_path,
     config.img_use_date,
     config.img_use_hash,
-    config.img_path_prefix,
+    config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
     raw_hash,
   )
   full_path.write_bytes(raw_png)

@@ -79,7 +79,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     ),
   ),
   img_output_path: pathlib.Path | None = base.IMAGE_PATH_OUTPUT_OPTION,  # type: ignore[assignment]
-  img_path_prefix: str = base.IMAGE_PREFIX_OPTION,  # type: ignore[assignment]
+  img_path_prefix: str | None = base.IMAGE_PREFIX_OPTION,  # type: ignore[assignment]
   img_use_date: bool = base.IMAGE_INCLUDE_DATE_OPTION,  # type: ignore[assignment]
   img_use_hash: bool = base.IMAGE_INCLUDE_HASH_OPTION,  # type: ignore[assignment]
   max_threads: int | None = base.MAX_THREADS_OPTION,  # type: ignore[assignment]
