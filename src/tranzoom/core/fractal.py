@@ -469,6 +469,7 @@ def _JuliaComputation(inp: MandelbrotTaskInput) -> MandelbrotTaskOutput:  # noqa
       # this is the "outer for loop", no benefit in pre-computing y values;
       # also, this is where the "Y" (imaginary) coordinates are converted mpq->mpfr
       img_y: gmpy2.mpfr = gmpy2.mpfr(inp.frm.top_im - gmpy2.mpq(py) * dy)
+      img_y2: gmpy2.mpfr = img_y * img_y  # precompute |img_y|*|img_y| once per row; reused per col
       # iterate over columns, reusing x values and doing the escape test in mpfr for correctness
       for px in range(inp.width):
         px_count += 1
@@ -476,22 +477,20 @@ def _JuliaComputation(inp: MandelbrotTaskInput) -> MandelbrotTaskOutput:  # noqa
           # this pixel is not for this process, skip it but still update the progress bar
           p_bar.update(1)
           continue
-        # either this is a solo process, or this pixel is for this process
-        img_x: gmpy2.mpfr = xs[px]
-        # fast interior tests, all in mpfr: main cardioid and period-2 bulb.
-        # x_minus_quarter: gmpy2.mpfr = img_x - _MPFR_FOURTH
-        # q: gmpy2.mpfr = x_minus_quarter * x_minus_quarter + img_y * img_y
-        # in_cardioid: bool = q * (q + x_minus_quarter) <= _MPFR_FOURTH * img_y * img_y
-        # x_plus_one: gmpy2.mpfr = img_x + _MPFR_ONE
-        # in_bulb: bool = x_plus_one * x_plus_one + img_y * img_y <= _MPFR_SIXTEENTH
-        # if in_cardioid or in_bulb:
-        #   # point is in the main cardioid or period-2 bulb, so it's an interior point, no escape
-        #   img.escape[px_count] = inp.max_iter  # carefully set this directly in the array
-        #   p_bar.update(1)  # we touched a pixel, so update the progress bar
-        #   continue
-        # not in the main cardioid or period-2 bulb, do the full escape-time test in mpfr
-        zx: gmpy2.mpfr = img_x
+        # starting point is inside escape radius; do the full escape-time iteration in mpfr
         zy: gmpy2.mpfr = img_y
+        zx: gmpy2.mpfr = xs[px]
+        # fast exterior pre-check: if |z_0|*|z_0| > 4 the starting point is already outside the
+        # escape radius so the orbit escapes immediately, before any iteration; note that this is
+        # the ONLY simple universal fast test available for Julia sets — unlike Mandelbrot (which
+        # has closed-form algebraic interior tests for its main cardioid and period-2 bulb), Julia
+        # sets have NO universal fast interior test: the filled Julia set's shape depends entirely
+        # on c and has no simple global algebraic boundary description
+        if zx * zx + img_y2 > _MPFR_FOUR:
+          img.escape[px_count] = 0  # orbit escapes at the starting point, before any iteration
+          p_bar.update(1)
+          continue
+        # did not escape at fast check, do the whole thing
         escaped_at: int = 0
         # escape-time loop, implemented with explicit zx/zy variables
         for escaped_at in range(inp.max_iter):  # noqa: B007
