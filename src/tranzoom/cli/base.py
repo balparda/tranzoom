@@ -355,6 +355,23 @@ PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
     f'available palettes: {sorted(p.value for p in palette.PALETTES)}'
   ),
 )
+SET_PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
+  palette.DEFAULT_SET_PALETTE,
+  '--set-palette',
+  help=(
+    f'Color palette to use for rendering the interior Set points; '
+    f'default is {palette.DEFAULT_SET_PALETTE.value!r}; '
+    f'available palettes: {sorted(p.value for p in palette.PALETTES)}'
+  ),
+)
+COLOR_SET_POINTS_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--set/--no-set',
+  help=(
+    'If True, color the interior Set points with `--set-palette` instead of black; '
+    'default is False (black)'
+  ),
+)
 
 # AI Options
 MODEL_OPTION: typer.models.OptionInfo = typer.Option(
@@ -404,6 +421,9 @@ class TranZoomConfig(clibase.CLIConfig):
   img_use_date: bool
   img_use_hash: bool
   img_path_prefix: str | None
+  pal: palette.Palette
+  set_pal: palette.Palette
+  color_set_points: bool
   max_threads: int | None
   model: str
   spec_tokens: int | None
@@ -424,7 +444,6 @@ class TranZoomConfig(clibase.CLIConfig):
   img_size: int | None = None  # for `image` and `zoom` commands, overrides width/height if given
 
   max_iter: int | None = None  # for `image` command
-  pal: palette.Palette = palette.DEFAULT_PALETTE  # for `image` command
   mark_coords: str | None = None  # for `image` command
   mark_color: image.Color = image.DEFAULT_MARK_COLOR  # for `image` command
   mark_width: int = image.DEFAULT_MARK_WIDTH  # for `image` command

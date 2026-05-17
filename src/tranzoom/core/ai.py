@@ -15,7 +15,7 @@ from transai.core import lms
 from transcrypto.utils import base as tbase
 from transcrypto.utils import human, timer
 
-from tranzoom.core import fractal, frame, image, queries
+from tranzoom.core import fractal, frame, image, palette, queries
 
 DEFAULT_MEMORY_SIZE: int = 5  # default number of iterations the LLM will remember
 MAX_MEMORY_SIZE: int = 30  # maximum number of iterations the LLM will remember
@@ -44,6 +44,9 @@ def ZoomLoop(
   img_use_date: bool,
   img_use_hash: bool,
   img_path_prefix: str,
+  pal: palette.Palette,
+  set_pal: palette.Palette,
+  color_set_points: bool,
   max_threads: int | None,
   model: str,
   spec_tokens: int | None,
@@ -76,6 +79,9 @@ def ZoomLoop(
     img_use_date: Whether to include the current date in the image filename when saving.
     img_use_hash: Whether to include the image hash in the filename when saving.
     img_path_prefix: A prefix to add to the image filename when saving.
+    pal: The color palette to use for rendering the image.
+    set_pal: The color palette to use for interior Set points.
+    color_set_points: If True, color the interior Set points with `set_pal` instead of black.
     max_threads: Optional maximum number of threads to use for rendering; if None, use all
         available CPU cores.
     model: The AI model identifier to use for the search.
@@ -159,6 +165,9 @@ def ZoomLoop(
           img_use_date,
           img_use_hash,
           img_path_prefix,
+          pal,
+          set_pal,
+          color_set_points,
           max_threads,
           iterm,
           print_comm,
@@ -222,6 +231,9 @@ def ManualLoop(
   img_use_date: bool,
   img_use_hash: bool,
   img_path_prefix: str,
+  pal: palette.Palette,
+  set_pal: palette.Palette,
+  color_set_points: bool,
   max_threads: int | None,
   max_steps: int,
   iterm: bool,
@@ -238,6 +250,9 @@ def ManualLoop(
     img_use_date: Whether to include the current date in the image filename when saving.
     img_use_hash: Whether to include the image hash in the filename when saving.
     img_path_prefix: A prefix to add to the image filename when saving.
+    pal: The color palette to use for rendering the image.
+    set_pal: The color palette to use for interior Set points.
+    color_set_points: If True, color the interior Set points with `set_pal` instead of black.
     max_threads: Optional maximum number of threads to use for rendering; if None, use all
         available CPU cores.
     max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
@@ -273,6 +288,9 @@ def ManualLoop(
         img_use_date,
         img_use_hash,
         img_path_prefix,
+        pal,
+        set_pal,
+        color_set_points,
         max_threads,
         iterm,
         print_comm,
@@ -342,6 +360,9 @@ def _ComputeFractal(
   img_use_date: bool,
   img_use_hash: bool,
   img_path_prefix: str,
+  pal: palette.Palette,
+  set_pal: palette.Palette,
+  color_set_points: bool,
   max_threads: int | None,
   iterm: bool,
   print_comm: abc.Callable[[str], None],
@@ -359,6 +380,9 @@ def _ComputeFractal(
     img_use_date: Whether to include the current date in the image filename when saving.
     img_use_hash: Whether to include the image hash in the filename when saving.
     img_path_prefix: A prefix to add to the image filename when saving.
+    pal: The color palette to use for rendering the image.
+    set_pal: The color palette to use for interior Set points.
+    color_set_points: If True, color the interior Set points with `set_pal` instead of black.
     max_threads: Maximum number of threads to use for rendering.
     iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
     print_comm: A rich console callable for printing messages.
@@ -393,7 +417,7 @@ def _ComputeFractal(
       print_comm=print_comm,
     )
     # get PNG and overlay info on top of it
-    img_data, img_hash = img.AsPNG()
+    img_data, img_hash = img.AsPNG(pal=pal, set_pal=set_pal, color_set_points=color_set_points)
     img_data = image.DrawThirdsInfoOverlay(img_data)
   # log!
   full_path: pathlib.Path = image.MakeImagePath(

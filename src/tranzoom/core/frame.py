@@ -22,11 +22,12 @@ DEFAULT_ZOOM_SIZE: int = 512  # smaller default for zoom, since it can be more e
 
 # iteration constants
 
-N_BYTES_UINT: int = 4  # we use array of uint32 to store pixel data / array.array('I') / uint32
+N_BYTES_UINT: int = 4  # we use array of int32 to store pixel data / array.array('i') / signed 32
 MIN_ITER: int = 1000
 DEFAULT_ITER: int = 1000
 HIGH_ITERS: list[int] = [100_000, 1_000_000, 10_000_000]  # these are very high iteration counts
-MAX_ITER: int = 2 ** (N_BYTES_UINT * 8) - 1  # 4_294_967_295, max value for array('I'), uint32
+SET_INTERIOR_RESOLUTION: int = 100_000_000  # interior points max val [0..SET_INTERIOR_RESOLUTION]
+MAX_ITER: int = 2 ** (N_BYTES_UINT * 8 - 1) - 1  # ± 2_147_483_647, max value for array('i'), int32
 
 # gmpy2.mpfr constants
 _MPFR_MIN_PRECISION: int = 140  # about 42 decimal digits

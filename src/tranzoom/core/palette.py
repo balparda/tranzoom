@@ -17,6 +17,7 @@ class Palette(enum.Enum):
 
 
 DEFAULT_PALETTE: Palette = Palette.BYB
+DEFAULT_SET_PALETTE: Palette = Palette.BYB  # TODO: make grayscale palette and make it this default
 
 # how many times to cycle through the palette across the histogram-equalized range;
 # more cycles = tighter, more frequent color banding; 3 is a visually balanced default

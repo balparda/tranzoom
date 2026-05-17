@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - YYYY-MM-DD - Placeholder](#vvv---yyyy-mm-dd---placeholder)
+  - [1.4.0 - 2026-05-17](#140---2026-05-17)
   - [1.3.0 - 2026-05-16](#130---2026-05-16)
   - [1.2.0 - 2026-05-15](#120---2026-05-15)
   - [1.1.0 - 2026-05-14](#110---2026-05-14)
@@ -27,6 +28,18 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future changes.
+
+## 1.4.0 - 2026-05-17
+
+- Added
+  - TBD
+
+- Changed
+  - Option `--palette` moved up to `tranz` level and now applies to `zoom ai` and `zoom manual` commands too.
+  - TBD
+
+- Fixed
+  - TBD
 
 ## 1.3.0 - 2026-05-16
 

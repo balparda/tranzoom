@@ -20,7 +20,7 @@ from transcrypto.utils import human, timer
 
 from tranzoom import tranz
 from tranzoom.cli import base
-from tranzoom.core import fractal, frame, image, palette
+from tranzoom.core import fractal, frame, image
 
 image_app = typer.Typer(
   no_args_is_help=True,
@@ -53,7 +53,6 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
   img_height: int = base.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
   img_size: int | None = base.IMAGE_SIZE_OPTION,  # type: ignore[assignment]
   max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
-  pal: palette.Palette = base.PALETTE_OPTION,  # type: ignore[assignment]
   mark_coords: str | None = base.MARK_COORDINATES_OPTION,  # type: ignore[assignment]
   mark_color: str = base.MARK_COLOR_OPTION,  # type: ignore[assignment]
   mark_width: int = base.MARK_WIDTH_OPTION,  # type: ignore[assignment]
@@ -73,7 +72,6 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
       img_height=img_height,
       img_size=img_size,
       max_iter=max_iter,
-      pal=pal,
       mark_coords=mark_coords,
       mark_color=image.Color[col],
       mark_width=mark_width,
@@ -205,7 +203,9 @@ def _ProduceFractalImage(frm: frame.Frame, config: base.TranZoomConfig) -> None:
       print_comm=config.console.print,
     )
     # fractal is ready, convert to PNG
-    raw_png, raw_hash = img.AsPNG(pal=config.pal)
+    raw_png, raw_hash = img.AsPNG(
+      pal=config.pal, set_pal=config.set_pal, color_set_points=config.color_set_points
+    )
     if mark_coords:
       # we were asked to mark a coordinate with a crosshair overlay: do it
       raw_png = image.DrawCrossOverlay(

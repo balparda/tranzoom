@@ -15,6 +15,7 @@ from transcrypto.utils import config as app_config
 from transcrypto.utils import logging as cli_logging
 
 from tranzoom.cli import base
+from tranzoom.core import palette
 
 from . import __version__
 
@@ -90,6 +91,9 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   img_path_prefix: str | None = base.IMAGE_PREFIX_OPTION,  # type: ignore[assignment]
   img_use_date: bool = base.IMAGE_INCLUDE_DATE_OPTION,  # type: ignore[assignment]
   img_use_hash: bool = base.IMAGE_INCLUDE_HASH_OPTION,  # type: ignore[assignment]
+  pal: palette.Palette = base.PALETTE_OPTION,  # type: ignore[assignment]
+  set_pal: palette.Palette = base.SET_PALETTE_OPTION,  # type: ignore[assignment]
+  color_set_points: bool = base.COLOR_SET_POINTS_OPTION,  # type: ignore[assignment]
   max_threads: int | None = base.MAX_THREADS_OPTION,  # type: ignore[assignment]
   # AI parameters from transai (EXCEPT model which is overridden to be a vision model!):
   model: str = base.MODEL_OPTION,  # type: ignore[assignment]
@@ -127,6 +131,9 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     img_path_prefix=img_path_prefix,
     img_use_date=img_use_date,
     img_use_hash=img_use_hash,
+    pal=pal,
+    set_pal=set_pal,
+    color_set_points=color_set_points,
     max_threads=max_threads,
     model=model,
     spec_tokens=spec_tokens,

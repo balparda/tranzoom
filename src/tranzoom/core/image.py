@@ -73,7 +73,7 @@ META_LLM_MODEL_VALUE_HUMAN = 'HUMAN'  # used when the evaluation is done by a fl
 
 # image constants
 
-type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel data array
+type ImageInt32Array = array.array[int]  # type alias for the type of our pixel data array
 
 # constants for drawing
 
@@ -148,7 +148,7 @@ class Image:
     self._height: int = height
     self._depth: int | None = None  # may be set later by the fractal rendering function
     # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
-    self.escape: ImageUInt32Array = array.array('I', (0 for _ in range(width * height)))
+    self.escape: ImageInt32Array = array.array('i', (0 for _ in range(width * height)))  # signed32
     if self.escape.itemsize != frame.N_BYTES_UINT:
       raise Error(f'unsupported platform: array of unsigned ints is not {frame.N_BYTES_UINT} bytes')
 
@@ -171,14 +171,23 @@ class Image:
     self.escape[y * self._width + x] = escaped_at
 
   @property
-  def escape_range(self) -> tuple[int, int]:
-    """Get the range of escape iterations in the image.
+  def escape_range(self) -> tuple[int, int, int, int]:
+    """Get the range of escape iterations and set max_|z| in the image.
 
     Returns:
-      tuple[int, int]: A tuple containing the minimum and maximum escape iterations in the image.
+      tuple[int, int, int, int]: (min_escape, max_escape, min_|z|, max_|z|)
 
     """
-    return (min(self.escape), max(self.escape))
+    exterior_points: list[int] = [e for e in self.escape if e >= 0]
+    interior_points: list[int] = [e for e in self.escape if e < 0]
+    return (
+      min(exterior_points) if exterior_points else 0,
+      self._depth
+      if interior_points and self._depth
+      else (max(exterior_points) if exterior_points else 0),
+      -max(interior_points) if interior_points else 0,
+      -min(interior_points) if interior_points else 0,
+    )
 
   @property
   def precision(self) -> int:
@@ -212,12 +221,18 @@ class Image:
       Error: if the depth is invalid or inconsistent with the escape iterations.
 
     """
-    _, max_escape = self.escape_range
+    _, max_escape, _, _ = self.escape_range
     if depth < max_escape:
       raise Error(f'Inconsistent depth: {depth=} is < than {max_escape=}')
     self._depth = depth
 
-  def AsPixels(self, *, pal: palette.Palette = palette.DEFAULT_PALETTE) -> bytes:
+  def AsPixels(
+    self,
+    *,
+    pal: palette.Palette = palette.DEFAULT_PALETTE,
+    set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
+    color_set_points: bool = False,
+  ) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
     Current palette:
@@ -232,6 +247,8 @@ class Image:
 
     Args:
       pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
+      set_pal (palette.Palette, optional): The color palette for interior Set points.
+      color_set_points (bool, optional): If True, color the interior Set points
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
@@ -244,12 +261,12 @@ class Image:
     histogram: dict[int, int] = {}
     min_escape: int
     max_escape: int
-    min_escape, max_escape = self.escape_range
+    min_escape, max_escape, _, _ = self.escape_range
     depth: int = self._depth if self._depth is not None else max_escape
     if min_escape < 0 or depth < max_escape:
       raise Error(f'Invalid/Inconsistent {min_escape=} or {depth=} < {max_escape=}')
     for escaped_at in self.escape:
-      if escaped_at < depth:
+      if 0 <= escaped_at < depth:  # don't get negative escapes (interior points)
         histogram[escaped_at] = histogram.get(escaped_at, 0) + 1
     total_exterior: int = sum(histogram.values())
     # step 2: compute cumulative distribution function for histogram equalization;
@@ -265,7 +282,7 @@ class Image:
     b: int
     pixels = bytearray(self._width * self._height * 3)
     for i, escaped_at in enumerate(self.escape):
-      if escaped_at >= depth or total_exterior == 0:
+      if escaped_at < 0 or escaped_at >= depth or total_exterior == 0:
         r, g, b = 0, 0, 0  # interior point: black
       else:
         # keep t in [0, 1) so the highest escape bucket does not wrap
@@ -276,11 +293,20 @@ class Image:
       pixels[i * 3 + 2] = b
     return bytes(pixels)
 
-  def AsPNG(self, *, pal: palette.Palette = palette.DEFAULT_PALETTE) -> tuple[bytes, str]:
+  def AsPNG(
+    self,
+    *,
+    pal: palette.Palette = palette.DEFAULT_PALETTE,
+    set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
+    color_set_points: bool = False,
+  ) -> tuple[bytes, str]:
     """Convert the image to PNG bytes and return it with its internal data hash.
 
     Args:
       pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
+      set_pal (palette.Palette, optional): The color palette for interior Set points.
+          Defaults to DEFAULT_SET_PALETTE.
+      color_set_points (bool, optional): If True, color the interior Set points
 
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
@@ -290,7 +316,7 @@ class Image:
 
     """
     # convert the raw pixel data to a PNG using PIL
-    raw_img: bytes = self.AsPixels(pal=pal)
+    raw_img: bytes = self.AsPixels(pal=pal, set_pal=set_pal, color_set_points=color_set_points)
     img_data_hash: str = hashes.Hash256(raw_img).hex()
     img: PILImage.Image = PILImage.frombytes('RGB', (self._width, self._height), raw_img)
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
@@ -330,7 +356,7 @@ class Image:
     # escape iteration range in the image
     min_escape: int
     max_escape: int
-    min_escape, max_escape = self.escape_range
+    min_escape, max_escape, _, _ = self.escape_range
     png_meta.add_text(META_ITER_DEPTH_MIN_KEY, str(min_escape))
     png_meta.add_text(META_ITER_DEPTH_MAX_KEY, str(max_escape))
     png_meta.add_text(

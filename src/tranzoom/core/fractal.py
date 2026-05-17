@@ -13,7 +13,7 @@ import logging
 import os
 from collections import abc
 from concurrent import futures
-from typing import NoReturn
+from typing import NoReturn, cast
 
 import gmpy2
 import tqdm
@@ -39,6 +39,9 @@ _MPFR_FOURTH: gmpy2.mpfr = gmpy2.mpfr('0.25')
 _MPFR_ONE: gmpy2.mpfr = gmpy2.mpfr('1')
 _MPFR_TWO: gmpy2.mpfr = gmpy2.mpfr('2')
 _MPFR_FOUR: gmpy2.mpfr = gmpy2.mpfr('4')
+_MPFR_MAX_SET_Z: gmpy2.mpfr = _MPFR_TWO
+_MPFR_SET_INTERIOR_RESOLUTION: gmpy2.mpfr = gmpy2.mpfr(frame.SET_INTERIOR_RESOLUTION)
+_MPFR_SET_INTERIOR_SCALE: gmpy2.mpfr = _MPFR_SET_INTERIOR_RESOLUTION / _MPFR_MAX_SET_Z
 
 
 class Error(image.Error):
@@ -75,18 +78,20 @@ def Mandelbrot(
     Error: on error
 
   """
+  # determine processes
   if n_processes is not None and n_processes < 1:
     raise Error(f'{n_processes=} must be a positive integer or None')
-  # if max_iter is None, we do an adaptive iteration limit calculation based on a small test render
-  # BEWARE: the method call will call Mandelbrot() recursively, but with a fixed max_iter!
-  max_iter = (
-    _FractalAdaptiveIterations(frm, progress_bar, print_comm) if max_iter is None else max_iter
-  )
-  # determine processes
   is_preprocess: bool = width == frame.MIN_IMAGE_SIZE and height == frame.MIN_IMAGE_SIZE
   n_processes = n_processes or AVAILABLE_CPU
   n_processes = min(n_processes, _MAX_PRE_PROCESS_CONCURRENCE) if is_preprocess else n_processes
   n_processes = min(n_processes, MAX_CONCURRENCE, AVAILABLE_CPU)  # never exceed CPU!
+  # if max_iter is None, we do an adaptive iteration limit calculation based on a small test render
+  # BEWARE: the method call will call Mandelbrot() recursively, but with a fixed max_iter!
+  max_iter = (
+    _FractalAdaptiveIterations(frm, progress_bar, n_processes, print_comm)
+    if max_iter is None
+    else max_iter
+  )
   logging.debug(
     f'Mandelbrot using {n_processes} process(es) for {"PRE " if is_preprocess else ""}rendering'
   )
@@ -156,18 +161,20 @@ def Julia(
     Error: on error
 
   """
+  # determine processes
   if n_processes is not None and n_processes < 1:
     raise Error(f'{n_processes=} must be a positive integer or None')
-  # if max_iter is None, we do an adaptive iteration limit calculation based on a small test render
-  # BEWARE: the method call will call Julia() recursively, but with a fixed max_iter!
-  max_iter = (
-    _FractalAdaptiveIterations(frm, progress_bar, print_comm) if max_iter is None else max_iter
-  )
-  # determine processes
   is_preprocess: bool = width == frame.MIN_IMAGE_SIZE and height == frame.MIN_IMAGE_SIZE
   n_processes = n_processes or AVAILABLE_CPU
   n_processes = min(n_processes, _MAX_PRE_PROCESS_CONCURRENCE) if is_preprocess else n_processes
   n_processes = min(n_processes, MAX_CONCURRENCE, AVAILABLE_CPU)  # never exceed CPU!
+  # if max_iter is None, we do an adaptive iteration limit calculation based on a small test render
+  # BEWARE: the method call will call Julia() recursively, but with a fixed max_iter!
+  max_iter = (
+    _FractalAdaptiveIterations(frm, progress_bar, n_processes, print_comm)
+    if max_iter is None
+    else max_iter
+  )
   logging.debug(
     f'Julia using {n_processes} process(es) for {"PRE " if is_preprocess else ""}rendering'
   )
@@ -208,7 +215,7 @@ def Julia(
 
 
 def _FractalAdaptiveIterations(
-  frm: frame.Frame, progress_bar: bool, print_comm: abc.Callable[[str], None]
+  frm: frame.Frame, progress_bar: bool, n_processes: int, print_comm: abc.Callable[[str], None]
 ) -> int:
   """Estimate a suitable max_iter for the full image by rendering a small test image.
 
@@ -227,6 +234,7 @@ def _FractalAdaptiveIterations(
   Args:
     frm (Frame): The frame to render.
     progress_bar (bool): Whether to show a progress bar during the test render.
+    n_processes (int): The number of processes to use for the test render.
     print_comm (Callable[[str], None]): A callable to print messages
 
   Returns:
@@ -247,13 +255,15 @@ def _FractalAdaptiveIterations(
       frame.MIN_IMAGE_SIZE,
       max_iter=high_iter,
       progress_bar=progress_bar,
+      n_processes=n_processes,
       print_comm=print_comm,
     )
     # estimate the needed iterations for the full image based on the smallest image;
     # make the histogram of escape iterations for the smallest image, and find the highest escape
     escape_histogram: dict[int, int] = {}
     for escaped_at in img16.escape:
-      escape_histogram[escaped_at] = escape_histogram.get(escaped_at, 0) + 1
+      esc: int = escaped_at if escaped_at >= 0 else high_iter  # interior point == high_iter
+      escape_histogram[esc] = escape_histogram.get(esc, 0) + 1
     # sort the histogram by escape iteration; find the highest escape iteration that < high limit
     # if all pixels hit high_iter then max_iter will be high_iter, and we WANT it to FAIL
     histogram: list[tuple[int, int]] = sorted(escape_histogram.items())
@@ -391,32 +401,42 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
         # either this is a solo process, or this pixel is for this process
         cx: gmpy2.mpfr = xs[px]
         # fast interior tests, all in mpfr: main cardioid and period-2 bulb.
-        x_minus_quarter: gmpy2.mpfr = cx - _MPFR_FOURTH
-        q: gmpy2.mpfr = x_minus_quarter * x_minus_quarter + cy * cy
-        in_cardioid: bool = q * (q + x_minus_quarter) <= _MPFR_FOURTH * cy * cy
-        x_plus_one: gmpy2.mpfr = cx + _MPFR_ONE
-        in_bulb: bool = x_plus_one * x_plus_one + cy * cy <= _MPFR_SIXTEENTH
-        if in_cardioid or in_bulb:
-          # point is in the main cardioid or period-2 bulb, so it's an interior point, no escape
-          img.escape[px_count] = inp.max_iter  # carefully set this directly in the array
-          p_bar.update(1)  # we touched a pixel, so update the progress bar
-          continue
+        # x_minus_quarter: gmpy2.mpfr = cx - _MPFR_FOURTH
+        # q: gmpy2.mpfr = x_minus_quarter * x_minus_quarter + cy * cy
+        # in_cardioid: bool = q * (q + x_minus_quarter) <= _MPFR_FOURTH * cy * cy
+        # x_plus_one: gmpy2.mpfr = cx + _MPFR_ONE
+        # in_bulb: bool = x_plus_one * x_plus_one + cy * cy <= _MPFR_SIXTEENTH
+        # if in_cardioid or in_bulb:
+        #   # point is in the main cardioid or period-2 bulb, so it's an interior point, no escape
+        #   img.escape[px_count] = inp.max_iter  # carefully set this directly in the array
+        #   p_bar.update(1)  # we touched a pixel, so update the progress bar
+        #   continue
         # not in the main cardioid or period-2 bulb, do the full escape-time test in mpfr
         zx: gmpy2.mpfr = _MPFR_ZERO
         zy: gmpy2.mpfr = _MPFR_ZERO
+        max_z2: gmpy2.mpfr = _MPFR_ZERO  # track the max |z|^2
+        mag_z2: gmpy2.mpfr
         escaped_at: int = 0
         # escape-time loop, implemented with explicit zx/zy variables
         for escaped_at in range(inp.max_iter):  # noqa: B007
           zx2: gmpy2.mpfr = zx * zx
           zy2: gmpy2.mpfr = zy * zy
           # avoid sqrt(abs(z)); compare squared magnitude to 2^2
-          if zx2 + zy2 > _MPFR_FOUR:
+          if (mag_z2 := zx2 + zy2) > _MPFR_FOUR:
             break
+          max_z2 = max(max_z2, mag_z2)  # track max |z|^2 for potential use in coloring
           # z = z^2 + c in terms of zx/zy: zx' = zx^2 - zy^2 + cx
           zy = _MPFR_TWO * zx * zy + cy
           zx = zx2 - zy2 + cx
         else:
-          escaped_at = inp.max_iter  # if we didn't break, we reached max_iter, mark as non-escaped
+          # if we didn't break, we reached max_iter, mark as non-escaped, so
+          # we will declare this a Set point, interior; the max_z2 should be <= 4: check
+          if not 0 <= max_z2 < _MPFR_FOUR:
+            raise Error(f'Interior point exceeded max |z|^2 of 4, should never happen, {max_z2=}')
+          # scale max_z2 to [1..SET_INTERIOR_RESOLUTION], never zero b/c being <0 is the marker!
+          escaped_at = -(  # negative!
+            int(gmpy2.floor(_MPFR_SET_INTERIOR_SCALE * cast('gmpy2.mpfr', gmpy2.sqrt(max_z2)))) + 1
+          )  # add 1 to make it [1..SET_INTERIOR_RESOLUTION], never zero
         img.escape[px_count] = escaped_at  # carefully set this directly in the array
         p_bar.update(1)  # we touched a pixel, so update the progress bar
   # done
@@ -488,9 +508,12 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: PL
           # this pixel is not for this process, skip it but still update the progress bar
           p_bar.update(1)
           continue
+        # either this is a solo process, or this pixel is for this process
         # starting point is inside escape radius; do the full escape-time iteration in mpfr
         zy: gmpy2.mpfr = img_y
         zx: gmpy2.mpfr = xs[px]
+        max_z2: gmpy2.mpfr = _MPFR_ZERO  # track the max |z|^2
+        mag_z2: gmpy2.mpfr
         # fast exterior pre-check: if |z_0|*|z_0| > 4 the starting point is already outside the
         # escape radius so the orbit escapes immediately, before any iteration; note that this is
         # the ONLY simple universal fast test available for Julia sets — unlike Mandelbrot (which
@@ -508,13 +531,21 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: PL
           zx2: gmpy2.mpfr = zx * zx
           zy2: gmpy2.mpfr = zy * zy
           # avoid sqrt(abs(z)); compare squared magnitude to 2^2
-          if zx2 + zy2 > _MPFR_FOUR:
+          if (mag_z2 := zx2 + zy2) > _MPFR_FOUR:
             break
+          max_z2 = max(max_z2, mag_z2)  # track max |z|^2 for potential use in coloring
           # z = z^2 + c in terms of zx/zy: zx' = zx^2 - zy^2 + cx
           zy = _MPFR_TWO * zx * zy + cy
           zx = zx2 - zy2 + cx
         else:
-          escaped_at = inp.max_iter  # if we didn't break, we reached max_iter, mark as non-escaped
+          # if we didn't break, we reached max_iter, mark as non-escaped, so
+          # we will declare this a Set point, interior; the max_z2 should be <= 4: check
+          if not 0 <= max_z2 < _MPFR_FOUR:
+            raise Error(f'Interior point exceeded max |z|^2 of 4, should never happen, {max_z2=}')
+          # scale max_z2 to [1..SET_INTERIOR_RESOLUTION], never zero b/c being <0 is the marker!
+          escaped_at = -(  # negative!
+            int(gmpy2.floor(_MPFR_SET_INTERIOR_SCALE * cast('gmpy2.mpfr', gmpy2.sqrt(max_z2)))) + 1
+          )  # add 1 to make it [1..SET_INTERIOR_RESOLUTION], never zero
         img.escape[px_count] = escaped_at  # carefully set this directly in the array
         p_bar.update(1)  # we touched a pixel, so update the progress bar
   # done
