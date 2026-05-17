@@ -9,6 +9,7 @@ import pathlib
 from collections import abc
 
 import click
+import gmpy2
 import typer
 from transcrypto.cli import clibase
 from transcrypto.utils import base as tbase
@@ -17,13 +18,19 @@ from tranzoom.core import ai, fractal, frame, image, palette
 
 # global CLI data, and some test stuff
 
-# if `tests/data/images/demo-mandel-seahorse-tail.png` changes you have to update this hash!
-SEAHORSE_TAIL_HASH: str = '38824cdaa58b64496ebfd86facf4d4ba4596ab18db95ac97afd643a7a892ff83'
+# if `tests/data/images/demo-mandel-seahorse-tail.png` internal data changes this will change!
+# this indicates that the mathematical computation or the setting of colors has changed;
+# this should NOT change over metadata changes, as it is computed from raw pixel data
+SEAHORSE_TAIL_HASH: str = '9191d8e0946361b47e25dbe4cb21246d3e21b27a2d7dec800b4e25fd699d6814'
 # this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 
 # CLI options that can be re-used
 
-DEFAULT_IMAGE_PREFIX: str = 'mandel'
+DEFAULT_IMAGE_PREFIX: dict[frame.Fractal, str] = {
+  frame.Fractal.MANDELBROT: 'mandel',
+  frame.Fractal.JULIA: 'julia',
+}
+DEFAULT_VISION_MODEL: str = 'qwen3-vl-32b-instruct@q8_0'
 
 # Image: output image
 IMAGE_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
@@ -48,6 +55,43 @@ IMAGE_HEIGHT_OPTION: typer.models.OptionInfo = typer.Option(
     f'default is {frame.DEFAULT_IMAGE_SIZE}'
   ),
 )
+IMAGE_SIZE_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '-s',
+  '--size',
+  min=frame.MIN_IMAGE_SIZE,
+  max=frame.MAX_IMAGE_SIZE,
+  help=(
+    'Size of the image: *overrides* both `-w/--width` and `-h/--height` by determining the '
+    'max pixel length of the final image, which will be proportional to the given frame, i.e., '
+    'the final dimensions will be scaled accordingly and, given a size S, will be either '
+    '(S, x), (x, S) or (S, S), where x < S, and will make the final image ratio/proportion be '
+    f'the same as the frame; {frame.MIN_IMAGE_SIZE} ≤ S ≤ {frame.MAX_IMAGE_SIZE}; '
+    'default is None, i.e., follow the explicit `-w/--width` and `-h/--height` options'
+  ),
+)
+IMAGE_ZOOM_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
+  frame.DEFAULT_ZOOM_SIZE,
+  '-w',
+  '--width',
+  min=frame.MIN_IMAGE_SIZE,
+  max=frame.MAX_IMAGE_SIZE,
+  help=(
+    f'Width of the image; {frame.MIN_IMAGE_SIZE} ≤ w ≤ {frame.MAX_IMAGE_SIZE}; '
+    f'default is {frame.DEFAULT_ZOOM_SIZE}'
+  ),
+)
+IMAGE_ZOOM_HEIGHT_OPTION: typer.models.OptionInfo = typer.Option(
+  frame.DEFAULT_ZOOM_SIZE,
+  '-h',
+  '--height',
+  min=frame.MIN_IMAGE_SIZE,
+  max=frame.MAX_IMAGE_SIZE,
+  help=(
+    f'Height of the image; {frame.MIN_IMAGE_SIZE} ≤ h ≤ {frame.MAX_IMAGE_SIZE}; '
+    f'default is {frame.DEFAULT_ZOOM_SIZE}'
+  ),
+)
 IMAGE_PATH_OUTPUT_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '-o',
@@ -63,10 +107,10 @@ IMAGE_PATH_OUTPUT_OPTION: typer.models.OptionInfo = typer.Option(
   ),
 )
 IMAGE_PREFIX_OPTION: typer.models.OptionInfo = typer.Option(
-  DEFAULT_IMAGE_PREFIX,
+  None,
   '--prefix',
   help=(
-    f'Image save prefix; default: {DEFAULT_IMAGE_PREFIX!r} '
+    'Image save prefix; default: None, meaning use "mandel" for Mandelbrot and "julia" for Julia '
     '(the final file name will be "<prefix>[-<date>][-<hash20>].png", note the date and the hash '
     'can be turned off with --no-date and --no-hash, respectively)'
   ),
@@ -150,17 +194,134 @@ FRAME_HEIGHT_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
     'default is None, i.e, the same as width'
   ),
 )
+JULIA_RE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  frame.DEFAULT_JULIA_RE,
+  help=(
+    'Real part of the Julia Set constant; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    'ALTERNATIVELY: you can use this to input an existing PNG image path, and it will read the '
+    "Julia Set constant from the given image's metadata frame *CENTER* "
+    f'(overriding/ignoring the imaginary parameter part!); default is {frame.DEFAULT_JULIA_RE!r}'
+  ),
+)
+JULIA_RE_OPTION: typer.models.OptionInfo = typer.Option(
+  frame.DEFAULT_JULIA_RE,
+  help=(
+    'Real part of the Julia Set constant; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    'ALTERNATIVELY: you can use this to input an existing PNG image path, and it will read the '
+    "Julia Set constant from the given image's metadata frame *CENTER* "
+    f'(overriding/ignoring the imaginary parameter part!); default is {frame.DEFAULT_JULIA_RE!r}'
+  ),
+)
+JULIA_IM_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  frame.DEFAULT_JULIA_IM,
+  help=(
+    'Imaginary part of the Julia Set constant; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_JULIA_IM!r}'
+  ),
+)
+JULIA_IM_OPTION: typer.models.OptionInfo = typer.Option(
+  frame.DEFAULT_JULIA_IM,
+  help=(
+    'Imaginary part of the Julia Set constant; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_JULIA_IM!r}'
+  ),
+)
+JULIA_CENTER_RE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  frame.DEFAULT_JULIA_CENTER_RE,
+  help=(
+    'Real part of the center point; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    'ALTERNATIVELY: you can use this to input an existing PNG image path, and it will read the '
+    "frame from the given image's metadata (overriding/ignoring the other CLI frame parameters!); "
+    f'default is {frame.DEFAULT_JULIA_CENTER_RE!r}'
+  ),
+)
+JULIA_CENTER_IM_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  frame.DEFAULT_JULIA_CENTER_IM,
+  help=(
+    'Imaginary part of the center point; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_JULIA_CENTER_IM!r}'
+  ),
+)
+JULIA_WIDTH_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  frame.DEFAULT_JULIA_WIDTH,
+  help=(
+    'Width of the frame in the real plane; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_JULIA_WIDTH!r}'
+  ),
+)
+JULIA_HEIGHT_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  frame.DEFAULT_JULIA_HEIGHT,
+  help=(
+    'Height of the frame in the imaginary plane; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'default is {frame.DEFAULT_JULIA_HEIGHT!r}'
+  ),
+)
+MARK_COORDINATES_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '--mark',
+  help=(
+    'A point formatted as "(re, im)" to add a crosshair overlay, `re` and `im` multi-precision; '
+    'this can be a float (ex: "(0.34, -0.56)") or a fraction of ints '
+    '(rational numbers, ex: "(123/451, 789/1011)") or any combination of these, and '
+    'the numbers will be fed directly to multi-precision arithmetic so no precision is lost; '
+    'default is None, i.e., do not mark overlay on the image'
+  ),
+)
+MARK_COLOR_OPTION: typer.models.OptionInfo = typer.Option(
+  image.DEFAULT_MARK_COLOR.name.lower(),
+  '--mark-color',
+  help=(
+    f'Color of the crosshair overlay; default is "{image.DEFAULT_MARK_COLOR.name.lower()}"; '
+    'available colors: ' + ', '.join(sorted(repr(c.name.lower()) for c in image.Color))
+  ),
+)
+MARK_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
+  image.DEFAULT_MARK_WIDTH,
+  '--mark-width',
+  min=image.MIN_MARK_WIDTH,
+  max=image.MAX_MARK_WIDTH,
+  help=(
+    f'Width of the crosshair overlay; {image.MIN_MARK_WIDTH} ≤ w ≤ {image.MAX_MARK_WIDTH}; '
+    f'default is {image.DEFAULT_MARK_WIDTH}'
+  ),
+)
 
 # Computation Options
+FRACTAL_TYPE_OPTION: typer.models.OptionInfo = typer.Option(
+  frame.DEFAULT_FRACTAL,
+  '-f',
+  '--fractal',
+  help=(
+    f'Fractal type to generate; '
+    f'possible values: {", ".join(repr(f.value) for f in frame.Fractal)}; '
+    f'default: {frame.DEFAULT_FRACTAL.value!r}'
+  ),
+)
 MAX_ITERATIONS_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '-i',
   '--iter',
-  min=fractal.MIN_ITER,
-  max=fractal.MAX_ITER,
+  min=frame.MIN_ITER,
+  max=frame.MAX_ITER,
   help=(
     'Maximum iterations (depth) to compute before determining escape; '
-    f'{fractal.MIN_ITER} ≤ iter ≤ {fractal.MAX_ITER}; '
+    f'{frame.MIN_ITER} ≤ iter ≤ {frame.MAX_ITER}; '
     f'default is None (automatic search for optimal iterations --- recommended)'
   ),
 )
@@ -196,6 +357,18 @@ PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
 )
 
 # AI Options
+MODEL_OPTION: typer.models.OptionInfo = typer.Option(
+  DEFAULT_VISION_MODEL,
+  '-m',
+  '--model',
+  help=(
+    'LLM vision model to load and use: '
+    'the model must be compatible with the LMStudio client libraries and must support vision; '
+    'will NOT get the model for you, so make sure you either have it available in your LMStudio; '
+    'should be a string you would use with `lms get <THIS>` or `https://huggingface.co/<THIS>`; '
+    f'default: {DEFAULT_VISION_MODEL!r}, a good general-purpose vision model'
+  ),
+)
 AI_QUERY_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '-q',
@@ -227,12 +400,10 @@ AI_OUTPUT_REASON_FIELD_OPTION: typer.models.OptionInfo = typer.Option(
 class TranZoomConfig(clibase.CLIConfig):
   """TranZoom global context, storing the configuration."""
 
-  img_width: int
-  img_height: int
   img_output_path: pathlib.Path | None
   img_use_date: bool
   img_use_hash: bool
-  img_path_prefix: str
+  img_path_prefix: str | None
   max_threads: int | None
   model: str
   spec_tokens: int | None
@@ -246,6 +417,22 @@ class TranZoomConfig(clibase.CLIConfig):
   flash: bool
   kv_cache: int | None
   timeout: float
+  iterm: bool
+
+  img_width: int = frame.DEFAULT_IMAGE_SIZE  # both `image` and `zoom` use, different defaults
+  img_height: int = frame.DEFAULT_IMAGE_SIZE  # both `image` and `zoom` use, different defaults
+  img_size: int | None = None  # for `image` and `zoom` commands, overrides width/height if given
+
+  max_iter: int | None = None  # for `image` command
+  pal: palette.Palette = palette.DEFAULT_PALETTE  # for `image` command
+  mark_coords: str | None = None  # for `image` command
+  mark_color: image.Color = image.DEFAULT_MARK_COLOR  # for `image` command
+  mark_width: int = image.DEFAULT_MARK_WIDTH  # for `image` command
+
+  max_steps: int = 0  # for `zoom` command
+  fractal_type: frame.Fractal = frame.DEFAULT_FRACTAL  # for `zoom` command
+  julia_re: str = frame.DEFAULT_JULIA_RE  # for `zoom` command
+  julia_im: str = frame.DEFAULT_JULIA_IM  # for `zoom` command
 
 
 def MakeFrameFromCLIArgs(
@@ -313,3 +500,56 @@ def MakeFrameFromCLIArgs(
       ) from err2
   except Exception as err:  # this error we cannot forgive
     raise click.UsageError(f'Error: {center_re=}, {center_im=}, {f_width=}, {f_height=}') from err
+
+
+def MakePointFromCLIArgs(
+  point_re: frame.ExactInputType,
+  point_im: frame.ExactInputType,
+  print_call: abc.Callable[[str], None],
+) -> tuple[gmpy2.mpq, gmpy2.mpq]:
+  """Make a point or die. Tries float/mpq first, then tries reading from a file metadata.
+
+  Args:
+    point_re: the real part of the point
+    point_im: the imaginary part of the point
+    print_call: a callable to print messages, used for logging during frame creation
+
+  Returns:
+    A valid point
+
+  Raises:
+    click.UsageError: if arguments can't be turned into a valid point
+    ValueError: internally (but this is caught and turned into UsageError with a helpful message)
+
+  """
+  try:
+    # the happy path is simple... if these conversions work, we return the point and we're done
+    cx: gmpy2.mpq = point_re if isinstance(point_re, gmpy2.mpq) else gmpy2.mpq(point_re)
+    cy: gmpy2.mpq = point_im if isinstance(point_im, gmpy2.mpq) else gmpy2.mpq(point_im)
+    return (cx, cy)
+  except ValueError as err:
+    if 'invalid' not in str(err).lower():
+      raise click.UsageError(f'Error: {point_re=}, {point_im=}') from err
+    # maybe the user gave us an image path instead of coordinates? let's try to read it as image
+    try:
+      # convert and validate path
+      img_path: pathlib.Path = pathlib.Path(str(point_re)).expanduser().resolve()
+      if not img_path.exists() or not img_path.is_file():
+        raise ValueError(f'Image "{img_path}" does not exist or is not a file')  # noqa: TRY301
+      # make sure we have the needed metadata
+      info: tbase.JSONDict = image.GetBasicDataFromPNG(img_path.read_bytes())[-1]
+      if image.META_CENTER_RE_KEY not in info or image.META_CENTER_IM_KEY not in info:
+        raise ValueError(f'Image "{img_path}" missing tranZoom frame metadata keys')  # noqa: TRY301
+      version: str = str(info.get(image.META_VERSION_KEY, '')) or 'UNKNOWN'
+      fract: str = str(info.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
+      print_call(
+        f'Reading frame from "{img_path}", [red]tranZoom version {version}[/], {fract} fractal...'
+      )
+      return (
+        gmpy2.mpq(str(info[image.META_CENTER_RE_KEY])),
+        gmpy2.mpq(str(info[image.META_CENTER_IM_KEY])),
+      )
+    except Exception as err2:  # this error we cannot forgive
+      raise click.UsageError(f'Error/not path: {point_re=}, {point_im=}') from err2
+  except Exception as err:  # this error we cannot forgive
+    raise click.UsageError(f'Error: {point_re=}, {point_im=}') from err

@@ -13,14 +13,12 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │ --verbose             -v                INTEGER RANGE [0<=x<=3]           Verbosity (nothing=ERROR, -v=WARNING, -vv=INFO, -vvv=DEBUG).      │
 │ --color                   --no-color                                      Force enable/disable colored output (respects NO_COLOR env var if not         │
 │                                                                           provided). Defaults to having colors.                                         │
-│ --width               -w                INTEGER RANGE [16<=x<=8192]       Width of the image; 16 ≤ w ≤ 8192; default is 1024             │
-│ --height              -h                INTEGER RANGE [16<=x<=8192]       Height of the image; 16 ≤ h ≤ 8192; default is 1024            │
 │ --out                 -o                DIRECTORY                         The local output root directory path, ex: "~/foo/bar/"; if not given, the     │
 │                                                                           image will be saved in the current working directory                          │
-│ --prefix                                TEXT                              Image save prefix; default: 'mandel' (the final file name will be             │
+│ --prefix                                TEXT                              Image save prefix; default: None, meaning use "mandel" for Mandelbrot and     │
+│                                                                           "julia" for Julia (the final file name will be                                │
 │                                                                           "<prefix>[-<date>][-<hash20>].png", note the date and the hash can be turned  │
 │                                                                           off with --no-date and --no-hash, respectively)                               │
-│                                                                                                                                        │
 │ --date                    --no-date                                       If True, file names will include the date-time as YYYYMMDDhhmmss; if False,   │
 │                                                                           file names will not include the date-time; default is True                    │
 │                                                                                                                                          │
@@ -29,13 +27,13 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                                                          │
 │ --threads                               INTEGER RANGE [1<=x<=16]          Number of threads to use for rendering; default is None, which means to use   │
 │                                                                           all available CPU cores; will be limited to 16 threads                        │
-│ --model               -m                TEXT                              LLM model to load and use: the model must be compatible with the              │
-│                                                                           llama.cpp/LMStudio client libraries; will NOT get the model for you, so make  │
-│                                                                           sure you either have it available in your LMStudio or the model files are     │
-│                                                                           under the specified models root path (`-r/--root` option); should be a string │
-│                                                                           you would use with `lms get <THIS>` or `https://huggingface.co/<THIS>`;       │
-│                                                                           default: 'qwen3-8b@Q8_0', a good general-purpose text (non-vision) model      │
-│                                                                                                                                 │
+│ --model               -m                TEXT                              LLM vision model to load and use: the model must be compatible with the       │
+│                                                                           LMStudio client libraries and must support vision; will NOT get the model for │
+│                                                                           you, so make sure you either have it available in your LMStudio; should be a  │
+│                                                                           string you would use with `lms get <THIS>` or                                 │
+│                                                                           `https://huggingface.co/<THIS>`; default: 'qwen3-vl-32b-instruct@q8_0', a     │
+│                                                                           good general-purpose vision model                                             │
+│                                                                                                                    │
 │ --tokens              -t                INTEGER RANGE [2<=x<=200]         Speculative Decoding: controls how many tokens the model should generate in   │
 │                                                                           advance during auto-tagging; if you do not define this flag then speculative  │
 │                                                                           decoding will be disabled; usually this is a small value, like 4 or 8, and it │
@@ -74,6 +72,10 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │ --timeout                               FLOAT RANGE [0.0<=x<=86400.0]     Timeout, in seconds, for AI calls; zero, or <1s, means no timeout (infinite); │
 │                                                                           default: 300.0 seconds                                                        │
 │                                                                                                                                         │
+│ --iterm                   --no-iterm                                      If True, will output the image to iTerm2 (only use on macOS with iTerm2!      │
+│                                                                           <https://iterm2.com/documentation-images.html>); if False, will not output    │
+│                                                                           the image to iTerm2; default is False                                         │
+│                                                                                                                                      │
 │ --install-completion                                                      Install completion for the current shell.                                     │
 │ --show-completion                                                         Show completion for the current shell, to copy it or customize the            │
 │                                                                           installation.                                                                 │
@@ -89,19 +91,26 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
                                                                                                                                                            
  # --- Mandelbrot Image Generation ---                                                                                                                     
  poetry run tranz image mandel                                                                                                                             
- poetry run tranz -w 512 -h 512 image mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                         
+ poetry run tranz image -w 512 -h 512 mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                         
+                                                                                                                                                           
+ # --- Julia Set Image Generation ---                                                                                                                      
+ poetry run tranz image julia                                                                                                                              
+ poetry run tranz -s 1024 image julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"                                         
+ poetry run tranz image julia "/path/to/julia_point_image.png" "" "/path/to/frame_image.png"                                                               
                                                                                                                                                            
  # --- TranZoom Fractal Image Data Reading / Visualization ---                                                                                             
  poetry run tranz image read /path/to/image.png                                                                                                            
                                                                                                                                                            
  # --- LLM-Guided Fractal Zoom ---                                                                                                                         
- poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai                                                                                                  
- poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                     
- poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"                                                                             
+ poetry run tranz zoom ai                                                                                                                                  
+ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai " -0.7436499" "0.13188204" "0.00073801"                                             
+ poetry run tranz --iterm zoom ai "/path/to/image.png"                                                                                                     
+ poetry run tranz --iterm zoom -s 700 --fractal julia ai                                                                                                   
                                                                                                                                                            
  # --- Human/Manual-Guided Fractal Zoom ---                                                                                                                
- poetry run tranz zoom manual " -0.74303" "0.126433" "0.01611"                                                                                             
+ poetry run tranz --iterm zoom manual " -0.74303" "0.126433" "0.01611"                                                                                     
  poetry run tranz zoom manual "/path/to/image.png"                                                                                                         
+ poetry run tranz --iterm zoom -s 700 --fractal julia manual                                                                                               
                                                                                                                                                            
  # --- Markdown Help ---                                                                                                                                   
  poetry run tranz markdown > tranz.md
@@ -114,20 +123,103 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
                                                                                                                                                            
  Examples:                                                                                                                                                 
                                                                                                                                                            
- # --- Mandelbrot Image Generation ---                                                                                                                     
+ # --- Mandelbrot Set Image Generation ---                                                                                                                 
  poetry run tranz image mandel                                                                                                                             
- poetry run tranz -w 512 -h 512 image mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                         
+ poetry run tranz image -w 512 -h 512 mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                         
+                                                                                                                                                           
+ # --- Julia Set Image Generation ---                                                                                                                      
+ poetry run tranz image julia                                                                                                                              
+ poetry run tranz -s 1024 image julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"                                         
+ poetry run tranz image julia "/path/to/julia_point_image.png" "" "/path/to/frame_image.png"                                                               
                                                                                                                                                            
  # --- TranZoom Fractal Image Data Reading / Visualization ---                                                                                             
  poetry run tranz image read /path/to/image.png                                                                                                            
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --help          Show this message and exit.                                                                                                             │
+│ --width       -w      INTEGER RANGE [16<=x<=16384]                          Width of the image; 16 ≤ w ≤ 16384; default is 1024          │
+│ --height      -h      INTEGER RANGE [16<=x<=16384]                          Height of the image; 16 ≤ h ≤ 16384; default is 1024         │
+│ --size        -s      INTEGER RANGE [16<=x<=16384]                          Size of the image: *overrides* both `-w/--width` and `-h/--height` by       │
+│                                                                             determining the max pixel length of the final image, which will be          │
+│                                                                             proportional to the given frame, i.e., the final dimensions will be scaled  │
+│                                                                             accordingly and, given a size S, will be either (S, x), (x, S) or (S, S),   │
+│                                                                             where x < S, and will make the final image ratio/proportion be the same as  │
+│                                                                             the frame; 16 ≤ S ≤ 16384; default is None, i.e., follow the explicit       │
+│                                                                             `-w/--width` and `-h/--height` options                                      │
+│ --iter        -i      INTEGER RANGE [1000<=x<=4294967295]                   Maximum iterations (depth) to compute before determining escape; 1000 ≤     │
+│                                                                             iter ≤ 4294967295; default is None (automatic search for optimal iterations │
+│                                                                             --- recommended)                                                            │
+│ --palette               Color palette to use for rendering; default is 'blue-to-yellow-to-brown';   │
+│                                                                             available palettes: ['blue-to-yellow-to-brown', 'electric-ocean', 'lava',   │
+│                                                                             'sunset']                                                                   │
+│                                                                                                                       │
+│ --mark                TEXT                                                  A point formatted as "(re, im)" to add a crosshair overlay, `re` and `im`   │
+│                                                                             multi-precision; this can be a float (ex: "(0.34, -0.56)") or a fraction of │
+│                                                                             ints (rational numbers, ex: "(123/451, 789/1011)") or any combination of    │
+│                                                                             these, and the numbers will be fed directly to multi-precision arithmetic   │
+│                                                                             so no precision is lost; default is None, i.e., do not mark overlay on the  │
+│                                                                             image                                                                       │
+│ --mark-color          TEXT                                                  Color of the crosshair overlay; default is "red"; available colors:         │
+│                                                                             'black', 'blue', 'cyan', 'green', 'magenta', 'red', 'white', 'yellow'       │
+│                                                                                                                                           │
+│ --mark-width          INTEGER RANGE [1<=x<=50]                              Width of the crosshair overlay; 1 ≤ w ≤ 50; default is 1        │
+│ --help                                                                      Show this message and exit.                                                 │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ mandel  Generate a Mandelbrot image.                                                                                                                    │
+│ julia   Generate a Julia image.                                                                                                                         │
 │ read    Read a TranZoom fractal image.                                                                                                                  │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+### `tranz image julia` Sub-Command
+
+```text
+Usage: tranz image julia [OPTIONS] [POINT_RE] [POINT_IM] [CENTER_RE] [CENTER_IM]                                                                          
+                          [F_WIDTH] [F_HEIGHT]                                                                                                             
+                                                                                                                                                           
+ Generate a Julia image.                                                                                                                                   
+                                                                                                                                                           
+╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│   point_re       [POINT_RE]   Real part of the Julia Set constant; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:         │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; ALTERNATIVELY: you  │
+│                               can use this to input an existing PNG image path, and it will read the Julia Set constant from the given image's metadata │
+│                               frame *CENTER* (overriding/ignoring the imaginary parameter part!); default is '0.27334'                                  │
+│                                                                                                                                       │
+│   point_im       [POINT_IM]   Imaginary part of the Julia Set constant; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:    │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is          │
+│                               '0.00742'                                                                                                                 │
+│                                                                                                                                       │
+│   center_re      [CENTER_RE]  Real part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451")    │
+│                               and the number will be fed directly to multi-precision arithmetic so no precision is lost; ALTERNATIVELY: you can use     │
+│                               this to input an existing PNG image path, and it will read the frame from the given image's metadata (overriding/ignoring │
+│                               the other CLI frame parameters!); default is '0'                                                                          │
+│                                                                                                                                             │
+│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:          │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '0'      │
+│                                                                                                                                             │
+│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:        │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '1.8'    │
+│                                                                                                                                           │
+│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:  │
+│                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is '2.2'    │
+│                                                                                                                                           │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Examples:                                                                                                                                                 
+                                                                                                                                                           
+ $ poetry run tranz image julia                                                                                                                            
+ 1024x1024 Julia in frame [(0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)] ...                                                                            
+ ...                                                                                                                                                       
+ Saved to "julia-<date>-<hash>.png"                                                                                                                        
+                                                                                                                                                           
+ $ poetry run tranz -s 1024 image julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"                                       
+ <saves 1024px Julia to disk with center -313420497/429687500+0.6567j and width 0.6567 by 0.004>                                                           
+                                                                                                                                                           
+ $ poetry run tranz image julia "/path/to/julia_point_image.png" "" "/path/to/frame_image.png"                                                             
+ <gets the same frame used in "frame_image.png" and saves a new image using "julia_point_image.png" Julia point>
 ```
 
 ### `tranz image mandel` Sub-Command
@@ -154,18 +246,7 @@ Usage: tranz image mandel [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │                               i.e, the same as width                                                                                                    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --iter     -i                INTEGER RANGE [1000<=x<=4294967295]                   Maximum iterations (depth) to compute before determining escape;     │
-│                                                                                    1000 ≤ iter ≤ 4294967295; default is None (automatic search for      │
-│                                                                                    optimal iterations --- recommended)                                  │
-│ --palette                      Color palette to use for rendering; default is                       │
-│                                                                                    'blue-to-yellow-to-brown'; available palettes:                       │
-│                                                                                    ['blue-to-yellow-to-brown', 'electric-ocean', 'lava', 'sunset']      │
-│                                                                                                                       │
-│ --iterm        --no-iterm                                                          If True, will output the image to iTerm2 (only use on macOS with     │
-│                                                                                    iTerm2! <https://iterm2.com/documentation-images.html>); if False,   │
-│                                                                                    will not output the image to iTerm2; default is False                │
-│                                                                                                                                      │
-│ --help                                                                             Show this message and exit.                                          │
+│ --help          Show this message and exit.                                                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 
@@ -175,8 +256,8 @@ Usage: tranz image mandel [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  ...                                                                                                                                                       
  Saved to "mandel-<date>-<hash>.png"                                                                                                                       
                                                                                                                                                            
- $ poetry run tranz -w 512 -h 512 image mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                       
- <saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>                                                                              
+ $ poetry run tranz image -w 512 -h 512 mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                       
+ <saves Mandelbrot to disk with center -0.74303+0.126433j and width 0.01611>                                                                               
                                                                                                                                                            
  $ poetry run tranz image mandel "/path/to/image.png"                                                                                                      
  <gets the same frame used in "/path/to/image.png" and saves a new image of it to disk>
@@ -193,10 +274,7 @@ Usage: tranz image read [OPTIONS] IMAGE_PATH
 │ *    image_path      FILE  The local input file path, ex: "~/foo/bar/file.png"                                                                │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --iterm    --no-iterm      If True, will output the image to iTerm2 (only use on macOS with iTerm2! <https://iterm2.com/documentation-images.html>); if │
-│                            False, will not output the image to iTerm2; default is False                                                                 │
-│                                                                                                                                      │
-│ --help                     Show this message and exit.                                                                                                  │
+│ --help          Show this message and exit.                                                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 
@@ -231,16 +309,40 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
  Examples:                                                                                                                                                 
                                                                                                                                                            
  # --- LLM-Guided Fractal Zoom ---                                                                                                                         
- poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai                                                                                                  
- poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                     
- poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"                                                                             
+ poetry run tranz zoom ai                                                                                                                                  
+ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai " -0.7436499" "0.13188204" "0.00073801"                                             
+ poetry run tranz --iterm zoom ai "/path/to/image.png"                                                                                                     
+ poetry run tranz --iterm zoom -s 700 --fractal julia ai                                                                                                   
                                                                                                                                                            
  # --- Human/Manual-Guided Fractal Zoom ---                                                                                                                
- poetry run tranz zoom manual " -0.74303" "0.126433" "0.01611"                                                                                             
+ poetry run tranz --iterm zoom manual " -0.74303" "0.126433" "0.01611"                                                                                     
  poetry run tranz zoom manual "/path/to/image.png"                                                                                                         
+ poetry run tranz --iterm zoom -s 700 --fractal julia manual                                                                                               
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --help          Show this message and exit.                                                                                                             │
+│ --fractal    -f                  Fractal type to generate; possible values: 'mandelbrot', 'julia'; default: 'mandelbrot'              │
+│                                                                                                                                    │
+│ --width      -w      INTEGER RANGE [16<=x<=16384]  Width of the image; 16 ≤ w ≤ 16384; default is 512                                     │
+│ --height     -h      INTEGER RANGE [16<=x<=16384]  Height of the image; 16 ≤ h ≤ 16384; default is 512                                    │
+│ --size       -s      INTEGER RANGE [16<=x<=16384]  Size of the image: *overrides* both `-w/--width` and `-h/--height` by determining the max pixel      │
+│                                                    length of the final image, which will be proportional to the given frame, i.e., the final dimensions │
+│                                                    will be scaled accordingly and, given a size S, will be either (S, x), (x, S) or (S, S), where x <   │
+│                                                    S, and will make the final image ratio/proportion be the same as the frame; 16 ≤ S ≤ 16384; default  │
+│                                                    is None, i.e., follow the explicit `-w/--width` and `-h/--height` options                            │
+│ --max-steps  -n      INTEGER RANGE           Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is 0       │
+│                                                    (unlimited, run forever)                                                                             │
+│                                                                                                                                             │
+│ --julia-re           TEXT                          Real part of the Julia Set constant; this can be a float (ex: "0.34") or a fraction of ints          │
+│                                                    (rational number, ex: "123/451") and the number will be fed directly to multi-precision arithmetic   │
+│                                                    so no precision is lost; ALTERNATIVELY: you can use this to input an existing PNG image path, and it │
+│                                                    will read the Julia Set constant from the given image's metadata frame *CENTER* (overriding/ignoring │
+│                                                    the imaginary parameter part!); default is '0.27334'                                                 │
+│                                                                                                                                       │
+│ --julia-im           TEXT                          Imaginary part of the Julia Set constant; this can be a float (ex: "0.34") or a fraction of ints     │
+│                                                    (rational number, ex: "123/451") and the number will be fed directly to multi-precision arithmetic   │
+│                                                    so no precision is lost; default is '0.00742'                                                        │
+│                                                                                                                                       │
+│ --help                                             Show this message and exit.                                                                          │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ai      Use AI to search for an interest point.                                                                                                         │
@@ -272,34 +374,30 @@ Usage: tranz zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │                               i.e, the same as width                                                                                                    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --query      -q                 TEXT                      Query to be added to the default prompt; default is None, no additional query                 │
-│ --reason         --no-reason                              If True, LLM sector evaluations will include an extra `reason` field for the AI output, which │
-│                                                           is great for debugging and understanding the LLM, but is much slower on the LLM; if False,    │
-│                                                           the field will not be included, which is faster; default is False                             │
+│ --query   -q                 TEXT                      Query to be added to the default prompt; default is None, no additional query                    │
+│ --reason      --no-reason                              If True, LLM sector evaluations will include an extra `reason` field for the AI output, which is │
+│                                                        great for debugging and understanding the LLM, but is much slower on the LLM; if False, the      │
+│                                                        field will not be included, which is faster; default is False                                    │
 │                                                                                                                                     │
-│ --memory                        INTEGER RANGE [0<=x<=30]  Maximum number of iterations the LLM will remember; 0 ≤ m ≤ 30; 0 (zero) means no memory,     │
-│                                                           every AI call is independent; default is 5                                                    │
+│ --memory                     INTEGER RANGE [0<=x<=30]  Maximum number of iterations the LLM will remember; 0 ≤ m ≤ 30; 0 (zero) means no memory, every  │
+│                                                        AI call is independent; default is 5                                                             │
 │                                                                                                                                             │
-│ --max-steps  -n                 INTEGER RANGE       Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is  │
-│                                                           0 (unlimited, run forever)                                                                    │
-│                                                                                                                                             │
-│ --iterm          --no-iterm                               If True, will output the image to iTerm2 (only use on macOS with iTerm2!                      │
-│                                                           <https://iterm2.com/documentation-images.html>); if False, will not output the image to       │
-│                                                           iTerm2; default is False                                                                      │
-│                                                                                                                                      │
-│ --help                                                    Show this message and exit.                                                                   │
+│ --help                                                 Show this message and exit.                                                                      │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 
                                                                                                                                                            
- $ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai                                                                                                
+ $ poetry run tranz zoom ai                                                                                                                                
  <start with full set and zoom in using model Qwen 32>                                                                                                     
                                                                                                                                                            
- $ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10                                   
- <zoom in using model Qwen 32 with higher temperature 0.7, start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>                           
+ $ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai " -0.7436499" "0.13188204" "0.00073801"                                           
+ <zoom in using model Qwen 32 with higher temperature 0.7, start from "Seahorse Tail", stop after 10 steps>                                                
                                                                                                                                                            
- $ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"                                                                           
- <gets the same frame used in "/path/to/image.png" and starts zoom there>
+ $ poetry run tranz --iterm zoom ai "/path/to/image.png"                                                                                                   
+ <gets the same frame used in "/path/to/image.png" and starts zoom there, print iTerm2 images>                                                             
+                                                                                                                                                           
+ $ poetry run tranz --iterm zoom -s 700 --fractal julia ai                                                                                                 
+ <start with full default Julia Set and AI zoom with 700px size, print iTerm2 images>
 ```
 
 ### `tranz zoom manual` Sub-Command
@@ -326,14 +424,7 @@ Usage: tranz zoom manual [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │                               i.e, the same as width                                                                                                    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --max-steps  -n                INTEGER RANGE   Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is 0     │
-│                                                      (unlimited, run forever)                                                                           │
-│                                                                                                                                             │
-│ --iterm          --no-iterm                          If True, will output the image to iTerm2 (only use on macOS with iTerm2!                           │
-│                                                      <https://iterm2.com/documentation-images.html>); if False, will not output the image to iTerm2;    │
-│                                                      default is False                                                                                   │
-│                                                                                                                                      │
-│ --help                                               Show this message and exit.                                                                        │
+│ --help          Show this message and exit.                                                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 
@@ -341,9 +432,12 @@ Usage: tranz zoom manual [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  $ poetry run tranz zoom manual                                                                                                                            
  <start with full set and zoom in manually>                                                                                                                
                                                                                                                                                            
- $ poetry run tranz zoom manual " -0.7436499" "0.13188204" "0.00073801" --iterm                                                                            
+ $ poetry run tranz --iterm zoom manual " -0.7436499" "0.13188204" "0.00073801"                                                                            
  <zoom in manually, start from "Seahorse Tail", print iTerm2 images>                                                                                       
                                                                                                                                                            
  $ poetry run tranz zoom manual "/path/to/image.png"                                                                                                       
- <gets the same frame used in "/path/to/image.png" and starts zoom there>
+ <gets the same frame used in "/path/to/image.png" and starts zoom there>                                                                                  
+                                                                                                                                                           
+ $ poetry run tranz --iterm zoom -s 700 --fractal julia manual                                                                                             
+ <start with full default Julia Set and manual zoom with 700px size, print iTerm2 images>
 ```

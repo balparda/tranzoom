@@ -16,14 +16,23 @@ from transcrypto.utils import base as tbase
 
 type ExactInputType = str | float | gmpy2.mpq
 MIN_IMAGE_SIZE: int = 16  # BEWARE: we use this for the "auto" depth calculation, so not too small!
-MAX_IMAGE_SIZE: int = 8 * 1024  # BEWARE: changing this changes the frame precision requirements
-DEFAULT_IMAGE_SIZE: int = 1024
+MAX_IMAGE_SIZE: int = 16 * 1024  # huge image, 16k x 16k, 256Mpx, tens or hundreds of Mb per image
+DEFAULT_IMAGE_SIZE: int = 1024  # good all-around default, 1Mpx, ~1Mb per image (compressed)
+DEFAULT_ZOOM_SIZE: int = 512  # smaller default for zoom, since it can be more expensive
+
+# iteration constants
+
+N_BYTES_UINT: int = 4  # we use array of uint32 to store pixel data / array.array('I') / uint32
+MIN_ITER: int = 1000
+DEFAULT_ITER: int = 1000
+HIGH_ITERS: list[int] = [100_000, 1_000_000, 10_000_000]  # these are very high iteration counts
+MAX_ITER: int = 2 ** (N_BYTES_UINT * 8) - 1  # 4_294_967_295, max value for array('I'), uint32
 
 # gmpy2.mpfr constants
-_MPFR_MIN_PRECISION: int = 80  # about 25 decimal digits
+_MPFR_MIN_PRECISION: int = 140  # about 42 decimal digits
 _MPFR_BIG_PRECISION: int = 30_000  # ±10k decimal digits
 _MPFR_MAX_PRECISION: int = 300_000  # ±100k decimal digits
-_MPFR_MIN_GUARD_BITS: int = 64  # extra bits beyond the minimum needed to distinguish pixels
+_MPFR_MIN_GUARD_BITS: int = 88  # extra bits beyond the minimum needed to distinguish pixels
 
 # gmpy2.mpfr ultra-precision context factory
 PrecisionContext: abc.Callable[[], gmpy2.context] = lambda: gmpy2.local_context(
@@ -31,15 +40,15 @@ PrecisionContext: abc.Callable[[], gmpy2.context] = lambda: gmpy2.local_context(
 )
 
 # gmpy2.mpq constants
+_MPQ_ONE: gmpy2.mpq = gmpy2.mpq('1')
+_MPQ_SQRT_TWO_NOT_EXACT: gmpy2.mpq = gmpy2.mpq('99/70')  # good enough for our purposes
 _MPQ_TWO: gmpy2.mpq = gmpy2.mpq('2')
-_MPQ_MAX_IMAGE_SIZE: gmpy2.mpq = gmpy2.mpq(MAX_IMAGE_SIZE)
-_MPQ_SQRT_TWO_NOT_PRECISE: gmpy2.mpq = gmpy2.mpq('99/70')  # good enough for our purposes
 # constant to divide frame size when zooming one step
 DEFAULT_MPQ_ZOOM: gmpy2.mpq = gmpy2.mpq('5/3')  # 1.67
 # fraction of frame size to move when moving in a cardinal direction
 DEFAULT_STEP_DIRECT: int = 3
 DEFAULT_MPQ_STEP_DIRECT: gmpy2.mpq = gmpy2.mpq(f'1/{DEFAULT_STEP_DIRECT}')
-DEFAULT_MPQ_STEP_DIAGONAL: gmpy2.mpq = DEFAULT_MPQ_STEP_DIRECT / _MPQ_SQRT_TWO_NOT_PRECISE
+DEFAULT_MPQ_STEP_DIAGONAL: gmpy2.mpq = DEFAULT_MPQ_STEP_DIRECT / _MPQ_SQRT_TWO_NOT_EXACT
 
 # Frame: the default frame is the one that shows the whole Mandelbrot set, which is centered at
 # -0.75+0j and has width 2.5; the height is the same as the width by default;
@@ -48,6 +57,12 @@ DEFAULT_MPQ_STEP_DIAGONAL: gmpy2.mpq = DEFAULT_MPQ_STEP_DIRECT / _MPQ_SQRT_TWO_N
 DEFAULT_FRAME_CENTER_RE: str = '-0.75'
 DEFAULT_FRAME_CENTER_IM: str = '0'
 DEFAULT_FRAME_SIZE: str = '2.5'
+DEFAULT_JULIA_RE: str = '0.27334'
+DEFAULT_JULIA_IM: str = '0.00742'
+DEFAULT_JULIA_CENTER_RE: str = '0'
+DEFAULT_JULIA_CENTER_IM: str = '0'
+DEFAULT_JULIA_WIDTH: str = '1.8'
+DEFAULT_JULIA_HEIGHT: str = '2.2'
 
 
 class Error(tbase.Error):
@@ -57,7 +72,11 @@ class Error(tbase.Error):
 class Fractal(enum.Enum):
   """Fractal enum."""
 
-  MANDELBROT = 'Mandelbrot'
+  MANDELBROT = 'mandelbrot'
+  JULIA = 'julia'
+
+
+DEFAULT_FRACTAL: Fractal = Fractal.MANDELBROT
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
@@ -151,6 +170,22 @@ class Frame:
       )
       return (magnification, float(cast('gmpy2.mpfr', gmpy2.log10(magnification))))
 
+  @property
+  def coordinates_magnitude(self) -> gmpy2.mpq:
+    """Get the magnitude of the frame's coordinates, i.e., the max distance from the origin.
+
+    Returns:
+      gmpy2.mpq: The magnitude of the frame's coordinates.
+
+    """
+    return max(
+      abs(self.top_re),
+      abs(self.bottom_re),
+      abs(self.top_im),
+      abs(self.bottom_im),
+      _MPQ_ONE,
+    )
+
   def __str__(self) -> str:
     """Get string representation of the frame.
 
@@ -160,7 +195,7 @@ class Frame:
     """
     cx, cy = self.center
     dx, dy = self.size
-    return f'[({cx}, {cy}) @ {dx}]' if dx == dy else f'[({cx}, {cy}) @ ({dx}, {dy})]'
+    return f'[({cx}, {cy}) ± {dx}]' if dx == dy else f'[({cx}, {cy}) ± ({dx}, {dy})]'
 
   @staticmethod
   def FromCoords(
@@ -244,43 +279,226 @@ class Frame:
       raise Error(f'calculated frame size {fr.size} does not match input size ({dx * 2}, {dy * 2})')
     return fr
 
-  @property
-  def precision(self) -> int:
-    """Pick enough precision to distinguish adjacent pixels in smaller complex-plane dimension.
+  def PixelDimensionsFromSize(self, pixel_size: int) -> tuple[int, int]:
+    """Calculate pixel dimensions for a image pixel size given its max dimension side.
 
-    Will use MAX_IMAGE_SIZE and the frame dimensions to estimate the pixel size in the complex
-    plane, and then calculate the number of bits needed to have enough precision to distinguish
-    adjacent pixels, plus a safety margin.
+    Args:
+      pixel_size (int): The desired maximum dimension in pixels.
 
     Returns:
-      int: The estimated number of bits of precision needed.
+      tuple[int, int]: The calculated image (width, height) in pixels.
 
     Raises:
-      Error: if the estimated precision exceeds the maximum allowed.
+      Error: if the input pixel size is outside the allowed range.
 
     """
-    # compute the size & most conservative scale - exact mpq computations
-    px_scale: gmpy2.mpq = self.scale / _MPQ_MAX_IMAGE_SIZE
-    # log2 converts to mpfr, so we pick a huge, almost ridiculous, precision to do this in
-    with PrecisionContext():
-      # need about -log2(scale) bits, plus guard
-      n_precision: int = max(
-        _MPFR_MIN_PRECISION, int(gmpy2.ceil(-gmpy2.log2(px_scale))) + _MPFR_MIN_GUARD_BITS
+    # check px size is valid
+    if not (MIN_IMAGE_SIZE <= pixel_size <= MAX_IMAGE_SIZE):
+      raise Error(f'{pixel_size=} must be between {MIN_IMAGE_SIZE} and {MAX_IMAGE_SIZE}')
+    # get the size of the frame in complex-plane units
+    dx: gmpy2.mpq
+    dy: gmpy2.mpq
+    dx, dy = self.size
+    # trivial case, a square
+    if dx == dy:
+      return (pixel_size, pixel_size)
+    # rectangle case
+    sz: gmpy2.mpq = gmpy2.mpq(pixel_size)
+    if dx > dy:
+      return (pixel_size, min(int(gmpy2.ceil(sz * dy / dx)), pixel_size))
+    return (min(int(gmpy2.ceil(sz * dx / dy)), pixel_size), pixel_size)
+
+  def CoordToPixel(
+    self, re_inp: ExactInputType, im_inp: ExactInputType, pixel_width: int, pixel_height: int
+  ) -> tuple[int, int]:
+    """Convert complex-plane coordinates to pixel coordinates in the image.
+
+    Calculate pixel coordinates, with (0, 0) at the top-left corner of the image and
+    (pixel_width-1, pixel_height-1) at the bottom-right corner; we use floor to ensure
+    that coordinates on the boundary between two pixels are assigned to the pixel above/left,
+    which is important for consistency and to avoid out-of-bounds pixel coordinates;
+    the calculations are exact mpq. Formula is:
+
+    x = floor((re - top_re) / (bottom_re - top_re) * pixel_width)
+    y = floor((top_im - im) / (top_im - bottom_im) * pixel_height)
+
+    Args:
+      re_inp (ExactInputType): Real part of the complex coordinate.
+      im_inp (ExactInputType): Imaginary part of the complex coordinate.
+      pixel_width (int): Width of the image in pixels.
+      pixel_height (int): Height of the image in pixels.
+
+    Returns:
+      tuple[int, int]: The (x, y) pixel coordinates corresponding to the complex coordinate.
+
+    Raises:
+      Error: If the input coordinates are outside the frame or if the image dimensions are invalid.
+
+    """
+    re: gmpy2.mpq = re_inp if isinstance(re_inp, gmpy2.mpq) else gmpy2.mpq(re_inp)
+    im: gmpy2.mpq = im_inp if isinstance(im_inp, gmpy2.mpq) else gmpy2.mpq(im_inp)
+    # check parameters
+    if not (self.top_re <= re <= self.bottom_re) or not (self.bottom_im <= im <= self.top_im):
+      raise Error(f'coordinates ({re}, {im}) are outside the frame {self}')
+    if not (MIN_IMAGE_SIZE <= pixel_width <= MAX_IMAGE_SIZE) or not (
+      MIN_IMAGE_SIZE <= pixel_height <= MAX_IMAGE_SIZE
+    ):
+      raise Error(
+        f'{pixel_width=} and {pixel_height=} must be between {MIN_IMAGE_SIZE} and {MAX_IMAGE_SIZE}'
       )
-    # check for precision cap and return
+    # do computation
+    return (
+      int(
+        gmpy2.floor((re - self.top_re) / (self.bottom_re - self.top_re) * gmpy2.mpq(pixel_width))
+      ),
+      int(
+        gmpy2.floor((self.top_im - im) / (self.top_im - self.bottom_im) * gmpy2.mpq(pixel_height))
+      ),
+    )
+
+  def CoordsTupleToPixel(self, inp: str, pixel_width: int, pixel_height: int) -> tuple[int, int]:
+    """Parse a complex-plane tuple coordinates to pixel coordinates in the image.
+
+    See CoordToPixel() for more details.
+
+    Args:
+      inp (str): A string representing the complex coordinate in the format "(re, im)".
+      pixel_width (int): Width of the image in pixels.
+      pixel_height (int): Height of the image in pixels.
+
+    Returns:
+      tuple[int, int]: The (x, y) pixel coordinates corresponding to the complex coordinate
+
+    Raises:
+      Error: If the input string is not in the correct format or if the coordinates are invalid
+
+    """
+    # parse and check the mark_coords, which should be in the format "(re,im)"
+    co_re: str
+    co_im: str
+    co_re, co_im = inp.split(',')
+    co_re, co_im = co_re.strip(), co_im.strip()
+    if not co_re.startswith('(') or not co_im.endswith(')'):
+      raise Error(f'Expected "(re,im)" input got {inp!r}')
+    # convert the coordinate to pixel and draw the overlay
+    return self.CoordToPixel(co_re[1:], co_im[:-1], pixel_width, pixel_height)
+
+  def Precision(self, pixel_width: int, pixel_height: int, *, max_iter: int = DEFAULT_ITER) -> int:
+    """Estimate the MPFR precision needed to render this frame at the requested image size.
+
+    This method chooses a conservative MPFR precision, in bits, for Mandelbrot-style arbitrary
+    precision computations over this frame. The goal is not merely to store the frame coordinates,
+    but to perform repeated fractal iteration with enough numerical precision that arithmetic error
+    is far smaller than a rendered pixel. The estimate is based on the smallest complex-plane
+    distance represented by one output pixel and on the largest coordinate magnitude appearing in
+    the frame:
+
+        pixel_size = min( frame_width / pixel_width , frame_height / pixel_height )
+        coordinates_magnitude = max( abs(top_re), abs(bottom_re), abs(top_im), abs(bottom_im) , 1 )
+
+    MPFR precision is relative, not absolute. Around a value with magnitude M, the spacing between
+    adjacent representable MPFR numbers is approximately proportional to M * 2**-precision.
+    Therefore, resolving a pixel of size h requires roughly:
+
+        precision >= log2(M / h)
+
+    This method computes that base requirement exactly from rational frame geometry, then adds
+    guard bits. The fixed guard budget gives substantial safety margin beyond merely distinguishing
+    neighboring pixels, while the iteration guard grows logarithmically with max_iter to account for
+    accumulated rounding error during repeated fractal iteration.
+
+    The resulting precision is:
+
+        max(
+          _MPFR_MIN_PRECISION,
+          ceil(log2(coordinates_magnitude / pixel_size)) +
+          2 * ceil(log2(max_iter + 1)) +
+          _MPFR_MIN_GUARD_BITS
+        )
+
+    Assumptions:
+      * The frame coordinates are exact gmpy2.mpq values.
+      * The requested pixel dimensions are the dimensions of the actual render target.
+      * The renderer maps pixels into this frame using the same horizontal and vertical scale
+        implied by pixel_width and pixel_height.
+      * The relevant numerical scale is the smallest of the horizontal and vertical complex-plane
+        pixel sizes.
+      * max_iter is the expected upper bound for the number of fractal iterations performed per
+        pixel.
+      * The computation is intended for Mandelbrot-like iteration near ordinary complex-plane
+        magnitudes, but the coordinates_magnitude term makes the estimate valid for frames whose
+        coordinates are far from the origin as well.
+
+    Promise:
+      The returned precision is intended to make coordinate representation error and ordinary MPFR
+      rounding error much smaller than one output pixel, with additional safety margin for repeated
+      iteration. In practical terms, using this precision should prevent visible artifacts caused by
+      insufficient floating-point precision for the requested frame size and iteration count.
+
+      This method does not and cannot guarantee mathematically correct classification of every pixel
+      near the Mandelbrot boundary. Points can lie arbitrarily close to the boundary, where deciding
+      escape versus non-escape may require more precision, more iterations, or a different
+      algorithm. The promise is instead that the chosen precision is conservative relative to the
+      image resolution: numerical noise should be well below the pixel scale, so any remaining
+      ambiguity should come from the fractal problem itself rather than from an obviously inadequate
+      MPFR precision.
+
+    Args:
+      pixel_width (int): The width of the putative image in pixels.
+      pixel_height (int): The height of the putative image in pixels.
+      max_iter (int): The maximum number of iterations we expect to need to render this frame;
+          defaults to DEFAULT_ITER
+
+    Returns:
+      int: The estimated number of bits of MPFR precision needed
+
+    Raises:
+      Error: If the image dimensions or iteration count are outside allowed limits, or if the
+          estimated precision exceeds _MPFR_MAX_PRECISION
+
+    """
+    # check inputs
+    if not (MIN_IMAGE_SIZE <= pixel_width <= MAX_IMAGE_SIZE) or not (
+      MIN_IMAGE_SIZE <= pixel_height <= MAX_IMAGE_SIZE
+    ):
+      raise Error(
+        f'{pixel_width=} and {pixel_height=} must be between {MIN_IMAGE_SIZE} and {MAX_IMAGE_SIZE}'
+      )
+    if not (MIN_ITER <= max_iter <= MAX_ITER):
+      raise Error(f'{max_iter=} must be between {MIN_ITER} and {MAX_ITER}')
+    # calculate pixel size and magnitude-to-pixel ratio, EXACT mpq computations
+    pixel_re: gmpy2.mpq = (self.bottom_re - self.top_re) / gmpy2.mpq(pixel_width)
+    pixel_im: gmpy2.mpq = (self.top_im - self.bottom_im) / gmpy2.mpq(pixel_height)
+    pixel_size: gmpy2.mpq = min(pixel_re, pixel_im)
+    magnitude_to_pixel_ratio: gmpy2.mpq = self.coordinates_magnitude / pixel_size
+    # calculate the number of bits needed so that MPFR spacing at this magnitude << pixel size
+    with PrecisionContext():
+      iter_guard: int = 2 * int(gmpy2.ceil(gmpy2.log2(max_iter + 1)))
+      base_bits: int = int(gmpy2.ceil(gmpy2.log2(magnitude_to_pixel_ratio)))
+    # join it all; check for precision cap and return
+    n_precision: int = max(_MPFR_MIN_PRECISION, base_bits + iter_guard + _MPFR_MIN_GUARD_BITS)
     if n_precision > _MPFR_MAX_PRECISION:
       raise Error(f'Frame too small: estimated {n_precision} bits; max is {_MPFR_MAX_PRECISION}')
     return n_precision
 
-  @property
-  def context(self) -> gmpy2.context:
+  def Context(
+    self, pixel_width: int, pixel_height: int, *, max_iter: int = DEFAULT_ITER
+  ) -> gmpy2.context:
     """Get gmpy2 context with precision to distinguish adjacent pixels in smaller complex-plane dim.
+
+    Args:
+      pixel_width (int): The width of the putative image in pixels.
+      pixel_height (int): The height of the putative image in pixels.
+      max_iter (int): The maximum number of iterations we expect to need to render this frame;
+          defaults to DEFAULT_ITER
 
     Returns:
       gmpy2.context: A context with the estimated number of bits of precision needed.
 
     """
-    return gmpy2.local_context(gmpy2.context(), precision=self.precision)
+    return gmpy2.local_context(
+      gmpy2.context(), precision=self.Precision(pixel_width, pixel_height, max_iter=max_iter)
+    )
 
 
 # the standard/default frames for each fractal
@@ -289,6 +507,86 @@ DEFAULT_MANDELBROT_FRAME: Frame = Frame.FromCenter(
   Fractal.MANDELBROT, DEFAULT_FRAME_CENTER_RE, DEFAULT_FRAME_CENTER_IM, DEFAULT_FRAME_SIZE
 )
 
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class FrameAndPoint(Frame):
+  """Defines a rectangular region and a point of the complex plane, with arbitrary precision. Exact.
+
+  The point is not required to be inside the rectangle; it is just an additional coordinate
+  that can be used for various purposes, such as marking a specific location in the image or
+  providing additional data like for the Julia fractal.
+  """
+
+  point_re: gmpy2.mpq
+  point_im: gmpy2.mpq
+
+  def __str__(self) -> str:
+    """Get string representation of the frame.
+
+    Returns:
+      str: String representation of the frame.
+
+    """
+    cx, cy = self.center
+    dx, dy = self.size
+    return (
+      f'[({cx}, {cy}) ± {dx} @ ({self.point_re}, {self.point_im})]'
+      if dx == dy
+      else f'[({cx}, {cy}) ± ({dx}, {dy}) @ ({self.point_re}, {self.point_im})]'
+    )
+
+  @staticmethod
+  def FromCenterAndPoint(
+    fractal: Fractal,
+    point_re: ExactInputType,
+    point_im: ExactInputType,
+    center_re: ExactInputType,
+    center_im: ExactInputType,
+    width: ExactInputType,
+    height: ExactInputType | None = None,
+  ) -> FrameAndPoint:
+    """Create a FrameAndPoint from a point, a center point, and dimensions.
+
+    Args:
+      fractal (Fractal): The type of fractal.
+      point_re (ExactInputType): Real part of the point.
+      point_im (ExactInputType): Imaginary part of the point.
+      center_re (ExactInputType): Real part of the center point.
+      center_im (ExactInputType): Imaginary part of the center point.
+      width (ExactInputType): Width of the frame in the real direction.
+      height (ExactInputType | None): Height of the frame in the imaginary direction. If None,
+          height will be equal to width.
+
+    Returns:
+      FrameAndPoint: A FrameAndPoint object representing the rectangle+point.
+
+    """
+    re: gmpy2.mpq = point_re if isinstance(point_re, gmpy2.mpq) else gmpy2.mpq(point_re)
+    im: gmpy2.mpq = point_im if isinstance(point_im, gmpy2.mpq) else gmpy2.mpq(point_im)
+    frm: Frame = Frame.FromCenter(fractal, center_re, center_im, width, height)
+    return FrameAndPoint(
+      fractal=frm.fractal,
+      top_re=frm.top_re,
+      top_im=frm.top_im,
+      bottom_re=frm.bottom_re,
+      bottom_im=frm.bottom_im,
+      point_re=re,
+      point_im=im,
+    )
+
+
+DEFAULT_JULIA_FRAME: FrameAndPoint = FrameAndPoint.FromCenterAndPoint(
+  Fractal.JULIA,
+  DEFAULT_JULIA_RE,
+  DEFAULT_JULIA_IM,
+  DEFAULT_JULIA_CENTER_RE,
+  DEFAULT_JULIA_CENTER_IM,
+  DEFAULT_JULIA_WIDTH,
+  DEFAULT_JULIA_HEIGHT,
+)
+
+
 DEFAULT_FRAMES: dict[Fractal, Frame] = {
   Fractal.MANDELBROT: DEFAULT_MANDELBROT_FRAME,
+  Fractal.JULIA: DEFAULT_JULIA_FRAME,
 }

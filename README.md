@@ -4,12 +4,12 @@
 
 Fractal manipulation with LLMs
 
-- **Primary use case:** Render ultra-deep Mandelbrot fractal images with arbitrary precision and use AI/LLMs to guide fractal zoom sequences
+- **Primary use case:** Render ultra-deep Mandelbrot and Julia Set fractal images with arbitrary precision and use AI/LLMs to guide fractal zoom sequences
 - **Works with:** Local filesystem (PNG output), complex-plane coordinates, local LLM vision models (via LMStudio + `transai`)
 - **Status:** Early / experimental — core fractal engine is functional; AI-guided zoom is functional
 - **License:** Apache-2.0
 
-**tranZoom** is a Python CLI tool for rendering the Mandelbrot set at virtually unlimited zoom depth using arbitrary-precision arithmetic (`gmpy2`), and for navigating it using AI. The goal is to be able to zoom so deep that standard double-precision floating point becomes meaningless — tranZoom automatically computes the required precision and renders faithfully at any scale. The `tranz zoom ai` command uses local LLM vision models (via `transai` / LMStudio) to evaluate each rendered frame, score nine sectors for visual interest, and autonomously navigate toward the most promising region of the fractal.
+**tranZoom** is a Python CLI tool for rendering the Mandelbrot set and Julia Sets at virtually unlimited zoom depth using arbitrary-precision arithmetic (`gmpy2`), and for navigating fractals using AI. The goal is to be able to zoom so deep that standard double-precision floating point becomes meaningless — tranZoom automatically computes the required precision and renders faithfully at any scale. The `tranz zoom ai` command uses local LLM vision models (via `transai` / LMStudio) to evaluate each rendered frame, score nine sectors for visual interest, and autonomously navigate toward the most promising region of the fractal.
 
 Since version 1.0.0 it is a PyPI package: <https://pypi.org/project/tranzoom/>
 
@@ -39,6 +39,7 @@ Built with:
     - [What this tool is not](#what-this-tool-is-not)
     - [Key concepts and terminology](#key-concepts-and-terminology)
       - [Frame Representation](#frame-representation)
+      - [Precision](#precision)
     - [Inputs and outputs](#inputs-and-outputs)
       - [Inputs](#inputs)
       - [Outputs](#outputs)
@@ -47,15 +48,20 @@ Built with:
     - [Palettes](#palettes)
     - [Command structure](#command-structure)
     - [`tranz` global flags](#tranz-global-flags)
+    - [`tranz image` subgroup flags](#tranz-image-subgroup-flags)
+    - [`tranz zoom` subgroup flags](#tranz-zoom-subgroup-flags)
     - [CLI Commands Documentation](#cli-commands-documentation)
     - [`tranz image mandel` — Render a Mandelbrot image](#tranz-image-mandel--render-a-mandelbrot-image)
-    - [`tranz image read` — Read a Mandelbrot image](#tranz-image-read--read-a-mandelbrot-image)
-    - [`tranz zoom ai` — AI-guided Mandelbrot zoom search](#tranz-zoom-ai--ai-guided-mandelbrot-zoom-search)
-    - [`tranz zoom manual` — Manually-guided Mandelbrot zoom](#tranz-zoom-manual--manually-guided-mandelbrot-zoom)
+    - [`tranz image julia` — Render a Julia Set image](#tranz-image-julia--render-a-julia-set-image)
+    - [`tranz image read` — Read a tranZoom image](#tranz-image-read--read-a-tranzoom-image)
+    - [`tranz zoom ai` — AI-guided fractal zoom search](#tranz-zoom-ai--ai-guided-fractal-zoom-search)
+    - [`tranz zoom manual` — Manually-guided fractal zoom](#tranz-zoom-manual--manually-guided-fractal-zoom)
     - [Comprehensive example images and zooms](#comprehensive-example-images-and-zooms)
-      - [Full / Default (×1, 80 bits)](#full--default-1-80-bits)
-      - [Seahorse (×155, 83 bits)](#seahorse-155-83-bits)
-      - [Seahorse Tail (×3k, 88 bits)](#seahorse-tail-3k-88-bits)
+      - [Full / Default (×1)](#full--default-1)
+      - [Seahorse (×155)](#seahorse-155)
+      - [Seahorse Tail (×3k)](#seahorse-tail-3k)
+      - [Julia Suzana (×1)](#julia-suzana-1)
+      - [Julia Suzana Wave (×427)](#julia-suzana-wave-427)
       - [Powers of 1000](#powers-of-1000)
     - [Configuration](#configuration)
     - [Color and formatting](#color-and-formatting)
@@ -150,9 +156,9 @@ Or install from the repository for development (see [Development Setup](#develop
 
 ### What this tool is
 
-tranZoom is a command-line fractal renderer focused on extreme zoom depth. Standard double-precision (`float64`) floating point has only about 15–16 significant decimal digits, so any zoom below roughly 1e-14 of the full Mandelbrot set will produce incorrect images due to precision loss. tranZoom uses `gmpy2.mpq` (exact rational arithmetic) to represent frame coordinates and `gmpy2.mpfr` (arbitrary-precision floating point) for the escape-time computations, automatically determining how many bits of precision are needed for any given zoom level.
+tranZoom is a command-line fractal renderer focused on extreme zoom depth. Standard double-precision (`float64`) floating point has only about 15–16 significant decimal digits, so any zoom below roughly 1e-14 of the full Mandelbrot set will produce incorrect images due to precision loss. tranZoom uses `gmpy2.mpq` (exact rational arithmetic) to represent frame coordinates and `gmpy2.mpfr` (arbitrary-precision floating point) for the escape-time computations, automatically determining how many bits of precision are needed for any given zoom level. Starting with version 1.3.0, tranZoom also renders Julia Sets — the same arbitrary-precision engine works for any complex-constant Julia iteration.
 
-Starting with version 1.1.0, tranZoom can use local LLM vision models to autonomously guide the zoom — identifying visually interesting regions, scoring nine sectors of the current frame, and navigating toward the most promising sector at each step. A manual mode is also available for human-guided zoom sessions with the same iterative frame navigation.
+Starting with version 1.1.0, tranZoom can use local LLM vision models to autonomously guide the zoom — identifying visually interesting regions, scoring nine sectors of the current frame, and navigating toward the most promising sector at each step. A manual mode is also available for human-guided zoom sessions with the same iterative frame navigation. Both AI and manual zoom support Mandelbrot and Julia Sets.
 
 ### What this tool is not
 
@@ -163,13 +169,13 @@ Starting with version 1.1.0, tranZoom can use local LLM vision models to autonom
 ### Key concepts and terminology
 
 - **[Frame](#frame-representation)**: A rectangular region of the complex plane, defined by a center + width. Stored as `gmpy2.mpq` (exact rationals) to avoid any accumulation of rounding error in coordinates.
-- **Precision**: The number of bits of `mpfr` floating-point precision used for escape-time iteration. Computed automatically from the frame size; never needs to be set manually.
+- **[Precision](#precision)**: The number of bits of `mpfr` floating-point precision used for escape-time iteration. Computed automatically from the frame size; never needs to be set manually.
 - **Magnification**: Ratio of the default full-set frame area to the current frame area. 1× = full set; 1G× = zoomed in one billion times.
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
 - **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
 - **Color palette**: Four built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette`. Positions in the palette are determined by histogram equalization of escape-iteration counts, cycling through the stops `3` times across the range, so the full color range is used regardless of zoom depth or iteration scale. Interior points (never escaped) are always rendered as pure black. Available palettes: `blue-to-yellow-to-brown` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric-ocean` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient).
-- **AI zoom session**: The `tranz zoom ai` command starts an iterative loop: render the current frame as a 512×512 image, draw a 3×3 thirds grid overlay with green sector labels, send the image to a local LLM vision model, parse the 9-sector scoring response, and move the frame center toward the highest-scoring sector. The optional `--query` flag enables targeted search, blending fractal-quality scores with target-match scores. The loop runs until Ctrl+C or `--max-steps` is reached.
-- **Manual zoom session**: The `tranz zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM.
+- **AI zoom session**: The `tranz zoom ai` command starts an iterative loop: render the current frame, draw a 3×3 thirds grid overlay with green sector labels, send the image to a local LLM vision model, parse the 9-sector scoring response, and move the frame center toward the highest-scoring sector. Supports both Mandelbrot (default) and Julia Set fractals via `-f/--fractal`. The optional `--query` flag enables targeted search, blending fractal-quality scores with target-match scores. The loop runs until Ctrl+C or `--max-steps` is reached.
+- **Manual zoom session**: The `tranz zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM. Supports both Mandelbrot and Julia Set fractals.
 - **Sector scoring**: Each sector is scored on a 0–100 scale for `fractal_score` (visual complexity / zoom promise). When targeted search is active, an additional `target_match_score` (also 0–100) is blended in with a configurable weight.
 - **Image metadata**: All tranZoom PNG images embed rich metadata (`tranzoom:*` PNG text chunks) including frame coordinates, magnification, palette, precision, and (for AI/manual sessions) the full LLM evaluation, model parameters, prompts, and zoom step count.
 
@@ -177,8 +183,8 @@ Starting with version 1.1.0, tranZoom can use local LLM vision models to autonom
 
 A **Frame** is an exact representation of a rectangular region of the complex plane, it is ***your view*** into a fractal, the viewport, the part of the plane to be computed and transformed into an image or visualization. It can be printed by the CLI like:
 
-1. **`[(-3/4, 0) @ 5/2]`** A ***square*** Frame, centered on $-3/4+0j$ and with *width* and *height* of $5/2$, `[(center_re, center_im) @ square_side]`; or
-1. **`[(-3/4, 0) @ (5/2, 5/3)]`** A **rectangular** Frame, centered on $-3/4+0j$ and with *width* of $5/2$ (on the *real* scale) and *height* of $5/3$ (on the *imaginary* scale), `[(center_re, center_im) @ (width_re, height_im)]`.
+1. **`[(-3/4, 0) ± 5/2]`** A ***square*** Frame, centered on $-3/4+0j$ and with *width* and *height* of $5/2$, `[(center_re, center_im) ± square_side]`; or
+1. **`[(-3/4, 0) ± (5/2, 5/3)]`** A **rectangular** Frame, centered on $-3/4+0j$ and with *width* of $5/2$ (on the *real* scale) and *height* of $5/3$ (on the *imaginary* scale), `[(center_re, center_im) ± (width_re, height_im)]`.
 
 Frames are stored as [`gmpy2.mpq` (exact rationals)](https://gmpy2.readthedocs.io/en/latest/mpq.html) to avoid any accumulation of rounding error in coordinates. You can provide a `mpq` to the CLI as:
 
@@ -190,7 +196,7 @@ Here is an example with mixed use:
 ```txt
 " -0.74303" "0.126433" "1611/100000" "0.0176"
 will create the Frame:
-[(-74303/100000, 126433/1000000) @ (1611/100000, 11/625)]
+[(-74303/100000, 126433/1000000) ± (1611/100000, 11/625)]
 ```
 
 Here is one example with numbers that would usually *NOT* be representable with regular `float`:
@@ -199,10 +205,45 @@ Here is one example with numbers that would usually *NOT* be representable with 
 " -929554858796448380940239382643467500000001/1250000000000000000000000000000000000000000" "0.13182590420531197049313205638514950000008" "0.00000000000001"
 will create the Frame:
 [(-929554858796448380940239382643467500000001/1250000000000000000000000000000000000000000,
-1647823802566399631164150704814368750001/12500000000000000000000000000000000000000) @ 1/100000000000000]
+1647823802566399631164150704814368750001/12500000000000000000000000000000000000000) ± 1/100000000000000]
 ```
 
 Frame will keep these numbers exact always, no matter the precision.
+
+For Julia and other uses the Frame can also receive an extra complex number, a point, determined by real and image parts. It will be represented as:
+
+`[(center_re, center_im) ± (width_re, height_im) @ (point_re, point_im)]`
+
+where the `(point_re, point_im)` part is added after an `@`. For example:
+
+`[(-3/4, 0) ± (5/2, 5/3) @ (13667/50000, 371/50000)]`
+
+#### Precision
+
+**Precision** is the number of [MPFR (arbitrary-precision floating-point)](https://www.mpfr.org/) **bits** used during fractal iteration. Mandelbrot computation involves repeated complex-plane arithmetic starting from the frame's coordinates; insufficient floating-point precision causes visible artifacts — pixels classified as escaped or non-escaped incorrectly — especially at high magnification where neighboring pixels differ only in the final bits of their coordinates.
+
+TransZoom computes the required precision automatically for every `(frame, image size, max-iteration)` combination via `Frame.Precision()` and `Image.precision`. You never need to set it manually. The estimate is conservative by design: it aims to keep numerical noise far below one output pixel.
+
+The formula is:
+
+$$\text{precision} = \max\!\Big( P_{\min},\; \lceil \log_2(M / h) \rceil + 2\,\lceil \log_2(N+1) \rceil + G \Big)$$
+
+where:
+
+- $h = \min\!\left(\dfrac{\text{frame\_width}}{\text{pixel\_width}},\; \dfrac{\text{frame\_height}}{\text{pixel\_height}}\right)$ — the smaller complex-plane distance that maps to one output pixel (the tighter precision constraint)
+- $M = \max\!\left(|\text{top\_re}|,\, |\text{bottom\_re}|,\, |\text{top\_im}|,\, |\text{bottom\_im}|,\, 1\right)$ — the largest coordinate magnitude in the frame; because MPFR precision is *relative* (not absolute), frames far from the origin need more bits to represent fine detail at a given scale
+- $N$ — `max_iter`, the iteration ceiling for the render; the $2\,\lceil\log_2(N+1)\rceil$ term is an iteration guard that grows logarithmically to account for accumulated rounding error over many iterations
+- $G = 88$ — `_MPFR_MIN_GUARD_BITS`, a fixed safety margin of 88 extra bits beyond the bare minimum to distinguish neighboring pixels
+- $P_{\min} = 140$ — `_MPFR_MIN_PRECISION`, the floor (≈42 decimal digits), active for low-magnification frames where the base term is small
+
+The maximum allowed precision is `_MPFR_MAX_PRECISION = 300 000` bits (≈90 000 decimal digits). Requesting a frame smaller than that limit raises an error. In practice, deep zooms at moderate image sizes stay well below a few thousand bits.
+
+The computed precision is exposed as:
+
+- `Frame.Precision(pixel_width, pixel_height, max_iter=...)` → `int` bits
+- `Frame.Context(pixel_width, pixel_height, max_iter=...)` → ready-to-use `gmpy2.context`
+- `Image.precision` → `int` bits (uses the image's own dimensions and current depth)
+- `Image.context` → ready-to-use `gmpy2.context` (same)
 
 ### Inputs and outputs
 
@@ -216,7 +257,7 @@ Frame will keep these numbers exact always, no matter the precision.
 
 - stdout: progress info and saved filename
 - stderr: warnings/errors/logs (controlled by `--verbose`)
-- Output images are saved as `<prefix>[-<YYYYMMDDhhmmss>][-<SHA256-20>].png`; the prefix defaults to `mandel` and is set via `--prefix`; date inclusion is controlled by `--date/--no-date`; hash (first 20 chars of SHA256, 80 bits) inclusion is controlled by `--hash/--no-hash`; output directory is set via `-o/--out` (defaults to the current working directory)
+- Output images are saved as `<prefix>[-<YYYYMMDDhhmmss>][-<SHA256-20>].png`; the prefix defaults to `mandel` for Mandelbrot and `julia` for Julia and is set via `--prefix`; date inclusion is controlled by `--date/--no-date`; hash (first 20 chars of SHA256, 80 bits) inclusion is controlled by `--hash/--no-hash`; output directory is set via `-o/--out` (defaults to the current working directory)
 
 ## CLI Interface
 
@@ -224,23 +265,24 @@ Frame will keep these numbers exact always, no matter the precision.
 
 ![Full / Default](tests/data/images/demo-mandel-whole-set.png)
 
-Render the [full Mandelbrot set](#full--default-1-80-bits) (default, 1024×1024):
+Render the [full Mandelbrot set](#full--default-1) (default, 1024×1024):
 
 ```sh
-$ poetry run tranz image mandel
+$ poetry run tranz --no-date image mandel
 
-1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision 80 bits, 1 magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 1011.19px/s]
+Picked depth 1000, histogram [(1, 24), (2, 26), (3, 58), ('...', 86), (57, 2), (222, 2), (100000, 58)]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:13<00:00, 78912.96px/s]
 
 Generated image 'bd77ee8874aa425422a9ea92867c53937f28534898d49a56b9e4d1dca7b5dd54' in 14.120 s, escape range (1, 1000)
 Saved to "mandel-bd77ee8874aa425422a9.png"
 ```
 
-As can be seen, the `Frame` is stored as rational numbers with arbitrary precision, `[(-3/4, 0) @ 5/2]`, so it is guaranteed to be exact (centered in $-0.75+0j$ and with width of $2.5$). It will pick a precision, in bits, which is the internal `float` representation (mantissa), and will pick the (max) number of iterations for the generation. The magnification here is 1 because it is the full Mandelbrot set. There will be a progress bar, counting the horizontal lines being produced. The generated image data will be hashed and then saved to a PNG on disk.
+As can be seen, the `Frame` is stored as rational numbers with arbitrary precision, `[(-3/4, 0) ± 5/2]`, so it is guaranteed to be exact (centered in $-0.75+0j$ and with width of $2.5$). It will pick a precision, in bits, which is the internal `float` representation (mantissa), and will pick the (max) number of iterations for the generation. The magnification here is 1 because it is the full Mandelbrot set. There will be a progress bar, counting the horizontal lines being produced. The generated image data will be hashed and then saved to a PNG on disk.
 
-Render a [well-known zoom ("Seahorse", ~155× magnification)](#seahorse-155-83-bits):
+Render a [well-known zoom ("Seahorse", ~155× magnification)](#seahorse-155) at the default 1024×1024:
 
 ```sh
 poetry run tranz image mandel " -0.74303" "0.126433" "0.01611"
@@ -275,27 +317,61 @@ tranz [global flags] <subgroup> <command> [args]
 | `--version` | Show version and exit | off |
 | `-v`, `-vv`, `-vvv`, `--verbose` | Verbosity (nothing=*ERROR*, `-v`=*WARNING*, `-vv`=*INFO*, `-vvv`=*DEBUG*) | *ERROR* |
 | `--color`/`--no-color` | Force enable/disable colored output (respects `NO_COLOR` env var if not provided) | `--color` |
-| `-w`/`--width` | Output image width in pixels (16–8192); only used by `tranz image mandel` | 1024 |
-| `-h`/`--height` | Output image height in pixels (16–8192); only used by `tranz image mandel` | 1024 |
 | `--threads` | Number of worker processes for rendering (1–N, default: all available cores) | all cores |
 | `-o`/`--out` | Output directory path | current directory |
-| `--prefix` | Filename prefix | `mandel` |
+| `--prefix` | Filename prefix | None = `mandel`/`julia` |
 | `--date`/`--no-date` | Include date-time (`YYYYMMDDhhmmss`) in filename | `--date` |
 | `--hash`/`--no-hash` | Include 20-char SHA256 hash in filename | `--hash` |
-| `-m`/`--model` | LMStudio model identifier to load | *(required for AI zoom)* |
+| `--iterm`/`--no-iterm` | Print image inline in iTerm2 (macOS + iTerm2 only) | off |
+| `-m`/`--model` | LMStudio vision model identifier to load | `qwen3-vl-32b-instruct@q8_0` |
 | `--spec-tokens` | Speculative decoding tokens | model default |
 | `--seed` | Random seed for the model | random |
 | `-c`/`--context` | Context window size in tokens | model default |
-| `-x`/`--temperature` | Sampling temperature | `0.4` |
-| `--gpu` | GPU usage ratio (`0.0`–`1.0`) | `0.0` |
-| `--gpu-layers` | Number of model layers to offload to GPU | `0` |
+| `-x`/`--temperature` | Sampling temperature | `0.15` |
+| `--gpu` | GPU usage ratio (`0.0`–`1.0`) | `0.80` |
+| `--gpu-layers` | Number of model layers to offload to GPU | `-1` (as many as possible) |
 | `--fp16` | Use FP16 precision | off |
-| `--use-mmap` | Use memory-mapped model files | off |
-| `--flash` | Use flash attention | off |
+| `--mmap`/`--no-mmap` | Use memory-mapped model files | on |
+| `--flash`/`--no-flash` | Use flash attention | on |
 | `--kv-cache` | Key-value cache size | model default |
 | `--timeout` | Model operation timeout in seconds | `300.0` |
 
-Note: `tranz zoom` images are always **512×512** pixels; `-w`/`--width` and `-h`/`--height` only affect `tranz image mandel`.
+### `tranz image` subgroup flags
+
+These flags apply to all `tranz image` commands and must be placed **between `image` and the sub-command name**:
+
+```sh
+tranz [global flags] image [-w W] [-h H] [-s S] [--iter N] [--palette NAME] [--mark COORD] <mandel|julia|read> [args]
+```
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `-w`/`--width` | Output image width in pixels (16–16384) | 1024 |
+| `-h`/`--height` | Output image height in pixels (16–16384) | 1024 |
+| `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales the other dimension proportionally to match the frame aspect ratio | None (use `-w`/`-h`) |
+| `-i`/`--iter` | Override max iterations (depth); `1000`–4294967295 | automatic adaptive search |
+| `--palette` | Color palette name | `blue-to-yellow-to-brown` |
+| `--mark` | Draw a crosshair at this complex coordinate, formatted as `"(re, im)"` | None |
+| `--mark-color` | Color of the crosshair; one of `black`, `white`, `red`, `green`, `blue`, `yellow`, `cyan`, `magenta` | `red` |
+| `--mark-width` | Line width of the crosshair (1–50) | `1` |
+
+### `tranz zoom` subgroup flags
+
+These flags apply to all `tranz zoom` commands and must be placed **between `zoom` and the sub-command name**:
+
+```sh
+tranz [global flags] zoom [-w W] [-h H] [-s S] [-f FRACTAL] [-n STEPS] [--julia-re RE] [--julia-im IM] <ai|manual> [args]
+```
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `-w`/`--width` | Output image width in pixels (16–16384) | 512 |
+| `-h`/`--height` | Output image height in pixels (16–16384) | 512 |
+| `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales proportionally | None (use `-w`/`-h`) |
+| `-f`/`--fractal` | Fractal type: `mandelbrot` or `julia` | `mandelbrot` |
+| `--julia-re` | Real part of the Julia Set constant `c` | `'0.27334'` |
+| `--julia-im` | Imaginary part of the Julia Set constant `c` | `'0.00742'` |
+| `-n`/`--max-steps` | Max zoom steps; `0` = unlimited (Ctrl+C to stop) | `0` |
 
 ### CLI Commands Documentation
 
@@ -306,7 +382,7 @@ Auto-generated CLI reference:
 ### `tranz image mandel` — Render a Mandelbrot image
 
 ```sh
-poetry run tranz [-w WIDTH] [-h HEIGHT] image mandel [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] [--iter N] [--palette NAME]
+poetry run tranz [global flags] image [-w WIDTH] [-h HEIGHT] [--iter N] [--palette NAME] mandel [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 ```
 
 Positional arguments (all optional; defaults show the full Mandelbrot set):
@@ -318,18 +394,13 @@ Positional arguments (all optional; defaults show the full Mandelbrot set):
 | `F_WIDTH` | Width of the frame in the real plane | `'2.5'` |
 | `F_HEIGHT` | Height of the frame in the imaginary plane | same as `F_WIDTH` |
 
+Image size and render options are set at the `tranz image` subgroup level (see [above](#tranz-image-subgroup-flags)).
+
 **Tip — re-render from a saved image:** pass a tranZoom PNG path as `CENTER_RE` to pick up exactly the same frame:
 
 ```sh
 poetry run tranz image mandel "/path/to/saved.png"
 ```
-
-Command-level options:
-
-| Option | Description | Default |
-| --- | --- | --- |
-| `-i`/`--iter` | Override max iterations (depth); `1000`–4294967295 | automatic adaptive search |
-| `--palette` | Color palette name | `blue-to-yellow-to-brown` |
 
 The command:
 
@@ -342,10 +413,41 @@ The command:
 
 See below for many example outputs.
 
-### `tranz image read` — Read a Mandelbrot image
+### `tranz image julia` — Render a Julia Set image
 
 ```sh
-poetry run tranz image read <IMAGE_PATH> [--iterm]
+poetry run tranz [global flags] image [-w WIDTH] [-h HEIGHT] [-s SIZE] [--iter N] [--palette NAME] [--mark COORD] julia [POINT_RE] [POINT_IM] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
+```
+
+Positional arguments (all optional; defaults show the "Julia Suzana" set):
+
+| Argument | Description | Default |
+| --- | --- | --- |
+| `POINT_RE` | Real part of the Julia constant `c`; **or** a path to an existing tranZoom PNG — the Julia constant is then read from that image's `tranzoom:frame:julia_re` metadata | `'0.27334'` |
+| `POINT_IM` | Imaginary part of the Julia constant `c` | `'0.00742'` |
+| `CENTER_RE` | Real part of the frame center | `'0'` |
+| `CENTER_IM` | Imaginary part of the frame center | `'0'` |
+| `F_WIDTH` | Width of the frame in the real plane | `'1.8'` |
+| `F_HEIGHT` | Height of the frame in the imaginary plane | `'2.2'` |
+
+Image size and render options are set at the `tranz image` subgroup level (see [above](#tranz-image-subgroup-flags)).
+
+**Tip — proportional sizing:** use `-s` instead of `-w`/`-h` so the output image always matches the frame's aspect ratio:
+
+```sh
+poetry run tranz image -s 1024 --palette electric-ocean julia
+```
+
+**Tip — re-render from a saved image:** pass a tranZoom PNG path as `POINT_RE` to pick up the same Julia constant:
+
+```sh
+poetry run tranz image julia "/path/to/saved.png"
+```
+
+### `tranz image read` — Read a tranZoom image
+
+```sh
+poetry run tranz [--iterm] image read <IMAGE_PATH>
 ```
 
 Reads an existing tranZoom PNG and pretty-prints all embedded metadata:
@@ -357,25 +459,25 @@ $ poetry run tranz image read mandel-38824cdaa58b64496ebf.png
 1024x1024 (wxh) / 38824cdaa58b64496ebfd86facf4d4ba4596ab18db95ac97afd643a7a892ff83
 
 {
-  "tranzoom:version": "1.1.0",
-  "tranzoom:frame:fractal": "Mandelbrot",
+  "tranzoom:version": "1.3.0",
+  "tranzoom:frame:fractal": "mandelbrot",
   "tranzoom:frame:top_re": "-7436499/10000000",
   ...
 }
 ```
 
-Use `--iterm` to also display the image inline (macOS + iTerm2 only).
+Use `--iterm` (global flag) to also display the image inline (macOS + iTerm2 only).
 
-### `tranz zoom ai` — AI-guided Mandelbrot zoom search
+### `tranz zoom ai` — AI-guided fractal zoom search
 
 ```sh
-poetry run tranz -m "<model>" zoom ai [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] \
-  [-n STEPS] [-q QUERY] [--reason] [--memory N] [--iterm]
+poetry run tranz [global flags] zoom [-w WIDTH] [-h HEIGHT] [-n STEPS] ai \
+  [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] [-q QUERY] [--reason] [--memory N]
 ```
 
 Starts an AI-guided iterative zoom session:
 
-1. Renders the current frame as a 512×512 image
+1. Renders the current frame (default: 512×512, configurable via `tranz zoom -w/-h`)
 2. Draws a 3×3 thirds grid with green sector numbers on top
 3. Sends the image to the LLM vision model with a fractal-scoring prompt
 4. Parses the structured response (9 sector scores)
@@ -383,49 +485,59 @@ Starts an AI-guided iterative zoom session:
 6. Saves the image with full LLM evaluation embedded in PNG metadata
 7. Repeats until Ctrl+C or `--max-steps` is reached
 
-Command-level options:
+Supports both Mandelbrot (default) and Julia Set fractals: use `-f julia` (and optionally `--julia-re`/`--julia-im`) on the `tranz zoom` subgroup callback.
 
-| Option | Description | Default |
+Positional frame arguments:
+
+| Argument | Description | Default |
 | --- | --- | --- |
 | `CENTER_RE` | Real part of the starting frame center; **or** a path to an existing tranZoom PNG (frame is read from image metadata; other frame arguments ignored) | `'-0.75'` (full set) |
 | `CENTER_IM` | Imaginary part of the starting frame center | `'0'` |
 | `F_WIDTH` | Starting frame width | `'2.5'` |
 | `F_HEIGHT` | Starting frame height | same as `F_WIDTH` |
-| `-n`/`--max-steps` | Max zoom steps; `0` = unlimited (Ctrl+C to stop) | `0` |
+
+Command-level options (on `tranz zoom ai` only):
+
+| Option | Description | Default |
+| --- | --- | --- |
 | `-q`/`--query` | Targeted search query added to the scoring prompt | None |
 | `--reason/--no-reason` | Include LLM reasoning text per sector | off |
 | `--memory` | Number of previous steps in LLM chat history | `5` |
-| `--iterm/--no-iterm` | Print image inline in iTerm2 | off |
 
-Example — start from the full set, zoom using Qwen 32B vision:
+Image size and step count are set at the `tranz zoom` subgroup level (see [above](#tranz-zoom-subgroup-flags)); `--iterm` is a global flag.
+
+Example — start from the full set, zoom using default model at default 512×512:
 
 ```sh
-poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai
+poetry run tranz zoom ai
 ```
 
-Example — start from the Seahorse Tail, targeted search, 10 steps, show images:
+Example — start from the Seahorse Tail, targeted search, 10 steps, show images, custom model:
 
 ```sh
-poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai \
+poetry run tranz --iterm -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai \
   " -0.7436499" "0.13188204" "0.00073801" \
-  -q "spiral" --iterm -n 10
+  -q "spiral"
 ```
 
 Example — resume a previous session from a saved tranZoom PNG (frame read from image metadata):
 
 ```sh
-poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/saved.png"
+poetry run tranz zoom ai "/path/to/saved.png"
 ```
 
-### `tranz zoom manual` — Manually-guided Mandelbrot zoom
+### `tranz zoom manual` — Manually-guided fractal zoom
 
 ```sh
-poetry run tranz zoom manual [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT] [-n STEPS] [--iterm]
+poetry run tranz [--iterm] zoom [-w WIDTH] [-h HEIGHT] [-n STEPS] manual \
+  [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 ```
 
 Same iterative rendering loop as `tranz zoom ai`, but at each step the user types a direction (1–9, numpad layout: 5=center/zoom-in, 8=N, 2=S, 4=W, 6=E, 7=NW, 9=NE, 1=SW, 3=SE) instead of querying an LLM. The evaluation is stored in PNG metadata labeled as `HUMAN`.
 
 Positional frame arguments work the same way as `tranz zoom ai`: pass a tranZoom PNG path as `CENTER_RE` to start the session from the frame stored in that image's metadata.
+
+Supports both Mandelbrot (default) and Julia Set fractals via `-f/--fractal` on the `tranz zoom` subgroup callback.
 
 Note: `tranz zoom manual` does **not** require the AI model flags; it does not load an LLM.
 
@@ -433,63 +545,103 @@ Note: `tranz zoom manual` does **not** require the AI model flags; it does not l
 
 You can run all these at once by executing `scripts/make_examples.sh`.
 
-#### Full / Default (×1, 80 bits)
+#### Full / Default (×1)
 
 ![Full / Default](tests/data/images/demo-mandel-whole-set.png)
 
 Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) with all the default values (image size 1024×1024, centered in $-0.75+0j$ and with width of $2.5$, a good frame that contains the whole set):
 
 ```sh
-$ poetry run tranz image mandel
+$ poetry run tranz --no-date image mandel
 
-1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2], precision 80 bits, 1 magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision 140 bits, 1 magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 962134.25px/s]
+Picked depth 1000, histogram [(1, 24), (2, 26), (3, 58), ('...', 86), (57, 2), (222, 2), (100000, 58)]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:01<00:00, 593762.44px/s]
 
-Generated image 'bd77ee8874aa425422a9ea92867c53937f28534898d49a56b9e4d1dca7b5dd54' in 3.135 s, escape range (1, 1000)
-Saved to "mandel-bd77ee8874aa425422a9.png"
+Generated image 'b934ff27c4e6dede0ecdea8c746ab8f626553ba40e1a402506935e2fd0354f1b' in 3.135 s, escape range (1, 1000)
+Saved to "mandel-b934ff27c4e6dede0ecd.png"
 ```
 
 This is what tranZoom considers ***"1 magnification"***, and will measure other magnifications against this size.
 
-#### Seahorse (×155, 83 bits)
+#### Seahorse (×155)
 
 ![Seahorse](tests/data/images/demo-mandel-seahorse.png)
 
 Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mandel_zoom_03_seehorse.jpg) to a 1024×1024 image (default size):
 
 ```sh
-$ poetry run tranz image mandel " -0.74303" "0.126433" "0.01611"
+$ poetry run tranz --no-date image mandel " -0.74303" "0.126433" "0.01611"
 
-1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) @ 1611/100000], precision 83 bits, 155.183 magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) ± 1611/100000], precision 140 bits, 155.183 magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 2575.92px/s]
+Picked depth 9276, histogram [(24, 7), (25, 14), (26, 14), ('...', 153), (3215, 1), (6184, 1), (100000, 66)]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:36<00:00, 28721.25px/s]
 
-Generated image '0cf52a6f78b4a883727c553da286b9f0f446a3671b01a6e364e3ae8f9b2391b3' in 38.291 s, escape range (24, 9276)
-Saved to "mandel-0cf52a6f78b4a883727c.png"
+Generated image 'e70bc149bc2fd3aff8ce4d8aed79c878f373bb5f5ee82fb866584e0cf9858793' in 38.291 s, escape range (24, 9276)
+Saved to "mandel-e70bc149bc2fd3aff8ce.png"
 ```
 
-#### Seahorse Tail (×3k, 88 bits)
+#### Seahorse Tail (×3k)
 
 ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail.png)
 
-Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tail_part.jpg) to a 512×512 image:
+Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tail_part.jpg) at default 1024×1024:
 
 ```sh
-$ poetry run tranz image mandel " -0.7436499" "0.13188204" "0.00073801"
+$ poetry run tranz --no-date image mandel " -0.7436499" "0.13188204" "0.00073801"
 
-1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) @ 73801/100000000], precision 88 bits, 3.387 k magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) ± 73801/100000000], precision 140 bits, 3.387 k magnification, AUTO iterations...
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 101834.39px/s]
+Picked depth 1000, histogram [(36, 5), (37, 9), (38, 15), ('...', 224), (415, 1), (464, 1), (649, 1)]
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:05<00:00, 199725.00px/s]
 
-Generated image '38824cdaa58b64496ebfd86facf4d4ba4596ab18db95ac97afd643a7a892ff83' in 6.797 s, escape range (36, 1000)
-Saved to "mandel-38824cdaa58b64496ebf.png"
+Generated image '9191d8e0946361b47e25dbe4cb21246d3e21b27a2d7dec800b4e25fd699d6814' in 6.797 s, escape range (36, 1000)
+Saved to "mandel-9191d8e0946361b47e25.png"
 ```
 
 This image is relatively fast to generate (despite the zoom level, it has very little interior regions), so we use it in the unit and integration tests to make sure we are operating consistently. If the hash of this image changes, remember to change it in `src/tranzoom/cli/base.py`.
+
+#### Julia Suzana (×1)
+
+![Julia Suzana](tests/data/images/demo-julia-suzana.png)
+
+Render a "Julia Suzana" at `-s/--size` 1024:
+
+```sh
+$ poetry run tranz --no-date image -s 1024 --palette electric-ocean julia
+
+838x1024 Julia in frame [(0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)], precision ± 140 bits, 1 magnification, AUTO iterations...
+
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 175.98px/s]
+Picked depth 1000, histogram [(2, 20), (3, 32), (4, 18), ('...', 58), (44, 2), (45, 2), (100000, 124)]
+Img: 100%|█████████████████████████████████████████████| 858112/858112 [00:23<00:00, 36878.43px/s]
+Julia image '28f147dcfc6190d94bbbfece396c56ae074bb3cae14be5040446dc5fb40984f8' in 25.542 s, escape range (2, 1000)
+Saved to "julia-28f147dcfc6190d94bbb.png"
+```
+
+#### Julia Suzana Wave (×427)
+
+![Julia Suzana](tests/data/images/demo-julia-suzana-wave.png)
+
+Render a "Julia Suzana Wave" at `-s/--size` 1024:
+
+```sh
+$ poetry run tranz --no-date -s 1024 image --palette electric-ocean julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
+
+1024x1024 Julia in frame [(-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)], precision ± 140 bits, 426.597 magnification,
+AUTO iterations...
+
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:02<00:00, 121.00px/s]
+Picked depth 1819, histogram [(43, 8), (44, 14), (45, 14), ('...', 93), (208, 1), (1213, 1), (100000, 125)]
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [01:31<00:00, 11424.17px/s]
+Julia image '6319af0cc04f56bc974f041cdd68e1fde58ec8f24c9b2aee06bba2b5b60f09ef' in 1.588 min, escape range (43, 1819)
+Saved to "julia-6319af0cc04f56bc974f.png"
+```
 
 #### Powers of 1000
 
@@ -499,7 +651,7 @@ $-0.7436438870371587047521915061147740000000008 + 0.1318259042053119704931320563
 
 or, if you want to use as parameters:
 
-`" -0.7436438870371587047521915061147740000000008" "0.13182590420531197049313205638514950000008"`
+`"(-0.7436438870371587047521915061147740000000008, 0.13182590420531197049313205638514950000008)"`
 
 We have, for fun, generated a sequence of powers of 1000, demonstrating the amazing power of the infinite. The view size of each image is always $2.5$ times some power of 1000.
 
@@ -550,9 +702,9 @@ The CLI respects the `NO_COLOR` environment variable and the `--no-color` / `--c
 | --- | --- |
 | `tranz.py` | `tranz` CLI entry point — global options, `tranz markdown` |
 | `cli/base.py` | Shared CLI options, defaults, `DEFAULT_MANDELBROT_FRAME` |
-| `cli/imagecommand.py` | `tranz image mandel` and `tranz image read` command implementations |
+| `cli/imagecommand.py` | `tranz image mandel`, `tranz image julia`, and `tranz image read` command implementations |
 | `cli/zoomcommand.py` | `tranz zoom ai` and `tranz zoom manual` command implementations |
-| `core/fractal.py` | `Mandelbrot()` renderer — most fractal math |
+| `core/fractal.py` | `Mandelbrot()` and `Julia()` renderers — fractal math |
 | `core/frame.py` | `Frame` class, `Fractal` enum, and base coordinate math |
 | `core/image.py` | `Image` class; image utilities, overlays, iTerm2 printing, metadata helpers |
 | `core/palette.py` | Palette definitions and color mapping |

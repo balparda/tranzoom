@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import array
 import base64
+import enum
 import io
 import json
 import math
@@ -18,7 +19,7 @@ import sys
 import time
 from typing import cast
 
-from gmpy2 import mpq
+import gmpy2
 from PIL import Image as PILImage
 from PIL import ImageDraw, ImageFont, PngImagePlugin
 from transcrypto.core import hashes
@@ -35,8 +36,9 @@ META_VERSION_KEY = 'tranzoom:version'  # str, like "1.1.0"
 META_IMAGE_WIDTH_KEY = 'tranzoom:image:width'  # int, in pixels
 META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
 META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
-META_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
-META_FRACTAL_KEY = 'tranzoom:frame:fractal'  # str, like "Mandelbrot", one of frame.Fractal
+META_IMAGE_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
+META_IMAGE_OVERLAY_KEY = 'tranzoom:image:overlay'  # bool; stored as "true"/"false"
+META_FRACTAL_KEY = 'tranzoom:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal, lowercase
 META_TOP_RE_KEY = 'tranzoom:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
 META_TOP_IM_KEY = 'tranzoom:frame:top_im'  # gmpy2.mpq
 META_BOTTOM_RE_KEY = 'tranzoom:frame:bottom_re'  # gmpy2.mpq
@@ -52,6 +54,8 @@ META_ITER_DEPTH_MIN_KEY = 'tranzoom:iter_depth:min'  # int
 META_ITER_DEPTH_MAX_KEY = 'tranzoom:iter_depth:max'  # int
 META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:iter_depth:search'  # int, can be "-1" if unknown or not set
 # extra keys added to some images only (for example, when the LLM evaluates the image)
+META_JULIA_RE_KEY = 'tranzoom:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
+META_JULIA_IM_KEY = 'tranzoom:frame:julia_im'  # gmpy2.mpq, only added for Julia Set frames
 META_LLM_MODEL_KEY = 'tranzoom:llm:model'  # str (or "HUMAN"/META_LLM_MODEL_VALUE_HUMAN for human)
 META_LLM_TEMPERATURE_KEY = 'tranzoom:llm:temperature'  # float
 META_LLM_SEED_KEY = 'tranzoom:llm:seed'  # int (0 if not set)
@@ -65,24 +69,40 @@ META_LLM_ZOOM_COUNT_KEY = 'tranzoom:llm:zoom:count'  # int; zoom iteration depth
 # special values
 META_LLM_MODEL_VALUE_HUMAN = 'HUMAN'  # used when the evaluation is done by a flesh-and-blood human
 
-# TODO: ability to mark a point in an image
-
-# TODO: Julia Set + ability to read either the frame or the center (Julia point) from existing img
-
+# TODO: animated gif or videos of zooms
 
 # image constants
 
-N_BYTES_UINT: int = 4  # we use array of unsigned ints to store pixel data
 type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel data array
 
 # constants for drawing
 
 _SQRT_TWO: float = math.sqrt(2)
-_LINE_WIDTH: int = 3
+_LINE_WIDTH_RATIO: int = 150  # line width will be max(1, sz//_LINE_WIDTH_RATIO) of the image width
 _CIRCLE_RADIUS: int = 20
 _LABEL_OFFSET: int = 5
-_COLOR_WHITE: tuple[int, int, int] = (255, 255, 255)
-_COLOR_GREEN: tuple[int, int, int] = (0, 255, 0)
+
+
+class Color(enum.Enum):
+  """Color enum."""
+
+  BLACK = (0, 0, 0)
+  WHITE = (255, 255, 255)
+  RED = (255, 0, 0)
+  GREEN = (0, 255, 0)
+  BLUE = (0, 0, 255)
+  YELLOW = (255, 255, 0)
+  CYAN = (0, 255, 255)
+  MAGENTA = (255, 0, 255)
+
+
+# color constants
+
+
+DEFAULT_MARK_COLOR: Color = Color.RED
+DEFAULT_MARK_WIDTH: int = 1
+MIN_MARK_WIDTH: int = 1
+MAX_MARK_WIDTH: int = 50
 
 
 class Error(frame.Error):
@@ -129,8 +149,8 @@ class Image:
     self._depth: int | None = None  # may be set later by the fractal rendering function
     # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
     self.escape: ImageUInt32Array = array.array('I', (0 for _ in range(width * height)))
-    if self.escape.itemsize != N_BYTES_UINT:
-      raise Error(f'unsupported platform: array of unsigned ints is not {N_BYTES_UINT} bytes')
+    if self.escape.itemsize != frame.N_BYTES_UINT:
+      raise Error(f'unsupported platform: array of unsigned ints is not {frame.N_BYTES_UINT} bytes')
 
   def SetEscape(self, x: int, y: int, escaped_at: int) -> None:
     """Set the escape iteration for a given pixel.
@@ -159,6 +179,28 @@ class Image:
 
     """
     return (min(self.escape), max(self.escape))
+
+  @property
+  def precision(self) -> int:
+    """Estimate the MPFR precision needed to render this image. See Frame.Precision() for details.
+
+    Returns:
+      int: The estimated number of bits of MPFR precision needed.
+
+    """
+    return self._frame.Precision(
+      self._width, self._height, max_iter=self._depth or frame.DEFAULT_ITER
+    )
+
+  @property
+  def context(self) -> gmpy2.context:
+    """Get gmpy2 context with precision to distinguish adjacent pixels in smaller complex-plane dim.
+
+    Returns:
+      gmpy2.context: A context with the estimated number of bits of precision needed.
+
+    """
+    return gmpy2.local_context(gmpy2.context(), precision=self.precision)
 
   def SetDepth(self, depth: int) -> None:
     """Set the maximum iteration depth for the image. Should be called after image is complete.
@@ -243,6 +285,9 @@ class Image:
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
 
+    Raises:
+      Error: on error
+
     """
     # convert the raw pixel data to a PNG using PIL
     raw_img: bytes = self.AsPixels(pal=pal)
@@ -256,23 +301,29 @@ class Image:
     png_meta.add_text(META_IMAGE_WIDTH_KEY, str(self._width))
     png_meta.add_text(META_IMAGE_HEIGHT_KEY, str(self._height))
     png_meta.add_text(META_IMAGE_HASH_KEY, img_data_hash)
-    png_meta.add_text(META_PALETTE_KEY, pal.value)
+    png_meta.add_text(META_IMAGE_PALETTE_KEY, pal.value)
+    png_meta.add_text(META_IMAGE_OVERLAY_KEY, 'false')  # if it comes from this, it has no overlay
     # frame type
-    png_meta.add_text(META_FRACTAL_KEY, self._frame.fractal.value)
+    png_meta.add_text(META_FRACTAL_KEY, self._frame.fractal.value.lower())
+    if self._frame.fractal == frame.Fractal.JULIA:
+      if not isinstance(self._frame, frame.FrameAndPoint):
+        raise Error(f'Expected FrameAndPoint for Julia Set frame, got {type(self._frame)}')
+      png_meta.add_text(META_JULIA_RE_KEY, str(self._frame.point_re))
+      png_meta.add_text(META_JULIA_IM_KEY, str(self._frame.point_im))
     # frame as corners
     png_meta.add_text(META_TOP_RE_KEY, str(self._frame.top_re))
     png_meta.add_text(META_TOP_IM_KEY, str(self._frame.top_im))
     png_meta.add_text(META_BOTTOM_RE_KEY, str(self._frame.bottom_re))
     png_meta.add_text(META_BOTTOM_IM_KEY, str(self._frame.bottom_im))
     # frame as center + size
-    center: tuple[mpq, mpq] = self._frame.center
-    sz: tuple[mpq, mpq] = self._frame.size
+    center: tuple[gmpy2.mpq, gmpy2.mpq] = self._frame.center
+    sz: tuple[gmpy2.mpq, gmpy2.mpq] = self._frame.size
     png_meta.add_text(META_CENTER_RE_KEY, str(center[0]))
     png_meta.add_text(META_CENTER_IM_KEY, str(center[1]))
     png_meta.add_text(META_WIDTH_RE_KEY, str(sz[0]))
     png_meta.add_text(META_HEIGHT_IM_KEY, str(sz[1]))
     # precision and magnification
-    png_meta.add_text(META_PRECISION_KEY, str(self._frame.precision))
+    png_meta.add_text(META_PRECISION_KEY, str(self.precision))
     magnification, magnitude = self._frame.magnification
     png_meta.add_text(META_MAGNIFICATION_KEY, str(float(magnification)))  # huge if not converted!
     png_meta.add_text(META_MAGNIFICATION_ORDER_KEY, str(magnitude))
@@ -385,7 +436,7 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
   - each circle has a green label with its direction: "N", "NE", "E", "SE", "S", "SW", "W", "NW"
 
   Works on any size image, but is designed for 512x512, especially because of:
-  - line width and circle radius are fixed
+  - circle radius is fixed
   - text labels are fixed size and positioned with a fixed offset from the circle's center
   Fix these and it can work well on other sizes too...
 
@@ -402,6 +453,7 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
   cy: int
   x: int
   y: int
+  lw: int
   # open the image
   with PILImage.open(io.BytesIO(img_data)) as img:
     # draw the quadrant lines
@@ -409,8 +461,9 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
     w, h = img.size
     cx, cy = w // 2, h // 2
     step_sz: int = w // frame.DEFAULT_STEP_DIRECT
-    draw.line((0, cy, w, cy), fill=_COLOR_WHITE, width=_LINE_WIDTH)
-    draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
+    lw = max(1, max(w, h) // _LINE_WIDTH_RATIO)
+    draw.line((0, cy, w, cy), fill=Color.WHITE.value, width=lw)
+    draw.line((cx, 0, cx, h), fill=Color.WHITE.value, width=lw)
     # draw 8 circles around the center to indicate the 8 cardinal/ordinal directions
     font: ImageFont.ImageFont = cast('ImageFont.ImageFont', ImageFont.load_default())
     for dx, dy, direction in [
@@ -426,23 +479,23 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
       x, y = int(cx + dx), int(cy + dy)
       draw.ellipse(
         (x - _CIRCLE_RADIUS, y - _CIRCLE_RADIUS, x + _CIRCLE_RADIUS, y + _CIRCLE_RADIUS),
-        outline=_COLOR_GREEN,
-        width=_LINE_WIDTH,
+        outline=Color.GREEN.value,
+        width=lw,
       )
       # for each circle, also draw the label text
-      draw.text((x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=_COLOR_GREEN, font=font)
-    # done
-    return SaveWithMeta(img)
+      draw.text(
+        (x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=Color.GREEN.value, font=font
+      )
+    # done, save remembering to add metadata that this image has an overlay
+    return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
 
 
 def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
-  """Draw an overlay on the (512x512) image with target info for moving the zoom frame.
+  """Draw an overlay on an image of any size, with target info for moving the zoom frame.
 
   Overlays:
   - white lines delimiting the 9 sections of the image
   - large green number labels (1-9) centered in each section, left-to-right, top-to-bottom
-
-  Works on any size image apart from the fixed line size. The text labels scale.
 
   Args:
     img_data: The PNG image data as bytes.
@@ -457,31 +510,72 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
   cy: int
   col: int
   row: int
+  lw: int
   # open the image
   with PILImage.open(io.BytesIO(img_data)) as img:
     # draw the thirds lines
     draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
     w, h = img.size
     cx, cy = w // 3, h // 3
-    draw.line((0, cy, w, cy), fill=_COLOR_WHITE, width=_LINE_WIDTH)
-    draw.line((0, 2 * cy, w, 2 * cy), fill=_COLOR_WHITE, width=_LINE_WIDTH)
-    draw.line((cx, 0, cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
-    draw.line((2 * cx, 0, 2 * cx, h), fill=_COLOR_WHITE, width=_LINE_WIDTH)
+    lw = max(1, max(w, h) // _LINE_WIDTH_RATIO)
+    draw.line((0, cy, w, cy), fill=Color.WHITE.value, width=lw)
+    draw.line((0, 2 * cy, w, 2 * cy), fill=Color.WHITE.value, width=lw)
+    draw.line((cx, 0, cx, h), fill=Color.WHITE.value, width=lw)
+    draw.line((2 * cx, 0, 2 * cx, h), fill=Color.WHITE.value, width=lw)
     # draw large number labels centered in each of the 9 sections, left-to-right, top-to-bottom
     label_font: ImageFont.FreeTypeFont = cast(
-      'ImageFont.FreeTypeFont', ImageFont.load_default(size=int(min(cx, cy) / 3))
+      'ImageFont.FreeTypeFont', ImageFont.load_default(size=int(max(cx, cy) / 3))
     )
     for row in range(3):
       for col in range(3):
         draw.text(
           (col * cx + cx // 2, row * cy + cy // 2),  # center of this section
           str(row * 3 + col + 1),  # label
-          fill=_COLOR_GREEN,
+          fill=Color.GREEN.value,
           font=label_font,
           anchor='mm',  # center it exactly
         )
-    # done
-    return SaveWithMeta(img)
+    # done, save remembering to add metadata that this image has an overlay
+    return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
+
+
+def DrawCrossOverlay(
+  img_data: bytes, x: int, y: int, *, col: Color = DEFAULT_MARK_COLOR, lw: int = DEFAULT_MARK_WIDTH
+) -> bytes:
+  """Draw a cross overlay on an image at the specified coordinates.
+
+  Overlays:
+  - a horizontal line spanning the image at the given y-coordinate
+  - a vertical line spanning the image at the given x-coordinate
+
+  Args:
+    img_data: The PNG image data as bytes.
+    x: The x-coordinate of the center of the cross.
+    y: The y-coordinate of the center of the cross.
+    col: The color of the cross.
+    lw: The line width of the cross.
+
+  Returns:
+    The modified PNG image data with the overlay drawn.
+
+  Raises:
+    Error: If the coordinates are out of bounds or if there are issues processing the image.
+
+  """
+  w: int
+  h: int
+  # open the image
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    # check the coords
+    draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
+    w, h = img.size
+    if not (0 <= x < w) or not (0 <= y < h):
+      raise Error(f'Invalid coordinates for cross overlay: {x=}, {y=}, image size {w}x{h}')
+    # draw the cross lines
+    draw.line((0, y, w, y), fill=col.value, width=lw)
+    draw.line((x, 0, x, h), fill=col.value, width=lw)
+    # done, save remembering to add metadata that this image has an overlay
+    return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
 
 
 def SaveWithMeta(img: PILImage.Image, *, extra_meta: dict[str, str] | None = None) -> bytes:

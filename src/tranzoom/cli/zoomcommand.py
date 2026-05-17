@@ -9,6 +9,8 @@ README.md has good examples for different zoom levels.
 
 from __future__ import annotations
 
+import dataclasses
+
 import click
 import typer
 from transcrypto.cli import clibase
@@ -25,16 +27,46 @@ zoom_app = typer.Typer(
   help=(
     'Examples:\n\n\n\n'
     '# --- LLM-Guided Fractal Zoom ---\n'
-    'poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai\n'
-    'poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom ai '
-    '" -0.7436499" "0.13188204" "0.00073801" --iterm -n 10\n'
-    'poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"\n\n'
+    'poetry run tranz zoom ai\n'
+    'poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai '
+    '" -0.7436499" "0.13188204" "0.00073801"\n'
+    'poetry run tranz --iterm zoom ai "/path/to/image.png"\n'
+    'poetry run tranz --iterm zoom -s 700 --fractal julia ai\n\n'
     '# --- Human/Manual-Guided Fractal Zoom ---\n'
-    'poetry run tranz zoom manual " -0.74303" "0.126433" "0.01611"\n'
-    'poetry run tranz zoom manual "/path/to/image.png"'
+    'poetry run tranz --iterm zoom manual " -0.74303" "0.126433" "0.01611"\n'
+    'poetry run tranz zoom manual "/path/to/image.png"\n'
+    'poetry run tranz --iterm zoom -s 700 --fractal julia manual'
   ),
 )
 tranz.app.add_typer(zoom_app, name='zoom')
+
+
+@zoom_app.callback(invoke_without_command=True)
+@clibase.CLIErrorGuard
+def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
+  *,
+  ctx: click.Context,
+  # note that these are the zoom image options, with default of 512x512
+  fractal_type: frame.Fractal = base.FRACTAL_TYPE_OPTION,  # type: ignore[assignment]
+  img_width: int = base.IMAGE_ZOOM_WIDTH_OPTION,  # type: ignore[assignment]
+  img_height: int = base.IMAGE_ZOOM_HEIGHT_OPTION,  # type: ignore[assignment]
+  img_size: int | None = base.IMAGE_SIZE_OPTION,  # type: ignore[assignment]
+  max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
+  julia_re: str = base.JULIA_RE_OPTION,  # type: ignore[assignment]
+  julia_im: str = base.JULIA_IM_OPTION,  # type: ignore[assignment]
+) -> None:
+  # store this command's options in the shared config so all sub-commands can read it
+  if ctx.invoked_subcommand is not None and ctx.obj is not None:
+    ctx.obj = dataclasses.replace(
+      ctx.obj,
+      fractal_type=fractal_type,
+      img_width=img_width,
+      img_height=img_height,
+      img_size=img_size,
+      max_steps=max_steps,
+      julia_re=julia_re,
+      julia_im=julia_im,
+    )
 
 
 @zoom_app.command(
@@ -42,14 +74,17 @@ tranz.app.add_typer(zoom_app, name='zoom')
   help='Use AI to search for an interest point.',
   epilog=(
     'Examples:\n\n\n\n'
-    '$ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai\n\n'
+    '$ poetry run tranz zoom ai\n\n'
     '<start with full set and zoom in using model Qwen 32>\n\n\n\n'
     '$ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 '
-    'zoom ai " -0.7436499" "0.13188204" "0.00073801" --iterm -n 10\n\n'
+    'zoom -n 10 ai " -0.7436499" "0.13188204" "0.00073801"\n\n'
     '<zoom in using model Qwen 32 with higher temperature 0.7, '
-    'start from "Seahorse Tail", print iTerm2 images, stop after 10 steps>\n\n\n\n'
-    '$ poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" zoom ai "/path/to/image.png"\n\n'
-    '<gets the same frame used in "/path/to/image.png" and starts zoom there>'
+    'start from "Seahorse Tail", stop after 10 steps>\n\n\n\n'
+    '$ poetry run tranz --iterm zoom ai "/path/to/image.png"\n\n'
+    '<gets the same frame used in "/path/to/image.png" and starts zoom there, '
+    'print iTerm2 images>\n\n\n\n'
+    '$ poetry run tranz --iterm zoom -s 700 --fractal julia ai\n\n'
+    '<start with full default Julia Set and AI zoom with 700px size, print iTerm2 images>'
   ),
 )
 @clibase.CLIErrorGuard
@@ -63,21 +98,42 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
   query: str | None = base.AI_QUERY_OPTION,  # type: ignore[assignment]
   reason: bool = base.AI_OUTPUT_REASON_FIELD_OPTION,  # type: ignore[assignment]
   memory: int = base.MAX_CHAT_MEMORY_OPTION,  # type: ignore[assignment]
-  max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
-  iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
   config: base.TranZoomConfig = ctx.obj
   frm: frame.Frame = base.MakeFrameFromCLIArgs(
-    frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
+    config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
+  )
+  # if it is a Julia, make the Julia point and add it to the frame
+  frm = (
+    frame.FrameAndPoint.FromCenterAndPoint(
+      frame.Fractal.JULIA,
+      *base.MakePointFromCLIArgs(config.julia_re, config.julia_im, config.console.print),
+      frm.center[0],
+      frm.center[1],
+      frm.size[0],
+      frm.size[1],
+    )
+    if config.fractal_type == frame.Fractal.JULIA
+    else frm
+  )
+  # determine width and height
+  width: int
+  height: int
+  width, height = (
+    frm.PixelDimensionsFromSize(config.img_size)
+    if config.img_size
+    else (config.img_width, config.img_height)
   )
   # we have a valid frame, let's start the AI search loop
   ai.ZoomLoop(
     frm,
+    width,
+    height,
     config.img_output_path,
     config.img_use_date,
     config.img_use_hash,
-    config.img_path_prefix,
+    config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
     config.max_threads,
     config.model,
     config.spec_tokens,
@@ -94,8 +150,8 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     query.strip() if query else None,
     reason,
     memory,
-    max_steps,
-    iterm,
+    config.max_steps,
+    config.iterm,
     _MANUAL_QUERY_WEIGHT,
     config.console.print,
   )
@@ -108,10 +164,12 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     'Examples:\n\n\n\n'
     '$ poetry run tranz zoom manual\n\n'
     '<start with full set and zoom in manually>\n\n\n\n'
-    '$ poetry run tranz zoom manual " -0.7436499" "0.13188204" "0.00073801" --iterm\n\n'
+    '$ poetry run tranz --iterm zoom manual " -0.7436499" "0.13188204" "0.00073801"\n\n'
     '<zoom in manually, start from "Seahorse Tail", print iTerm2 images>\n\n\n\n'
     '$ poetry run tranz zoom manual "/path/to/image.png"\n\n'
-    '<gets the same frame used in "/path/to/image.png" and starts zoom there>'
+    '<gets the same frame used in "/path/to/image.png" and starts zoom there>\n\n\n\n'
+    '$ poetry run tranz --iterm zoom -s 700 --fractal julia manual\n\n'
+    '<start with full default Julia Set and manual zoom with 700px size, print iTerm2 images>'
   ),
 )
 @clibase.CLIErrorGuard
@@ -122,23 +180,44 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   center_im: str = base.FRAME_CENTER_IM_ARGUMENT,  # type: ignore[assignment]
   f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]
   f_height: str | None = base.FRAME_HEIGHT_ARGUMENT,  # type: ignore[assignment]
-  max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
-  iterm: bool = base.IMAGE_PRINT_ITERM_OPTION,  # type: ignore[assignment]
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
   config: base.TranZoomConfig = ctx.obj
   frm: frame.Frame = base.MakeFrameFromCLIArgs(
-    frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
+    config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
+  )
+  # if it is a Julia, make the Julia point and add it to the frame
+  frm = (
+    frame.FrameAndPoint.FromCenterAndPoint(
+      frame.Fractal.JULIA,
+      *base.MakePointFromCLIArgs(config.julia_re, config.julia_im, config.console.print),
+      frm.center[0],
+      frm.center[1],
+      frm.size[0],
+      frm.size[1],
+    )
+    if config.fractal_type == frame.Fractal.JULIA
+    else frm
+  )
+  # determine width and height
+  width: int
+  height: int
+  width, height = (
+    frm.PixelDimensionsFromSize(config.img_size)
+    if config.img_size
+    else (config.img_width, config.img_height)
   )
   # we have a valid frame, let's start the AI search loop
   ai.ManualLoop(
     frm,
+    width,
+    height,
     config.img_output_path,
     config.img_use_date,
     config.img_use_hash,
-    config.img_path_prefix,
+    config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
     config.max_threads,
-    max_steps,
-    iterm,
+    config.max_steps,
+    config.iterm,
     config.console.print,
   )

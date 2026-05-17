@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - YYYY-MM-DD - Placeholder](#vvv---yyyy-mm-dd---placeholder)
+  - [1.3.0 - 2026-05-16](#130---2026-05-16)
   - [1.2.0 - 2026-05-15](#120---2026-05-15)
   - [1.1.0 - 2026-05-14](#110---2026-05-14)
   - [1.0.0 - 2026-05-10](#100---2026-05-10)
@@ -26,6 +27,45 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future changes.
+
+## 1.3.0 - 2026-05-16
+
+- Added
+  - **Julia Set fractal rendering**: new `tranz image julia` command renders a Julia Set image with arbitrary-precision arithmetic; the Julia constant `c` is set via `POINT_RE` and `POINT_IM` positional arguments (or loaded from an existing tranZoom PNG's metadata); center, width, and height of the viewed plane are configurable; default constant is `0.27334+0.00742j` ("Julia Suzana"), default frame is `[(0, 0) ± (9/5, 11/5)]`.
+  - **Julia Set zoom**: `tranz zoom [-f julia] ai|manual` runs zoom sessions on a Julia Set instead of the Mandelbrot Set; the Julia constant is set via `--julia-re` and `--julia-im` on the `tranz zoom` subgroup callback; the constant can also be loaded from an existing PNG's metadata by passing the PNG path as the first positional argument.
+  - New `FrameAndPoint` class in `core/frame.py`: extends `Frame` with an extra exact `gmpy2.mpq` complex-plane point (used as the Julia Set constant `c`); provides `FromCenterAndPoint()` factory; `__str__` prints as `[(center) ± size @ (point_re, point_im)]`.
+  - New `-s`/`--size S` option on the `tranz image` subgroup: sets the maximum pixel side of the output image and scales the other dimension proportionally to match the frame aspect ratio; overrides `-w`/`--width` and `-h`/`--height` when given; useful for non-square Julia frames.
+  - New `--mark "(re, im)"` option on `tranz image`: draws a colored crosshair overlay at a given complex-plane coordinate on the output image; `--mark-color` (default `red`) and `--mark-width` (default `1`) are also configurable.
+  - New `Color` enum in `core/image.py` with eight standard overlay colors: `BLACK`, `WHITE`, `RED`, `GREEN`, `BLUE`, `YELLOW`, `CYAN`, `MAGENTA`.
+  - New `DrawCrossOverlay()` function in `core/image.py`: draws a crosshair at given pixel coordinates on an existing PNG.
+  - New PNG metadata keys `tranzoom:frame:julia_re` and `tranzoom:frame:julia_im`: embedded in all Julia Set images so that the Julia constant can be loaded back from the PNG path via the CLI.
+  - New `Frame.PixelDimensionsFromSize()` method: computes proportional `(width, height)` pixel dimensions given a desired max-side pixel count, honoring the frame's aspect ratio.
+  - New `Frame.CoordToPixel()` and `Frame.CoordsTupleToPixel()` methods: convert exact complex-plane coordinates to pixel `(x, y)` coordinates within a given image size.
+  - New `-f`/`--fractal` option on the `tranz zoom` subgroup: selects the fractal type (`mandelbrot` or `julia`; default `mandelbrot`).
+  - New `--julia-re` and `--julia-im` options on the `tranz zoom` subgroup: set the Julia Set constant for Julia zoom sessions.
+  - `tranz zoom ai` and `tranz zoom manual` now accept any output image size, configured via `-w`/`--width` and `-h`/`--height` on the `tranz zoom` subgroup callback; default is still 512×512.
+  - New `tranzoom:image:overlay` PNG metadata key records whether the saved image has a grid/direction overlay drawn on it (`"true"`) or not (`"false"`).
+  - New `DEFAULT_ZOOM_SIZE = 512` constant in `core/frame.py` separates the zoom default from the `image mandel` default (`DEFAULT_IMAGE_SIZE = 1024`).
+
+- Changed
+  - **Breaking**: `tranzoom:frame:fractal` PNG metadata value is now stored lowercase (e.g., `"mandelbrot"` instead of `"Mandelbrot"`); images written by older versions will show the old capitalized value when read back by this version.
+  - **Breaking**: `-w`/`--width` and `-h`/`--height` moved out of the global `tranz` callback and into per-subgroup callbacks: `tranz image [-w W] [-h H] mandel ...` (default 1024×1024) and `tranz zoom [-w W] [-h H] ai|manual ...` (default 512×512).
+  - **Breaking**: `--iter`/`-i` (max iterations) and `--palette` moved from `tranz image mandel` to the `tranz image` subgroup callback: `tranz image [--iter N] [--palette NAME] mandel ...`.
+  - **Breaking**: `-n`/`--max-steps` moved from `tranz zoom ai` and `tranz zoom manual` to the `tranz zoom` subgroup callback: `tranz zoom [-n N] ai|manual ...`.
+  - **Breaking**: `--iterm`/`--no-iterm` moved from the individual `tranz image mandel`, `tranz image read`, `tranz zoom ai`, and `tranz zoom manual` commands to the global `tranz` callback: `tranz [--iterm] ...`.
+  - **Breaking**: PNG metadata key `tranzoom:image:palette` replaces the old key `tranzoom:palette`; images written by older versions will show `null` for the palette when read back by this version.
+  - `Frame.precision` property removed; replaced by `Frame.Precision(pixel_width, pixel_height, max_iter=DEFAULT_ITER)` method — precision is now computed from actual image dimensions and iteration count rather than the pessimistic `MAX_IMAGE_SIZE` ceiling; more accurate for every frame and size combination.
+  - `Frame.context` property removed; replaced by `Frame.Context(pixel_width, pixel_height, max_iter=DEFAULT_ITER)` method — same improvement as `Frame.Precision()`.
+  - `_MPFR_MIN_PRECISION` increased from 80 to 140 bits (≈42 decimal digits) for improved robustness at low-magnification frames.
+  - `_MPFR_MIN_GUARD_BITS` increased from 64 to 88 bits for a larger safety margin above the bare minimum.
+  - `MAX_IMAGE_SIZE` increased from 8192 to 16384 pixels, allowing up to 16k×16k (~256 Mpx) images.
+  - Iteration constants (`MIN_ITER`, `DEFAULT_ITER`, `HIGH_ITERS`, `MAX_ITER`) moved from `core/fractal.py` to `core/frame.py` for better cohesion.
+  - `-m`/`--model` now defaults to `'qwen3-vl-32b-instruct@q8_0'` (a good general-purpose vision model) instead of requiring explicit specification for AI zoom.
+
+- Fixed
+  - Precision computation now uses actual image dimensions and iteration count rather than a pessimistic `MAX_IMAGE_SIZE` baseline, giving tighter and more accurate MPFR precision for every render.
+  - Overlay line width is now dynamic (`max(1, max(w, h) // 150)`) so overlays scale correctly with any image size, not just 512×512.
+  - Zoom overlay text labels now scale using `max(cx, cy)` instead of `min(cx, cy)`, fixing label sizing on non-square images.
 
 ## 1.2.0 - 2026-05-15
 
