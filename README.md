@@ -226,15 +226,17 @@ TransZoom computes the required precision automatically for every `(frame, image
 
 The formula is:
 
-$$\text{precision} = \max\!\Big( P_{\min},\; \lceil \log_2(M / h) \rceil + 2\,\lceil \log_2(N+1) \rceil + G \Big)$$
+```py
+precision = max(P_min, ceil(log2(M / h)) + 2 * ceil(log2(N + 1)) + G)
+```
 
 where:
 
-- $h = \min\!\left(\dfrac{\text{frame\_width}}{\text{pixel\_width}},\; \dfrac{\text{frame\_height}}{\text{pixel\_height}}\right)$ — the smaller complex-plane distance that maps to one output pixel (the tighter precision constraint)
-- $M = \max\!\left(|\text{top\_re}|,\, |\text{bottom\_re}|,\, |\text{top\_im}|,\, |\text{bottom\_im}|,\, 1\right)$ — the largest coordinate magnitude in the frame; because MPFR precision is *relative* (not absolute), frames far from the origin need more bits to represent fine detail at a given scale
-- $N$ — `max_iter`, the iteration ceiling for the render; the $2\,\lceil\log_2(N+1)\rceil$ term is an iteration guard that grows logarithmically to account for accumulated rounding error over many iterations
-- $G = 88$ — `_MPFR_MIN_GUARD_BITS`, a fixed safety margin of 88 extra bits beyond the bare minimum to distinguish neighboring pixels
-- $P_{\min} = 140$ — `_MPFR_MIN_PRECISION`, the floor (≈42 decimal digits), active for low-magnification frames where the base term is small
+- **`h`** = `min(frame_width / pixel_width, frame_height / pixel_height)` — the smaller complex-plane distance that maps to one output pixel (the tighter precision constraint)
+- **`M`** = `max(|top_re|, |bottom_re|, |top_im|, |bottom_im|, 1)` — the largest coordinate magnitude in the frame; because MPFR precision is *relative* (not absolute), frames far from the origin need more bits to represent fine detail at a given scale
+- **`N`** — `max_iter`, the iteration ceiling for the render; the `2 * ceil(log2(N + 1))` term is an iteration guard that grows logarithmically to account for accumulated rounding error over many iterations
+- **`G = 88`** — `_MPFR_MIN_GUARD_BITS`, a fixed safety margin of 88 extra bits beyond the bare minimum to distinguish neighboring pixels
+- **`P_min = 140`** — `_MPFR_MIN_PRECISION`, the floor (≈42 decimal digits), active for low-magnification frames where the base term is small
 
 The maximum allowed precision is `_MPFR_MAX_PRECISION = 300 000` bits (≈90 000 decimal digits). Requesting a frame smaller than that limit raises an error. In practice, deep zooms at moderate image sizes stay well below a few thousand bits.
 
