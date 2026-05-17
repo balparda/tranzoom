@@ -287,11 +287,11 @@ class Image:
       if 0 <= escaped_at < depth and total_exterior > 0:
         # exterior point: histogram-equalized position in pal
         t: float = (cumulative[escaped_at] - 1) / total_exterior
-        rgb: tuple[int, int, int] = PixelPalette(t, pal)
+        rgb: tuple[int, int, int] = PixelPalette(t, pal, palette.PALETTE_CYCLES)
       elif color_set_points and total_set > 0 and escaped_at < 0:
         # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
         t_set: float = (set_cumulative[-escaped_at] - 1) / total_set
-        rgb = PixelPalette(t_set, set_pal)
+        rgb = PixelPalette(t_set, set_pal, palette.SET_PALETTE_CYCLES)
       else:
         rgb = (0, 0, 0)  # black: interior point (default) or all-interior image
       pixels[i * 3], pixels[i * 3 + 1], pixels[i * 3 + 2] = rgb
@@ -715,15 +715,22 @@ def PrintITerm2(img_data: bytes) -> None:
   sys.stdout.flush()
 
 
-def PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:
+def PixelPalette(
+  t: float,
+  pal: palette.Palette,
+  cycles: int,
+) -> tuple[int, int, int]:
   """Get the RGB color for a histogram-equalized normalized palette position.
 
   Smoothly interpolates between adjacent stops in the specified palette, cycling
-  _PALETTE_CYCLES times across the [0, 1) range for visual banding.
+  `cycles` times across the [0, 1) range. Use PALETTE_CYCLES (3) for exterior palettes
+  (tighter color banding) and SET_PALETTE_CYCLES (1) for the interior Set palette
+  (single smooth gradient, black near the boundary).
 
   Args:
     t (float): Normalized position in [0, 1) derived from histogram equalization.
     pal (Palette): The palette to use.
+    cycles (int): How many times to cycle through the palette across [0, 1)
 
   Returns:
     tuple[int, int, int]: The interpolated RGB color.
@@ -736,8 +743,8 @@ def PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:
   if pal not in palette.PALETTES:
     raise Error(f'Unknown palette {pal!r}, available: {list(palette.PALETTES.keys())}')
   palette_stops: tuple[tuple[int, int, int], ...] = palette.PALETTES[pal]
-  # cycle multiple times through the palette for visual banding
-  t_cycled: float = (t * palette.PALETTE_CYCLES) % 1.0
+  # cycle through the palette the requested number of times for visual banding
+  t_cycled: float = (t * cycles) % 1.0
   n: int = len(palette_stops)
   # fractional index into the palette
   idx: float = t_cycled * n

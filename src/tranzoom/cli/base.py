@@ -365,11 +365,11 @@ SET_PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
   ),
 )
 COLOR_SET_POINTS_OPTION: typer.models.OptionInfo = typer.Option(
-  False,
+  True,
   '--set/--no-set',
   help=(
     'If True, color the interior Set points with `--set-palette` instead of black; '
-    'default is False (black)'
+    'default is True (use set palette)'
   ),
 )
 

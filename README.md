@@ -173,8 +173,8 @@ Starting with version 1.1.0, tranZoom can use local LLM vision models to autonom
 - **Magnification**: Ratio of the default full-set frame area to the current frame area. 1× = full set; 1G× = zoomed in one billion times.
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
 - **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
-- **Color palette**: Five built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette` (global flag). Positions in the palette are determined by histogram equalization of escape-iteration counts, cycling through the stops `3` times across the range, so the full color range is used regardless of zoom depth or iteration scale. Available palettes: `blue-to-yellow-to-brown` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric-ocean` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient), `grayscale` (8-stop black-to-white gradient, designed for interior coloring).
-- **Interior (Set) coloring**: By default, interior points (those that never escape, i.e., inside the Mandelbrot/Julia Set) are rendered as pure black. Passing `--set` enables smooth coloring of those points using a separate `--set-palette` (default `grayscale`); the same histogram-equalization approach is applied to their stored `|z|` magnitudes at max depth, so the full Set palette range is used. Both flags are global and apply to all `image` and `zoom` commands.
+- **Color palette**: Five built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette` (global flag). Positions in the palette are determined by histogram equalization of escape-iteration counts, cycling through the stops `3` times across the range, so the full color range is used regardless of zoom depth or iteration scale. Available palettes: `blue-to-yellow-to-brown` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric-ocean` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient), `grayscale` (8-stop white-to-black gradient, designed for interior coloring).
+- **Interior (Set) coloring**: By default, interior points (those that never escape, i.e., inside the Mandelbrot/Julia Set) are rendered as pure black. Passing `--set` enables smooth coloring of those points using a separate `--set-palette` (default `grayscale`); histogram equalization is applied to their stored `|z|` magnitudes at max depth, cycling through the set palette only **once** (no banding). The `grayscale` set palette goes white (deep interior, low `|z|`) → black (near boundary, high `|z|`), so the Set boundary is always dark for contrast with the exterior colors. Both flags are global and apply to all `image` and `zoom` commands.
 - **AI zoom session**: The `tranz zoom ai` command starts an iterative loop: render the current frame, draw a 3×3 thirds grid overlay with green sector labels, send the image to a local LLM vision model, parse the 9-sector scoring response, and move the frame center toward the highest-scoring sector. Supports both Mandelbrot (default) and Julia Set fractals via `-f/--fractal`. The optional `--query` flag enables targeted search, blending fractal-quality scores with target-match scores. The loop runs until Ctrl+C or `--max-steps` is reached.
 - **Manual zoom session**: The `tranz zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM. Supports both Mandelbrot and Julia Set fractals.
 - **Sector scoring**: Each sector is scored on a 0–100 scale for `fractal_score` (visual complexity / zoom promise). When targeted search is active, an additional `target_match_score` (also 0–100) is blended in with a configurable weight.
@@ -271,7 +271,7 @@ The computed precision is exposed as:
 Render the [full Mandelbrot set](#full--default-1) (default, 1024×1024):
 
 ```sh
-$ poetry run tranz --no-date image mandel
+$ poetry run tranz --no-set --no-date image mandel
 
 1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision 80 bits, 1 magnification, AUTO iterations...
 
@@ -305,7 +305,7 @@ With the `--palette` global flag you can pick your color scheme for exterior (es
 | **`"lava"`** | 16-stop volcanic gradient |
 | **`"electric-ocean"`** | 32-stop abyss-to-magenta-to-lavender gradient |
 | **`"sunset"`** | 32-stop indigo-to-amber-to-wine gradient |
-| **`"grayscale"` (DEFAULT for `--set-palette`)** | 8-stop black-to-white gradient; designed for interior Set-point coloring |
+| **`"grayscale"` (DEFAULT for `--set-palette`)** | 8-stop white-to-black gradient; white=deep interior, black=near boundary; designed for interior Set-point coloring; cycles once |
 
 ### Command structure
 
@@ -560,7 +560,7 @@ You can run all these at once by executing `scripts/make_examples.sh`.
 Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) with all the default values (image size 1024×1024, centered in $-0.75+0j$ and with width of $2.5$, a good frame that contains the whole set):
 
 ```sh
-$ poetry run tranz --no-date image mandel
+$ poetry run tranz --no-set --no-date image mandel
 
 1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision 140 bits, 1 magnification, AUTO iterations...
 
@@ -621,7 +621,7 @@ This image is relatively fast to generate (despite the zoom level, it has very l
 Render a "Julia Suzana" at `-s/--size` 1024:
 
 ```sh
-$ poetry run tranz --no-date --palette electric-ocean image -s 1024 julia
+$ poetry run tranz --no-set --no-date --palette electric-ocean image -s 1024 julia
 
 838x1024 Julia in frame [(0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)], precision ± 140 bits, 1 magnification, AUTO iterations...
 

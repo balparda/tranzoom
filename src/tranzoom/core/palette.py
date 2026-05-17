@@ -23,6 +23,9 @@ DEFAULT_SET_PALETTE: Palette = Palette.GRAYSCALE  # used for interior (set) poin
 # how many times to cycle through the palette across the histogram-equalized range;
 # more cycles = tighter, more frequent color banding; 3 is a visually balanced default
 PALETTE_CYCLES: int = 3
+# for the interior (Set) palette we cycle only once: the full gradient runs exactly once across
+# the histogram-equalized |z| range, keeping the gradient predictable and avoiding extra banding
+SET_PALETTE_CYCLES: int = 1
 
 # Color palettes for exterior points. Each is a tuple of RGB color stops that are
 # linearly interpolated and cycled PALETTE_CYCLES times across the histogram-equalized
@@ -136,16 +139,17 @@ PALETTES: dict[Palette, tuple[tuple[int, int, int], ...]] = {
     (22, 5, 60),  # near-dark indigo
     (13, 3, 50),  # almost black indigo (wraps back to start)
   ),
-  # 8-stop smooth grayscale: black → dark gray → mid gray → light gray → white; intended for
-  # coloring the interior (Set) points when --set is enabled; this is the DEFAULT_SET_PALETTE
+  # 8-stop smooth grayscale: white (deep interior, low |z|) → black (near boundary, high |z|);
+  # cycles only once (SET_PALETTE_CYCLES=1) so the full gradient runs across the Set interior;
+  # black near the boundary provides contrast with exterior colors; this is the DEFAULT_SET_PALETTE
   Palette.GRAYSCALE: (
-    (0, 0, 0),  # black (deepest interior; far from boundary)
-    (32, 32, 32),  # very dark gray
-    (72, 72, 72),  # dark gray
-    (120, 120, 120),  # medium-dark gray
-    (168, 168, 168),  # medium-light gray
-    (210, 210, 210),  # light gray
+    (255, 255, 255),  # white (deepest interior; far from boundary, low |z| magnitude)
     (240, 240, 240),  # near-white
-    (255, 255, 255),  # white (near-boundary, high |z| magnitude)
+    (210, 210, 210),  # light gray
+    (168, 168, 168),  # medium-light gray
+    (120, 120, 120),  # medium-dark gray
+    (72, 72, 72),  # dark gray
+    (32, 32, 32),  # very dark gray
+    (0, 0, 0),  # black (near-boundary, high |z| magnitude)
   ),
 }
