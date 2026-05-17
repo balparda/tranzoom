@@ -28,6 +28,9 @@ poetry run tranz --no-date --no-hash --prefix "demo-mandel-seahorse-tail-sunset"
 # Render Julia Suzana
 poetry run tranz  --no-date --no-hash --prefix "demo-julia-suzana" -o tests/data/images image -s 1024 --palette electric-ocean julia "13667/50000" "371/50000" "0" "0" "9/5" "11/5"
 
+# Render Julia Suzana Wave
+poetry run tranz --no-date --no-hash --prefix "demo-julia-suzana-wave" -o tests/data/images image -s 1024 --palette electric-ocean julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
+
 # generate the 16 images in the POWERS OF 1000 zoom sequence
 
 CX=" -0.7436438870371587047521915061147740000000008"

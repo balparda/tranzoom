@@ -201,7 +201,7 @@ JULIA_RE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
     'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
     'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
     'ALTERNATIVELY: you can use this to input an existing PNG image path, and it will read the '
-    "Julia Set constant from the given image's metadata frame *CENTER* '"
+    "Julia Set constant from the given image's metadata frame *CENTER* "
     f'(overriding/ignoring the imaginary parameter part!); default is {frame.DEFAULT_JULIA_RE!r}'
   ),
 )
@@ -212,7 +212,7 @@ JULIA_RE_OPTION: typer.models.OptionInfo = typer.Option(
     'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
     'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
     'ALTERNATIVELY: you can use this to input an existing PNG image path, and it will read the '
-    "Julia Set constant from the given image's metadata frame *CENTER* '"
+    "Julia Set constant from the given image's metadata frame *CENTER* "
     f'(overriding/ignoring the imaginary parameter part!); default is {frame.DEFAULT_JULIA_RE!r}'
   ),
 )

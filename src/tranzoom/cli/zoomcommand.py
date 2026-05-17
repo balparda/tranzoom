@@ -30,10 +30,12 @@ zoom_app = typer.Typer(
     'poetry run tranz zoom ai\n'
     'poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai '
     '" -0.7436499" "0.13188204" "0.00073801"\n'
-    'poetry run tranz --iterm zoom ai "/path/to/image.png"\n\n'
+    'poetry run tranz --iterm zoom ai "/path/to/image.png"\n'
+    'poetry run tranz --iterm zoom -s 700 --fractal julia ai\n\n'
     '# --- Human/Manual-Guided Fractal Zoom ---\n'
     'poetry run tranz --iterm zoom manual " -0.74303" "0.126433" "0.01611"\n'
-    'poetry run tranz zoom manual "/path/to/image.png"'
+    'poetry run tranz zoom manual "/path/to/image.png"\n'
+    'poetry run tranz --iterm zoom -s 700 --fractal julia manual'
   ),
 )
 tranz.app.add_typer(zoom_app, name='zoom')
@@ -79,7 +81,10 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
     '<zoom in using model Qwen 32 with higher temperature 0.7, '
     'start from "Seahorse Tail", stop after 10 steps>\n\n\n\n'
     '$ poetry run tranz --iterm zoom ai "/path/to/image.png"\n\n'
-    '<gets the same frame used in "/path/to/image.png" and starts zoom there, print iTerm2 images>'
+    '<gets the same frame used in "/path/to/image.png" and starts zoom there, '
+    'print iTerm2 images>\n\n\n\n'
+    '$ poetry run tranz --iterm zoom -s 700 --fractal julia ai\n\n'
+    '<start with full default Julia Set and AI zoom with 700px size, print iTerm2 images>'
   ),
 )
 @clibase.CLIErrorGuard
@@ -162,7 +167,9 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     '$ poetry run tranz --iterm zoom manual " -0.7436499" "0.13188204" "0.00073801"\n\n'
     '<zoom in manually, start from "Seahorse Tail", print iTerm2 images>\n\n\n\n'
     '$ poetry run tranz zoom manual "/path/to/image.png"\n\n'
-    '<gets the same frame used in "/path/to/image.png" and starts zoom there>'
+    '<gets the same frame used in "/path/to/image.png" and starts zoom there>\n\n\n\n'
+    '$ poetry run tranz --iterm zoom -s 700 --fractal julia manual\n\n'
+    '<start with full default Julia Set and manual zoom with 700px size, print iTerm2 images>'
   ),
 )
 @clibase.CLIErrorGuard

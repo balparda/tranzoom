@@ -93,6 +93,11 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
  poetry run tranz image mandel                                                                                                                             
  poetry run tranz image -w 512 -h 512 mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                         
                                                                                                                                                            
+ # --- Julia Set Image Generation ---                                                                                                                      
+ poetry run tranz image julia                                                                                                                              
+ poetry run tranz -s 1024 image julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"                                         
+ poetry run tranz image julia "/path/to/julia_point_image.png" "" "/path/to/frame_image.png"                                                               
+                                                                                                                                                           
  # --- TranZoom Fractal Image Data Reading / Visualization ---                                                                                             
  poetry run tranz image read /path/to/image.png                                                                                                            
                                                                                                                                                            
@@ -100,10 +105,12 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
  poetry run tranz zoom ai                                                                                                                                  
  poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai " -0.7436499" "0.13188204" "0.00073801"                                             
  poetry run tranz --iterm zoom ai "/path/to/image.png"                                                                                                     
+ poetry run tranz --iterm zoom -s 700 --fractal julia ai                                                                                                   
                                                                                                                                                            
  # --- Human/Manual-Guided Fractal Zoom ---                                                                                                                
  poetry run tranz --iterm zoom manual " -0.74303" "0.126433" "0.01611"                                                                                     
  poetry run tranz zoom manual "/path/to/image.png"                                                                                                         
+ poetry run tranz --iterm zoom -s 700 --fractal julia manual                                                                                               
                                                                                                                                                            
  # --- Markdown Help ---                                                                                                                                   
  poetry run tranz markdown > tranz.md
@@ -116,9 +123,14 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
                                                                                                                                                            
  Examples:                                                                                                                                                 
                                                                                                                                                            
- # --- Mandelbrot Image Generation ---                                                                                                                     
+ # --- Mandelbrot Set Image Generation ---                                                                                                                 
  poetry run tranz image mandel                                                                                                                             
  poetry run tranz image -w 512 -h 512 mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                         
+                                                                                                                                                           
+ # --- Julia Set Image Generation ---                                                                                                                      
+ poetry run tranz image julia                                                                                                                              
+ poetry run tranz -s 1024 image julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"                                         
+ poetry run tranz image julia "/path/to/julia_point_image.png" "" "/path/to/frame_image.png"                                                               
                                                                                                                                                            
  # --- TranZoom Fractal Image Data Reading / Visualization ---                                                                                             
  poetry run tranz image read /path/to/image.png                                                                                                            
@@ -171,7 +183,7 @@ Usage: tranz image julia [OPTIONS] [POINT_RE] [POINT_IM] [CENTER_RE] [CENTER_IM]
 │   point_re       [POINT_RE]   Real part of the Julia Set constant; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:         │
 │                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; ALTERNATIVELY: you  │
 │                               can use this to input an existing PNG image path, and it will read the Julia Set constant from the given image's metadata │
-│                               frame *CENTER* '(overriding/ignoring the imaginary parameter part!); default is '0.27334'                                 │
+│                               frame *CENTER* (overriding/ignoring the imaginary parameter part!); default is '0.27334'                                  │
 │                                                                                                                                       │
 │   point_im       [POINT_IM]   Imaginary part of the Julia Set constant; this can be a float (ex: "0.34") or a fraction of ints (rational number, ex:    │
 │                               "123/451") and the number will be fed directly to multi-precision arithmetic so no precision is lost; default is          │
@@ -199,15 +211,15 @@ Usage: tranz image julia [OPTIONS] [POINT_RE] [POINT_IM] [CENTER_RE] [CENTER_IM]
  Examples:                                                                                                                                                 
                                                                                                                                                            
  $ poetry run tranz image julia                                                                                                                            
- 1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...                                                                                                       
+ 1024x1024 Julia in frame [(0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)] ...                                                                            
  ...                                                                                                                                                       
  Saved to "julia-<date>-<hash>.png"                                                                                                                        
                                                                                                                                                            
- $ poetry run tranz image -w 512 -h 512 julia " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                        
- <saves Julia to disk with center --0.74303+0.126433j and width 0.01611>                                                                                   
+ $ poetry run tranz -s 1024 image julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"                                       
+ <saves 1024px Julia to disk with center -313420497/429687500+0.6567j and width 0.6567 by 0.004>                                                           
                                                                                                                                                            
- $ poetry run tranz image julia "/path/to/image.png"                                                                                                       
- <gets the same frame used in "/path/to/image.png" and saves a new image of it to disk>
+ $ poetry run tranz image julia "/path/to/julia_point_image.png" "" "/path/to/frame_image.png"                                                             
+ <gets the same frame used in "frame_image.png" and saves a new image using "julia_point_image.png" Julia point>
 ```
 
 ### `tranz image mandel` Sub-Command
@@ -245,7 +257,7 @@ Usage: tranz image mandel [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  Saved to "mandel-<date>-<hash>.png"                                                                                                                       
                                                                                                                                                            
  $ poetry run tranz image -w 512 -h 512 mandel " -0.74303" "0.126433" "0.01611"  # note the space because of the "-"                                       
- <saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>                                                                              
+ <saves Mandelbrot to disk with center -0.74303+0.126433j and width 0.01611>                                                                               
                                                                                                                                                            
  $ poetry run tranz image mandel "/path/to/image.png"                                                                                                      
  <gets the same frame used in "/path/to/image.png" and saves a new image of it to disk>
@@ -300,10 +312,12 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
  poetry run tranz zoom ai                                                                                                                                  
  poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai " -0.7436499" "0.13188204" "0.00073801"                                             
  poetry run tranz --iterm zoom ai "/path/to/image.png"                                                                                                     
+ poetry run tranz --iterm zoom -s 700 --fractal julia ai                                                                                                   
                                                                                                                                                            
  # --- Human/Manual-Guided Fractal Zoom ---                                                                                                                
  poetry run tranz --iterm zoom manual " -0.74303" "0.126433" "0.01611"                                                                                     
  poetry run tranz zoom manual "/path/to/image.png"                                                                                                         
+ poetry run tranz --iterm zoom -s 700 --fractal julia manual                                                                                               
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --fractal    -f                  Fractal type to generate; possible values: 'mandelbrot', 'julia'; default: 'mandelbrot'              │
@@ -321,8 +335,8 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
 │ --julia-re           TEXT                          Real part of the Julia Set constant; this can be a float (ex: "0.34") or a fraction of ints          │
 │                                                    (rational number, ex: "123/451") and the number will be fed directly to multi-precision arithmetic   │
 │                                                    so no precision is lost; ALTERNATIVELY: you can use this to input an existing PNG image path, and it │
-│                                                    will read the Julia Set constant from the given image's metadata frame *CENTER*                      │
-│                                                    '(overriding/ignoring the imaginary parameter part!); default is '0.27334'                           │
+│                                                    will read the Julia Set constant from the given image's metadata frame *CENTER* (overriding/ignoring │
+│                                                    the imaginary parameter part!); default is '0.27334'                                                 │
 │                                                                                                                                       │
 │ --julia-im           TEXT                          Imaginary part of the Julia Set constant; this can be a float (ex: "0.34") or a fraction of ints     │
 │                                                    (rational number, ex: "123/451") and the number will be fed directly to multi-precision arithmetic   │
@@ -380,7 +394,10 @@ Usage: tranz zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  <zoom in using model Qwen 32 with higher temperature 0.7, start from "Seahorse Tail", stop after 10 steps>                                                
                                                                                                                                                            
  $ poetry run tranz --iterm zoom ai "/path/to/image.png"                                                                                                   
- <gets the same frame used in "/path/to/image.png" and starts zoom there, print iTerm2 images>
+ <gets the same frame used in "/path/to/image.png" and starts zoom there, print iTerm2 images>                                                             
+                                                                                                                                                           
+ $ poetry run tranz --iterm zoom -s 700 --fractal julia ai                                                                                                 
+ <start with full default Julia Set and AI zoom with 700px size, print iTerm2 images>
 ```
 
 ### `tranz zoom manual` Sub-Command
@@ -419,5 +436,8 @@ Usage: tranz zoom manual [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  <zoom in manually, start from "Seahorse Tail", print iTerm2 images>                                                                                       
                                                                                                                                                            
  $ poetry run tranz zoom manual "/path/to/image.png"                                                                                                       
- <gets the same frame used in "/path/to/image.png" and starts zoom there>
+ <gets the same frame used in "/path/to/image.png" and starts zoom there>                                                                                  
+                                                                                                                                                           
+ $ poetry run tranz --iterm zoom -s 700 --fractal julia manual                                                                                             
+ <start with full default Julia Set and manual zoom with 700px size, print iTerm2 images>
 ```

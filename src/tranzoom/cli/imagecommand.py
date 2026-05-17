@@ -26,10 +26,16 @@ image_app = typer.Typer(
   no_args_is_help=True,
   help=(
     'Examples:\n\n\n\n'
-    '# --- Mandelbrot Image Generation ---\n'
+    '# --- Mandelbrot Set Image Generation ---\n'
     'poetry run tranz image mandel\n'
     'poetry run tranz image -w 512 -h 512 mandel " -0.74303" "0.126433" "0.01611"  '
     '# note the space because of the "-"\n\n'
+    '# --- Julia Set Image Generation ---\n'
+    'poetry run tranz image julia\n'
+    'poetry run tranz -s 1024 image julia "13667/50000" "371/50000" '
+    '" -313420497/429687500" "0.6567" "0.00544" "0.004"\n'
+    'poetry run tranz image julia "/path/to/julia_point_image.png" "" '
+    '"/path/to/frame_image.png"\n\n'
     '# --- TranZoom Fractal Image Data Reading / Visualization ---\n'
     'poetry run tranz image read /path/to/image.png'
   ),
@@ -85,7 +91,7 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
     'Saved to "mandel-<date>-<hash>.png"\n\n\n\n'
     '$ poetry run tranz image -w 512 -h 512 mandel " -0.74303" "0.126433" "0.01611"  '
     '# note the space because of the "-"\n\n'
-    '<saves Mandelbrot to disk with center --0.74303+0.126433j and width 0.01611>\n\n\n\n'
+    '<saves Mandelbrot to disk with center -0.74303+0.126433j and width 0.01611>\n\n\n\n'
     '$ poetry run tranz image mandel "/path/to/image.png"\n\n'
     '<gets the same frame used in "/path/to/image.png" and saves a new image of it to disk>'
   ),
@@ -114,14 +120,17 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
   epilog=(
     'Examples:\n\n\n\n'
     '$ poetry run tranz image julia\n\n'
-    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
+    '1024x1024 Julia in frame [(0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)] ...\n\n'
     '...\n\n'
     'Saved to "julia-<date>-<hash>.png"\n\n\n\n'
-    '$ poetry run tranz image -w 512 -h 512 julia " -0.74303" "0.126433" "0.01611"  '
-    '# note the space because of the "-"\n\n'
-    '<saves Julia to disk with center --0.74303+0.126433j and width 0.01611>\n\n\n\n'
-    '$ poetry run tranz image julia "/path/to/image.png"\n\n'
-    '<gets the same frame used in "/path/to/image.png" and saves a new image of it to disk>'
+    '$ poetry run tranz -s 1024 image julia "13667/50000" "371/50000" '
+    '" -313420497/429687500" "0.6567" "0.00544" "0.004"\n\n'
+    '<saves 1024px Julia to disk with center -313420497/429687500+0.6567j '
+    'and width 0.6567 by 0.004>\n\n\n\n'
+    '$ poetry run tranz image julia "/path/to/julia_point_image.png" "" '
+    '"/path/to/frame_image.png"\n\n'
+    '<gets the same frame used in "frame_image.png" and saves a new image '
+    'using "julia_point_image.png" Julia point>'
   ),
 )
 @clibase.CLIErrorGuard

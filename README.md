@@ -61,6 +61,7 @@ Built with:
       - [Seahorse (×155)](#seahorse-155)
       - [Seahorse Tail (×3k)](#seahorse-tail-3k)
       - [Julia Suzana (×1)](#julia-suzana-1)
+      - [Julia Suzana Wave (×427)](#julia-suzana-wave-427)
       - [Powers of 1000](#powers-of-1000)
     - [Configuration](#configuration)
     - [Color and formatting](#color-and-formatting)
@@ -267,7 +268,7 @@ The computed precision is exposed as:
 Render the [full Mandelbrot set](#full--default-1) (default, 1024×1024):
 
 ```sh
-$ poetry run tranz image mandel
+$ poetry run tranz --no-date image mandel
 
 1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision 80 bits, 1 magnification, AUTO iterations...
 
@@ -551,7 +552,7 @@ You can run all these at once by executing `scripts/make_examples.sh`.
 Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) with all the default values (image size 1024×1024, centered in $-0.75+0j$ and with width of $2.5$, a good frame that contains the whole set):
 
 ```sh
-$ poetry run tranz image mandel
+$ poetry run tranz --no-date image mandel
 
 1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision 140 bits, 1 magnification, AUTO iterations...
 
@@ -572,7 +573,7 @@ This is what tranZoom considers ***"1 magnification"***, and will measure other 
 Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mandel_zoom_03_seehorse.jpg) to a 1024×1024 image (default size):
 
 ```sh
-$ poetry run tranz image mandel " -0.74303" "0.126433" "0.01611"
+$ poetry run tranz --no-date image mandel " -0.74303" "0.126433" "0.01611"
 
 1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) ± 1611/100000], precision 140 bits, 155.183 magnification, AUTO iterations...
 
@@ -591,7 +592,7 @@ Saved to "mandel-e70bc149bc2fd3aff8ce.png"
 Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tail_part.jpg) at default 1024×1024:
 
 ```sh
-$ poetry run tranz image mandel " -0.7436499" "0.13188204" "0.00073801"
+$ poetry run tranz --no-date image mandel " -0.7436499" "0.13188204" "0.00073801"
 
 1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) ± 73801/100000000], precision 140 bits, 3.387 k magnification, AUTO iterations...
 
@@ -612,7 +613,7 @@ This image is relatively fast to generate (despite the zoom level, it has very l
 Render a "Julia Suzana" at `-s/--size` 1024:
 
 ```sh
-$ poetry run tranz image -s 1024 --palette electric-ocean julia
+$ poetry run tranz --no-date image -s 1024 --palette electric-ocean julia
 
 838x1024 Julia in frame [(0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)], precision ± 140 bits, 1 magnification, AUTO iterations...
 
@@ -621,6 +622,25 @@ Picked depth 1000, histogram [(2, 20), (3, 32), (4, 18), ('...', 58), (44, 2), (
 Img: 100%|█████████████████████████████████████████████| 858112/858112 [00:23<00:00, 36878.43px/s]
 Julia image '28f147dcfc6190d94bbbfece396c56ae074bb3cae14be5040446dc5fb40984f8' in 25.542 s, escape range (2, 1000)
 Saved to "julia-28f147dcfc6190d94bbb.png"
+```
+
+#### Julia Suzana Wave (×427)
+
+![Julia Suzana](tests/data/images/demo-julia-suzana-wave.png)
+
+Render a "Julia Suzana Wave" at `-s/--size` 1024:
+
+```sh
+$ poetry run tranz --no-date -s 1024 image --palette electric-ocean julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
+
+1024x1024 Julia in frame [(-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)], precision ± 140 bits, 426.597 magnification,
+AUTO iterations...
+
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:02<00:00, 121.00px/s]
+Picked depth 1819, histogram [(43, 8), (44, 14), (45, 14), ('...', 93), (208, 1), (1213, 1), (100000, 125)]
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [01:31<00:00, 11424.17px/s]
+Julia image '6319af0cc04f56bc974f041cdd68e1fde58ec8f24c9b2aee06bba2b5b60f09ef' in 1.588 min, escape range (43, 1819)
+Saved to "julia-6319af0cc04f56bc974f.png"
 ```
 
 #### Powers of 1000
