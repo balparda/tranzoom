@@ -20,8 +20,6 @@ import tqdm
 
 from tranzoom.core import frame, image
 
-# TODO: make a way of coloring the black inside with grayscale base on the max value [0..4] of |x|
-
 # automated search for iter
 
 _ITER_SAFETY_FACTOR: float = 1.5  # we multiply the estimated iter by this to be safe
@@ -400,18 +398,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
           continue
         # either this is a solo process, or this pixel is for this process
         cx: gmpy2.mpfr = xs[px]
-        # fast interior tests, all in mpfr: main cardioid and period-2 bulb.
-        # x_minus_quarter: gmpy2.mpfr = cx - _MPFR_FOURTH
-        # q: gmpy2.mpfr = x_minus_quarter * x_minus_quarter + cy * cy
-        # in_cardioid: bool = q * (q + x_minus_quarter) <= _MPFR_FOURTH * cy * cy
-        # x_plus_one: gmpy2.mpfr = cx + _MPFR_ONE
-        # in_bulb: bool = x_plus_one * x_plus_one + cy * cy <= _MPFR_SIXTEENTH
-        # if in_cardioid or in_bulb:
-        #   # point is in the main cardioid or period-2 bulb, so it's an interior point, no escape
-        #   img.escape[px_count] = inp.max_iter  # carefully set this directly in the array
-        #   p_bar.update(1)  # we touched a pixel, so update the progress bar
-        #   continue
-        # not in the main cardioid or period-2 bulb, do the full escape-time test in mpfr
+        # we can't have fast interior tests, b/c we want to tally the max |z| for interior points
         zx: gmpy2.mpfr = _MPFR_ZERO
         zy: gmpy2.mpfr = _MPFR_ZERO
         max_z2: gmpy2.mpfr = _MPFR_ZERO  # track the max |z|^2

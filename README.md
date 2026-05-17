@@ -173,7 +173,8 @@ Starting with version 1.1.0, tranZoom can use local LLM vision models to autonom
 - **Magnification**: Ratio of the default full-set frame area to the current frame area. 1× = full set; 1G× = zoomed in one billion times.
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
 - **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
-- **Color palette**: Four built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette`. Positions in the palette are determined by histogram equalization of escape-iteration counts, cycling through the stops `3` times across the range, so the full color range is used regardless of zoom depth or iteration scale. Interior points (never escaped) are always rendered as pure black. Available palettes: `blue-to-yellow-to-brown` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric-ocean` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient).
+- **Color palette**: Five built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette` (global flag). Positions in the palette are determined by histogram equalization of escape-iteration counts, cycling through the stops `3` times across the range, so the full color range is used regardless of zoom depth or iteration scale. Available palettes: `blue-to-yellow-to-brown` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric-ocean` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient), `grayscale` (8-stop black-to-white gradient, designed for interior coloring).
+- **Interior (Set) coloring**: By default, interior points (those that never escape, i.e., inside the Mandelbrot/Julia Set) are rendered as pure black. Passing `--set` enables smooth coloring of those points using a separate `--set-palette` (default `grayscale`); the same histogram-equalization approach is applied to their stored `|z|` magnitudes at max depth, so the full Set palette range is used. Both flags are global and apply to all `image` and `zoom` commands.
 - **AI zoom session**: The `tranz zoom ai` command starts an iterative loop: render the current frame, draw a 3×3 thirds grid overlay with green sector labels, send the image to a local LLM vision model, parse the 9-sector scoring response, and move the frame center toward the highest-scoring sector. Supports both Mandelbrot (default) and Julia Set fractals via `-f/--fractal`. The optional `--query` flag enables targeted search, blending fractal-quality scores with target-match scores. The loop runs until Ctrl+C or `--max-steps` is reached.
 - **Manual zoom session**: The `tranz zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM. Supports both Mandelbrot and Julia Set fractals.
 - **Sector scoring**: Each sector is scored on a 0–100 scale for `fractal_score` (visual complexity / zoom promise). When targeted search is active, an additional `target_match_score` (also 0–100) is blended in with a configurable weight.
@@ -296,14 +297,15 @@ See many more examples in *[Comprehensive example images and zooms](#comprehensi
 
 ### Palettes
 
-With the `--palette` flag you can pick your color scheme. We provide the following out of the box:
+With the `--palette` global flag you can pick your color scheme for exterior (escaped) pixels. With `--set-palette` you can pick the color scheme for interior Set points (only visible when `--set` is also given). We provide the following palettes:
 
-| Flag Value | Example |
+| Flag Value | Notes |
 | --- | --- |
-| **`blue-to-yellow-to-brown"` (DEFAULT)** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-byb.png) |
-| **`"lava"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-lava.png) |
-| **`"electric-ocean"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-ocean.png) |
-| **`"sunset"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-sunset.png) |
+| **`"blue-to-yellow-to-brown"` (DEFAULT)** | Classic 16-stop gradient |
+| **`"lava"`** | 16-stop volcanic gradient |
+| **`"electric-ocean"`** | 32-stop abyss-to-magenta-to-lavender gradient |
+| **`"sunset"`** | 32-stop indigo-to-amber-to-wine gradient |
+| **`"grayscale"` (DEFAULT for `--set-palette`)** | 8-stop black-to-white gradient; designed for interior Set-point coloring |
 
 ### Command structure
 
@@ -325,6 +327,9 @@ tranz [global flags] <subgroup> <command> [args]
 | `--date`/`--no-date` | Include date-time (`YYYYMMDDhhmmss`) in filename | `--date` |
 | `--hash`/`--no-hash` | Include 20-char SHA256 hash in filename | `--hash` |
 | `--iterm`/`--no-iterm` | Print image inline in iTerm2 (macOS + iTerm2 only) | off |
+| `--palette` | Color palette for exterior (escaped) pixels; one of `blue-to-yellow-to-brown`, `lava`, `electric-ocean`, `sunset`, `grayscale` | `blue-to-yellow-to-brown` |
+| `--set-palette` | Color palette for interior Set points (used only when `--set` is given) | `grayscale` |
+| `--set`/`--no-set` | Enable smooth coloring of interior Set points using `--set-palette` | off |
 | `-m`/`--model` | LMStudio vision model identifier to load | `qwen3-vl-32b-instruct@q8_0` |
 | `--spec-tokens` | Speculative decoding tokens | model default |
 | `--seed` | Random seed for the model | random |
@@ -343,7 +348,7 @@ tranz [global flags] <subgroup> <command> [args]
 These flags apply to all `tranz image` commands and must be placed **between `image` and the sub-command name**:
 
 ```sh
-tranz [global flags] image [-w W] [-h H] [-s S] [--iter N] [--palette NAME] [--mark COORD] <mandel|julia|read> [args]
+tranz [global flags] image [-w W] [-h H] [-s S] [--iter N] [--mark COORD] <mandel|julia|read> [args]
 ```
 
 | Flag | Description | Default |
@@ -352,7 +357,6 @@ tranz [global flags] image [-w W] [-h H] [-s S] [--iter N] [--palette NAME] [--m
 | `-h`/`--height` | Output image height in pixels (16–16384) | 1024 |
 | `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales the other dimension proportionally to match the frame aspect ratio | None (use `-w`/`-h`) |
 | `-i`/`--iter` | Override max iterations (depth); `1000`–4294967295 | automatic adaptive search |
-| `--palette` | Color palette name | `blue-to-yellow-to-brown` |
 | `--mark` | Draw a crosshair at this complex coordinate, formatted as `"(re, im)"` | None |
 | `--mark-color` | Color of the crosshair; one of `black`, `white`, `red`, `green`, `blue`, `yellow`, `cyan`, `magenta` | `red` |
 | `--mark-width` | Line width of the crosshair (1–50) | `1` |
@@ -375,6 +379,8 @@ tranz [global flags] zoom [-w W] [-h H] [-s S] [-f FRACTAL] [-n STEPS] [--julia-
 | `--julia-im` | Imaginary part of the Julia Set constant `c` | `'0.00742'` |
 | `-n`/`--max-steps` | Max zoom steps; `0` = unlimited (Ctrl+C to stop) | `0` |
 
+Palette flags (`--palette`, `--set-palette`, `--set/--no-set`) are **global flags** (placed before the subgroup name) and apply to all zoom commands as well as image commands.
+
 ### CLI Commands Documentation
 
 Auto-generated CLI reference:
@@ -384,7 +390,7 @@ Auto-generated CLI reference:
 ### `tranz image mandel` — Render a Mandelbrot image
 
 ```sh
-poetry run tranz [global flags] image [-w WIDTH] [-h HEIGHT] [--iter N] [--palette NAME] mandel [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
+poetry run tranz [global flags] image [-w WIDTH] [-h HEIGHT] [--iter N] mandel [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 ```
 
 Positional arguments (all optional; defaults show the full Mandelbrot set):
@@ -418,7 +424,7 @@ See below for many example outputs.
 ### `tranz image julia` — Render a Julia Set image
 
 ```sh
-poetry run tranz [global flags] image [-w WIDTH] [-h HEIGHT] [-s SIZE] [--iter N] [--palette NAME] [--mark COORD] julia [POINT_RE] [POINT_IM] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
+poetry run tranz [global flags] image [-w WIDTH] [-h HEIGHT] [-s SIZE] [--iter N] [--mark COORD] julia [POINT_RE] [POINT_IM] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 ```
 
 Positional arguments (all optional; defaults show the "Julia Suzana" set):
@@ -437,7 +443,7 @@ Image size and render options are set at the `tranz image` subgroup level (see [
 **Tip — proportional sizing:** use `-s` instead of `-w`/`-h` so the output image always matches the frame's aspect ratio:
 
 ```sh
-poetry run tranz image -s 1024 --palette electric-ocean julia
+poetry run tranz --palette electric-ocean image -s 1024 julia
 ```
 
 **Tip — re-render from a saved image:** pass a tranZoom PNG path as `POINT_RE` to pick up the same Julia constant:
@@ -615,7 +621,7 @@ This image is relatively fast to generate (despite the zoom level, it has very l
 Render a "Julia Suzana" at `-s/--size` 1024:
 
 ```sh
-$ poetry run tranz --no-date image -s 1024 --palette electric-ocean julia
+$ poetry run tranz --no-date --palette electric-ocean image -s 1024 julia
 
 838x1024 Julia in frame [(0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)], precision ± 140 bits, 1 magnification, AUTO iterations...
 
@@ -633,7 +639,7 @@ Saved to "julia-28f147dcfc6190d94bbb.png"
 Render a "Julia Suzana Wave" at `-s/--size` 1024:
 
 ```sh
-$ poetry run tranz --no-date -s 1024 image --palette electric-ocean julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
+$ poetry run tranz --no-date --palette electric-ocean image -s 1024 julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
 
 1024x1024 Julia in frame [(-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)], precision ± 140 bits, 426.597 magnification,
 AUTO iterations...

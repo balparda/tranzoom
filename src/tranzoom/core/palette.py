@@ -14,10 +14,11 @@ class Palette(enum.Enum):
   LAVA = 'lava'
   OCEAN = 'electric-ocean'
   SUNSET = 'sunset'
+  GRAYSCALE = 'grayscale'
 
 
 DEFAULT_PALETTE: Palette = Palette.BYB
-DEFAULT_SET_PALETTE: Palette = Palette.BYB  # TODO: make grayscale palette and make it this default
+DEFAULT_SET_PALETTE: Palette = Palette.GRAYSCALE  # used for interior (set) points coloring
 
 # how many times to cycle through the palette across the histogram-equalized range;
 # more cycles = tighter, more frequent color banding; 3 is a visually balanced default
@@ -134,5 +135,17 @@ PALETTES: dict[Palette, tuple[tuple[int, int, int], ...]] = {
     (38, 8, 75),  # deep violet
     (22, 5, 60),  # near-dark indigo
     (13, 3, 50),  # almost black indigo (wraps back to start)
+  ),
+  # 8-stop smooth grayscale: black → dark gray → mid gray → light gray → white; intended for
+  # coloring the interior (Set) points when --set is enabled; this is the DEFAULT_SET_PALETTE
+  Palette.GRAYSCALE: (
+    (0, 0, 0),  # black (deepest interior; far from boundary)
+    (32, 32, 32),  # very dark gray
+    (72, 72, 72),  # dark gray
+    (120, 120, 120),  # medium-dark gray
+    (168, 168, 168),  # medium-light gray
+    (210, 210, 210),  # light gray
+    (240, 240, 240),  # near-white
+    (255, 255, 255),  # white (near-boundary, high |z| magnitude)
   ),
 }

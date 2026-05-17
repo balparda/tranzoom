@@ -32,14 +32,15 @@ This project follows a pragmatic versioning approach:
 ## 1.4.0 - 2026-05-17
 
 - Added
-  - TBD
+  - **Grayscale palette** (`grayscale`): new 8-stop black-to-white gradient palette designed for coloring interior Set points; it is now the default `--set-palette`.
+  - **Interior (Set) point coloring**: new `--set/--no-set` global flag enables smooth coloring of interior (Set) points using a separate `--set-palette` (default `grayscale`); the same histogram-equalization approach used for exterior points is applied to the stored `|z|` magnitudes at max depth, so the full set-palette range is used across the Set interior; defaults to off (black).
+  - New PNG metadata keys `tranzoom:image:set_palette` and `tranzoom:image:color_set`: embedded in all images to record the interior palette used and whether interior coloring was enabled.
 
 - Changed
-  - Option `--palette` moved up to `tranz` level and now applies to `zoom ai` and `zoom manual` commands too.
-  - TBD
+  - **Breaking**: `--palette`, `--set-palette`, and `--set/--no-set` moved from the `tranz image` subgroup callback to the `tranz` global callback; they now apply to `tranz zoom ai` and `tranz zoom manual` commands as well; usage changes from `tranz image --palette NAME ...` to `tranz --palette NAME image ...`.
 
 - Fixed
-  - TBD
+  - N/A
 
 ## 1.3.0 - 2026-05-16
 

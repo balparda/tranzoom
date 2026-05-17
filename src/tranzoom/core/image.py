@@ -37,6 +37,8 @@ META_IMAGE_WIDTH_KEY = 'tranzoom:image:width'  # int, in pixels
 META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
 META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
 META_IMAGE_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
+META_IMAGE_SET_PALETTE_KEY = 'tranzoom:image:set_palette'  # str, interior Set palette name
+META_IMAGE_COLOR_SET_KEY = 'tranzoom:image:color_set'  # bool; "true" if Set points are colored
 META_IMAGE_OVERLAY_KEY = 'tranzoom:image:overlay'  # bool; stored as "true"/"false"
 META_FRACTAL_KEY = 'tranzoom:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal, lowercase
 META_TOP_RE_KEY = 'tranzoom:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
@@ -52,6 +54,8 @@ META_MAGNIFICATION_KEY = 'tranzoom:frame:magnification'  # gmpy2.mpfr -> convert
 META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'  # float
 META_ITER_DEPTH_MIN_KEY = 'tranzoom:iter_depth:min'  # int
 META_ITER_DEPTH_MAX_KEY = 'tranzoom:iter_depth:max'  # int
+META_SET_POINT_MIN_KEY = 'tranzoom:set_point:min'  # int
+META_SET_POINT_MAX_KEY = 'tranzoom:set_point:max'  # int
 META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:iter_depth:search'  # int, can be "-1" if unknown or not set
 # extra keys added to some images only (for example, when the LLM evaluates the image)
 META_JULIA_RE_KEY = 'tranzoom:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
@@ -235,20 +239,24 @@ class Image:
   ) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
-    Current palette:
-    - black for interior points (never escape)
-    - smooth multi-stop cycling gradient, histogram-equalized across escape iterations
+    Exterior points (escaped) are colored by mapping their escape iteration through a cumulative
+    histogram distribution (histogram equalization) into [0, 1), which is then fed into a smooth
+    cycling color gradient via (PixelPalette). This ensures the full color range is used
+    regardless of zoom depth or iteration distribution.
 
-    Interior points (that never escaped, i.e., escaped_at == max_iter) are rendered as
-    pure black. Exterior points are colored by mapping their escape iteration through a
-    cumulative histogram distribution (histogram equalization) into [0, 1), which is then
-    fed into a smooth cycling color gradient via (_PixelPalette). This ensures the full
-    color range is used regardless of zoom depth or iteration distribution.
+    Interior (Set) points that never escaped are rendered as pure black by default. When
+    `color_set_points=True`, they are instead colored using `set_pal` via the same histogram
+    equalization approach, applied to their stored |z| magnitude (the negative of the stored
+    escape value), so the full `set_pal` range is used across the Set interior.
 
     Args:
-      pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
-      set_pal (palette.Palette, optional): The color palette for interior Set points.
-      color_set_points (bool, optional): If True, color the interior Set points
+      pal (palette.Palette, optional): The color palette for exterior (escaped) pixels.
+          Defaults to DEFAULT_PALETTE.
+      set_pal (palette.Palette, optional): The color palette for interior Set points; only
+          used when `color_set_points=True`. Defaults to DEFAULT_SET_PALETTE.
+      color_set_points (bool, optional): If True, color the interior Set points using `set_pal`
+          with histogram equalization over their |z| magnitudes; if False (default), render
+          them as pure black.
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
@@ -257,40 +265,36 @@ class Image:
       Error: on error
 
     """
-    # step 1: build histogram of escape iterations for exterior pixels only
-    histogram: dict[int, int] = {}
+    # step 1: build cumulative histogram for exterior pixels (escaped, 0 <= e < depth)
     min_escape: int
     max_escape: int
+    total_exterior: int
+    cumulative: dict[int, int]
     min_escape, max_escape, _, _ = self.escape_range
     depth: int = self._depth if self._depth is not None else max_escape
     if min_escape < 0 or depth < max_escape:
       raise Error(f'Invalid/Inconsistent {min_escape=} or {depth=} < {max_escape=}')
-    for escaped_at in self.escape:
-      if 0 <= escaped_at < depth:  # don't get negative escapes (interior points)
-        histogram[escaped_at] = histogram.get(escaped_at, 0) + 1
-    total_exterior: int = sum(histogram.values())
-    # step 2: compute cumulative distribution function for histogram equalization;
-    # cumulative[v] = number of exterior pixels with escape value <= v
-    cumulative: dict[int, int] = {}
-    cum: int = 0
-    for v in sorted(histogram):
-      cum += histogram[v]
-      cumulative[v] = cum
+    cumulative, total_exterior = BuildCumulative([e for e in self.escape if 0 <= e < depth])
+    # step 2: optionally build cumulative histogram for interior/Set pixels (escaped_at < 0);
+    # interior points store -|z| magnitude, so we flip the sign for the histogram key
+    set_cumulative: dict[int, int] = {}
+    total_set: int = 0
+    if color_set_points:
+      set_cumulative, total_set = BuildCumulative([-e for e in self.escape if e < 0])
     # step 3: map each pixel to an RGB color
-    r: int
-    g: int
-    b: int
     pixels = bytearray(self._width * self._height * 3)
     for i, escaped_at in enumerate(self.escape):
-      if escaped_at < 0 or escaped_at >= depth or total_exterior == 0:
-        r, g, b = 0, 0, 0  # interior point: black
-      else:
-        # keep t in [0, 1) so the highest escape bucket does not wrap
+      if 0 <= escaped_at < depth and total_exterior > 0:
+        # exterior point: histogram-equalized position in pal
         t: float = (cumulative[escaped_at] - 1) / total_exterior
-        r, g, b = PixelPalette(t, pal)
-      pixels[i * 3] = r
-      pixels[i * 3 + 1] = g
-      pixels[i * 3 + 2] = b
+        rgb: tuple[int, int, int] = PixelPalette(t, pal)
+      elif color_set_points and total_set > 0 and escaped_at < 0:
+        # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
+        t_set: float = (set_cumulative[-escaped_at] - 1) / total_set
+        rgb = PixelPalette(t_set, set_pal)
+      else:
+        rgb = (0, 0, 0)  # black: interior point (default) or all-interior image
+      pixels[i * 3], pixels[i * 3 + 1], pixels[i * 3 + 2] = rgb
     return bytes(pixels)
 
   def AsPNG(
@@ -328,6 +332,8 @@ class Image:
     png_meta.add_text(META_IMAGE_HEIGHT_KEY, str(self._height))
     png_meta.add_text(META_IMAGE_HASH_KEY, img_data_hash)
     png_meta.add_text(META_IMAGE_PALETTE_KEY, pal.value)
+    png_meta.add_text(META_IMAGE_SET_PALETTE_KEY, set_pal.value)
+    png_meta.add_text(META_IMAGE_COLOR_SET_KEY, 'true' if color_set_points else 'false')
     png_meta.add_text(META_IMAGE_OVERLAY_KEY, 'false')  # if it comes from this, it has no overlay
     # frame type
     png_meta.add_text(META_FRACTAL_KEY, self._frame.fractal.value.lower())
@@ -356,9 +362,13 @@ class Image:
     # escape iteration range in the image
     min_escape: int
     max_escape: int
-    min_escape, max_escape, _, _ = self.escape_range
+    min_set: int
+    max_set: int
+    min_escape, max_escape, min_set, max_set = self.escape_range
     png_meta.add_text(META_ITER_DEPTH_MIN_KEY, str(min_escape))
     png_meta.add_text(META_ITER_DEPTH_MAX_KEY, str(max_escape))
+    png_meta.add_text(META_SET_POINT_MIN_KEY, str(min_set))
+    png_meta.add_text(META_SET_POINT_MAX_KEY, str(max_set))
     png_meta.add_text(
       META_ITER_SEARCH_DEPTH_KEY, str(self._depth) if self._depth is not None else '-1'
     )
@@ -741,3 +751,26 @@ def PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:
     int(g0 + frac * (g1 - g0)),
     int(b0 + frac * (b1 - b0)),
   )
+
+
+def BuildCumulative(values: list[int]) -> tuple[dict[int, int], int]:
+  """Build a cumulative histogram from a pre-filtered list of integer values.
+
+  Args:
+    values (list[int]): The list of integer values to histogram.
+
+  Returns:
+    tuple[dict[int, int], int]: (cumulative, total) where cumulative[v] = count of values ≤ v
+        and total = len(values).
+
+  """
+  histogram: dict[int, int] = {}
+  for v in values:
+    histogram[v] = histogram.get(v, 0) + 1
+  total: int = len(values)
+  cumulative: dict[int, int] = {}
+  cum: int = 0
+  for v in sorted(histogram):
+    cum += histogram[v]
+    cumulative[v] = cum
+  return cumulative, total
