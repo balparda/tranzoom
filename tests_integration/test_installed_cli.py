@@ -83,8 +83,12 @@ def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path
         'tranzoom:image:height': '1024',
         'tranzoom:image:width': '1024',
         'tranzoom:image:palette': 'blue-to-yellow-to-brown',
+        'tranzoom:image:set_palette': 'grayscale',
+        'tranzoom:image:color_set': 'true',
         'tranzoom:image:hash': base.SEAHORSE_TAIL_HASH,
         'tranzoom:image:overlay': 'false',
+        'tranzoom:image:pixel_exterior_count': '1048376',
+        'tranzoom:image:pixel_interior_count': '200',
         'tranzoom:frame:fractal': 'mandelbrot',
         'tranzoom:frame:top_re': '-148803781/200000000',
         'tranzoom:frame:top_im': '26450209/200000000',
@@ -100,6 +104,10 @@ def _SeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path
         'tranzoom:iter_depth:min': '36',
         'tranzoom:iter_depth:max': '1000',
         'tranzoom:iter_depth:search': '1000',
+        'tranzoom:set_point:min': '50504988',
+        'tranzoom:set_point:max': '72283514',
+        'tranzoom:set_point:float_min': '1.01009974',
+        'tranzoom:set_point:float_max': '1.44567026',
       }
   finally:
     shutil.rmtree(data_dir)  # remove created data to isolate the next CLI's read step
