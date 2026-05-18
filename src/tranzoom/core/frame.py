@@ -34,6 +34,9 @@ _MPFR_MIN_PRECISION: int = 140  # about 42 decimal digits
 _MPFR_BIG_PRECISION: int = 30_000  # ±10k decimal digits
 _MPFR_MAX_PRECISION: int = 300_000  # ±100k decimal digits
 _MPFR_MIN_GUARD_BITS: int = 88  # extra bits beyond the minimum needed to distinguish pixels
+MPFR_MAX_SET_Z: gmpy2.mpfr = gmpy2.mpfr('2')
+MPFR_SET_INTERIOR_RESOLUTION: gmpy2.mpfr = gmpy2.mpfr(SET_INTERIOR_RESOLUTION)
+MPFR_SET_INTERIOR_SCALE: gmpy2.mpfr = MPFR_SET_INTERIOR_RESOLUTION / MPFR_MAX_SET_Z
 
 # gmpy2.mpfr ultra-precision context factory
 PrecisionContext: abc.Callable[[], gmpy2.context] = lambda: gmpy2.local_context(

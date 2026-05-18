@@ -185,7 +185,8 @@ def _ProduceFractalImage(frm: frame.Frame, config: base.TranZoomConfig) -> None:
     f'\n{width}x{height} {frm.fractal.value.capitalize()} in '
     f'frame {frm}, precision ± {frm.Precision(width, height)} bits, '  # approx: b/c iters
     f'{magnification_str} magnification, '
-    f'{"AUTO" if config.max_iter is None else config.max_iter} iterations...\n'
+    f'{"AUTO" if config.max_iter is None else config.max_iter} iterations'
+    f'{", rich interior" if config.color_set_points else ""}...'
   )
   # render the image
   raw_png: bytes
@@ -211,8 +212,13 @@ def _ProduceFractalImage(frm: frame.Frame, config: base.TranZoomConfig) -> None:
       raw_png = image.DrawCrossOverlay(
         raw_png, mark_coords[0], mark_coords[1], col=config.mark_color, lw=config.mark_width
       )
+  # print stats
+  set_z_min: float
+  set_z_max: float
+  set_z_min, set_z_max = img.set_range_as_z
   config.console.print(
-    f'{frm.fractal.value.capitalize()} image {raw_hash!r} in {tmr}, escape range {img.escape_range}'
+    f'{frm.fractal.value.capitalize()} image {raw_hash!r} in {tmr}, '
+    f'escape range {img.escape_range[:2]}, |z| in [{set_z_min:.6f}, {set_z_max:.6f}]'
   )
   # save the image to a file named by its time/hash
   full_path: pathlib.Path = image.MakeImagePath(
@@ -224,6 +230,7 @@ def _ProduceFractalImage(frm: frame.Frame, config: base.TranZoomConfig) -> None:
   )
   full_path.write_bytes(raw_png)
   config.console.print(f'Saved to "{full_path}"\n')
+  # iterm
   if config.iterm:
     image.PrintITerm2(raw_png)
     config.console.print()
@@ -245,19 +252,23 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
   ctx: click.Context,
   image_path: pathlib.Path = base.IMAGE_PATH_INPUT_ARGUMENT,  # type: ignore[assignment]
 ) -> None:
-  # check sanity
   config: base.TranZoomConfig = ctx.obj
+  # read image
   image_path = image_path.expanduser().resolve()
   image_data: bytes = image_path.read_bytes()
   w, h, png_hash, info = image.GetBasicDataFromPNG(image_data)
+  # print header
   config.console.print()
   config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')
   config.console.print(f'[green]{w}x{h}[/green] (wxh) / [cyan]{png_hash}[/cyan]')
   config.console.print()
+  # expand JSON, if needed
   if image.META_LLM_RESULT_JSON_KEY in info:
     info[image.META_LLM_RESULT_JSON_KEY] = json.loads(str(info[image.META_LLM_RESULT_JSON_KEY]))
+  # print the metadata in a nice format
   config.console.print_json(data=info, indent=2)
   config.console.print()
+  # iterm
   if config.iterm:
     image.PrintITerm2(image_data)
     config.console.print()

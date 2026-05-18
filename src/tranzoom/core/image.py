@@ -40,6 +40,8 @@ META_IMAGE_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of 
 META_IMAGE_SET_PALETTE_KEY = 'tranzoom:image:set_palette'  # str, interior Set palette name
 META_IMAGE_COLOR_SET_KEY = 'tranzoom:image:color_set'  # bool; "true" if Set points are colored
 META_IMAGE_OVERLAY_KEY = 'tranzoom:image:overlay'  # bool; stored as "true"/"false"
+META_PIXEL_EXTERIOR_COUNT_KEY = 'tranzoom:image:pixel_exterior_count'  # int; escaped pixel count
+META_PIXEL_INTERIOR_COUNT_KEY = 'tranzoom:image:pixel_interior_count'  # int; Set interior count
 META_FRACTAL_KEY = 'tranzoom:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal, lowercase
 META_TOP_RE_KEY = 'tranzoom:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
 META_TOP_IM_KEY = 'tranzoom:frame:top_im'  # gmpy2.mpq
@@ -56,6 +58,8 @@ META_ITER_DEPTH_MIN_KEY = 'tranzoom:iter_depth:min'  # int
 META_ITER_DEPTH_MAX_KEY = 'tranzoom:iter_depth:max'  # int
 META_SET_POINT_MIN_KEY = 'tranzoom:set_point:min'  # int
 META_SET_POINT_MAX_KEY = 'tranzoom:set_point:max'  # int
+META_SET_POINT_FLOAT_MIN_KEY = 'tranzoom:set_point:float_min'  # float; min |z| for Set interior
+META_SET_POINT_FLOAT_MAX_KEY = 'tranzoom:set_point:float_max'  # float; max |z| for Set interior
 META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:iter_depth:search'  # int, can be "-1" if unknown or not set
 # extra keys added to some images only (for example, when the LLM evaluates the image)
 META_JULIA_RE_KEY = 'tranzoom:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
@@ -85,6 +89,9 @@ _SQRT_TWO: float = math.sqrt(2)
 _LINE_WIDTH_RATIO: int = 150  # line width will be max(1, sz//_LINE_WIDTH_RATIO) of the image width
 _CIRCLE_RADIUS: int = 20
 _LABEL_OFFSET: int = 5
+# scale factor for converting stored Set interior integers back to |z| float magnitudes;
+# interior points are stored as -(int(floor(scale * |z|)) + 1), with scale = RES / MAX_Z = RES / 2
+_SET_INTERIOR_SCALE: float = float(frame.MPFR_SET_INTERIOR_SCALE)
 
 
 class Color(enum.Enum):
@@ -173,6 +180,17 @@ class Image:
     if escaped_at < 0:
       raise Error(f'Invalid escape iteration: {escaped_at=}')
     self.escape[y * self._width + x] = escaped_at
+
+  @property
+  def set_range_as_z(self) -> tuple[float, float]:
+    """Get the min/max interior Set |z| magnitudes as floats. Returns (0.0, 0.0) if no interior.
+
+    Returns:
+      tuple[float, float]: (min_|z|, max_|z|) for the Set interior points.
+
+    """
+    _, _, min_set, max_set = self.escape_range
+    return (_SetIntToZ(min_set), _SetIntToZ(max_set))
 
   @property
   def escape_range(self) -> tuple[int, int, int, int]:
@@ -274,13 +292,13 @@ class Image:
     depth: int = self._depth if self._depth is not None else max_escape
     if min_escape < 0 or depth < max_escape:
       raise Error(f'Invalid/Inconsistent {min_escape=} or {depth=} < {max_escape=}')
-    cumulative, total_exterior = BuildCumulative([e for e in self.escape if 0 <= e < depth])
+    _, cumulative, total_exterior = BuildCumulative([e for e in self.escape if 0 <= e < depth])
     # step 2: optionally build cumulative histogram for interior/Set pixels (escaped_at < 0);
     # interior points store -|z| magnitude, so we flip the sign for the histogram key
     set_cumulative: dict[int, int] = {}
     total_set: int = 0
     if color_set_points:
-      set_cumulative, total_set = BuildCumulative([-e for e in self.escape if e < 0])
+      _, set_cumulative, total_set = BuildCumulative([-e for e in self.escape if e < 0])
     # step 3: map each pixel to an RGB color
     pixels = bytearray(self._width * self._height * 3)
     for i, escaped_at in enumerate(self.escape):
@@ -369,9 +387,17 @@ class Image:
     png_meta.add_text(META_ITER_DEPTH_MAX_KEY, str(max_escape))
     png_meta.add_text(META_SET_POINT_MIN_KEY, str(min_set))
     png_meta.add_text(META_SET_POINT_MAX_KEY, str(max_set))
+    png_meta.add_text(META_SET_POINT_FLOAT_MIN_KEY, str(_SetIntToZ(min_set)))
+    png_meta.add_text(META_SET_POINT_FLOAT_MAX_KEY, str(_SetIntToZ(max_set)))
     png_meta.add_text(
       META_ITER_SEARCH_DEPTH_KEY, str(self._depth) if self._depth is not None else '-1'
     )
+    # pixel counts and histograms; exterior pixels have escape >= 0, interior (Set) have escape < 0
+    depth: int = self._depth if self._depth is not None else max_escape
+    png_meta.add_text(
+      META_PIXEL_EXTERIOR_COUNT_KEY, str(len([1 for e in self.escape if 0 <= e < depth]))
+    )
+    png_meta.add_text(META_PIXEL_INTERIOR_COUNT_KEY, str(len([1 for e in self.escape if e < 0])))
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
     img.save(buf, format='PNG', pnginfo=png_meta)
@@ -760,24 +786,49 @@ def PixelPalette(
   )
 
 
-def BuildCumulative(values: list[int]) -> tuple[dict[int, int], int]:
-  """Build a cumulative histogram from a pre-filtered list of integer values.
+def _SetIntToZ(val: int) -> float:
+  """Convert a stored Set interior integer to its |z| magnitude float value.
+
+  Interior points are stored as -(int(floor(scale * |z|)) + 1) where scale = SET_INTERIOR_SCALE,
+  so min_set/max_set (the positive equivalents from escape_range) map back via (val-1)/scale.
+
+  Args:
+    val (int): The stored Set interior integer (1..SET_INTERIOR_RESOLUTION), or 0 if none.
+
+  Returns:
+    float: The |z| magnitude, in [0, 2), or 0.0 if val <= 0 (no interior points).
+
+  Raises:
+    Error: if val exceeds the resolution limit.
+
+  """
+  val = val if val >= 0 else -val  # convert back to positive if negative
+  if val > frame.SET_INTERIOR_RESOLUTION:
+    raise Error(f'Invalid Set interior: {val=} exceeds resolution {frame.SET_INTERIOR_RESOLUTION}')
+  return (val - 1) / _SET_INTERIOR_SCALE
+
+
+def BuildCumulative(values: list[int]) -> tuple[dict[int, int], dict[int, int], int]:
+  """Build a raw histogram and cumulative histogram from a pre-filtered list of integer values.
 
   Args:
     values (list[int]): The list of integer values to histogram.
 
   Returns:
-    tuple[dict[int, int], int]: (cumulative, total) where cumulative[v] = count of values ≤ v
+    tuple[dict[int, int], dict[int, int], int]: (histogram, cumulative, total) where
+        histogram[v] = count of occurrences of value v, cumulative[v] = count of values ≤ v,
         and total = len(values).
 
   """
+  # build the raw histogram
   histogram: dict[int, int] = {}
   for v in values:
     histogram[v] = histogram.get(v, 0) + 1
+  # build the cumulative histogram by iterating over the sorted keys of the raw histogram
   total: int = len(values)
   cumulative: dict[int, int] = {}
   cum: int = 0
   for v in sorted(histogram):
     cum += histogram[v]
     cumulative[v] = cum
-  return cumulative, total
+  return (histogram, cumulative, total)

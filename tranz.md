@@ -39,9 +39,9 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                 'grayscale', 'lava', 'sunset']                          │
 │                                                                                                                                     │
 │ --set                     --no-set                                                              If True, color the interior Set points with             │
-│                                                                                                 `--set-palette` instead of black; default is False      │
-│                                                                                                 (black)                                                 │
-│                                                                                                                                        │
+│                                                                                                 `--set-palette` instead of black; default is True (use  │
+│                                                                                                 set palette)                                            │
+│                                                                                                                                           │
 │ --threads                               INTEGER RANGE [1<=x<=16]                                Number of threads to use for rendering; default is      │
 │                                                                                                 None, which means to use all available CPU cores; will  │
 │                                                                                                 be limited to 16 threads                                │

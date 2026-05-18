@@ -114,6 +114,7 @@ def ZoomLoop(
   print_comm(
     f'Will run {width} x {height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
     + ('include reason field. ' if reason else '[cyan]NOT[/] include reason field. ')
+    + ('Rich interior. ' if color_set_points else '')
     + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(
@@ -264,7 +265,8 @@ def ManualLoop(
   zoom_tm: int = timer.Now()
   print_comm(
     f'Will run {width} x {height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
-    'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
+    + ('Rich interior. ' if color_set_points else '')
+    + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})\n')
   # start
@@ -429,10 +431,14 @@ def _ComputeFractal(
     tm=zoom_tm,
     add_serial=count,
   )
+  set_z_min: float
+  set_z_max: float
+  set_z_min, set_z_max = img.set_range_as_z
   print_comm(
     f'\n{frm.fractal.value.capitalize()} zoom (#{count}) '
     f'with frame {frm}, precision {img.precision} bits, {magnification_str} magnification\n'
-    f'{img_hash!r} in {tmr}, escape range {img.escape_range}, will save as "{full_path}"'
+    f'{img_hash!r} in {tmr}, escape range {img.escape_range[:2]}'
+    f', |z| in [{set_z_min:.6f}, {set_z_max:.6f}], will save as "{full_path}"'
   )
   if iterm:
     print_comm('')

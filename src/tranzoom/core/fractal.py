@@ -32,14 +32,8 @@ MAX_CONCURRENCE: int = 16  # for the main rendering step, we limit the concurren
 
 # gmpy2.mpfr constants
 _MPFR_ZERO: gmpy2.mpfr = gmpy2.mpfr('0')
-_MPFR_SIXTEENTH: gmpy2.mpfr = gmpy2.mpfr('0.0625')
-_MPFR_FOURTH: gmpy2.mpfr = gmpy2.mpfr('0.25')
-_MPFR_ONE: gmpy2.mpfr = gmpy2.mpfr('1')
 _MPFR_TWO: gmpy2.mpfr = gmpy2.mpfr('2')
 _MPFR_FOUR: gmpy2.mpfr = gmpy2.mpfr('4')
-_MPFR_MAX_SET_Z: gmpy2.mpfr = _MPFR_TWO
-_MPFR_SET_INTERIOR_RESOLUTION: gmpy2.mpfr = gmpy2.mpfr(frame.SET_INTERIOR_RESOLUTION)
-_MPFR_SET_INTERIOR_SCALE: gmpy2.mpfr = _MPFR_SET_INTERIOR_RESOLUTION / _MPFR_MAX_SET_Z
 
 
 class Error(image.Error):
@@ -422,7 +416,8 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
             raise Error(f'Interior point exceeded max |z|^2 of 4, should never happen, {max_z2=}')
           # scale max_z2 to [1..SET_INTERIOR_RESOLUTION], never zero b/c being <0 is the marker!
           escaped_at = -(  # negative!
-            int(gmpy2.floor(_MPFR_SET_INTERIOR_SCALE * cast('gmpy2.mpfr', gmpy2.sqrt(max_z2)))) + 1
+            int(gmpy2.floor(frame.MPFR_SET_INTERIOR_SCALE * cast('gmpy2.mpfr', gmpy2.sqrt(max_z2))))
+            + 1
           )  # add 1 to make it [1..SET_INTERIOR_RESOLUTION], never zero
         img.escape[px_count] = escaped_at  # carefully set this directly in the array
         p_bar.update(1)  # we touched a pixel, so update the progress bar
@@ -531,7 +526,8 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: PL
             raise Error(f'Interior point exceeded max |z|^2 of 4, should never happen, {max_z2=}')
           # scale max_z2 to [1..SET_INTERIOR_RESOLUTION], never zero b/c being <0 is the marker!
           escaped_at = -(  # negative!
-            int(gmpy2.floor(_MPFR_SET_INTERIOR_SCALE * cast('gmpy2.mpfr', gmpy2.sqrt(max_z2)))) + 1
+            int(gmpy2.floor(frame.MPFR_SET_INTERIOR_SCALE * cast('gmpy2.mpfr', gmpy2.sqrt(max_z2))))
+            + 1
           )  # add 1 to make it [1..SET_INTERIOR_RESOLUTION], never zero
         img.escape[px_count] = escaped_at  # carefully set this directly in the array
         p_bar.update(1)  # we touched a pixel, so update the progress bar
