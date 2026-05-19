@@ -30,14 +30,13 @@ from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
-from tranzoom import __version__
 from tranzoom.core import frame, palette
 
-# metadata keys for PNG tEXt chunks; used to store the frame parameters and other info in the PNG
+# metadata keys for PNG tEXt chunks; used to store the frame parameters and other info in the PNG;
+# don't add "version", or "date", or other metadata that can change without changing the
+# actual image/mathematical data;
 # keys use a "tranzoom:" namespace to avoid collisions with other metadata
 # all are converted to str for storage in PNG metadata, but the original types are indicated below
-META_VERSION_KEY = 'tranzoom:version'  # str, like "1.1.0"
-META_DATETIME_KEY = 'tranzoom:datetime'  # str, format '%Y/%b/%d-%H:%M:%S-UTC'
 META_IMAGE_WIDTH_KEY = 'tranzoom:image:width'  # int, in pixels
 META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
 META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
@@ -372,9 +371,6 @@ class Image:
     img: PILImage.Image = PILImage.frombytes('RGB', (self._width, self._height), raw_img)
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
     png_meta = PngImagePlugin.PngInfo()
-    # version / date
-    png_meta.add_text(META_VERSION_KEY, __version__)
-    png_meta.add_text(META_DATETIME_KEY, timer.StrNow())
     # image parameters
     png_meta.add_text(META_IMAGE_WIDTH_KEY, str(self._width))
     png_meta.add_text(META_IMAGE_HEIGHT_KEY, str(self._height))

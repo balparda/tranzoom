@@ -84,8 +84,6 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pa
       w, h, hsh, info = image.GetBasicDataFromPNG(output_image.read_bytes())
       assert w == h == 1024, f'Expected image dimensions 1024x1024, got {w}x{h}'
       assert hsh == base.SEAHORSE_TAIL_HASH
-      assert '.' in info.pop(image.META_VERSION_KEY)  # type: ignore[operator]  # make agnostic
-      assert 'UTC' in info.pop(image.META_DATETIME_KEY)  # type: ignore[operator]  # make agnostic
       assert info == {
         'tranzoom:frame:fractal': 'mandelbrot',
         'tranzoom:frame:center_re': '-7436499/10000000',
@@ -178,8 +176,6 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.P
       assert w == 512, f'Expected image dimensions 512x377, got {w}x{h}'
       assert h == 377, f'Expected image dimensions 512x377, got {w}x{h}'
       assert hsh == base.SUZANA_WAVE_HASH
-      assert '.' in info.pop(image.META_VERSION_KEY)  # type: ignore[operator]  # make agnostic
-      assert 'UTC' in info.pop(image.META_DATETIME_KEY)  # type: ignore[operator]  # make agnostic
       assert info == {
         'tranzoom:frame:fractal': 'julia',
         'tranzoom:frame:julia_re': '13667/50000',
