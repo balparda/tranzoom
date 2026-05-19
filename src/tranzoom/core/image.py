@@ -18,9 +18,12 @@ import math
 import pathlib
 import sys
 import time
+from collections import abc
 from typing import cast
 
 import gmpy2
+import imageio
+import numpy as np
 from PIL import Image as PILImage
 from PIL import ImageDraw, ImageFont, PngImagePlugin
 from transcrypto.core import hashes
@@ -862,3 +865,110 @@ def BuildCumulative(values: list[int]) -> tuple[dict[int, int], dict[int, int], 
     cum += histogram[v]
     cumulative[v] = cum
   return (histogram, cumulative, total)
+
+
+type PathLike = str | pathlib.Path
+
+
+def WriteAnimatedGIF(
+  frames: abc.Iterable[PILImage.Image],
+  path: PathLike,
+  width: int,
+  height: int,
+  fps: float,
+  loop: int = 0,  # 0 == infinite loop
+) -> None:
+  """Write PIL Image frames to an animated GIF.
+
+  Args:
+    frames: An iterable of PIL Image frames to include in the GIF.
+    path: The file path to save the GIF.
+    width: The width of the GIF frames.
+    height: The height of the GIF frames.
+    fps: The frames per second for the GIF.
+    loop: The number of times to loop the GIF (0 for infinite loop).
+
+
+  Raises:
+    Error: on error
+
+  """
+  if fps <= 0:
+    raise Error('fps must be > 0')
+  duration_ms: int = round(1000 / fps)
+  try:
+    first: PILImage.Image = next(iter(frames))
+  except StopIteration:
+    raise Error('frames generator produced no frames') from None
+
+  def _Normalize(frame: PILImage.Image) -> PILImage.Image:
+    if frame.size != (width, height):
+      raise Error(f'frame size {frame.size} != {(width, height)}')
+    return frame.convert('RGBA')
+
+  first = _Normalize(first)
+  rest: list[PILImage.Image] = [_Normalize(frame) for frame in frames]
+  first.save(
+    path,
+    save_all=True,
+    append_images=rest,
+    duration=duration_ms,
+    loop=loop,
+    disposal=2,
+  )
+
+
+def WriteVideoMP4(
+  frames: abc.Generator[PILImage.Image],
+  path: PathLike,
+  width: int,
+  height: int,
+  fps: float,
+) -> None:
+  """Write PIL Image frames to an MP4 video using H.264, the most broadly compatible video format.
+
+  Args:
+    frames: A generator of PIL Image frames to include in the video.
+    path: The file path to save the video.
+    width: The width of the video frames.
+    height: The height of the video frames.
+    fps: The frames per second for the video.
+
+  Raises:
+    Error: on error
+
+  """
+  if fps <= 0:
+    raise Error('fps must be > 0')
+  frame_count = 0
+  with imageio.get_writer(
+    path,
+    fps=fps,
+    codec='libx264',
+    pixelformat='yuv420p',
+    macro_block_size=1,
+  ) as writer:
+    for frame in frames:
+      if frame.size != (width, height):
+        raise Error(f'frame size {frame.size} != {(width, height)}')
+      writer.append_data(np.asarray(frame.convert('RGB')))
+      frame_count += 1
+  # with imageio.v3.imopen(
+  #   path,
+  #   'w',
+  #   plugin='pyav' if False else None,
+  #   extension='.mp4',
+  # ) as writer:
+  #   for frame in frames:
+  #     if frame.size != (width, height):
+  #       raise Error(f'frame size {frame.size} != {(width, height)}')
+  #     writer.write(
+  #       np.asarray(frame.convert('RGB')),
+  #       fps=fps,
+  #       codec='libx264',
+  #       pixelformat='yuv420p',
+  #       macro_block_size=1,
+  #     )
+  #     frame_count += 1
+  if not frame_count:
+    raise Error('frames generator produced no frames')
