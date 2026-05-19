@@ -13,7 +13,8 @@
 set -euxo pipefail
 
 # Render the Full / Default Mandelbrot set
-poetry run tranz --set imaginary --no-date --no-hash --prefix "demo-mandel-whole-set" -o tests/data/images image mandel
+poetry run tranz --no-date --no-hash --prefix "demo-mandel-whole-set" -o tests/data/images image mandel
+poetry run tranz --set imaginary --palette "grayscale" --set-palette "lava" --no-date --no-hash --prefix "demo-mandel-whole-set-spicy" -o tests/data/images image mandel
 
 # Render Seahorse
 poetry run tranz --no-date --no-hash --prefix "demo-mandel-seahorse" -o tests/data/images image mandel " -0.74303" "0.126433" "0.01611"
