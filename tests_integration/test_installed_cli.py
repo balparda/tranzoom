@@ -134,7 +134,7 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pa
 
 
 def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path) -> None:
-  """Call the installed CLI to render the Julia Suzana Wave image, check the output file and metadata.
+  """Call the installed CLI to render the Julia Suzana Wave image, check the output file / metadata.
 
   Should be 100% equivalent to the `scripts/make_examples.sh` line to "Render Julia Suzana Wave".
   """
@@ -207,15 +207,22 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.P
         'tranzoom:image:set_point:min': '1',
         'tranzoom:image:set_point:max': '100000000',
         'tranzoom:image:overlay': 'false',
-        'tranzoom:image:exterior:cumulative_histogram_summary': "[(43, 4194), (44, 15827), (45, 25830), ('...', 86502348), (1792, 106708), "
-        '(1798, 106709), (1813, 106710)]',
-        'tranzoom:image:exterior:histogram_summary': "[(43, 4194), (44, 11633), (45, 10003), ('...', 80877), (1792, 1), (1798, "
-        '1), (1813, 1)]',
+        'tranzoom:image:exterior:cumulative_histogram_summary': (
+          "[(43, 4194), (44, 15827), (45, 25830), ('...', 86502348), (1792, 106708), "
+          '(1798, 106709), (1813, 106710)]'
+        ),
+        'tranzoom:image:exterior:histogram_summary': (
+          "[(43, 4194), (44, 11633), (45, 10003), ('...', 80877), (1792, 1), (1798, 1), (1813, 1)]"
+        ),
         'tranzoom:image:exterior:pixel_count': '106710',
-        'tranzoom:image:interior:cumulative_histogram_summary': "[(1, 6741), (47, 6742), (122, 6743), ('...', 3609455247), (99949558, "
-        '85448), (99995934, 85449), (100000000, 86314)]',
-        'tranzoom:image:interior:histogram_summary': "[(1, 6741), (47, 1), (122, 1), ('...', 78704), (99949558, 1), (99995934, "
-        '1), (100000000, 865)]',
+        'tranzoom:image:interior:cumulative_histogram_summary': (
+          "[(1, 6741), (47, 6742), (122, 6743), ('...', 3609455247), "
+          '(99949558, 85448), (99995934, 85449), (100000000, 86314)]'
+        ),
+        'tranzoom:image:interior:histogram_summary': (
+          "[(1, 6741), (47, 1), (122, 1), ('...', 78704), (99949558, 1), "
+          '(99995934, 1), (100000000, 865)]'
+        ),
         'tranzoom:image:interior:pixel_count': '86314',
       }
   finally:
