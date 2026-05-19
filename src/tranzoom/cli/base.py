@@ -13,6 +13,7 @@ import gmpy2
 import typer
 from transcrypto.cli import clibase
 from transcrypto.utils import base as tbase
+from transcrypto.utils import human, timer
 
 from tranzoom.core import ai, fractal, frame, image, palette
 
@@ -456,6 +457,94 @@ class TranZoomConfig(clibase.CLIConfig):
   julia_im: str = frame.DEFAULT_JULIA_IM  # for `zoom` command
 
 
+def ProduceFractalImage(frm: frame.Frame, config: TranZoomConfig) -> None:
+  """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
+
+  Args:
+    frm: the frame to produce the image from; must be already validated and ready for rendering
+    config: the global configuration with all the options needed for rendering and saving the image
+
+  This is a high-level function that takes care of all the steps needed to produce the final image,
+  including:
+  - determining the image dimensions from the config
+  - logging the rendering parameters
+  - rendering the image from the frame using the fractal module
+  - converting the rendered image to PNG and getting its hash
+  - optionally adding a crosshair overlay if mark coordinates are given
+  - saving the image to disk with a name based on the date and hash
+  - optionally printing the image to iTerm2 if the corresponding option is set
+
+  """
+  # determine width and height
+  width: int
+  height: int
+  width, height = (
+    frm.PixelDimensionsFromSize(config.img_size)
+    if config.img_size
+    else (config.img_width, config.img_height)
+  )
+  # add the mark?
+  mark_coords: tuple[int, int] | None = (
+    frm.CoordsTupleToPixel(config.mark_coords, width, height)
+    if config.mark_coords  # do this early to check the inputs ASAP
+    else None
+  )
+  # log
+  magnification, magnitude = frm.magnification
+  magnification_str: str = (
+    # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation
+    human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
+  )
+  config.console.print(
+    f'\n{width}x{height} {frm.fractal.value.capitalize()} in '
+    f'frame {frm}, precision ± {frm.Precision(width, height)} bits, '  # approx: b/c iters
+    f'{magnification_str} magnification, '
+    f'{"AUTO" if config.max_iter is None else config.max_iter} iterations'
+    f'{f', "{config.set_points.value}" interior' if config.set_points else ""}...'
+  )
+  # render the image
+  raw_png: bytes
+  raw_hash: str
+  with timer.Timer(emit_log=False) as tmr:
+    img: image.Image = {
+      frame.Fractal.MANDELBROT: fractal.Mandelbrot,
+      frame.Fractal.JULIA: fractal.Julia,
+    }[frm.fractal](
+      frm,  # type: ignore[arg-type]  # we know this is the right type of frame
+      width,
+      height,
+      max_iter=config.max_iter,
+      set_points=config.set_points,
+      n_processes=config.max_threads,
+      print_comm=config.console.print,
+    )
+    # fractal is ready, convert to PNG
+    raw_png, raw_hash = img.AsPNG(
+      pal=config.pal, set_pal=config.set_pal, set_points=config.set_points
+    )
+    if mark_coords:
+      # we were asked to mark a coordinate with a crosshair overlay: do it
+      raw_png = image.DrawCrossOverlay(
+        raw_png, mark_coords[0], mark_coords[1], col=config.mark_color, lw=config.mark_width
+      )
+  # print stats
+  config.console.print(f'{frm.fractal.value.capitalize()} image {raw_hash!r} in {tmr}')
+  # save the image to a file named by its time/hash
+  full_path: pathlib.Path = image.MakeImagePath(
+    config.img_output_path,
+    config.img_use_date,
+    config.img_use_hash,
+    config.img_path_prefix or DEFAULT_IMAGE_PREFIX[frm.fractal],
+    raw_hash,
+  )
+  full_path.write_bytes(raw_png)
+  config.console.print(f'Saved to "{full_path}"\n')
+  # iterm
+  if config.iterm:
+    image.PrintITerm2(raw_png)
+    config.console.print()
+
+
 def MakeFrameFromCLIArgs(
   fractal: frame.Fractal,
   center_re: str,
@@ -503,11 +592,8 @@ def MakeFrameFromCLIArgs(
         or image.META_HEIGHT_IM_KEY not in info
       ):
         raise ValueError(f'Image "{img_path}" missing tranZoom frame metadata keys')  # noqa: TRY301
-      version: str = str(info.get(image.META_VERSION_KEY, '')) or 'UNKNOWN'
       fract: str = str(info.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
-      print_call(
-        f'Reading frame from "{img_path}", [red]tranZoom version {version}[/], {fract} fractal...'
-      )
+      print_call(f'Reading frame from "{img_path}", [red]tranZoom[/], {fract} fractal...')
       return frame.Frame.FromCenter(
         fractal,
         str(info[image.META_CENTER_RE_KEY]),
@@ -561,11 +647,8 @@ def MakePointFromCLIArgs(
       info: tbase.JSONDict = image.GetBasicDataFromPNG(img_path.read_bytes())[-1]
       if image.META_CENTER_RE_KEY not in info or image.META_CENTER_IM_KEY not in info:
         raise ValueError(f'Image "{img_path}" missing tranZoom frame metadata keys')  # noqa: TRY301
-      version: str = str(info.get(image.META_VERSION_KEY, '')) or 'UNKNOWN'
       fract: str = str(info.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
-      print_call(
-        f'Reading frame from "{img_path}", [red]tranZoom version {version}[/], {fract} fractal...'
-      )
+      print_call(f'Reading frame from "{img_path}", [red]tranZoom[/], {fract} fractal...')
       return (
         gmpy2.mpq(str(info[image.META_CENTER_RE_KEY])),
         gmpy2.mpq(str(info[image.META_CENTER_IM_KEY])),
