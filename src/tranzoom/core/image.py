@@ -40,12 +40,24 @@ META_VERSION_KEY = 'tranzoom:version'  # str, like "1.1.0"
 META_IMAGE_WIDTH_KEY = 'tranzoom:image:width'  # int, in pixels
 META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
 META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
+META_ITER_DEPTH_MIN_KEY = 'tranzoom:image:iter_depth:min'  # int
+META_ITER_DEPTH_MAX_KEY = 'tranzoom:image:iter_depth:max'  # int
+META_SET_POINT_MIN_KEY = 'tranzoom:image:set_point:min'  # int
+META_SET_POINT_MAX_KEY = 'tranzoom:image:set_point:max'  # int
 META_IMAGE_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
 META_IMAGE_SET_PALETTE_KEY = 'tranzoom:image:set_palette'  # str, interior Set palette name
-META_IMAGE_COLOR_SET_KEY = 'tranzoom:image:color_set'  # bool; "true" if Set points are colored
+META_IMAGE_COLOR_SET_KEY = 'tranzoom:image:color_set'  # frame.SetHighlightAlgorithm or "none"
 META_IMAGE_OVERLAY_KEY = 'tranzoom:image:overlay'  # bool; stored as "true"/"false"
-META_PIXEL_EXTERIOR_COUNT_KEY = 'tranzoom:image:pixel_exterior_count'  # int; escaped pixel count
-META_PIXEL_INTERIOR_COUNT_KEY = 'tranzoom:image:pixel_interior_count'  # int; Set interior count
+META_PIXEL_EXTERIOR_COUNT_KEY = 'tranzoom:image:exterior:pixel_exterior_count'  # int; count escaped
+META_PIXEL_INTERIOR_COUNT_KEY = 'tranzoom:image:interior:pixel_interior_count'  # int; count set
+META_PIXEL_EXTERIOR_HISTOGRAM_KEY = 'tranzoom:image:exterior:histogram_summary'  # str
+META_PIXEL_INTERIOR_HISTOGRAM_KEY = 'tranzoom:image:interior:histogram_summary'  # str; can be ""!
+META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
+  'tranzoom:image:exterior:cumulative_histogram_summary'  # str
+)
+META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
+  'tranzoom:image:interior:cumulative_histogram_summary'  # str; can be ""!
+)
 META_FRACTAL_KEY = 'tranzoom:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal, lowercase
 META_TOP_RE_KEY = 'tranzoom:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
 META_TOP_IM_KEY = 'tranzoom:frame:top_im'  # gmpy2.mpq
@@ -58,12 +70,7 @@ META_HEIGHT_IM_KEY = 'tranzoom:frame:height_im'  # gmpy2.mpq
 META_PRECISION_KEY = 'tranzoom:frame:precision'  # int, in bits
 META_MAGNIFICATION_KEY = 'tranzoom:frame:magnification'  # gmpy2.mpfr -> converted to float
 META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'  # float
-META_ITER_DEPTH_MIN_KEY = 'tranzoom:iter_depth:min'  # int
-META_ITER_DEPTH_MAX_KEY = 'tranzoom:iter_depth:max'  # int
-META_SET_POINT_MIN_KEY = 'tranzoom:set_point:min'  # int
-META_SET_POINT_MAX_KEY = 'tranzoom:set_point:max'  # int
-META_SET_POINT_FLOAT_MIN_KEY = 'tranzoom:set_point:float_min'  # float; min |z| for Set interior
-META_SET_POINT_FLOAT_MAX_KEY = 'tranzoom:set_point:float_max'  # float; max |z| for Set interior
+
 META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:iter_depth:search'  # int, can be "-1" if unknown or not set
 # extra keys added to some images only (for example, when the LLM evaluates the image)
 META_JULIA_RE_KEY = 'tranzoom:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
@@ -213,17 +220,6 @@ class Image:
     self.escape[y * self._width + x] = escaped_at
 
   @property
-  def set_range_as_z(self) -> tuple[float, float]:
-    """Get the min/max interior Set |z| magnitudes as floats. Returns (0.0, 0.0) if no interior.
-
-    Returns:
-      tuple[float, float]: (min_|z|, max_|z|) for the Set interior points.
-
-    """
-    _, _, min_set, max_set = self.escape_range
-    return (_SetIntToZ(min_set), _SetIntToZ(max_set))
-
-  @property
   def escape_range(self) -> tuple[int, int, int, int]:
     """Get the range of escape iterations and set max_|z| in the image.
 
@@ -346,7 +342,7 @@ class Image:
       pixels[i * 3], pixels[i * 3 + 1], pixels[i * 3 + 2] = rgb
     return bytes(pixels)
 
-  def AsPNG(
+  def AsPNG(  # noqa: PLR0914, PLR0915
     self,
     *,
     pal: palette.Palette = palette.DEFAULT_PALETTE,
@@ -384,7 +380,7 @@ class Image:
     png_meta.add_text(META_IMAGE_HASH_KEY, img_data_hash)
     png_meta.add_text(META_IMAGE_PALETTE_KEY, pal.value)
     png_meta.add_text(META_IMAGE_SET_PALETTE_KEY, set_pal.value)
-    png_meta.add_text(META_IMAGE_COLOR_SET_KEY, 'true' if set_points else 'false')
+    png_meta.add_text(META_IMAGE_COLOR_SET_KEY, str(set_points.value) if set_points else 'none')
     png_meta.add_text(META_IMAGE_OVERLAY_KEY, 'false')  # if it comes from this, it has no overlay
     # frame type
     png_meta.add_text(META_FRACTAL_KEY, self._frame.fractal.value.lower())
@@ -420,21 +416,61 @@ class Image:
     png_meta.add_text(META_ITER_DEPTH_MAX_KEY, str(max_escape))
     png_meta.add_text(META_SET_POINT_MIN_KEY, str(min_set))
     png_meta.add_text(META_SET_POINT_MAX_KEY, str(max_set))
-    png_meta.add_text(META_SET_POINT_FLOAT_MIN_KEY, str(_SetIntToZ(min_set)))
-    png_meta.add_text(META_SET_POINT_FLOAT_MAX_KEY, str(_SetIntToZ(max_set)))
     png_meta.add_text(
       META_ITER_SEARCH_DEPTH_KEY, str(self._depth) if self._depth is not None else '-1'
     )
     # pixel counts and histograms; exterior pixels have escape >= 0, interior (Set) have escape < 0
     depth: int = self._depth if self._depth is not None else max_escape
+    hist: dict[int, int]
+    cumulative: dict[int, int]
+    total: int
+    hist, cumulative, total = BuildCumulative([e for e in self.escape if 0 <= e < depth])
+    png_meta.add_text(META_PIXEL_EXTERIOR_HISTOGRAM_KEY, SummaryHistogram(sorted(hist.items())))
     png_meta.add_text(
-      META_PIXEL_EXTERIOR_COUNT_KEY, str(len([1 for e in self.escape if 0 <= e < depth]))
+      META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY, SummaryHistogram(sorted(cumulative.items()))
     )
-    png_meta.add_text(META_PIXEL_INTERIOR_COUNT_KEY, str(len([1 for e in self.escape if e < 0])))
+    png_meta.add_text(META_PIXEL_EXTERIOR_COUNT_KEY, str(total))
+    if set_points:
+      hist, cumulative, total = BuildCumulative([-e for e in self.escape if e < 0])
+      png_meta.add_text(META_PIXEL_INTERIOR_HISTOGRAM_KEY, SummaryHistogram(sorted(hist.items())))
+      png_meta.add_text(
+        META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY, SummaryHistogram(sorted(cumulative.items()))
+      )
+      png_meta.add_text(META_PIXEL_INTERIOR_COUNT_KEY, str(total))
+    else:
+      png_meta.add_text(META_PIXEL_INTERIOR_HISTOGRAM_KEY, '')
+      png_meta.add_text(META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY, '')
+      png_meta.add_text(META_PIXEL_INTERIOR_COUNT_KEY, str(len([1 for e in self.escape if e < 0])))
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
     img.save(buf, format='PNG', pnginfo=png_meta)
     return (buf.getvalue(), img_data_hash)
+
+
+def SummaryHistogram(sorted_histogram: list[tuple[int, int]]) -> str:
+  """Summarize a histogram as a string, showing the first 3, last 3 values, summarizing the middle.
+
+  Args:
+    sorted_histogram (list[tuple[int, int]]): A list of (key, count) tuples representing
+        the histogram, SORTED by key.
+
+  Returns:
+    str: A string representation of the histogram, showing the first 3 and last 3 values,
+        with the middle values summarized as a total count.
+
+  """
+  if len(sorted_histogram) <= 7:  # noqa: PLR2004
+    # small histogram, no need to summarize
+    return str(sorted_histogram)
+  # this is usually the case: many escape values, so summarize the middle ones
+  return str(
+    # make a new list with the first 3 and last 3 values, and a summary of the middle values "..."
+    [
+      *sorted_histogram[:3],
+      ('...', sum(count for _, count in sorted_histogram[3:-3])),
+      *sorted_histogram[-3:],
+    ]
+  )
 
 
 def MakeImagePath(
@@ -817,28 +853,6 @@ def PixelPalette(
     int(g0 + frac * (g1 - g0)),
     int(b0 + frac * (b1 - b0)),
   )
-
-
-def _SetIntToZ(val: int) -> float:
-  """Convert a stored Set interior integer to its |z| magnitude float value.
-
-  Interior points are stored as -(int(floor(scale * |z|)) + 1) where scale = SET_INTERIOR_SCALE,
-  so min_set/max_set (the positive equivalents from escape_range) map back via (val-1)/scale.
-
-  Args:
-    val (int): The stored Set interior integer (1..SET_INTERIOR_RESOLUTION), or 0 if none.
-
-  Returns:
-    float: The |z| magnitude, in [0, 2), or 0.0 if val <= 0 (no interior points).
-
-  Raises:
-    Error: if val exceeds the resolution limit.
-
-  """
-  val = val if val >= 0 else -val  # convert back to positive if negative
-  if val > frame.SET_INTERIOR_RESOLUTION:
-    raise Error(f'Invalid Set interior: {val=} exceeds resolution {frame.SET_INTERIOR_RESOLUTION}')
-  return (val - 1) / _SET_INTERIOR_SCALE
 
 
 def BuildCumulative(values: list[int]) -> tuple[dict[int, int], dict[int, int], int]:

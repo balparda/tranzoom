@@ -86,7 +86,7 @@ def Mandelbrot(
   # BEWARE: the method call will call Mandelbrot() recursively, but with a fixed max_iter!
   stats: image.FractalStats | None
   max_iter, stats = (
-    _FractalAdaptiveIterations(frm, progress_bar, n_processes, print_comm)
+    _FractalAdaptiveIterations(frm, progress_bar, n_processes, set_points, print_comm)
     if max_iter is None
     else (max_iter, None)
   )
@@ -176,7 +176,7 @@ def Julia(
   # BEWARE: the method call will call Julia() recursively, but with a fixed max_iter!
   stats: image.FractalStats | None
   max_iter, stats = (
-    _FractalAdaptiveIterations(frm, progress_bar, n_processes, print_comm)
+    _FractalAdaptiveIterations(frm, progress_bar, n_processes, set_points, print_comm)
     if max_iter is None
     else (max_iter, None)
   )
@@ -222,7 +222,11 @@ def Julia(
 
 
 def _FractalAdaptiveIterations(
-  frm: frame.Frame, progress_bar: bool, n_processes: int, print_comm: abc.Callable[[str], None]
+  frm: frame.Frame,
+  progress_bar: bool,
+  n_processes: int,
+  set_points: frame.SetHighlightAlgorithm | None,
+  print_comm: abc.Callable[[str], None],
 ) -> tuple[int, image.FractalStats]:
   """Estimate a suitable max_iter for the full image by rendering a small test image.
 
@@ -242,6 +246,8 @@ def _FractalAdaptiveIterations(
     frm (Frame): The frame to render.
     progress_bar (bool): Whether to show a progress bar during the test render.
     n_processes (int): The number of processes to use for the test render.
+    set_points (SetHighlightAlgorithm | None): Which algorithm to use for coloring the
+        interior Set points, either None, or one of the SetHighlightAlgorithm values
     print_comm (Callable[[str], None]): A callable to print messages
 
   Returns:
@@ -261,6 +267,7 @@ def _FractalAdaptiveIterations(
       frame.MIN_IMAGE_SIZE,
       frame.MIN_IMAGE_SIZE,
       max_iter=high_iter,
+      set_points=set_points,
       progress_bar=progress_bar,
       n_processes=n_processes,
       print_comm=print_comm,
@@ -271,6 +278,9 @@ def _FractalAdaptiveIterations(
     for escaped_at in img16.escape:
       esc: int = escaped_at if escaped_at >= 0 else high_iter  # interior point == high_iter
       escape_histogram[esc] = escape_histogram.get(esc, 0) + 1
+    # check stats
+    if img16.stats is None:
+      raise Error('Fractal stats should have been collected during rendering, but are missing')
     # sort the histogram by escape iteration; find the highest escape iteration that < high limit
     # if all pixels hit high_iter then max_iter will be high_iter, and we WANT it to FAIL
     histogram: list[tuple[int, int]] = sorted(escape_histogram.items())
@@ -280,22 +290,13 @@ def _FractalAdaptiveIterations(
     # apply safety factor and clamp
     max_iter = min(frame.MAX_ITER, max(frame.MIN_ITER, int(max_iter * _ITER_SAFETY_FACTOR)))
     if max_iter < high_iter:
-      # we found a winner!
-      if len(histogram) > 7:  # noqa: PLR2004 ; 7 is 3 before, the middle, and 3 after
-        # this is usually the case: many escape values, so summarize the middle ones
-        summary_histogram: list[tuple[int, int] | tuple[str, int]] = [
-          *histogram[:3],
-          ('...', sum(count for _, count in histogram[3:-3])),
-          *histogram[-3:],
-        ]
-        print_comm(f'Picked depth {max_iter}, histogram {summary_histogram}')
-      else:
-        # probably a pretty rare thing, but then we can show all
-        print_comm(f'Picked depth {max_iter}, histogram {histogram}')
-      # stop here
-      if img16.stats is None:
-        raise Error('Fractal stats should have been collected during rendering, but are missing')
+      # we found a winner! print and stop
+      print_comm(
+        f'Picked depth {max_iter}, histogram {image.SummaryHistogram(histogram)}, '
+        f'{img16.stats.n_interior}/{img16.stats.n_px} set points'
+      )
       return (max_iter, img16.stats)
+    print_comm(f'[red]Iteration limit of {high_iter} was too low:[/] will try again 10x deeper...')
     # here we didn't find, so we loop to the next higher limit...
   # if we exhausted all the high_iters without finding a suitable max_iter, we have to give up
   raise Error(
@@ -476,7 +477,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
             break
           # Imaginary Weight Average: accumulate sin(arg(z))**2 = zy**2/|z|**2 BEFORE the update
           if inp.highlight == frame.SetHighlightAlgorithm.IMAGINARY and mag_z2 > _MPFR_ZERO:
-            imag_acc += zy2 / mag_z2  # TODO: evaluate performance hit?
+            imag_acc += zy2 / mag_z2
           # z = z^2 + c in terms of zx/zy: zx' = zx^2 - zy^2 + cx - the actual Mandelbrot iteration
           zy = _MPFR_TWO * zx * zy + cy
           zx = zx2 - zy2 + cx

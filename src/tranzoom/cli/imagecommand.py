@@ -214,13 +214,7 @@ def _ProduceFractalImage(frm: frame.Frame, config: base.TranZoomConfig) -> None:
         raw_png, mark_coords[0], mark_coords[1], col=config.mark_color, lw=config.mark_width
       )
   # print stats
-  set_z_min: float
-  set_z_max: float
-  set_z_min, set_z_max = img.set_range_as_z
-  config.console.print(
-    f'{frm.fractal.value.capitalize()} image {raw_hash!r} in {tmr}, '
-    f'escape range {img.escape_range[:2]}, |z| in [{set_z_min:.6f}, {set_z_max:.6f}]'
-  )
+  config.console.print(f'{frm.fractal.value.capitalize()} image {raw_hash!r} in {tmr}')
   # save the image to a file named by its time/hash
   full_path: pathlib.Path = image.MakeImagePath(
     config.img_output_path,

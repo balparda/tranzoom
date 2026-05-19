@@ -437,14 +437,10 @@ def _ComputeFractal(
     tm=zoom_tm,
     add_serial=count,
   )
-  set_z_min: float
-  set_z_max: float
-  set_z_min, set_z_max = img.set_range_as_z
   print_comm(
     f'\n{frm.fractal.value.capitalize()} zoom (#{count}) '
     f'with frame {frm}, precision {img.precision} bits, {magnification_str} magnification\n'
-    f'{img_hash!r} in {tmr}, escape range {img.escape_range[:2]}'
-    f', |z| in [{set_z_min:.6f}, {set_z_max:.6f}], will save as "{full_path}"'
+    f'{img_hash!r} in {tmr}, will save as "{full_path}"'
   )
   if iterm:
     print_comm('')

@@ -13,20 +13,20 @@
 set -euxo pipefail
 
 # Render the Full / Default Mandelbrot set
-poetry run tranz --no-set --no-date --no-hash --prefix "demo-mandel-whole-set" -o tests/data/images image mandel
+poetry run tranz --set imaginary --no-date --no-hash --prefix "demo-mandel-whole-set" -o tests/data/images image mandel
 
 # Render Seahorse
-poetry run tranz --set --no-date --no-hash --prefix "demo-mandel-seahorse" -o tests/data/images image mandel " -0.74303" "0.126433" "0.01611"
+poetry run tranz --no-date --no-hash --prefix "demo-mandel-seahorse" -o tests/data/images image mandel " -0.74303" "0.126433" "0.01611"
 
 # Render Seahorse Tail original and all palettes
-poetry run tranz --set --no-date --no-hash --prefix "demo-mandel-seahorse-tail" -o tests/data/images image mandel " -0.7436499" "0.13188204" "0.00073801"
-poetry run tranz --set --no-date --no-hash --prefix "demo-mandel-seahorse-tail-byb" -o tests/data/images --palette "blue-to-yellow-to-brown" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
-poetry run tranz --set --no-date --no-hash --prefix "demo-mandel-seahorse-tail-lava" -o tests/data/images --palette "lava" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
-poetry run tranz --set --no-date --no-hash --prefix "demo-mandel-seahorse-tail-ocean" -o tests/data/images --palette "electric-ocean" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
-poetry run tranz --set --no-date --no-hash --prefix "demo-mandel-seahorse-tail-sunset" -o tests/data/images --palette "sunset" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
+poetry run tranz --set imaginary --no-date --no-hash --prefix "demo-mandel-seahorse-tail" -o tests/data/images image mandel " -0.7436499" "0.13188204" "0.00073801"
+poetry run tranz --set imaginary --no-date --no-hash --prefix "demo-mandel-seahorse-tail-byb" -o tests/data/images --palette "blue-to-yellow-to-brown" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
+poetry run tranz --set imaginary --no-date --no-hash --prefix "demo-mandel-seahorse-tail-lava" -o tests/data/images --palette "lava" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
+poetry run tranz --set imaginary --no-date --no-hash --prefix "demo-mandel-seahorse-tail-ocean" -o tests/data/images --palette "electric-ocean" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
+poetry run tranz --set imaginary --no-date --no-hash --prefix "demo-mandel-seahorse-tail-sunset" -o tests/data/images --palette "sunset" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
 
 # Render Julia Suzana
-poetry run tranz --no-set  --no-date --no-hash --prefix "demo-julia-suzana" -o tests/data/images --palette "electric-ocean" image -s 1024 julia
+poetry run tranz --no-set --no-date --no-hash --prefix "demo-julia-suzana" -o tests/data/images --palette "electric-ocean" image -s 1024 julia
 
 # Render Julia Suzana Wave
 poetry run tranz --set --no-date --no-hash --prefix "demo-julia-suzana-wave" -o tests/data/images --palette "electric-ocean" image -s 1024 julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
@@ -43,5 +43,5 @@ for n in $(seq 1 16); do
     else
         zoom=$(printf "0.%0*d25" "$((3 * n - 4))" 0)  # then "0.0025", "0.0000025", etc.
     fi
-    poetry run tranz --set --no-date --no-hash --prefix "$prefix" -o tests/data/images image -w 512 -h 512 --mark "($CX,$CY)" mandel "$CX" "$CY" "$zoom"
+    poetry run tranz --set imaginary --no-date --no-hash --prefix "$prefix" -o tests/data/images image -w 512 -h 512 --mark "($CX,$CY)" mandel "$CX" "$CY" "$zoom"
 done
