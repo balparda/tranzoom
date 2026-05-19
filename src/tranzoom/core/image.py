@@ -867,12 +867,9 @@ def BuildCumulative(values: list[int]) -> tuple[dict[int, int], dict[int, int], 
   return (histogram, cumulative, total)
 
 
-type PathLike = str | pathlib.Path
-
-
 def WriteAnimatedGIF(
   frames: abc.Iterable[PILImage.Image],
-  path: PathLike,
+  path: pathlib.Path,
   width: int,
   height: int,
   fps: float,
@@ -920,7 +917,7 @@ def WriteAnimatedGIF(
 
 def WriteVideoMP4(
   frames: abc.Generator[PILImage.Image],
-  path: PathLike,
+  path: pathlib.Path,
   width: int,
   height: int,
   fps: float,
