@@ -21,7 +21,8 @@ from tranzoom.core import ai, fractal, frame, image, palette
 # if `tests/data/images/demo-mandel-seahorse-tail.png` internal data changes this will change!
 # this indicates that the mathematical computation or the setting of colors has changed;
 # this should NOT change over metadata changes, as it is computed from raw pixel data
-SEAHORSE_TAIL_HASH: str = 'dabb66630b482d5d64931b52929b3af5b2a446747dfa6c2e1d6035d9a58e3a9e'
+SEAHORSE_TAIL_HASH: str = 'bc8befe1492f4d296cf93994ba201ef06c3fa4858a47a657bb7f136f42bceb5d'
+SUZANA_WAVE_HASH: str = 'd7b19b0f1783bb38127d2948140e2379c19656ff4923b7244f25da7fbf322a2a'
 # this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 
 # CLI options that can be re-used
