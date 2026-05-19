@@ -37,19 +37,21 @@ from tranzoom.core import frame, palette
 # keys use a "tranzoom:" namespace to avoid collisions with other metadata
 # all are converted to str for storage in PNG metadata, but the original types are indicated below
 META_VERSION_KEY = 'tranzoom:version'  # str, like "1.1.0"
+META_DATETIME_KEY = 'tranzoom:datetime'  # str, format '%Y/%b/%d-%H:%M:%S-UTC'
 META_IMAGE_WIDTH_KEY = 'tranzoom:image:width'  # int, in pixels
 META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
 META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
 META_ITER_DEPTH_MIN_KEY = 'tranzoom:image:iter_depth:min'  # int
 META_ITER_DEPTH_MAX_KEY = 'tranzoom:image:iter_depth:max'  # int
+META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:image:iter_depth:search'  # int, can be "-1" if unknown/unset
 META_SET_POINT_MIN_KEY = 'tranzoom:image:set_point:min'  # int
 META_SET_POINT_MAX_KEY = 'tranzoom:image:set_point:max'  # int
 META_IMAGE_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
 META_IMAGE_SET_PALETTE_KEY = 'tranzoom:image:set_palette'  # str, interior Set palette name
 META_IMAGE_COLOR_SET_KEY = 'tranzoom:image:color_set'  # frame.SetHighlightAlgorithm or "none"
 META_IMAGE_OVERLAY_KEY = 'tranzoom:image:overlay'  # bool; stored as "true"/"false"
-META_PIXEL_EXTERIOR_COUNT_KEY = 'tranzoom:image:exterior:pixel_exterior_count'  # int; count escaped
-META_PIXEL_INTERIOR_COUNT_KEY = 'tranzoom:image:interior:pixel_interior_count'  # int; count set
+META_PIXEL_EXTERIOR_COUNT_KEY = 'tranzoom:image:exterior:pixel_count'  # int; count escaped
+META_PIXEL_INTERIOR_COUNT_KEY = 'tranzoom:image:interior:pixel_count'  # int; count set
 META_PIXEL_EXTERIOR_HISTOGRAM_KEY = 'tranzoom:image:exterior:histogram_summary'  # str
 META_PIXEL_INTERIOR_HISTOGRAM_KEY = 'tranzoom:image:interior:histogram_summary'  # str; can be ""!
 META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
@@ -70,8 +72,6 @@ META_HEIGHT_IM_KEY = 'tranzoom:frame:height_im'  # gmpy2.mpq
 META_PRECISION_KEY = 'tranzoom:frame:precision'  # int, in bits
 META_MAGNIFICATION_KEY = 'tranzoom:frame:magnification'  # gmpy2.mpfr -> converted to float
 META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'  # float
-
-META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:iter_depth:search'  # int, can be "-1" if unknown or not set
 # extra keys added to some images only (for example, when the LLM evaluates the image)
 META_JULIA_RE_KEY = 'tranzoom:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
 META_JULIA_IM_KEY = 'tranzoom:frame:julia_im'  # gmpy2.mpq, only added for Julia Set frames
@@ -372,8 +372,9 @@ class Image:
     img: PILImage.Image = PILImage.frombytes('RGB', (self._width, self._height), raw_img)
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
     png_meta = PngImagePlugin.PngInfo()
-    # version
+    # version / date
     png_meta.add_text(META_VERSION_KEY, __version__)
+    png_meta.add_text(META_DATETIME_KEY, timer.StrNow())
     # image parameters
     png_meta.add_text(META_IMAGE_WIDTH_KEY, str(self._width))
     png_meta.add_text(META_IMAGE_HEIGHT_KEY, str(self._height))
