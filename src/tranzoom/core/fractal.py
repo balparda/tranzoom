@@ -567,7 +567,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
     return _FractalTaskOutput(img=img, n_task=inp.n_task, total_tasks=inp.total_tasks)
 
 
-def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: PLR0914
+def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C901, PLR0912, PLR0914, PLR0915
   """Compute the Julia image for the given task input. ONE THREAD FOR MULTIPROCESSING.
 
   Args:
@@ -601,6 +601,54 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: PL
     xs: list[gmpy2.mpfr] = [
       gmpy2.mpfr(inp.frm.top_re + gmpy2.mpq(i) * dx) for i in range(inp.width)
     ]
+    # variables for stats we will track; we pre-compute all we can!
+    mpfr_pi: gmpy2.mpfr = gmpy2.const_pi()  # pi with the current context precision
+    mpfr_two_pi: gmpy2.mpfr = _MPFR_TWO * mpfr_pi  # 2*pi with the current context precision
+    max_iter_p_1: gmpy2.mpfr = gmpy2.mpfr(inp.max_iter) + _MPFR_ONE
+    n_interior: int = 0  # track how many points are interior (non-escaping)
+    max_lo: gmpy2.mpfr = _MPFR_FOUR
+    max_hi: gmpy2.mpfr = _MPFR_ZERO
+    min_lo: gmpy2.mpfr = _MPFR_FOUR
+    min_hi: gmpy2.mpfr = _MPFR_ZERO
+    ang_lo: gmpy2.mpfr = _MPFR_ONE
+    ang_hi: gmpy2.mpfr = _MPFR_ZERO
+    imag_lo: gmpy2.mpfr = _MPFR_ONE
+    imag_hi: gmpy2.mpfr = _MPFR_ZERO
+    stats_max: bool = False
+    sqrt_lo: gmpy2.mpfr = _MPFR_ZERO
+    sqrt_delta: gmpy2.mpfr = _MPFR_ZERO
+    stats_min: bool = False
+    sqrt_lo2: gmpy2.mpfr = _MPFR_ZERO
+    sqrt_delta2: gmpy2.mpfr = _MPFR_ZERO
+    stats_ang: bool = False
+    ang_delta: gmpy2.mpfr = _MPFR_ZERO
+    stats_imag: bool = False
+    imag_delta: gmpy2.mpfr = _MPFR_ZERO
+    if inp.stats is not None:
+      stats_max = inp.stats.max_hi > inp.stats.max_lo
+      sqrt_lo = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.max_lo))
+      sqrt_delta = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.max_hi) - sqrt_lo)
+      stats_min = inp.stats.min_hi > inp.stats.min_lo
+      sqrt_lo2 = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.min_lo))
+      sqrt_delta2 = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.min_hi) - sqrt_lo2)
+      stats_ang = inp.stats.ang_hi > inp.stats.ang_lo
+      ang_delta = inp.stats.ang_hi - inp.stats.ang_lo
+      stats_imag = inp.stats.imag_hi > inp.stats.imag_lo
+      imag_delta = inp.stats.imag_hi - inp.stats.imag_lo
+    normalize: abc.Callable[[gmpy2.mpfr, gmpy2.mpfr, gmpy2.mpfr], int] = lambda v, lo, d: (
+      -min(  # negative to mark it as interior!
+        frame.SET_INTERIOR_RESOLUTION,  # clamp to the max
+        max(
+          1,  # clamped to at least 1, we can't have 0
+          int(  # converted to int
+            gmpy2.floor(  # scaled to [0,1], then to [0, SET_INTERIOR_RESOLUTION]
+              max(_MPFR_ZERO, min(_MPFR_ONE, (v - lo) / d)) * frame.MPFR_SET_INTERIOR_RESOLUTION
+            )
+          )
+          + 1,  # we want to start at 1, so add 1, -> [1, SET_INTERIOR_RESOLUTION + 1]
+        ),
+      )
+    )
     # create progress bar based on total pixels and the options
     has_procs: bool = inp.total_tasks > 1
     n_task: int = inp.n_task - 1  # convert to 0-based index for easier modulo math
@@ -635,8 +683,10 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: PL
         # starting point is inside escape radius; do the full escape-time iteration in mpfr
         zy: gmpy2.mpfr = img_y
         zx: gmpy2.mpfr = xs[px]
-        max_z2: gmpy2.mpfr = _MPFR_ZERO  # track the max |z|^2
+        min_z2: gmpy2.mpfr = _MPFR_FOUR  # track min |z|^2 for potential use in coloring
+        max_z2: gmpy2.mpfr = _MPFR_ZERO  # track max |z|^2 for potential use in coloring
         mag_z2: gmpy2.mpfr
+        imag_acc: gmpy2.mpfr = _MPFR_ZERO  # accumulate sin(arg(z)) over orbit for smooth SAC
         # fast exterior pre-check: if |z_0|*|z_0| > 4 the starting point is already outside the
         # escape radius so the orbit escapes immediately, before any iteration; note that this is
         # the ONLY simple universal fast test available for Julia sets — unlike Mandelbrot (which
@@ -656,22 +706,93 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: PL
           # avoid sqrt(abs(z)); compare squared magnitude to 2^2
           if (mag_z2 := zx2 + zy2) > _MPFR_FOUR:
             break
-          max_z2 = max(max_z2, mag_z2)  # track max |z|^2 for potential use in coloring
-          # z = z^2 + c in terms of zx/zy: zx' = zx^2 - zy^2 + cx
+          # Imaginary Weight Average: accumulate sin(arg(z))**2 = zy**2/|z|**2 BEFORE the update
+          if inp.highlight == frame.SetHighlightAlgorithm.IMAGINARY and mag_z2 > _MPFR_ZERO:
+            imag_acc += zy2 / mag_z2
+          # z = z^2 + c in terms of zx/zy: zx' = zx^2 - zy^2 + cx - the actual Julia iteration
           zy = _MPFR_TWO * zx * zy + cy
           zx = zx2 - zy2 + cx
+          # accumulate |z|; don't do this first, or else, for example, min() will always be 0.0
+          if inp.highlight == frame.SetHighlightAlgorithm.MIN:
+            min_z2 = min(min_z2, mag_z2)
+          elif inp.highlight == frame.SetHighlightAlgorithm.MAX:
+            max_z2 = max(max_z2, mag_z2)
         else:
           # if we didn't break, we reached max_iter, mark as non-escaped, so
           # we will declare this a Set point, interior; the max_z2 should be <= 4: check
           if not 0 <= max_z2 < _MPFR_FOUR:
             raise Error(f'Interior point exceeded max |z|^2 of 4, should never happen, {max_z2=}')
-          # scale max_z2 to [1..SET_INTERIOR_RESOLUTION], never zero b/c being <0 is the marker!
-          escaped_at = -(  # negative!
-            int(gmpy2.floor(frame.MPFR_SET_INTERIOR_SCALE * cast('gmpy2.mpfr', gmpy2.sqrt(max_z2))))
-            + 1
-          )  # add 1 to make it [1..SET_INTERIOR_RESOLUTION], never zero
+          # always count interior points, even if we don't do any special coloring for them
+          n_interior += 1
+          # now, for every possible set px algorithms, we do the final computations
+          if inp.highlight is None:
+            # default coloring: just mark as interior with a special negative value
+            escaped_at = -frame.SET_INTERIOR_RESOLUTION  # negative to mark it as interior!
+          elif inp.highlight == frame.SetHighlightAlgorithm.MIN:
+            # track the min |z|^2; first the stats...
+            min_lo = min(min_lo, min_z2)
+            min_hi = max(min_hi, min_z2)
+            # ...then the normalized value for coloring
+            sqrt_min: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(min_z2))
+            escaped_at = (
+              normalize(sqrt_min, sqrt_lo2, sqrt_delta2)  # sqrt_lo2 & sqrt_delta2 are pre-computed
+              if stats_min
+              else normalize(sqrt_min, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
+            )
+          elif inp.highlight == frame.SetHighlightAlgorithm.MAX:
+            # track the max |z|^2; first the stats...
+            max_lo = min(max_lo, max_z2)
+            max_hi = max(max_hi, max_z2)
+            # ...then the normalized value for coloring
+            sqrt_max: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(max_z2))
+            escaped_at = (
+              normalize(sqrt_max, sqrt_lo, sqrt_delta)  # sqrt_lo & sqrt_delta are pre-computed
+              if stats_max
+              else normalize(sqrt_max, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
+            )
+          elif inp.highlight == frame.SetHighlightAlgorithm.ANGLE:
+            # angle stats for interior points; first the stats...
+            ang: gmpy2.mpfr = gmpy2.atan2(zy, zx)  # angle in radians, between -pi and pi
+            ang = (ang + mpfr_pi) / mpfr_two_pi  # shift to [0, 2pi] then to [0, 1]
+            ang_lo = min(ang_lo, ang)
+            ang_hi = max(ang_hi, ang)
+            # ...then the normalized value for coloring
+            escaped_at = (
+              # ang_lo & ang_delta are pre-computed
+              normalize(ang, inp.stats.ang_lo, ang_delta)  # type: ignore[union-attr]
+              if stats_ang
+              else normalize(ang, _MPFR_ZERO, _MPFR_ONE)
+            )
+          elif inp.highlight == frame.SetHighlightAlgorithm.IMAGINARY:
+            # Imaginary Weight Average: mean(sin(arg(z))**2) over orbit; first the stats...
+            imag_mean: gmpy2.mpfr = (imag_acc / max_iter_p_1) / frame.MPFR_MAX_SET_Z
+            imag_lo = min(imag_lo, imag_mean)
+            imag_hi = max(imag_hi, imag_mean)
+            # ...then the normalized value for coloring
+            escaped_at = (
+              # imag_lo & imag_delta are pre-computed
+              normalize(imag_mean, inp.stats.imag_lo, imag_delta)  # type: ignore[union-attr]
+              if stats_imag
+              else normalize(imag_mean, _MPFR_ZERO, _MPFR_ONE)
+            )
+          else:
+            raise Error(f'Unknown fractal type {inp.highlight=}; should never happen')
+        # either in or out of the set, we now should always have a value for escaped_at;
+        # this is setting the pixel escape (not the coloring! that is done later in image.Image)
         img.escape[px_count] = escaped_at  # carefully set this directly in the array
         p_bar.update(1)  # we touched a pixel, so update the progress bar
-    # done
+    # done; return the stats we collected with the task output
     p_bar.close()
+    img.stats = image.FractalStats(
+      n_px=inp.width * inp.height,
+      n_interior=n_interior,
+      max_lo=max_lo,
+      max_hi=max_hi,
+      min_lo=min_lo,
+      min_hi=min_hi,
+      ang_lo=ang_lo,
+      ang_hi=ang_hi,
+      imag_lo=imag_lo,
+      imag_hi=imag_hi,
+    )
     return _FractalTaskOutput(img=img, n_task=inp.n_task, total_tasks=inp.total_tasks)
