@@ -365,11 +365,12 @@ SET_PALETTE_OPTION: typer.models.OptionInfo = typer.Option(
   ),
 )
 COLOR_SET_POINTS_OPTION: typer.models.OptionInfo = typer.Option(
-  True,
-  '--set/--no-set',
+  None,
+  '--set',
   help=(
-    'If True, color the interior Set points with `--set-palette` instead of black; '
-    'default is True (use set palette)'
+    'Which algorithm to use for coloring the interior Set points, either None, or one of '
+    f'{", ".join(repr(a.value) for a in frame.SetHighlightAlgorithm)}; '
+    'default is None, do not color the Set points (i.e., they will be black)'
   ),
 )
 
@@ -423,7 +424,7 @@ class TranZoomConfig(clibase.CLIConfig):
   img_path_prefix: str | None
   pal: palette.Palette
   set_pal: palette.Palette
-  color_set_points: bool
+  set_points: frame.SetHighlightAlgorithm | None
   max_threads: int | None
   model: str
   spec_tokens: int | None

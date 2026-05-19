@@ -46,7 +46,7 @@ def ZoomLoop(
   img_path_prefix: str,
   pal: palette.Palette,
   set_pal: palette.Palette,
-  color_set_points: bool,
+  set_points: frame.SetHighlightAlgorithm | None,
   max_threads: int | None,
   model: str,
   spec_tokens: int | None,
@@ -81,7 +81,9 @@ def ZoomLoop(
     img_path_prefix: A prefix to add to the image filename when saving.
     pal: The color palette to use for rendering the image.
     set_pal: The color palette to use for interior Set points.
-    color_set_points: If True, color the interior Set points with `set_pal` instead of black.
+    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
+          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
+          None, do not color the Set points (i.e., they will be black).
     max_threads: Optional maximum number of threads to use for rendering; if None, use all
         available CPU cores.
     model: The AI model identifier to use for the search.
@@ -114,7 +116,7 @@ def ZoomLoop(
   print_comm(
     f'Will run {width} x {height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
     + ('include reason field. ' if reason else '[cyan]NOT[/] include reason field. ')
-    + ('Rich interior. ' if color_set_points else '')
+    + f'{f', "{set_points.value}" interior. ' if set_points else ""}'
     + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(
@@ -168,7 +170,7 @@ def ZoomLoop(
           img_path_prefix,
           pal,
           set_pal,
-          color_set_points,
+          set_points,
           max_threads,
           iterm,
           print_comm,
@@ -234,7 +236,7 @@ def ManualLoop(
   img_path_prefix: str,
   pal: palette.Palette,
   set_pal: palette.Palette,
-  color_set_points: bool,
+  set_points: frame.SetHighlightAlgorithm | None,
   max_threads: int | None,
   max_steps: int,
   iterm: bool,
@@ -253,7 +255,9 @@ def ManualLoop(
     img_path_prefix: A prefix to add to the image filename when saving.
     pal: The color palette to use for rendering the image.
     set_pal: The color palette to use for interior Set points.
-    color_set_points: If True, color the interior Set points with `set_pal` instead of black.
+    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
+          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
+          None, do not color the Set points (i.e., they will be black).
     max_threads: Optional maximum number of threads to use for rendering; if None, use all
         available CPU cores.
     max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
@@ -265,8 +269,8 @@ def ManualLoop(
   zoom_tm: int = timer.Now()
   print_comm(
     f'Will run {width} x {height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
-    + ('Rich interior. ' if color_set_points else '')
-    + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
+    f'{f', "{set_points.value}" interior. ' if set_points else ""}'
+    'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})\n')
   # start
@@ -292,7 +296,7 @@ def ManualLoop(
         img_path_prefix,
         pal,
         set_pal,
-        color_set_points,
+        set_points,
         max_threads,
         iterm,
         print_comm,
@@ -364,7 +368,7 @@ def _ComputeFractal(
   img_path_prefix: str,
   pal: palette.Palette,
   set_pal: palette.Palette,
-  color_set_points: bool,
+  set_points: frame.SetHighlightAlgorithm | None,
   max_threads: int | None,
   iterm: bool,
   print_comm: abc.Callable[[str], None],
@@ -384,7 +388,9 @@ def _ComputeFractal(
     img_path_prefix: A prefix to add to the image filename when saving.
     pal: The color palette to use for rendering the image.
     set_pal: The color palette to use for interior Set points.
-    color_set_points: If True, color the interior Set points with `set_pal` instead of black.
+    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
+          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
+          None, do not color the Set points (i.e., they will be black).
     max_threads: Maximum number of threads to use for rendering.
     iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
     print_comm: A rich console callable for printing messages.
@@ -419,7 +425,7 @@ def _ComputeFractal(
       print_comm=print_comm,
     )
     # get PNG and overlay info on top of it
-    img_data, img_hash = img.AsPNG(pal=pal, set_pal=set_pal, color_set_points=color_set_points)
+    img_data, img_hash = img.AsPNG(pal=pal, set_pal=set_pal, set_points=set_points)
     img_data = image.DrawThirdsInfoOverlay(img_data)
   # log!
   full_path: pathlib.Path = image.MakeImagePath(

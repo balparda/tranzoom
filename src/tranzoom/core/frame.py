@@ -83,6 +83,15 @@ class Fractal(enum.Enum):
 DEFAULT_FRACTAL: Fractal = Fractal.MANDELBROT
 
 
+class SetHighlightAlgorithm(enum.Enum):
+  """Fractal enum."""
+
+  MIN = 'min'
+  MAX = 'max'
+  ANGLE = 'angle'
+  IMAGINARY = 'imaginary'
+
+
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class Frame:
   """Defines a rectangular region of the complex plane, with arbitrary precision. Exact."""

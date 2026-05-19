@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import array
 import base64
+import dataclasses
 import enum
 import io
 import json
@@ -94,6 +95,10 @@ _LABEL_OFFSET: int = 5
 _SET_INTERIOR_SCALE: float = float(frame.MPFR_SET_INTERIOR_SCALE)
 
 
+class Error(frame.Error):
+  """Base image exception."""
+
+
 class Color(enum.Enum):
   """Color enum."""
 
@@ -116,8 +121,27 @@ MIN_MARK_WIDTH: int = 1
 MAX_MARK_WIDTH: int = 50
 
 
-class Error(frame.Error):
-  """Base image exception."""
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class FractalStats:
+  """Defines Mandelbrot stats values, collected over the sample run."""
+
+  # these 2 stats are always collected
+  n_px: int  # total number of pixels in the image
+  n_interior: int  # number of interior (Set) points in the image, pixels with escape iteration < 0
+
+  # limits of |z| magnitudes for interior (Set) points
+  max_lo: gmpy2.mpfr  # min(all max(|z|) for interior points)
+  max_hi: gmpy2.mpfr  # max(all max(|z|) for interior points)
+  min_lo: gmpy2.mpfr  # min(all min(|z|) for interior points)
+  min_hi: gmpy2.mpfr  # max(all min(|z|) for interior points)
+
+  # limits of angles for interior (Set) points, in [0, 1]
+  ang_lo: gmpy2.mpfr  # min(all angles for interior points)
+  ang_hi: gmpy2.mpfr  # max(all angles for interior points)
+
+  # limits of the Imaginary Weight Average for interior (Set) points, in [0, 1]
+  imag_lo: gmpy2.mpfr  # min(all sac values for interior points)
+  imag_hi: gmpy2.mpfr  # max(all sac values for interior points)
 
 
 class Image:
@@ -131,6 +155,9 @@ class Image:
         but for hot paths you can also set the escape iterations directly in the array,
         remembering that the pixel at coordinates (x, y) is stored at index (y * width + x)
         in the array.
+    stats (FractalStats | None): Optional stats about the fractal, collected during rendering;
+        DO NOT COUNT on this being present unless this was a sample 16.16 render
+        (see fractal._FractalAdaptiveIterations) where the stats are collected
 
   """
 
@@ -162,6 +189,7 @@ class Image:
     self.escape: ImageInt32Array = array.array('i', (0 for _ in range(width * height)))  # signed32
     if self.escape.itemsize != frame.N_BYTES_UINT:
       raise Error(f'unsupported platform: array of unsigned ints is not {frame.N_BYTES_UINT} bytes')
+    self.stats: FractalStats | None = None  # may be set later by the fractal rendering function
 
   def SetEscape(self, x: int, y: int, escaped_at: int) -> None:
     """Set the escape iteration for a given pixel.
@@ -253,7 +281,7 @@ class Image:
     *,
     pal: palette.Palette = palette.DEFAULT_PALETTE,
     set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-    color_set_points: bool = False,
+    set_points: frame.SetHighlightAlgorithm | None = None,
   ) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
@@ -272,9 +300,9 @@ class Image:
           Defaults to DEFAULT_PALETTE.
       set_pal (palette.Palette, optional): The color palette for interior Set points; only
           used when `color_set_points=True`. Defaults to DEFAULT_SET_PALETTE.
-      color_set_points (bool, optional): If True, color the interior Set points using `set_pal`
-          with histogram equalization over their |z| magnitudes; if False (default), render
-          them as pure black.
+      set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
+          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
+          None, do not color the Set points (i.e., they will be black).
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
@@ -297,7 +325,7 @@ class Image:
     # interior points store -|z| magnitude, so we flip the sign for the histogram key
     set_cumulative: dict[int, int] = {}
     total_set: int = 0
-    if color_set_points:
+    if set_points:
       _, set_cumulative, total_set = BuildCumulative([-e for e in self.escape if e < 0])
     # step 3: map each pixel to an RGB color
     pixels = bytearray(self._width * self._height * 3)
@@ -306,7 +334,7 @@ class Image:
         # exterior point: histogram-equalized position in pal
         t: float = (cumulative[escaped_at] - 1) / total_exterior
         rgb: tuple[int, int, int] = PixelPalette(t, pal, palette.PALETTE_CYCLES)
-      elif color_set_points and total_set > 0 and escaped_at < 0:
+      elif set_points and total_set > 0 and escaped_at < 0:
         # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
         t_set: float = (set_cumulative[-escaped_at] - 1) / total_set
         rgb = PixelPalette(t_set, set_pal, palette.SET_PALETTE_CYCLES)
@@ -320,7 +348,7 @@ class Image:
     *,
     pal: palette.Palette = palette.DEFAULT_PALETTE,
     set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-    color_set_points: bool = False,
+    set_points: frame.SetHighlightAlgorithm | None = None,
   ) -> tuple[bytes, str]:
     """Convert the image to PNG bytes and return it with its internal data hash.
 
@@ -328,7 +356,9 @@ class Image:
       pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
       set_pal (palette.Palette, optional): The color palette for interior Set points.
           Defaults to DEFAULT_SET_PALETTE.
-      color_set_points (bool, optional): If True, color the interior Set points
+      set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
+          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
+          None, do not color the Set points (i.e., they will be black).
 
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
@@ -338,7 +368,7 @@ class Image:
 
     """
     # convert the raw pixel data to a PNG using PIL
-    raw_img: bytes = self.AsPixels(pal=pal, set_pal=set_pal, color_set_points=color_set_points)
+    raw_img: bytes = self.AsPixels(pal=pal, set_pal=set_pal, set_points=set_points)
     img_data_hash: str = hashes.Hash256(raw_img).hex()
     img: PILImage.Image = PILImage.frombytes('RGB', (self._width, self._height), raw_img)
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
@@ -351,7 +381,7 @@ class Image:
     png_meta.add_text(META_IMAGE_HASH_KEY, img_data_hash)
     png_meta.add_text(META_IMAGE_PALETTE_KEY, pal.value)
     png_meta.add_text(META_IMAGE_SET_PALETTE_KEY, set_pal.value)
-    png_meta.add_text(META_IMAGE_COLOR_SET_KEY, 'true' if color_set_points else 'false')
+    png_meta.add_text(META_IMAGE_COLOR_SET_KEY, 'true' if set_points else 'false')
     png_meta.add_text(META_IMAGE_OVERLAY_KEY, 'false')  # if it comes from this, it has no overlay
     # frame type
     png_meta.add_text(META_FRACTAL_KEY, self._frame.fractal.value.lower())

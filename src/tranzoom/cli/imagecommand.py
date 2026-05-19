@@ -186,7 +186,7 @@ def _ProduceFractalImage(frm: frame.Frame, config: base.TranZoomConfig) -> None:
     f'frame {frm}, precision ± {frm.Precision(width, height)} bits, '  # approx: b/c iters
     f'{magnification_str} magnification, '
     f'{"AUTO" if config.max_iter is None else config.max_iter} iterations'
-    f'{", rich interior" if config.color_set_points else ""}...'
+    f'{f', "{config.set_points.value}" interior' if config.set_points else ""}...'
   )
   # render the image
   raw_png: bytes
@@ -200,12 +200,13 @@ def _ProduceFractalImage(frm: frame.Frame, config: base.TranZoomConfig) -> None:
       width,
       height,
       max_iter=config.max_iter,
+      set_points=config.set_points,
       n_processes=config.max_threads,
       print_comm=config.console.print,
     )
     # fractal is ready, convert to PNG
     raw_png, raw_hash = img.AsPNG(
-      pal=config.pal, set_pal=config.set_pal, color_set_points=config.color_set_points
+      pal=config.pal, set_pal=config.set_pal, set_points=config.set_points
     )
     if mark_coords:
       # we were asked to mark a coordinate with a crosshair overlay: do it
