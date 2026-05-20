@@ -415,6 +415,71 @@ AI_OUTPUT_REASON_FIELD_OPTION: typer.models.OptionInfo = typer.Option(
   ),
 )
 
+# Animation Options
+ANIM_DEST_MAGNIFICATION_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  image.DEFAULT_DEST_MAGNIFICATION_10,
+  min=-image.MAX_ZOOM_MAGNIFICATION_10,
+  max=image.MAX_ZOOM_MAGNIFICATION_10,
+  help=(
+    'Magnification magnitude to go through in the animation zoom; '
+    'ATTENTION!! this is exponential 10**mag, so a value of 2.0 means 10**2 = 100x zoom; '
+    f'default is {image.DEFAULT_DEST_MAGNIFICATION_10:.2f}, '
+    f'i.e., {10**image.DEFAULT_DEST_MAGNIFICATION_10:.2f}x zoom'
+  ),
+)
+ANIM_DURATION_OPTION: typer.models.OptionInfo = typer.Option(
+  image.DEFAULT_DURATION,
+  '--duration',
+  min=image.MIN_DURATION,
+  max=image.MAX_DURATION,
+  help=(
+    f'GIF/video duration, in seconds; {image.MIN_DURATION} ≤ d ≤ {image.MAX_DURATION} or None; '
+    'pick 2 out of `--duration`, `--frames` and `--fps`, and the third will be computed; '
+    f'default is {image.DEFAULT_DURATION:.2f} seconds'
+  ),
+)
+ANIM_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
+  image.DEFAULT_FRAMES,
+  '--frames',
+  min=image.MIN_FRAMES,
+  max=image.MAX_FRAMES,
+  help=(
+    f'Number of frames in GIF/video; {image.MIN_FRAMES} ≤ fr ≤ {image.MAX_FRAMES} or None; '
+    'pick 2 out of `--duration`, `--frames` and `--fps`, and the third will be computed; '
+    f'default is {image.DEFAULT_FRAMES}'
+  ),
+)
+ANIM_FPS_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '--fps',
+  min=image.MIN_FPS,
+  max=image.MAX_FPS,
+  help=(
+    f'Frames per second (FPS) for the GIF/video; {image.MIN_FPS} ≤ fps ≤ {image.MAX_FPS} or None; '
+    'pick 2 out of `--duration`, `--frames` and `--fps`, and the third will be computed; '
+    f'default is None'
+  ),
+)
+ANIM_TYPE_OPTION: typer.models.OptionInfo = typer.Option(
+  image.DEFAULT_ANIMATION_TYPE,
+  '--anim',
+  help=(
+    f'Type of animation to produce; possible values: '
+    f'{", ".join(repr(t.value) for t in image.AnimationType)}; '
+    f'default is "{image.DEFAULT_ANIMATION_TYPE.value}"'
+  ),
+)
+ANIM_LOOP_OPTION: typer.models.OptionInfo = typer.Option(
+  image.DEFAULT_LOOP,
+  '--loop',
+  min=image.MIN_LOOP,
+  max=image.MAX_LOOP,
+  help=(
+    f'Number of loops for the GIF (NOT MP4!); {image.MIN_LOOP} ≤ loop ≤ {image.MAX_LOOP}; '
+    f'default is {image.DEFAULT_LOOP}; zero (0) means infinite loops'
+  ),
+)
+
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class TranZoomConfig(clibase.CLIConfig):
@@ -446,10 +511,10 @@ class TranZoomConfig(clibase.CLIConfig):
   img_height: int = frame.DEFAULT_IMAGE_SIZE  # both `image` and `zoom` use, different defaults
   img_size: int | None = None  # for `image` and `zoom` commands, overrides width/height if given
 
-  max_iter: int | None = None  # for `image` command
-  mark_coords: str | None = None  # for `image` command
-  mark_color: image.Color = image.DEFAULT_MARK_COLOR  # for `image` command
-  mark_width: int = image.DEFAULT_MARK_WIDTH  # for `image` command
+  max_iter: int | None = None  # for `image` command, also `zoom auto`
+  mark_coords: str | None = None  # for `image` command, also `zoom auto`
+  mark_color: image.Color = image.DEFAULT_MARK_COLOR  # for `image` command, also `zoom auto`
+  mark_width: int = image.DEFAULT_MARK_WIDTH  # for `image` command, also `zoom auto`
 
   max_steps: int = 0  # for `zoom` command
   fractal_type: frame.Fractal = frame.DEFAULT_FRACTAL  # for `zoom` command
@@ -457,12 +522,15 @@ class TranZoomConfig(clibase.CLIConfig):
   julia_im: str = frame.DEFAULT_JULIA_IM  # for `zoom` command
 
 
-def ProduceFractalImage(frm: frame.Frame, config: TranZoomConfig) -> None:
+def ProduceFractalImage(frm: frame.Frame, config: TranZoomConfig) -> tuple[image.Image, bytes, str]:
   """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
 
   Args:
     frm: the frame to produce the image from; must be already validated and ready for rendering
     config: the global configuration with all the options needed for rendering and saving the image
+
+  Returns:
+    A tuple of (image.Image object, raw PNG bytes, internal hash of the raw PNG)
 
   This is a high-level function that takes care of all the steps needed to produce the final image,
   including:
@@ -543,6 +611,7 @@ def ProduceFractalImage(frm: frame.Frame, config: TranZoomConfig) -> None:
   if config.iterm:
     image.PrintITerm2(raw_png)
     config.console.print()
+  return (img, raw_png, raw_hash)
 
 
 def MakeFrameFromCLIArgs(

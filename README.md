@@ -4,7 +4,7 @@
 
 Fractal manipulation with LLMs
 
-- **Primary use case:** Render ultra-deep Mandelbrot and Julia Set fractal images with arbitrary precision and use AI/LLMs to guide fractal zoom sequences
+- **Primary use case:** Render ultra-deep [Mandelbrot Set](https://en.wikipedia.org/wiki/Mandelbrot_set) and [Julia Set](https://en.wikipedia.org/wiki/Julia_set) fractal images with arbitrary precision and use AI/LLMs to guide fractal zoom sequences
 - **Works with:** Local filesystem (PNG output), complex-plane coordinates, local LLM vision models (via LMStudio + `transai`)
 - **Status:** Early / experimental — core fractal engine is functional; AI-guided zoom is functional
 - **License:** Apache-2.0
@@ -157,7 +157,7 @@ Or install from the repository for development (see [Development Setup](#develop
 
 ### What this tool is
 
-tranZoom is a command-line fractal renderer focused on extreme zoom depth. Standard double-precision (`float64`) floating point has only about 15–16 significant decimal digits, so any zoom below roughly 1e-14 of the full Mandelbrot set will produce incorrect images due to precision loss. tranZoom uses `gmpy2.mpq` (exact rational arithmetic) to represent frame coordinates and `gmpy2.mpfr` (arbitrary-precision floating point) for the escape-time computations, automatically determining how many bits of precision are needed for any given zoom level. Starting with version 1.3.0, tranZoom also renders Julia Sets — the same arbitrary-precision engine works for any complex-constant Julia iteration.
+tranZoom is a command-line fractal renderer focused on extreme zoom depth for [Mandelbrot Set](https://en.wikipedia.org/wiki/Mandelbrot_set) and [Julia Set](https://en.wikipedia.org/wiki/Julia_set). Standard double-precision (`float64`) floating point has only about 15–16 significant decimal digits, so any zoom below roughly 1e-14 of the full Mandelbrot set will produce incorrect images due to precision loss. tranZoom uses `gmpy2.mpq` (exact rational arithmetic) to represent frame coordinates and `gmpy2.mpfr` (arbitrary-precision floating point) for the escape-time computations, automatically determining how many bits of precision are needed for any given zoom level. Starting with version 1.3.0, tranZoom also renders Julia Sets — the same arbitrary-precision engine works for any complex-constant Julia iteration.
 
 Starting with version 1.1.0, tranZoom can use local LLM vision models to autonomously guide the zoom — identifying visually interesting regions, scoring nine sectors of the current frame, and navigating toward the most promising sector at each step. A manual mode is also available for human-guided zoom sessions with the same iterative frame navigation. Both AI and manual zoom support Mandelbrot and Julia Sets.
 
@@ -639,7 +639,7 @@ This image is relatively fast to generate (despite the zoom level, it has very l
 
 ![Julia Suzana](tests/data/images/demo-julia-suzana.png)
 
-Render a "Julia Suzana" at `-s/--size` 1024:
+Render a "Julia Suzana" at `-s/--size` 1024, one of the possible [Julia Set](https://en.wikipedia.org/wiki/Julia_set):
 
 ```sh
 $ poetry run tranz --no-date --palette electric-ocean image -s 1024 julia

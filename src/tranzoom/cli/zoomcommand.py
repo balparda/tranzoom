@@ -10,16 +10,23 @@ README.md has good examples for different zoom levels.
 from __future__ import annotations
 
 import dataclasses
+import math
+import pathlib
+from typing import cast
 
 import click
+import gmpy2
 import typer
 from transcrypto.cli import clibase
+from transcrypto.core import hashes
+from transcrypto.utils import human, timer
 
 from tranzoom import tranz
 from tranzoom.cli import base
-from tranzoom.core import ai, frame
+from tranzoom.core import ai, frame, image
 
 _MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the fractal score
+_MAX_TOLERATED_MAG_ERROR: float = 0.02  # 2%
 
 
 zoom_app = typer.Typer(
@@ -227,3 +234,219 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
     config.iterm,
     config.console.print,
   )
+
+
+@zoom_app.command(
+  'auto',
+  help='Create a GIF/MP4 zoom fractal animation.',
+  epilog=(
+    'Examples:\n\n\n\n'  # TODO: update help
+    '$ poetry run tranz zoom auto'
+  ),
+)
+@clibase.CLIErrorGuard
+def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR0914, PLR0915
+  *,
+  ctx: click.Context,
+  center_re: str = base.FRAME_CENTER_RE_ARGUMENT,  # type: ignore[assignment]
+  center_im: str = base.FRAME_CENTER_IM_ARGUMENT,  # type: ignore[assignment]
+  f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]
+  f_height: str | None = base.FRAME_HEIGHT_ARGUMENT,  # type: ignore[assignment]
+  dest_magnification_10: float = base.ANIM_DEST_MAGNIFICATION_ARGUMENT,  # type: ignore[assignment]
+  anim_type: image.AnimationType = base.ANIM_TYPE_OPTION,  # type: ignore[assignment]
+  duration: float | None = base.ANIM_DURATION_OPTION,  # type: ignore[assignment]
+  frames: int | None = base.ANIM_FRAMES_OPTION,  # type: ignore[assignment]
+  fps: float | None = base.ANIM_FPS_OPTION,  # type: ignore[assignment]
+  loop: int = base.ANIM_LOOP_OPTION,  # type: ignore[assignment]
+  max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
+  mark_coords: str | None = base.MARK_COORDINATES_OPTION,  # type: ignore[assignment]
+  mark_color: str = base.MARK_COLOR_OPTION,  # type: ignore[assignment]
+  mark_width: int = base.MARK_WIDTH_OPTION,  # type: ignore[assignment]
+) -> None:
+  # we intend passing config, so we add the options here...
+  ctx.obj = dataclasses.replace(
+    ctx.obj,
+    max_iter=max_iter,
+    mark_coords=mark_coords,
+    mark_color=mark_color,
+    mark_width=mark_width,
+  )
+  config: base.TranZoomConfig = ctx.obj
+  # check sanity, create frame, and print info about the image we're going to generate
+  if duration and frames and not fps:
+    fps = frames / duration
+  elif duration and fps and not frames:
+    frames = int(duration * fps)
+  elif frames and fps and not duration:
+    duration = frames / fps
+  else:
+    raise click.ClickException(
+      'Please provide exactly 2 of the 3 options: `--duration`, `--frames` and `--fps`; '
+      f'got {duration=}, {frames=} and {fps=}'
+    )
+  if not (image.MIN_FPS <= fps <= image.MAX_FPS):
+    raise click.ClickException(
+      f'FPS={fps:.2f} must be between {image.MIN_FPS:.2f} and {image.MAX_FPS:.2f}'
+    )
+  if not (image.MIN_FRAMES <= frames <= image.MAX_FRAMES):
+    raise click.ClickException(
+      f'Frames={frames} must be between {image.MIN_FRAMES} and {image.MAX_FRAMES}'
+    )
+  if not (image.MIN_DURATION <= duration <= image.MAX_DURATION):
+    raise click.ClickException(
+      f'Duration={duration:.2f} must be between {image.MIN_DURATION:.2f} and '
+      f'{image.MAX_DURATION:.2f} seconds'
+    )
+  frm: frame.Frame = base.MakeFrameFromCLIArgs(
+    config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
+  )
+  # if it is a Julia, make the Julia point and add it to the frame
+  frm = (
+    frame.FrameAndPoint.FromCenterAndPoint(
+      frame.Fractal.JULIA,
+      *base.MakePointFromCLIArgs(config.julia_re, config.julia_im, config.console.print),
+      frm.center[0],
+      frm.center[1],
+      frm.size[0],
+      frm.size[1],
+    )
+    if config.fractal_type == frame.Fractal.JULIA
+    else frm
+  )
+  original_frm: frame.Frame = frm
+  # determine width and height
+  width: int
+  height: int
+  width, height = (
+    frm.PixelDimensionsFromSize(config.img_size)
+    if config.img_size
+    else (config.img_width, config.img_height)
+  )
+  # compute zoom constants; log
+  steps: int = frames - 1
+  mag_per_step: float = dest_magnification_10 / steps
+  scalar_magnification: gmpy2.mpfr = gmpy2.exp10(dest_magnification_10)
+  scalar_magnification_per_step: float = math.pow(10.0, mag_per_step)
+  mpq_mag: gmpy2.mpq = frame.MPQFromFloatApprox(scalar_magnification_per_step, 100_000)
+  # reproduce the zoom run to check the actual magnification we will get
+  for _ in range(frames - 1):
+    frm = frame.Frame.FromCenter(
+      frm.fractal,
+      frm.center[0],
+      frm.center[1],
+      frm.size[0] / mpq_mag,
+      frm.size[1] / mpq_mag,
+    )
+  # now we can compute the actual final magnification
+  actual_mag: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(original_frm.area / frm.area))
+  mag_error: gmpy2.mpfr = abs(actual_mag - scalar_magnification) / scalar_magnification
+  frm = original_frm  # reset frm to the original for the actual rendering loop
+  # log; log errors
+  config.console.print(
+    f'\nProducing {width}x{height} 10^{dest_magnification_10:.2f} zoom animation, '
+    f'{human.HumanizedSeconds(duration)} long, at {fps:.2f} FPS, '
+    f'with {frames} frames, {100.0 * scalar_magnification_per_step:.2f}% per step ({mpq_mag}), '
+    f'final magnification error {float(gmpy2.mpfr(100.0) * mag_error):.4f}%...\n'
+  )
+  if scalar_magnification_per_step >= image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
+    config.console.print(
+      '[red]Warning: the zoom per frame is high: 10**(mag/(frames-1)) = '
+      f'10**({dest_magnification_10:.2f}/{steps}) = '
+      f'{100.0 * scalar_magnification_per_step:.2f}%/step. '
+      'The resulting animation may look jumpy. Consider increasing the number of frames '
+      'or reducing the total magnification.[/]\n'
+    )
+  if mag_error > _MAX_TOLERATED_MAG_ERROR:
+    config.console.print(
+      f'[red]Warning: the actual magnification achieved by zooming in the frame is '
+      f'{float(actual_mag):.2f}, which is {float(gmpy2.mpfr(100.0) * mag_error):.4f}% different '
+      f'from the intended {scalar_magnification:.2f}. This means the gmpy2.mpq needs more '
+      'precision for conversion. This is a bug! The final animation may not have the exact '
+      'intended zoom level.[/]\n'
+    )
+  # main zoom loop, go for frames iterations, producing the image and then zooming in the frame
+  img: image.Image | None = None
+  img_data: bytes
+  data_hash: str
+  all_frames: list[bytes] = []
+  all_hash: list[str] = []
+  with timer.Timer(emit_log=False) as tmr:
+    for i in range(frames):
+      config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
+      # we have the frame, now feed it to the producer
+      img, img_data, data_hash = base.ProduceFractalImage(frm, config)
+      all_frames.append(img_data)
+      all_hash.append(data_hash)
+      # zoom in the frame for the next iteration
+      frm = (
+        frame.FrameAndPoint.FromCenterAndPoint(
+          frm.fractal,
+          frm.point_re,
+          frm.point_im,
+          frm.center[0],
+          frm.center[1],
+          frm.size[0] / mpq_mag,
+          frm.size[1] / mpq_mag,
+        )
+        if isinstance(frm, frame.FrameAndPoint) and frm.fractal == frame.Fractal.JULIA
+        else frame.Frame.FromCenter(
+          frm.fractal,
+          frm.center[0],
+          frm.center[1],
+          frm.size[0] / mpq_mag,
+          frm.size[1] / mpq_mag,
+        )
+      )
+    # check we got something
+    if not img:
+      raise click.ClickException('No image produced for animation! should never happen; report bug')
+  # compute hash and so the path
+  video_hash: str = hashes.Hash256(
+    ('|'.join(all_hash)).encode('ascii')  # stable if all images are the same
+  ).hex()
+  video_path: pathlib.Path = image.MakeImagePath(
+    config.img_output_path,
+    config.img_use_date,
+    config.img_use_hash,
+    config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
+    video_hash,
+    suffix=anim_type.value,
+  )
+  # create metadata
+  meta: dict[str, str] = image.MakeImageMeta(
+    img,
+    video_hash,
+    pal=config.pal,
+    set_pal=config.set_pal,
+    set_points=config.set_points,
+  )
+  # add video-specific metadata
+  meta[image.META_IMAGE_ANIMATION_KEY] = anim_type.value.lower()
+  meta.update(
+    # the extra animation keys
+    {
+      image.META_ANIM_INITIAL_WIDTH_RE_KEY: str(original_frm.size[0]),
+      image.META_ANIM_INITIAL_HEIGHT_IM_KEY: str(original_frm.size[1]),
+      image.META_ANIM_MAGNITUDE_KEY: str(dest_magnification_10),
+      image.META_ANIM_MAGNITUDE_PER_STEP_KEY: str(mag_per_step),
+      image.META_ANIM_MAGNIFICATION_PER_STEP_KEY: str(scalar_magnification_per_step),
+      image.META_ANIM_MAGNIFICATION_PER_STEP_MPQ_KEY: str(mpq_mag),
+      image.META_ANIM_DURATION_KEY: str(duration),
+      image.META_ANIM_FRAMES_KEY: str(frames),
+      image.META_ANIM_STEPS_KEY: str(steps),
+      image.META_ANIM_FPS_KEY: str(fps),
+      image.META_ANIM_LOOP_KEY: str(loop),
+    }
+  )
+  # save the final animation
+  if anim_type == image.AnimationType.GIF:
+    image.WriteAnimatedGIF(
+      all_frames, video_path, width, height, frames, duration, meta=meta, loop=loop
+    )
+  elif anim_type == image.AnimationType.MP4:
+    image.WriteVideoMP4(all_frames, video_path, width, height, frames, duration, meta=meta)
+  else:
+    raise click.ClickException(f'Unsupported animation type: {anim_type}')
+  # done
+  config.console.print(f'\nSuccess: {anim_type.value.upper()} {video_hash!r} in {tmr}')
+  config.console.print(f'Saved {anim_type.value.upper()} to "{video_path}"\n')

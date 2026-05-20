@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+import fractions
 from collections import abc
 from typing import cast
 
@@ -603,3 +604,18 @@ DEFAULT_FRAMES: dict[Fractal, Frame] = {
   Fractal.MANDELBROT: DEFAULT_MANDELBROT_FRAME,
   Fractal.JULIA: DEFAULT_JULIA_FRAME,
 }
+
+
+def MPQFromFloatApprox(value: float, max_denominator: int) -> gmpy2.mpq:
+  """Convert a float to a gmpy2.mpq, using fractions.Fraction to find a good rational approximation.
+
+  Args:
+    value (float): The float value to convert.
+    max_denominator (int): The maximum denominator to use for the approximation.
+
+  Returns:
+    gmpy2.mpq: The rational approximation of the float as a gmpy2.mpq.
+
+  """
+  frac: fractions.Fraction = fractions.Fraction(value).limit_denominator(max_denominator)
+  return gmpy2.mpq(frac.numerator, frac.denominator)
