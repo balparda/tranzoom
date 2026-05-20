@@ -179,7 +179,7 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
   # read image
   image_path = image_path.expanduser().resolve()
   image_data: bytes = image_path.read_bytes()
-  w, h, png_hash, info = image.GetBasicDataFromPNG(image_data)
+  w, h, png_hash, info = image.GetBasicDataFromImage(image_data)
   # print header
   config.console.print()
   config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')

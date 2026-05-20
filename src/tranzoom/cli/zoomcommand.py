@@ -262,6 +262,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   mark_coords: str | None = base.MARK_COORDINATES_OPTION,  # type: ignore[assignment]
   mark_color: str = base.MARK_COLOR_OPTION,  # type: ignore[assignment]
   mark_width: int = base.MARK_WIDTH_OPTION,  # type: ignore[assignment]
+  save_frames: bool = base.ANIM_SAVE_FRAMES_OPTION,  # type: ignore[assignment]
 ) -> None:
   # we intend passing config, so we add the options here...
   ctx.obj = dataclasses.replace(
@@ -376,7 +377,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
       # we have the frame, now feed it to the producer
       img, img_data, data_hash = base.ProduceFractalImage(
-        frm, config, tm=timestamp, add_serial=i + 1
+        frm, config, tm=timestamp, add_serial=i + 1, save_image=save_frames
       )
       all_frames.append(img_data)
       all_hash.append(data_hash)
@@ -454,3 +455,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   # done
   config.console.print(f'\nSuccess: {anim_type.value.upper()} {video_hash!r} in {tmr}')
   config.console.print(f'Saved {anim_type.value.upper()} to "{video_path}"\n')
+  # iterm
+  if config.iterm:
+    image.PrintITerm2(video_path.read_bytes())
+    config.console.print()

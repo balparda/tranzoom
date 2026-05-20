@@ -14,6 +14,7 @@ import dataclasses
 import enum
 import io
 import json
+import logging
 import math
 import pathlib
 import sys
@@ -136,6 +137,14 @@ class Color(enum.Enum):
   MAGENTA = (255, 0, 255)
 
 
+class FileType(enum.Enum):
+  """File type enum."""
+
+  PNG = 'png'  # also the file suffix!
+  GIF = 'gif'
+  MP4 = 'mp4'
+
+
 class AnimationType(enum.Enum):
   """Animation type enum."""
 
@@ -167,8 +176,6 @@ MAX_LOOP: int = 1000  # maximum number of loops for a GIF animation, for sanity 
 
 MAX_ZOOM_MAGNIFICATION_10: float = 10000.0  # this is 10**10000 which is more than enough
 DEFAULT_DEST_MAGNIFICATION_10: float = 1.0  # default dest magnification for zooms 10**1 = 10x zoom
-DEFAULT_FRAMES: int = 15  # 15 frames is a good default
-DEFAULT_DURATION: float = 2.0  # 2 seconds
 DEFAULT_LOOP: int = 0  # 0 means infinite loop for GIFs
 THRESHOLD_JUMPY_ZOOM_PER_FRAME: float = 1.25  # if zoom per frame is above this warn about jumpiness
 
@@ -194,6 +201,11 @@ class FractalStats:
   # limits of the Imaginary Weight Average for interior (Set) points, in [0, 1]
   imag_lo: gmpy2.mpfr  # min(all sac values for interior points)
   imag_hi: gmpy2.mpfr  # max(all sac values for interior points)
+
+
+# TODO: more stable animations
+# instead of rendering each frame independently, we can have a class that knows about the
+# whole intended journey and can have a special AsPixels() that normalizes once against all images
 
 
 class Image:
@@ -636,7 +648,7 @@ def MakeImagePath(
   return pathlib.Path(filename) if img_output_path is None else img_output_path / filename
 
 
-def GetBasicDataFromPNG(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:
+def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:
   """Get basic data from a PNG image, including format, size, hash, and metadata text.
 
   Args:
@@ -654,9 +666,6 @@ def GetBasicDataFromPNG(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict
 
   """
   with PILImage.open(io.BytesIO(img_bytes)) as img:
-    # make sure format is PNG
-    if (img.format or '').upper() != 'PNG':
-      raise Error(f'Unsupported image format {img.format!r}, expected PNG')
     # get the internal data we need (size and hash)
     width: int = img.width
     height: int = img.height
@@ -665,6 +674,27 @@ def GetBasicDataFromPNG(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict
     raw_hash: str = hashes.Hash256(img.convert('RGB').tobytes()).hex()  # not 'RGBA'!!
     # extract metadata from PNG
     pil_info: tbase.JSONDict = img.info  # type: ignore[assignment]
+    # make sure format is known and do any format-specific operations
+    if (img_format := (img.format or '').upper()) == FileType.PNG.value.upper():
+      pass  # nothing else to do for PNG, the metadata is already extracted in pil_info
+    elif img_format == FileType.GIF.value.upper():
+      # for GIFs we expect the metadata to be stored in the "comment" field as a JSON string
+      if 'comment' in pil_info:
+        try:
+          pil_info = json.loads(cast('bytes', pil_info['comment']).decode('utf-8'))
+          # if we managed to extract this, then maybe we can also get the correct hash
+          if META_IMAGE_HASH_KEY in pil_info:
+            raw_hash = str(pil_info[META_IMAGE_HASH_KEY])
+          else:
+            logging.error('DO NOT trust this GIF hash')
+        except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError):
+          # if comment is not valid JSON, just keep the original pil_info
+          logging.error('GIF image has comment metadata but it is not valid JSON, ignoring it')  # noqa: TRY400
+          logging.error('DO NOT trust this GIF hash')  # noqa: TRY400
+    elif img_format == FileType.MP4.value.upper():
+      raise NotImplementedError('MP4 format is not supported yet')
+    else:
+      raise Error(f'Unsupported image format {img.format!r}, expected PNG')
   return (width, height, raw_hash, pil_info)
 
 

@@ -15,10 +15,11 @@ class Palette(enum.Enum):
   OCEAN = 'electric-ocean'
   SUNSET = 'sunset'
   GRAYSCALE = 'grayscale'
+  GRAYSCALE_REVERSE = 'rgrayscale'
 
 
 DEFAULT_PALETTE: Palette = Palette.BYB
-DEFAULT_SET_PALETTE: Palette = Palette.GRAYSCALE  # used for interior (set) points coloring
+DEFAULT_SET_PALETTE: Palette = Palette.GRAYSCALE_REVERSE  # used for interior (set) points coloring
 
 # how many times to cycle through the palette across the histogram-equalized range;
 # more cycles = tighter, more frequent color banding; 3 is a visually balanced default
@@ -142,7 +143,7 @@ PALETTES: dict[Palette, tuple[tuple[int, int, int], ...]] = {
   # 8-stop smooth grayscale: white (deep interior, low |z|) → black (near boundary, high |z|);
   # cycles only once (SET_PALETTE_CYCLES=1) so the full gradient runs across the Set interior;
   # black near the boundary provides contrast with exterior colors; this is the DEFAULT_SET_PALETTE
-  Palette.GRAYSCALE: (
+  Palette.GRAYSCALE_REVERSE: (
     (255, 255, 255),  # white (deepest interior; far from boundary, low |z| magnitude)
     (240, 240, 240),  # near-white
     (210, 210, 210),  # light gray
@@ -151,5 +152,17 @@ PALETTES: dict[Palette, tuple[tuple[int, int, int], ...]] = {
     (72, 72, 72),  # dark gray
     (32, 32, 32),  # very dark gray
     (0, 0, 0),  # black (near-boundary, high |z| magnitude)
+  ),
+  # 8-stop smooth grayscale: reverse of the above
+  # black (deep interior, low |z|) → white (near boundary, high |z|)
+  Palette.GRAYSCALE: (
+    (0, 0, 0),  # black (deepest interior; far from boundary, low |z| magnitude)
+    (32, 32, 32),  # very dark gray
+    (72, 72, 72),  # dark gray
+    (120, 120, 120),  # medium-dark gray
+    (168, 168, 168),  # medium-light gray
+    (210, 210, 210),  # light gray
+    (240, 240, 240),  # near-white
+    (255, 255, 255),  # white (near-boundary, high |z| magnitude)
   ),
 }

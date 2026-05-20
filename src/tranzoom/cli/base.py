@@ -23,6 +23,7 @@ from tranzoom.core import ai, fractal, frame, image, palette
 # this indicates that the mathematical computation or the setting of colors has changed;
 # this should NOT change over metadata changes, as it is computed from raw pixel data
 SEAHORSE_TAIL_HASH: str = 'bc8befe1492f4d296cf93994ba201ef06c3fa4858a47a657bb7f136f42bceb5d'
+SEAHORSE_ANIMATED_HASH: str = '91b99d972c26a6a4d6116064b4528136a9104436cac3d9f48d679df37a875d97'
 SUZANA_WAVE_HASH: str = 'd7b19b0f1783bb38127d2948140e2379c19656ff4923b7244f25da7fbf322a2a'
 # this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 
@@ -428,25 +429,25 @@ ANIM_DEST_MAGNIFICATION_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   ),
 )
 ANIM_DURATION_OPTION: typer.models.OptionInfo = typer.Option(
-  image.DEFAULT_DURATION,
+  None,
   '--duration',
   min=image.MIN_DURATION,
   max=image.MAX_DURATION,
   help=(
     f'GIF/video duration, in seconds; {image.MIN_DURATION} ≤ d ≤ {image.MAX_DURATION} or None; '
     'pick 2 out of `--duration`, `--frames` and `--fps`, and the third will be computed; '
-    f'default is {image.DEFAULT_DURATION:.2f} seconds'
+    f'default is None'
   ),
 )
 ANIM_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
-  image.DEFAULT_FRAMES,
+  None,
   '--frames',
   min=image.MIN_FRAMES,
   max=image.MAX_FRAMES,
   help=(
     f'Number of frames in GIF/video; {image.MIN_FRAMES} ≤ fr ≤ {image.MAX_FRAMES} or None; '
     'pick 2 out of `--duration`, `--frames` and `--fps`, and the third will be computed; '
-    f'default is {image.DEFAULT_FRAMES}'
+    f'default is None'
   ),
 )
 ANIM_FPS_OPTION: typer.models.OptionInfo = typer.Option(
@@ -477,6 +478,14 @@ ANIM_LOOP_OPTION: typer.models.OptionInfo = typer.Option(
   help=(
     f'Number of loops for the GIF (NOT MP4!); {image.MIN_LOOP} ≤ loop ≤ {image.MAX_LOOP}; '
     f'default is {image.DEFAULT_LOOP}; zero (0) means infinite loops'
+  ),
+)
+ANIM_SAVE_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--save-frames/--no-save-frames',
+  help=(
+    'If True, will save the intermediate frames of the animation; '
+    'if False, intermediate frames will not be saved; default is False'
   ),
 )
 
@@ -528,6 +537,7 @@ def ProduceFractalImage(
   *,
   tm: int | None = None,
   add_serial: int | None = None,
+  save_image: bool = True,
 ) -> tuple[image.Image, bytes, str]:
   """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
 
@@ -539,6 +549,8 @@ def ProduceFractalImage(
     add_serial (int | None): Optional serial number to include in the file name for uniqueness;
         if None, no serial number is included; if provided, it is formatted as a zero-padded
         5-digit number between the date and hash.
+    save_image (bool): If True, will save the final image to disk; if False, the image will
+        not be saved; default is True.
 
   Returns:
     A tuple of (image.Image object, raw PNG bytes, internal hash of the raw PNG)
@@ -609,17 +621,19 @@ def ProduceFractalImage(
   # print stats
   config.console.print(f'{frm.fractal.value.capitalize()} image {raw_hash!r} in {tmr}')
   # save the image to a file named by its time/hash
-  full_path: pathlib.Path = image.MakeImagePath(
-    config.img_output_path,
-    config.img_use_date,
-    config.img_use_hash,
-    config.img_path_prefix or DEFAULT_IMAGE_PREFIX[frm.fractal],
-    raw_hash,
-    tm=tm,
-    add_serial=add_serial,
-  )
-  full_path.write_bytes(raw_png)
-  config.console.print(f'Saved to "{full_path}"\n')
+  if save_image:
+    full_path: pathlib.Path = image.MakeImagePath(
+      config.img_output_path,
+      config.img_use_date,
+      config.img_use_hash,
+      config.img_path_prefix or DEFAULT_IMAGE_PREFIX[frm.fractal],
+      raw_hash,
+      tm=tm,
+      add_serial=add_serial,
+    )
+    full_path.write_bytes(raw_png)
+    config.console.print(f'Saved to "{full_path}"')
+  config.console.print()
   # iterm
   if config.iterm:
     image.PrintITerm2(raw_png)
@@ -666,7 +680,7 @@ def MakeFrameFromCLIArgs(
       if not img_path.exists() or not img_path.is_file():
         raise ValueError(f'Image "{img_path}" does not exist or is not a file')  # noqa: TRY301
       # make sure we have the needed metadata
-      info: tbase.JSONDict = image.GetBasicDataFromPNG(img_path.read_bytes())[-1]
+      info: tbase.JSONDict = image.GetBasicDataFromImage(img_path.read_bytes())[-1]
       if (
         image.META_CENTER_RE_KEY not in info
         or image.META_CENTER_IM_KEY not in info
@@ -726,7 +740,7 @@ def MakePointFromCLIArgs(
       if not img_path.exists() or not img_path.is_file():
         raise ValueError(f'Image "{img_path}" does not exist or is not a file')  # noqa: TRY301
       # make sure we have the needed metadata
-      info: tbase.JSONDict = image.GetBasicDataFromPNG(img_path.read_bytes())[-1]
+      info: tbase.JSONDict = image.GetBasicDataFromImage(img_path.read_bytes())[-1]
       if image.META_CENTER_RE_KEY not in info or image.META_CENTER_IM_KEY not in info:
         raise ValueError(f'Image "{img_path}" missing tranZoom frame metadata keys')  # noqa: TRY301
       fract: str = str(info.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
