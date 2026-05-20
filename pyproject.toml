@@ -47,7 +47,7 @@ dependencies = [
   # best place for project dependencies, if possible
   # development-only dependencies go in the [tool.poetry.group.dev.dependencies] section below
 
-  "click>=8.3",
+  "click>=8.4",
   "cryptography>=48.0",
   "gmpy2>=2.3",
   "ImageIO>=2.37",
