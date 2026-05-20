@@ -37,7 +37,7 @@ This project follows a pragmatic versioning approach:
   - New `SetHighlightAlgorithm` enum in `core/frame.py` with values `min`, `max`, `angle`, `imaginary`.
   - New PNG metadata keys `tranzoom:image:set_palette` and `tranzoom:image:color_set`: embedded in all images to record the interior palette used and whether interior coloring was enabled.
   - **`tranz zoom auto`** — new command that renders a GIF or MP4 zoom animation along a straight zoom-in path toward a given starting frame; specify the destination magnification exponent (`10^N` zoom) and pick any two of `--frames`, `--fps`, `--duration` to constrain the third; output format controlled by `--anim` (`gif` or `mp4`, default `gif`); GIF loop count via `--loop` (0 = infinite); optional intermediate frame saving via `--save-frames/--no-save-frames`.
-  - **GIF animation support**: `WriteAnimatedGIF()` function in `core/image.py` saves a sequence of rendered PNG frames as an animated GIF using `imageio`; frame timing and loop count are configurable.
+  - **GIF animation support**: `WriteAnimatedGIF()` function in `core/image.py` saves a sequence of rendered PNG frames as an animated GIF via `PIL.Image.save(...)`; frame timing and loop count are configurable.
   - **MP4 video support**: `WriteVideoMP4()` function in `core/image.py` saves a sequence of rendered PNG frames as an H.264 MP4 video using `imageio-ffmpeg`; FPS is configurable.
   - New `FractalStats` dataclass in `core/image.py`: collects interior-point statistics during the adaptive pre-pass render — min/max of `|z|` magnitudes, min/max of angles, min/max of imaginary-weighted averages; stored in `Image.stats` after rendering.
   - New `AnimationType` enum in `core/image.py` with values `gif` and `mp4`.
