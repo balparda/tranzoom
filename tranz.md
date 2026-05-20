@@ -30,14 +30,14 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │ --hash                    --no-hash                                                             If True, file names will include the hash; if False,    │
 │                                                                                                 file names will not include the hash; default is True   │
 │                                                                                                                                          │
-│ --palette                                                                               'blue-to-yellow-to-brown'; available palettes:          │
+│ --palette                                                                    'blue-to-yellow-to-brown'; available palettes:          │
 │                                                                                                 ['blue-to-yellow-to-brown', 'electric-ocean',           │
-│                                                                                                 'grayscale', 'lava', 'sunset']                          │
+│                                                                                                 'grayscale', 'lava', 'rgrayscale', 'sunset']            │
 │                                                                                                                       │
-│ --set-palette                                                                           points; default is 'grayscale'; available palettes:     │
+│ --set-palette                                                                points; default is 'rgrayscale'; available palettes:    │
 │                                                                                                 ['blue-to-yellow-to-brown', 'electric-ocean',           │
-│                                                                                                 'grayscale', 'lava', 'sunset']                          │
-│                                                                                                                                     │
+│                                                                                                 'grayscale', 'lava', 'rgrayscale', 'sunset']            │
+│                                                                                                                                    │
 │ --set                                                                  Which algorithm to use for coloring the interior Set    │
 │                                                                                                 points, either None, or one of 'min', 'max', 'angle',   │
 │                                                                                                 'imaginary'; default is None, do not color the Set      │
@@ -457,30 +457,38 @@ Usage: tranz zoom auto [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │                                                                                                                                           │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --anim                                            Type of animation to produce; possible values: 'gif', 'mp4'; default is "gif"  │
-│ --duration            FLOAT RANGE [0.1<=x<=45000.0]        GIF/video duration, in seconds; 0.1 ≤ d ≤ 45000.0 or None; pick 2 out of `--duration`,       │
-│                                                            `--frames` and `--fps`, and the third will be computed; default is 2.00 seconds              │
+│ --anim                                                             Type of animation to produce; possible values: 'gif', 'mp4'; default is     │
+│                                                                             "gif"                                                                       │
 │                                                                                                                                           │
-│ --frames              INTEGER RANGE [3<=x<=100000]         Number of frames in GIF/video; 3 ≤ fr ≤ 100000 or None; pick 2 out of `--duration`,          │
-│                                                            `--frames` and `--fps`, and the third will be computed; default is 15                        │
-│                                                                                                                                            │
-│ --fps                 FLOAT RANGE [0.1<=x<=30.0]           Frames per second (FPS) for the GIF/video; 0.1 ≤ fps ≤ 30.0 or None; pick 2 out of           │
-│                                                            `--duration`, `--frames` and `--fps`, and the third will be computed; default is None        │
-│ --loop                INTEGER RANGE [0<=x<=1000]           Number of loops for the GIF (NOT MP4!); 0 ≤ loop ≤ 1000; default is 0; zero (0) means        │
-│                                                            infinite loops                                                                               │
+│ --duration                             FLOAT RANGE [0.1<=x<=45000.0]        GIF/video duration, in seconds; 0.1 ≤ d ≤ 45000.0 or None; pick 2 out of    │
+│                                                                             `--duration`, `--frames` and `--fps`, and the third will be computed;       │
+│                                                                             default is None                                                             │
+│ --frames                               INTEGER RANGE [3<=x<=100000]         Number of frames in GIF/video; 3 ≤ fr ≤ 100000 or None; pick 2 out of       │
+│                                                                             `--duration`, `--frames` and `--fps`, and the third will be computed;       │
+│                                                                             default is None                                                             │
+│ --fps                                  FLOAT RANGE [0.1<=x<=30.0]           Frames per second (FPS) for the GIF/video; 0.1 ≤ fps ≤ 30.0 or None; pick 2 │
+│                                                                             out of `--duration`, `--frames` and `--fps`, and the third will be          │
+│                                                                             computed; default is None                                                   │
+│ --loop                                 INTEGER RANGE [0<=x<=1000]           Number of loops for the GIF (NOT MP4!); 0 ≤ loop ≤ 1000; default is 0; zero │
+│                                                                             (0) means infinite loops                                                    │
 │                                                                                                                                             │
-│ --iter        -i      INTEGER RANGE [1000<=x<=2147483647]  Maximum iterations (depth) to compute before determining escape; 1000 ≤ iter ≤ 2147483647;   │
-│                                                            default is None (automatic search for optimal iterations --- recommended)                    │
-│ --mark                TEXT                                 A point formatted as "(re, im)" to add a crosshair overlay, `re` and `im` multi-precision;   │
-│                                                            this can be a float (ex: "(0.34, -0.56)") or a fraction of ints (rational numbers, ex:       │
-│                                                            "(123/451, 789/1011)") or any combination of these, and the numbers will be fed directly to  │
-│                                                            multi-precision arithmetic so no precision is lost; default is None, i.e., do not mark       │
-│                                                            overlay on the image                                                                         │
-│ --mark-color          TEXT                                 Color of the crosshair overlay; default is "red"; available colors: 'black', 'blue', 'cyan', │
-│                                                            'green', 'magenta', 'red', 'white', 'yellow'                                                 │
+│ --iter         -i                      INTEGER RANGE [1000<=x<=2147483647]  Maximum iterations (depth) to compute before determining escape; 1000 ≤     │
+│                                                                             iter ≤ 2147483647; default is None (automatic search for optimal iterations │
+│                                                                             --- recommended)                                                            │
+│ --mark                                 TEXT                                 A point formatted as "(re, im)" to add a crosshair overlay, `re` and `im`   │
+│                                                                             multi-precision; this can be a float (ex: "(0.34, -0.56)") or a fraction of │
+│                                                                             ints (rational numbers, ex: "(123/451, 789/1011)") or any combination of    │
+│                                                                             these, and the numbers will be fed directly to multi-precision arithmetic   │
+│                                                                             so no precision is lost; default is None, i.e., do not mark overlay on the  │
+│                                                                             image                                                                       │
+│ --mark-color                           TEXT                                 Color of the crosshair overlay; default is "red"; available colors:         │
+│                                                                             'black', 'blue', 'cyan', 'green', 'magenta', 'red', 'white', 'yellow'       │
 │                                                                                                                                           │
-│ --mark-width          INTEGER RANGE [1<=x<=50]             Width of the crosshair overlay; 1 ≤ w ≤ 50; default is 1                         │
-│ --help                                                     Show this message and exit.                                                                  │
+│ --mark-width                           INTEGER RANGE [1<=x<=50]             Width of the crosshair overlay; 1 ≤ w ≤ 50; default is 1        │
+│ --save-frames      --no-save-frames                                         If True, will save the intermediate frames of the animation; if False,      │
+│                                                                             intermediate frames will not be saved; default is False                     │
+│                                                                                                                                │
+│ --help                                                                      Show this message and exit.                                                 │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 
