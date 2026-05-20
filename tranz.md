@@ -38,10 +38,10 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                 ['blue-to-yellow-to-brown', 'electric-ocean',           │
 │                                                                                                 'grayscale', 'lava', 'sunset']                          │
 │                                                                                                                                     │
-│ --set                     --no-set                                                              If True, color the interior Set points with             │
-│                                                                                                 `--set-palette` instead of black; default is True (use  │
-│                                                                                                 set palette)                                            │
-│                                                                                                                                           │
+│ --set                                                                  Which algorithm to use for coloring the interior Set    │
+│                                                                                                 points, either None, or one of 'min', 'max', 'angle',   │
+│                                                                                                 'imaginary'; default is None, do not color the Set      │
+│                                                                                                 points (i.e., they will be black)                       │
 │ --threads                               INTEGER RANGE [1<=x<=16]                                Number of threads to use for rendering; default is      │
 │                                                                                                 None, which means to use all available CPU cores; will  │
 │                                                                                                 be limited to 16 threads                                │
@@ -372,6 +372,7 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ai      Use AI to search for an interest point.                                                                                                         │
 │ manual  Manually navigate a Mandelbrot zoom search (no AI).                                                                                             │
+│ auto    Create a GIF/MP4 zoom fractal animation.                                                                                                        │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -423,6 +424,68 @@ Usage: tranz zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
                                                                                                                                                            
  $ poetry run tranz --iterm zoom -s 700 --fractal julia ai                                                                                                 
  <start with full default Julia Set and AI zoom with 700px size, print iTerm2 images>
+```
+
+### `tranz zoom auto` Sub-Command
+
+```text
+Usage: tranz zoom auto [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]                                                                             
+                        [DEST_MAGNIFICATION_10]                                                                                                            
+                                                                                                                                                           
+ Create a GIF/MP4 zoom fractal animation.                                                                                                                  
+                                                                                                                                                           
+╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│   center_re                  [CENTER_RE]              Real part of the center point; this can be a float (ex: "0.34") or a fraction of ints (rational   │
+│                                                       number, ex: "123/451") and the number will be fed directly to multi-precision arithmetic so no    │
+│                                                       precision is lost; ALTERNATIVELY: you can use this to input an existing PNG image path, and it    │
+│                                                       will read the frame from the given image's metadata (overriding/ignoring the other CLI frame      │
+│                                                       parameters!); default is '-0.75'                                                                  │
+│                                                                                                                                         │
+│   center_im                  [CENTER_IM]              Imaginary part of the center point; this can be a float (ex: "0.34") or a fraction of ints        │
+│                                                       (rational number, ex: "123/451") and the number will be fed directly to multi-precision           │
+│                                                       arithmetic so no precision is lost; default is '0'                                                │
+│                                                                                                                                             │
+│   f_width                    [F_WIDTH]                Width of the frame in the real plane; this can be a float (ex: "0.34") or a fraction of ints      │
+│                                                       (rational number, ex: "123/451") and the number will be fed directly to multi-precision           │
+│                                                       arithmetic so no precision is lost; default is '2.5'                                              │
+│                                                                                                                                           │
+│   f_height                   [F_HEIGHT]               Height of the frame in the imaginary plane; this can be a float (ex: "0.34") or a fraction of     │
+│                                                       ints (rational number, ex: "123/451") and the number will be fed directly to multi-precision      │
+│                                                       arithmetic so no precision is lost; default is None, i.e, the same as width                       │
+│   dest_magnification_10      [DEST_MAGNIFICATION_10]  Magnification magnitude to go through in the animation zoom; ATTENTION!! this is exponential      │
+│                                                       10**mag, so a value of 2.0 means 10**2 = 100x zoom; default is 1.00, i.e., 10.00x zoom            │
+│                                                                                                                                           │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --anim                                            Type of animation to produce; possible values: 'gif', 'mp4'; default is "gif"  │
+│ --duration            FLOAT RANGE [0.1<=x<=45000.0]        GIF/video duration, in seconds; 0.1 ≤ d ≤ 45000.0 or None; pick 2 out of `--duration`,       │
+│                                                            `--frames` and `--fps`, and the third will be computed; default is 2.00 seconds              │
+│                                                                                                                                           │
+│ --frames              INTEGER RANGE [3<=x<=100000]         Number of frames in GIF/video; 3 ≤ fr ≤ 100000 or None; pick 2 out of `--duration`,          │
+│                                                            `--frames` and `--fps`, and the third will be computed; default is 15                        │
+│                                                                                                                                            │
+│ --fps                 FLOAT RANGE [0.1<=x<=30.0]           Frames per second (FPS) for the GIF/video; 0.1 ≤ fps ≤ 30.0 or None; pick 2 out of           │
+│                                                            `--duration`, `--frames` and `--fps`, and the third will be computed; default is None        │
+│ --loop                INTEGER RANGE [0<=x<=1000]           Number of loops for the GIF (NOT MP4!); 0 ≤ loop ≤ 1000; default is 0; zero (0) means        │
+│                                                            infinite loops                                                                               │
+│                                                                                                                                             │
+│ --iter        -i      INTEGER RANGE [1000<=x<=2147483647]  Maximum iterations (depth) to compute before determining escape; 1000 ≤ iter ≤ 2147483647;   │
+│                                                            default is None (automatic search for optimal iterations --- recommended)                    │
+│ --mark                TEXT                                 A point formatted as "(re, im)" to add a crosshair overlay, `re` and `im` multi-precision;   │
+│                                                            this can be a float (ex: "(0.34, -0.56)") or a fraction of ints (rational numbers, ex:       │
+│                                                            "(123/451, 789/1011)") or any combination of these, and the numbers will be fed directly to  │
+│                                                            multi-precision arithmetic so no precision is lost; default is None, i.e., do not mark       │
+│                                                            overlay on the image                                                                         │
+│ --mark-color          TEXT                                 Color of the crosshair overlay; default is "red"; available colors: 'black', 'blue', 'cyan', │
+│                                                            'green', 'magenta', 'red', 'white', 'yellow'                                                 │
+│                                                                                                                                           │
+│ --mark-width          INTEGER RANGE [1<=x<=50]             Width of the crosshair overlay; 1 ≤ w ≤ 50; default is 1                         │
+│ --help                                                     Show this message and exit.                                                                  │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Examples:                                                                                                                                                 
+                                                                                                                                                           
+ $ poetry run tranz zoom auto
 ```
 
 ### `tranz zoom manual` Sub-Command
