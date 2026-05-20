@@ -1134,35 +1134,28 @@ def WriteVideoMP4(
   fps: float = n_frames / duration
   if not (MIN_FPS <= fps <= MAX_FPS):
     raise Error(f'FPS={fps:.2f} must be between {MIN_FPS:.2f} and {MAX_FPS:.2f}')
-  if fps <= 0:
-    raise Error('fps must be > 0')
+  # prepare metadata
+  output_params: list[str] = []
+  output_params.extend(['-movflags', '+faststart'])  # allows start playing before fully downloaded
+  output_params.extend(['-crf', '16'])  # good quality, lower is better
+  output_params.extend(['-preset', 'slow'])  # slower presets give better compression
+  if meta:
+    for k, v in meta.items():
+      output_params.extend(['-metadata', f'{k}={v}'])
+  # save the whole MP4, normalizing each frame
   frame_count = 0
-  with imageio.get_writer(
+  with imageio.get_writer(  # pyright: ignore[reportUnknownMemberType]
     path,
     fps=fps,
+    format='ffmpeg',  # type: ignore[arg-type]
     codec='libx264',
     pixelformat='yuv420p',
     macro_block_size=1,
+    output_params=output_params,
   ) as writer:
     for frm in frames:
-      writer.append_data(np.asarray(_ImageNormalizeAndValidate(frm, width, height)))
+      writer.append_data(np.asarray(_ImageNormalizeAndValidate(frm, width, height)))  # type: ignore[attr-defined]
       frame_count += 1
-  # with imageio.v3.imopen(
-  #   path,
-  #   'w',
-  #   plugin='pyav' if False else None,
-  #   extension='.mp4',
-  # ) as writer:
-  #   for frame in frames:
-  #     if frame.size != (width, height):
-  #       raise Error(f'frame size {frame.size} != {(width, height)}')
-  #     writer.write(
-  #       np.asarray(frame.convert('RGB')),
-  #       fps=fps,
-  #       codec='libx264',
-  #       pixelformat='yuv420p',
-  #       macro_block_size=1,
-  #     )
-  #     frame_count += 1
+  # done, check that the frame count matches n_frames
   if frame_count != n_frames:
     raise Error(f'frames generator produced {frame_count} frames, expected {n_frames}')

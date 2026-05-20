@@ -28,6 +28,7 @@ poetry run tranz --set imaginary --no-date --no-hash --prefix "demo-mandel-seaho
 
 # Render Animated Seahorse Tail zoom
 poetry run tranz --no-date --no-hash --prefix "demo-mandel-seahorse-tail-anim" -o tests/data/images zoom -s 220 auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4
+poetry run tranz --no-date --no-hash --prefix "demo-mandel-seahorse-tail-video" -o tests/data/images zoom -s 512 auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4 --anim mp4
 
 # Render Julia Suzana
 poetry run tranz --no-date --no-hash --prefix "demo-julia-suzana" -o tests/data/images --palette "electric-ocean" image -s 1024 julia

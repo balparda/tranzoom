@@ -456,6 +456,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   config.console.print(f'\nSuccess: {anim_type.value.upper()} {video_hash!r} in {tmr}')
   config.console.print(f'Saved {anim_type.value.upper()} to "{video_path}"\n')
   # iterm
-  if config.iterm:
+  if config.iterm and anim_type != image.AnimationType.MP4:  # iTerm2 does not support MP4, only GIF
     image.PrintITerm2(video_path.read_bytes())
     config.console.print()

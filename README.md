@@ -638,9 +638,29 @@ This image is relatively fast to generate (despite the zoom level, it has very l
 
 #### Seahorse Tail Zoom
 
+| GIF | MP4 |
+| --- | --- |
+| ![Seahorse Tail GIF](tests/data/images/demo-mandel-seahorse-tail-anim.gif) | ![Seahorse Tail MP4](tests/data/images/demo-mandel-seahorse-tail-video.mp4) |
+
+You can easily make animations!
+
 ```sh
-poetry run tranz --iterm zoom -s 200 auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4
+$ poetry run tranz --no-date zoom -s 220 auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4
+
+Producing 220x220 10^1.00 zoom animation, 4.000 s long, at 10.00 FPS, with 40 frames, 106.08% per step (48455/45677), final magnification error 0.0000%...
+
+Frame 1 / 40
+
+220x220 Mandelbrot in frame [(-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000], precision ± 140 bits, 3.387 k magnification, AUTO
+iterations...
+
+[...]
+
+Success: GIF '91b99d972c26a6a4d6116064b4528136a9104436cac3d9f48d679df37a875d97' in 39.587 s
+Saved GIF to "mandel-91b99d972c26a6a4d611.gif"
 ```
+
+To make that an MP4, just add `--anim mp4` to the command.
 
 #### Julia Suzana (×1)
 
