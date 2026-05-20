@@ -116,7 +116,7 @@ def ZoomLoop(
   print_comm(
     f'Will run {width} x {height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
     + ('include reason field. ' if reason else '[cyan]NOT[/] include reason field. ')
-    + f'{f', "{set_points.value}" interior. ' if set_points else ""}'
+    + (f'"{set_points.value}" interior. ' if set_points else '')
     + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(
