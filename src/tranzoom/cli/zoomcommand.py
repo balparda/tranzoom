@@ -272,6 +272,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     mark_width=mark_width,
   )
   config: base.TranZoomConfig = ctx.obj
+  timestamp: int = timer.Now()
   # check sanity, create frame, and print info about the image we're going to generate
   if duration and frames and not fps:
     fps = frames / duration
@@ -374,7 +375,9 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     for i in range(frames):
       config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
       # we have the frame, now feed it to the producer
-      img, img_data, data_hash = base.ProduceFractalImage(frm, config)
+      img, img_data, data_hash = base.ProduceFractalImage(
+        frm, config, tm=timestamp, add_serial=i + 1
+      )
       all_frames.append(img_data)
       all_hash.append(data_hash)
       # zoom in the frame for the next iteration
@@ -410,6 +413,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     config.img_use_hash,
     config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
     video_hash,
+    tm=timestamp,
     suffix=anim_type.value,
   )
   # create metadata

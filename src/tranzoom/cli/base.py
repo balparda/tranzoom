@@ -522,12 +522,23 @@ class TranZoomConfig(clibase.CLIConfig):
   julia_im: str = frame.DEFAULT_JULIA_IM  # for `zoom` command
 
 
-def ProduceFractalImage(frm: frame.Frame, config: TranZoomConfig) -> tuple[image.Image, bytes, str]:
+def ProduceFractalImage(
+  frm: frame.Frame,
+  config: TranZoomConfig,
+  *,
+  tm: int | None = None,
+  add_serial: int | None = None,
+) -> tuple[image.Image, bytes, str]:
   """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
 
   Args:
     frm: the frame to produce the image from; must be already validated and ready for rendering
     config: the global configuration with all the options needed for rendering and saving the image
+    tm (int | None): Optional timestamp to use for the date in the file name. If None, the
+        current time is used.
+    add_serial (int | None): Optional serial number to include in the file name for uniqueness;
+        if None, no serial number is included; if provided, it is formatted as a zero-padded
+        5-digit number between the date and hash.
 
   Returns:
     A tuple of (image.Image object, raw PNG bytes, internal hash of the raw PNG)
@@ -604,6 +615,8 @@ def ProduceFractalImage(frm: frame.Frame, config: TranZoomConfig) -> tuple[image
     config.img_use_hash,
     config.img_path_prefix or DEFAULT_IMAGE_PREFIX[frm.fractal],
     raw_hash,
+    tm=tm,
+    add_serial=add_serial,
   )
   full_path.write_bytes(raw_png)
   config.console.print(f'Saved to "{full_path}"\n')
