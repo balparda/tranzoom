@@ -27,7 +27,6 @@ import imageio
 import numpy as np
 from PIL import Image as PILImage
 from PIL import ImageDraw, ImageFont, PngImagePlugin
-from PIL.ImageFile import ImageFile
 from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer

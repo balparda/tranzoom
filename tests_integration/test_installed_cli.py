@@ -163,7 +163,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: path
           '4',
         ]
       )
-      assert r.returncode == 0, f'tranz image mandel failed:\n{r.stderr}'
+      assert r.returncode == 0, f'tranz zoom auto failed:\n{r.stderr}'
       # we check that the image is the same by trusting the 20-character hash in the file name;
       # the hash is from the internal representation and should only depend on our implementation;
       # resist the temptation of checking the PNG because PIL behaves differently across platforms
@@ -171,7 +171,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: path
       output_image: pathlib.Path = (
         pathlib.Path(tmp_dir) / f'mandel-{base.SEAHORSE_ANIMATED_HASH[:20]}.gif'
       )
-      assert output_image.exists(), f'Expected output image not found: {output_image}'
+      assert output_image.exists(), f'Expected output gif not found: {output_image}'
       # check the image data
       w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
       assert w == h == 220, f'Expected image dimensions 220x220, got {w}x{h}'
@@ -304,7 +304,7 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.P
           '0.004',
         ]
       )
-      assert r.returncode == 0, f'tranz image mandel failed:\n{r.stderr}'
+      assert r.returncode == 0, f'tranz image julia failed:\n{r.stderr}'
       # we check that the image is the same by trusting the 20-character hash in the file name;
       # the hash is from the internal representation and should only depend on our implementation;
       # resist the temptation of checking the PNG because PIL behaves differently across platforms

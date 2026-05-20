@@ -586,9 +586,7 @@ def ProduceFractalImage(
     # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation
     human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
   )
-  set_points_str: str = (
-    f', "{config.set_points.value}" interior' if config.set_points else ''
-  )
+  set_points_str: str = f', "{config.set_points.value}" interior' if config.set_points else ''
   config.console.print(
     f'\n{width}x{height} {frm.fractal.value.capitalize()} in '
     f'frame {frm}, precision ± {frm.Precision(width, height)} bits, '  # approx: b/c iters
