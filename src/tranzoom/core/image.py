@@ -1060,7 +1060,7 @@ def WriteAnimatedGIF(
   """
   # check inputs
   if not (MIN_FRAMES <= n_frames <= MAX_FRAMES):
-    raise Error(f'n_frames must be between 2 and {MAX_FRAMES}, got {n_frames}')
+    raise Error(f'n_frames must be between {MIN_FRAMES} and {MAX_FRAMES}, got {n_frames}')
   if not frames or len(frames) != n_frames:
     raise Error('frames list does not match the expected number of frames')
   if not (frame.MIN_IMAGE_SIZE <= width <= frame.MAX_IMAGE_SIZE) or not (
