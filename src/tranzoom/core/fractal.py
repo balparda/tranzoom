@@ -32,6 +32,8 @@ MAX_CONCURRENCE: int = 16  # for the main rendering step, we limit the concurren
 
 # gmpy2.mpfr constants
 _MPFR_ZERO: gmpy2.mpfr = gmpy2.mpfr('0')
+_MPFR_SIXTEENTH: gmpy2.mpfr = gmpy2.mpfr('0.0625')
+_MPFR_FOURTH: gmpy2.mpfr = gmpy2.mpfr('0.25')
 _MPFR_ONE: gmpy2.mpfr = gmpy2.mpfr('1')
 _MPFR_TWO: gmpy2.mpfr = gmpy2.mpfr('2')
 _MPFR_FOUR: gmpy2.mpfr = gmpy2.mpfr('4')
@@ -460,7 +462,30 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
           continue
         # either this is a solo process, or this pixel is for this process
         cx: gmpy2.mpfr = xs[px]
-        # we can't have fast interior tests, b/c we want to tally the max |z| for interior points
+        # fast interior tests, all in mpfr: main cardioid and period-2 bulb
+        # we can't do these tests for the other highlight algorithms, b/c we need to track
+        # the max|z|/angle/etc for interior points, so we have to do the full escape-time
+        # test in mpfr for all points, even those that would be interior by the fast tests
+        if inp.highlight is None:
+          # main cardioid test
+          # see <https://en.wikipedia.org/wiki/Mandelbrot_set#Main_cardioid_and_period_bulbs>
+          x_minus_quarter: gmpy2.mpfr = cx - _MPFR_FOURTH
+          q: gmpy2.mpfr = x_minus_quarter * x_minus_quarter + cy * cy
+          if q * (q + x_minus_quarter) <= _MPFR_FOURTH * cy * cy:
+            # point is in the main cardioid, so it's an interior point, no escape
+            n_interior += 1
+            img.escape[px_count] = -frame.SET_INTERIOR_RESOLUTION  # negative to mark it as interior
+            p_bar.update(1)  # we touched a pixel, so update the progress bar
+            continue
+          # period-2 bulb test
+          x_plus_one: gmpy2.mpfr = cx + _MPFR_ONE
+          if x_plus_one * x_plus_one + cy * cy <= _MPFR_SIXTEENTH:
+            # point is in the period-2 bulb, so it's an interior point, no escape
+            n_interior += 1
+            img.escape[px_count] = -frame.SET_INTERIOR_RESOLUTION  # negative to mark it as interior
+            p_bar.update(1)  # we touched a pixel, so update the progress bar
+            continue
+        # not in the main cardioid or period-2 bulb, do the full escape-time test in mpfr
         zx: gmpy2.mpfr = _MPFR_ZERO  # zx/zy -> the z in the iteration z = z^2 + c
         zy: gmpy2.mpfr = _MPFR_ZERO
         min_z2: gmpy2.mpfr = _MPFR_FOUR  # track min |z|^2 for potential use in coloring
