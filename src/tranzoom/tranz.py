@@ -49,6 +49,10 @@ app = typer.Typer(
     'poetry run tranz --iterm zoom manual " -0.74303" "0.126433" "0.01611"\n\n'
     'poetry run tranz zoom manual "/path/to/image.png"\n\n'
     'poetry run tranz --iterm zoom -s 700 --fractal julia manual\n\n\n\n'
+    '# --- Auto Fractal Zoom: Make Video ---\n\n'
+    'poetry run tranz zoom -s 256 auto --fps 10 --duration 2\n\n'
+    'poetry run tranz zoom auto " -5578776469/7500000000" "8244620127/62500000000" '
+    '"0.00073801" "0.00073801" "2.1" --fps 10 --duration 15\n\n\n\n'
     '# --- Markdown Help ---\n\n'
     'poetry run tranz markdown > tranz.md'
   ),

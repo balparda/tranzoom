@@ -47,7 +47,7 @@ dependencies = [
   # best place for project dependencies, if possible
   # development-only dependencies go in the [tool.poetry.group.dev.dependencies] section below
 
-  "click>=8.4",
+  "click==8.3.3",  # TODO: investigate why bump to 8.4 did not work
   "cryptography>=48.0",
   "gmpy2>=2.3",
   "ImageIO>=2.37",

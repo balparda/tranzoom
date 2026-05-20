@@ -212,7 +212,7 @@ class Image:
   """A fractal image. Encapsulates the image operations.
 
   Attributes:
-    escape (ImageUInt32Array): An array storing the escape iteration for each pixel;
+    escape (ImageInt32Array): An array storing the escape iteration for each pixel;
         this is not the color, but the raw data that will be converted to color later;
         the length of this array is equal to the total number of pixels in the image.
         You are encouraged to use the SetEscape() method to set the escape iterations,
@@ -264,13 +264,11 @@ class Image:
       escaped_at (int): The escape iteration to set for the pixel.
 
     Raises:
-      Error: if the pixel coordinates are out of bounds or if the escape iteration is invalid
+      Error: if the pixel coordinates are out of bounds
 
     """
     if not (0 <= x < self._width) or not (0 <= y < self._height):
       raise Error(f'Pixel coordinates out of bounds: {x=}, {y=}, {self._width=}, {self._height=}')
-    if escaped_at < 0:
-      raise Error(f'Invalid escape iteration: {escaped_at=}')
     self.escape[y * self._width + x] = escaped_at
 
   @property
@@ -305,10 +303,12 @@ class Image:
 
   @property
   def escape_range(self) -> tuple[int, int, int, int]:
-    """Get the range of escape iterations and set max_|z| in the image.
+    """Get the range of escape iterations and the range of the internal stored values.
+
+    The internal values map to different things depending on how they were computed.
 
     Returns:
-      tuple[int, int, int, int]: (min_escape, max_escape, min_|z|, max_|z|)
+      tuple[int, int, int, int]: (min_escape, max_escape, min_internal, max_internal)
 
     """
     exterior_points: list[int] = [e for e in self.escape if e >= 0]
@@ -1083,7 +1083,8 @@ def WriteAnimatedGIF(
     # https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif
     path,
     save_all=True,
-    append_images=[img0] + [_ImageNormalizeAndValidate(f, width, height) for f in frames[1:]],
+    # append without repeating the first frame, which is already saved as img0
+    append_images=[_ImageNormalizeAndValidate(f, width, height) for f in frames[1:]],
     duration=round(1000.0 * duration / n_frames),  # duration in milliseconds per frame
     loop=loop,
     disposal=1,  # 1 == do not dispose, overwrite; more efficient b/c we don't have any transparency

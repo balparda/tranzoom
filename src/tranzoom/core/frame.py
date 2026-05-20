@@ -85,7 +85,7 @@ DEFAULT_FRACTAL: Fractal = Fractal.MANDELBROT
 
 
 class SetHighlightAlgorithm(enum.Enum):
-  """Fractal enum."""
+  """Set highlight algorithm enum."""
 
   MIN = 'min'
   MAX = 'max'

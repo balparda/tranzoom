@@ -144,6 +144,10 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
  poetry run tranz zoom manual "/path/to/image.png"                                                                                                         
  poetry run tranz --iterm zoom -s 700 --fractal julia manual                                                                                               
                                                                                                                                                            
+ # --- Auto Fractal Zoom: Make Video ---                                                                                                                   
+ poetry run tranz zoom -s 256 auto --fps 10 --duration 2                                                                                                   
+ poetry run tranz zoom auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "2.1" --fps 10 --duration 15                      
+                                                                                                                                                           
  # --- Markdown Help ---                                                                                                                                   
  poetry run tranz markdown > tranz.md
 ```
@@ -344,6 +348,10 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
  poetry run tranz zoom manual "/path/to/image.png"                                                                                                         
  poetry run tranz --iterm zoom -s 700 --fractal julia manual                                                                                               
                                                                                                                                                            
+ # --- Auto Fractal Zoom: Make Video ---                                                                                                                   
+ poetry run tranz zoom -s 256 auto --fps 10 --duration 2                                                                                                   
+ poetry run tranz zoom auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "2.1" --fps 10 --duration 15                      
+                                                                                                                                                           
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --fractal    -f                  Fractal type to generate; possible values: 'mandelbrot', 'julia'; default: 'mandelbrot'              │
 │                                                                                                                                    │
@@ -493,7 +501,11 @@ Usage: tranz zoom auto [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
                                                                                                                                                            
  Examples:                                                                                                                                                 
                                                                                                                                                            
- $ poetry run tranz zoom auto
+ $ poetry run tranz zoom -s 256 auto --fps 10 --duration 2                                                                                                 
+ Producing 256x256 10^1.00 zoom animation, 2.000 s long, at 10.00 FPS, with 20 frames, 112.88% per step...                                                 
+                                                                                                                                                           
+ $ poetry run tranz zoom auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "2.1" --fps 10 --duration 15                    
+ Producing 512x512 10^2.10 zoom animation, 15.000 s long, at 10.00 FPS, with 150 frames, 103.30% per step...
 ```
 
 ### `tranz zoom manual` Sub-Command

@@ -42,7 +42,11 @@ zoom_app = typer.Typer(
     '# --- Human/Manual-Guided Fractal Zoom ---\n'
     'poetry run tranz --iterm zoom manual " -0.74303" "0.126433" "0.01611"\n'
     'poetry run tranz zoom manual "/path/to/image.png"\n'
-    'poetry run tranz --iterm zoom -s 700 --fractal julia manual'
+    'poetry run tranz --iterm zoom -s 700 --fractal julia manual\n\n'
+    '# --- Auto Fractal Zoom: Make Video ---\n'
+    'poetry run tranz zoom -s 256 auto --fps 10 --duration 2\n'
+    'poetry run tranz zoom auto " -5578776469/7500000000" "8244620127/62500000000" '
+    '"0.00073801" "0.00073801" "2.1" --fps 10 --duration 15'
   ),
 )
 tranz.app.add_typer(zoom_app, name='zoom')
@@ -241,7 +245,13 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   help='Create a GIF/MP4 zoom fractal animation.',
   epilog=(
     'Examples:\n\n\n\n'  # TODO: update help
-    '$ poetry run tranz zoom auto'
+    '$ poetry run tranz zoom -s 256 auto --fps 10 --duration 2\n\n'
+    'Producing 256x256 10^1.00 zoom animation, 2.000 s long, at 10.00 FPS, '
+    'with 20 frames, 112.88% per step...\n\n\n\n'
+    '$ poetry run tranz zoom auto " -5578776469/7500000000" "8244620127/62500000000" '
+    '"0.00073801" "0.00073801" "2.1" --fps 10 --duration 15\n\n'
+    'Producing 512x512 10^2.10 zoom animation, 15.000 s long, at 10.00 FPS, '
+    'with 150 frames, 103.30% per step...'
   ),
 )
 @clibase.CLIErrorGuard
