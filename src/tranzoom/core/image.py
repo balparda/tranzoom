@@ -1023,12 +1023,12 @@ def BuildCumulative(values: list[int]) -> tuple[dict[int, int], dict[int, int], 
 
 
 def _ImageNormalizeAndValidate(img_bytes: bytes, width: int, height: int) -> PILImage.Image:
-  img: ImageFile = PILImage.open(io.BytesIO(img_bytes))
-  if img.size != (width, height):
-    raise Error(f'frame size {img.size} != {(width, height)}')
-  if img.mode != 'RGB':
-    raise Error(f'expected RGB frame, got mode {img.mode!r}')
-  return img
+  with PILImage.open(io.BytesIO(img_bytes)) as img:
+    if img.size != (width, height):
+      raise Error(f'frame size {img.size} != {(width, height)}')
+    if img.mode != 'RGB':
+      raise Error(f'expected RGB frame, got mode {img.mode!r}')
+    return img.copy()
 
 
 def WriteAnimatedGIF(
