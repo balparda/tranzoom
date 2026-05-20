@@ -585,7 +585,7 @@ poetry run tranz [global flags] zoom [-w WIDTH] [-h HEIGHT] [-s SIZE] [-f FRACTA
 
 Renders a straight zoom-in animation from a starting frame to a target magnification and saves it as an animated GIF or MP4 file. Specify any two of `--duration`, `--frames`, and `--fps` to constrain the third; the command validates that all three resulting values are within allowed bounds.
 
-The zoom progression is geometrically uniform: each successive frame is scaled by a fixed rational factor computed so that the product of all per-frame zoom steps equals exactly the requested total magnification. Animation metadata (initial frame size, zoom step, FPS, duration, frame count, loop count) is embedded as `tranzoom:animation:*` PNG text chunks in each intermediate frame.
+The zoom progression is geometrically uniform: each successive frame is scaled by a fixed rational factor computed so that the product of all per-frame zoom steps equals exactly the requested total magnification. Animation metadata such as initial frame size, zoom step, FPS, duration, frame count, and loop count is stored with the final animated output; if you save intermediate PNG frames, they are written as regular tranZoom still images and do not currently include per-frame `tranzoom:animation:*` PNG text chunks.
 
 Positional arguments:
 
