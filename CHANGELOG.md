@@ -5,7 +5,8 @@
 All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
-  - [V.V.V - YYYY-MM-DD - Placeholder](#vvv---yyyy-mm-dd---placeholder)
+  - [V.V.V - 2026-05-DD - Placeholder](#vvv---2026-05-dd---placeholder)
+  - [1.5.0 - 2026-05-TBD](#150---2026-05-tbd)
   - [1.4.1 - 2026-05-21](#141---2026-05-21)
   - [1.4.0 - 2026-05-20](#140---2026-05-20)
   - [1.3.0 - 2026-05-16](#130---2026-05-16)
@@ -19,7 +20,7 @@ This project follows a pragmatic versioning approach:
 - **Minor**: new features or non-breaking changes.
 - **Major**: breaking changes (command renames, incompatible output formats).
 
-## V.V.V - YYYY-MM-DD - Placeholder
+## V.V.V - 2026-05-DD - Placeholder
 
 - Added
   - Placeholder for future changes.
@@ -29,6 +30,17 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future changes.
+
+## 1.5.0 - 2026-05-TBD
+
+- Added
+  - TBD
+
+- Changed
+  - TBD
+
+- Fixed
+  - TBD
 
 ## 1.4.1 - 2026-05-21
 
