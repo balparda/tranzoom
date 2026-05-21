@@ -244,7 +244,7 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   'auto',
   help='Create a GIF/MP4 zoom fractal animation.',
   epilog=(
-    'Examples:\n\n\n\n'  # TODO: update help
+    'Examples:\n\n\n\n'
     '$ poetry run tranz zoom -s 256 auto --fps 10 --duration 2\n\n'
     'Producing 256x256 10^1.00 zoom animation, 2.000 s long, at 10.00 FPS, '
     'with 20 frames, 112.88% per step...\n\n\n\n'
@@ -275,11 +275,18 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   save_frames: bool = base.ANIM_SAVE_FRAMES_OPTION,  # type: ignore[assignment]
 ) -> None:
   # we intend passing config, so we add the options here...
+  # check color so it won't raise plain KeyError
+  col: str = mark_color.strip().upper()
+  if col not in image.Color.__members__:
+    raise click.ClickException(
+      f'Invalid mark color {mark_color!r}; available colors: '
+      + ', '.join(sorted(repr(c.name.lower()) for c in image.Color))
+    )
   ctx.obj = dataclasses.replace(
     ctx.obj,
     max_iter=max_iter,
     mark_coords=mark_coords,
-    mark_color=mark_color,
+    mark_color=image.Color[col],
     mark_width=mark_width,
   )
   config: base.TranZoomConfig = ctx.obj
@@ -355,15 +362,15 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   frm = original_frm  # reset frm to the original for the actual rendering loop
   # log; log errors
   config.console.print(
-    f'\nProducing {width}x{height} 10^{dest_magnification_10:.2f} zoom animation, '
+    f'\nProducing {width}x{height} 10^{dest_magnification_10:.2f} magnification zoom animation, '
     f'{human.HumanizedSeconds(duration)} long, at {fps:.2f} FPS, '
     f'with {frames} frames, {100.0 * scalar_magnification_per_step:.2f}% per step ({mpq_mag}), '
     f'final magnification error {float(gmpy2.mpfr(100.0) * mag_error):.4f}%...\n'
   )
   if scalar_magnification_per_step >= image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
     config.console.print(
-      '[red]Warning: the zoom per frame is high: 10**(mag/(frames-1)) = '
-      f'10**({dest_magnification_10:.2f}/{steps}) = '
+      '[red]Warning: the zoom per frame is high: 10^(mag/(frames-1)) = '
+      f'10^({dest_magnification_10:.2f}/{steps}) = '
       f'{100.0 * scalar_magnification_per_step:.2f}%/step. '
       'The resulting animation may look jumpy. Consider increasing the number of frames '
       'or reducing the total magnification.[/]\n'

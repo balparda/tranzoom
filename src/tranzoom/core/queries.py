@@ -181,8 +181,6 @@ Any `target_match_score` score above 30 should be easily justified and visibly m
 class ImageScore(pydantic.BaseModel, abstract.ABC):
   """A sector score."""
 
-  # TODO: with structured classes, maybe target_match_score should be a separate class?
-
   sector: int
   fractal_score: int
   target_match_score: int | None

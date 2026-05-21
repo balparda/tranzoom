@@ -13,7 +13,7 @@ import gmpy2
 import typer
 from transcrypto.cli import clibase
 from transcrypto.utils import base as tbase
-from transcrypto.utils import human, timer
+from transcrypto.utils import timer
 
 from tranzoom.core import ai, fractal, frame, image, palette
 
@@ -24,7 +24,7 @@ from tranzoom.core import ai, fractal, frame, image, palette
 # this should NOT change over metadata changes, as it is computed from raw pixel data
 SEAHORSE_TAIL_HASH: str = 'bc8befe1492f4d296cf93994ba201ef06c3fa4858a47a657bb7f136f42bceb5d'
 SEAHORSE_ANIMATED_HASH: str = '91b99d972c26a6a4d6116064b4528136a9104436cac3d9f48d679df37a875d97'
-SUZANA_WAVE_HASH: str = 'd7b19b0f1783bb38127d2948140e2379c19656ff4923b7244f25da7fbf322a2a'
+SUZANA_WAVE_HASH: str = '4be1409a9c55b4f9cbe21f45fa29d0bfc11622bffc248a5639fbffdea0cd80fe'
 # this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 
 # CLI options that can be re-used
@@ -581,16 +581,11 @@ def ProduceFractalImage(
     else None
   )
   # log
-  magnification, magnitude = frm.magnification
-  magnification_str: str = (
-    # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation
-    human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
-  )
   set_points_str: str = f', "{config.set_points.value}" interior' if config.set_points else ''
   config.console.print(
     f'\n{width}x{height} {frm.fractal.value.capitalize()} in '
     f'frame {frm}, precision ± {frm.Precision(width, height)} bits, '  # approx: b/c iters
-    f'{magnification_str} magnification, '
+    f'10^{frm.magnification[1]:.2f} magnitude, '
     f'{"AUTO" if config.max_iter is None else config.max_iter} iterations'
     f'{set_points_str}...'
   )

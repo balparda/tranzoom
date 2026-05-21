@@ -12,7 +12,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 
 name = "tranzoom"
-version = "1.4.0"  # also update src/tranzoom/__init__.py
+version = "1.4.1"  # also update src/tranzoom/__init__.py
 
 description = "Fractal manipulation with LLMs"
 license = "Apache-2.0"
@@ -47,7 +47,7 @@ dependencies = [
   # best place for project dependencies, if possible
   # development-only dependencies go in the [tool.poetry.group.dev.dependencies] section below
 
-  "click==8.3.3",  # TODO: investigate why bump to 8.4 did not work
+  "click==8.3.3",  # TODO: >=8.4 is waiting for typer type-stubs compatibility (probably >0.25.1)
   "cryptography>=48.0",
   "gmpy2>=2.3",
   "ImageIO>=2.37",

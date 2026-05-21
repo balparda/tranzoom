@@ -283,7 +283,7 @@ Render the [full Mandelbrot set](#full--default-1) (default, 1024×1024):
 ```sh
 $ poetry run tranz --no-date image mandel
 
-1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision ± 140 bits, 1 magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision ± 140 bits, 10^0.00 magnitude, AUTO iterations...
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 413.97px/s]
 Picked depth 1000, histogram [(1, 24), (2, 26), (3, 58), ('...', 86), (57, 2), (222, 2), (100000, 58)], 12/256 set points
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:14<00:00, 72593.90px/s]
@@ -291,7 +291,7 @@ Mandelbrot image 'b934ff27c4e6dede0ecdea8c746ab8f626553ba40e1a402506935e2fd0354f
 Saved to "mandel-b934ff27c4e6dede0ecd.png"
 ```
 
-As can be seen, the `Frame` is stored as rational numbers with arbitrary precision, `[(-3/4, 0) ± 5/2]`, so it is guaranteed to be exact (centered in $-0.75+0j$ and with width of $2.5$). It will pick a precision, in bits, which is the internal `float` representation (mantissa), and will pick the (max) number of iterations for the generation. The magnification here is 1 because it is the full Mandelbrot set. There will be a progress bar, counting the horizontal lines being produced. The generated image data will be hashed and then saved to a PNG on disk.
+As can be seen, the `Frame` is stored as rational numbers with arbitrary precision, `[(-3/4, 0) ± 5/2]`, so it is guaranteed to be exact (centered in $-0.75+0j$ and with width of $2.5$). It will pick a precision, in bits, which is the internal `float` representation (mantissa), and will pick the (max) number of iterations for the generation. The magnitude shown is `10^0.00` because it is the full Mandelbrot set (magnification 1). There will be a progress bar, counting the horizontal lines being produced. The generated image data will be hashed and then saved to a PNG on disk.
 
 Render a [well-known zoom ("Seahorse", ~155× magnification)](#seahorse-155) at the default 1024×1024:
 
@@ -637,7 +637,7 @@ Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) w
 ```sh
 $ poetry run tranz --no-date image mandel
 
-1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision ± 140 bits, 1 magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision ± 140 bits, 10^0.00 magnitude, AUTO iterations...
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 414.11px/s]
 Picked depth 1000, histogram [(1, 24), (2, 26), (3, 58), ('...', 86), (57, 2), (222, 2), (100000, 58)], 12/256 set points
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:14<00:00, 74181.35px/s]
@@ -645,7 +645,7 @@ Mandelbrot image 'b934ff27c4e6dede0ecdea8c746ab8f626553ba40e1a402506935e2fd0354f
 Saved to "mandel-b934ff27c4e6dede0ecd.png"
 ```
 
-This is what tranZoom considers ***"1 magnification"***, and will measure other magnifications against this size.
+This is what tranZoom considers ***`10^0.00 magnitude`*** (magnification 1), and will measure other magnifications against this size.
 
 ##### Set Interior Coloring
 
@@ -656,7 +656,7 @@ You can also extract details from the set points (the traditionally black part o
 ```sh
 $ poetry run tranz --set imaginary --set-palette "lava" --palette "rgrayscale" --no-date image mandel
 
-1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision ± 140 bits, 1 magnification, AUTO iterations, "imaginary" interior...
+1024x1024 Mandelbrot in frame [(-3/4, 0) ± 5/2], precision ± 140 bits, 10^0.00 magnitude, AUTO iterations, "imaginary" interior...
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 308.62px/s]
 Picked depth 1000, histogram [(1, 24), (2, 26), (3, 58), ('...', 86), (57, 2), (222, 2), (100000, 58)], 12/256 set points
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:19<00:00, 53433.31px/s]
@@ -673,7 +673,7 @@ Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mande
 ```sh
 $ poetry run tranz --no-date image mandel " -0.74303" "0.126433" "0.01611"
 
-1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) ± 1611/100000], precision ± 140 bits, 155.183 magnification, AUTO iterations...
+1024x1024 Mandelbrot in frame [(-74303/100000, 126433/1000000) ± 1611/100000], precision ± 140 bits, 10^2.19 magnitude, AUTO iterations...
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 512.82px/s]
 Picked depth 9276, histogram [(24, 7), (25, 14), (26, 14), ('...', 153), (3215, 1), (6184, 1), (100000, 66)], 9/256 set points
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [02:24<00:00, 7245.57px/s]
@@ -692,8 +692,7 @@ Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tai
 ```sh
 $ poetry run tranz --set imaginary --no-date image mandel " -0.7436499" "0.13188204" "0.00073801"
 
-1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) ± 73801/100000000], precision ± 140 bits, 3.387 k magnification, AUTO iterations,
-"imaginary" interior...
+1024x1024 Mandelbrot in frame [(-7436499/10000000, 3297051/25000000) ± 73801/100000000], precision ± 140 bits, 10^3.53 magnitude, AUTO iterations, "imaginary" interior...
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 64996.48px/s]
 Picked depth 1000, histogram [(36, 5), (37, 9), (38, 15), ('...', 224), (415, 1), (464, 1), (649, 1)], 0/256 set points
 Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:08<00:00, 129166.61px/s]
@@ -714,12 +713,11 @@ You can easily make animations!
 ```sh
 $ poetry run tranz --no-date zoom -s 220 auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4
 
-Producing 220x220 10^1.00 zoom animation, 4.000 s long, at 10.00 FPS, with 40 frames, 106.08% per step (48455/45677), final magnification error 0.0000%...
+Producing 220x220 10^1.00 magnification zoom animation, 4.000 s long, at 10.00 FPS, with 40 frames, 106.08% per step (48455/45677), final magnification error 0.0000%...
 
 Frame 1 / 40
 
-220x220 Mandelbrot in frame [(-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000], precision ± 140 bits, 3.387 k magnification, AUTO
-iterations...
+220x220 Mandelbrot in frame [(-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000], precision ± 140 bits, 10^3.53 magnitude, AUTO iterations...
 
 [...]
 
@@ -738,7 +736,7 @@ Render a "Julia Suzana" at `-s/--size` 1024, one of the possible [Julia Set](htt
 ```sh
 $ poetry run tranz --no-date --palette electric-ocean image -s 1024 julia
 
-838x1024 Julia in frame [(0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)], precision ± 140 bits, 1 magnification, AUTO iterations...
+838x1024 Julia in frame [(0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)], precision ± 140 bits, 10^0.00 magnitude, AUTO iterations...
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 151.95px/s]
 Picked depth 1000, histogram [(2, 20), (3, 32), (4, 18), ('...', 58), (44, 2), (45, 2), (100000, 124)], 31/256 set points
 Img: 100%|█████████████████████████████████████████████| 858112/858112 [00:27<00:00, 31524.71px/s]
@@ -755,13 +753,12 @@ Render a "Julia Suzana Wave" at `-s/--size` 1024:
 ```sh
 $ poetry run tranz --palette electric-ocean --set max --set-palette sunset --no-date image -s 512 julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
 
-512x377 Julia in frame [(-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)], precision ± 140 bits, 426.597 magnification,
-AUTO iterations, "max" interior...
+512x377 Julia in frame [(-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)], precision ± 140 bits, 10^2.63 magnitude, AUTO iterations, "max" interior...
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 137.09px/s]
 Picked depth 1819, histogram [(43, 8), (44, 14), (45, 14), ('...', 93), (208, 1), (1213, 1), (100000, 125)], 30/256 set points
 Img: 100%|█████████████████████████████████████████████| 193024/193024 [00:10<00:00, 17614.26px/s]
-Julia image 'd7b19b0f1783bb38127d2948140e2379c19656ff4923b7244f25da7fbf322a2a' in 13.907 s
-Saved to "julia-d7b19b0f1783bb38127d.png"
+Julia image '4be1409a9c55b4f9cbe21f45fa29d0bfc11622bffc248a5639fbffdea0cd80fe' in 13.907 s
+Saved to "julia-4be1409a9c55b4f9cbe2.png"
 ```
 
 If the hash of this image changes, remember to change it in `src/tranzoom/cli/base.py`.
