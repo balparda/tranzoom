@@ -61,6 +61,14 @@ META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
 META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
   'tranzoom:image:interior:cumulative_histogram_summary'  # str; can be ""!
 )
+META_IMAGE_STATS_MAX_LO_KEY = 'tranzoom:image:stats:max_lo'  # gmpy2.mpfr
+META_IMAGE_STATS_MAX_HI_KEY = 'tranzoom:image:stats:max_hi'  # gmpy2.mpfr
+META_IMAGE_STATS_MIN_LO_KEY = 'tranzoom:image:stats:min_lo'  # gmpy2.mpfr
+META_IMAGE_STATS_MIN_HI_KEY = 'tranzoom:image:stats:min_hi'  # gmpy2.mpfr
+META_IMAGE_STATS_ANG_LO_KEY = 'tranzoom:image:stats:ang_lo'  # gmpy2.mpfr
+META_IMAGE_STATS_ANG_HI_KEY = 'tranzoom:image:stats:ang_hi'  # gmpy2.mpfr
+META_IMAGE_STATS_IMAG_LO_KEY = 'tranzoom:image:stats:imag_lo'  # gmpy2.mpfr
+META_IMAGE_STATS_IMAG_HI_KEY = 'tranzoom:image:stats:imag_hi'  # gmpy2.mpfr
 META_FRACTAL_KEY = 'tranzoom:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal, lowercase
 META_TOP_RE_KEY = 'tranzoom:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
 META_TOP_IM_KEY = 'tranzoom:frame:top_im'  # gmpy2.mpq
@@ -117,6 +125,11 @@ _CIRCLE_RADIUS: int = 20
 _LABEL_OFFSET: int = 5
 # scale factor for converting stored Set interior integers back to |z| float magnitudes;
 # interior points are stored as -(int(floor(scale * |z|)) + 1), with scale = RES / MAX_Z = RES / 2
+
+# gmpy2.mpfr constants
+_MPFR_ZERO: gmpy2.mpfr = gmpy2.mpfr('0')
+_MPFR_ONE: gmpy2.mpfr = gmpy2.mpfr('1')
+_MPFR_FOUR: gmpy2.mpfr = gmpy2.mpfr('4')
 
 
 class Error(frame.Error):
@@ -545,6 +558,20 @@ def MakeImageMeta(
     META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY: SummaryHistogram(sorted(cumulative.items())),
     META_PIXEL_EXTERIOR_COUNT_KEY: str(total),
   }
+  # add any stats that aren't just noise
+  if img.stats:
+    if img.stats.max_lo != _MPFR_FOUR or img.stats.max_hi != _MPFR_ZERO:
+      img_meta[META_IMAGE_STATS_MAX_LO_KEY] = str(img.stats.max_lo)
+      img_meta[META_IMAGE_STATS_MAX_HI_KEY] = str(img.stats.max_hi)
+    if img.stats.min_lo != _MPFR_FOUR or img.stats.min_hi != _MPFR_ZERO:
+      img_meta[META_IMAGE_STATS_MIN_LO_KEY] = str(img.stats.min_lo)
+      img_meta[META_IMAGE_STATS_MIN_HI_KEY] = str(img.stats.min_hi)
+    if img.stats.ang_lo != _MPFR_ONE or img.stats.ang_hi != _MPFR_ZERO:
+      img_meta[META_IMAGE_STATS_ANG_LO_KEY] = str(img.stats.ang_lo)
+      img_meta[META_IMAGE_STATS_ANG_HI_KEY] = str(img.stats.ang_hi)
+    if img.stats.imag_lo != _MPFR_ONE or img.stats.imag_hi != _MPFR_ZERO:
+      img_meta[META_IMAGE_STATS_IMAG_LO_KEY] = str(img.stats.imag_lo)
+      img_meta[META_IMAGE_STATS_IMAG_HI_KEY] = str(img.stats.imag_hi)
   # Julia
   if frm.fractal == frame.Fractal.JULIA:
     if not isinstance(frm, frame.FrameAndPoint):

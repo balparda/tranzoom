@@ -77,6 +77,7 @@ def Mandelbrot(
     Error: on error
 
   """
+  # TODO: most of this method is just repeated in Julia(): refactor
   # determine processes
   if n_processes is not None and n_processes < 1:
     raise Error(f'{n_processes=} must be a positive integer or None')
@@ -129,6 +130,24 @@ def Mandelbrot(
       # copy only this task's interleaved pixels into the final image
       n_task: int = result.n_task - 1  # convert to 0-based index for stepped slice indexing
       img.escape[n_task::n_processes] = result.img.escape[n_task::n_processes]
+    # combine stats from all tasks: n_interior is additive, _lo fields take min, _hi take max
+    all_stats: list[image.FractalStats] = [r.img.stats for r in results if r.img.stats is not None]
+    if all_stats:
+      img.stats = image.FractalStats(
+        n_px=all_stats[0].n_px,  # same in all tasks (= width * height)
+        n_interior=sum(s.n_interior for s in all_stats),
+        max_lo=min(s.max_lo for s in all_stats),
+        max_hi=max(s.max_hi for s in all_stats),
+        min_lo=min(s.min_lo for s in all_stats),
+        min_hi=max(s.min_hi for s in all_stats),
+        ang_lo=min(s.ang_lo for s in all_stats),
+        ang_hi=max(s.ang_hi for s in all_stats),
+        imag_lo=min(s.imag_lo for s in all_stats),
+        imag_hi=max(s.imag_hi for s in all_stats),
+      )
+  # if the final image doesn't have stats, we can add them from the pre-process stats we collected
+  if img.stats is None and stats is not None:
+    img.stats = stats
   # all copied, so we can return the final image
   return img
 
@@ -219,6 +238,24 @@ def Julia(
       # copy only this task's interleaved pixels into the final image
       n_task: int = result.n_task - 1  # convert to 0-based index for stepped slice indexing
       img.escape[n_task::n_processes] = result.img.escape[n_task::n_processes]
+    # combine stats from all tasks: n_interior is additive, _lo fields take min, _hi take max
+    all_stats: list[image.FractalStats] = [r.img.stats for r in results if r.img.stats is not None]
+    if all_stats:
+      img.stats = image.FractalStats(
+        n_px=all_stats[0].n_px,  # same in all tasks (= width * height)
+        n_interior=sum(s.n_interior for s in all_stats),
+        max_lo=min(s.max_lo for s in all_stats),
+        max_hi=max(s.max_hi for s in all_stats),
+        min_lo=min(s.min_lo for s in all_stats),
+        min_hi=max(s.min_hi for s in all_stats),
+        ang_lo=min(s.ang_lo for s in all_stats),
+        ang_hi=max(s.ang_hi for s in all_stats),
+        imag_lo=min(s.imag_lo for s in all_stats),
+        imag_hi=max(s.imag_hi for s in all_stats),
+      )
+  # if the final image doesn't have stats, we can add them from the pre-process stats we collected
+  if img.stats is None and stats is not None:
+    img.stats = stats
   # all copied, so we can return the final image
   return img
 

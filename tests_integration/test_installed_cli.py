@@ -128,6 +128,8 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pa
           '(14071028, 198), (14132599, 199), (14144995, 200)]'
         ),
         'tranzoom:image:interior:pixel_count': '200',
+        'tranzoom:image:stats:imag_lo': '0.027733821348360696858581004102225914175833148',
+        'tranzoom:image:stats:imag_hi': '0.14144994797569664128062592939633699605100723',
       }
   finally:
     shutil.rmtree(data_dir)  # remove created data to isolate the next CLI's read step
@@ -237,7 +239,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: path
         'tranzoom:image:palette': 'blue-to-yellow-to-brown',
         'tranzoom:image:set_palette': 'rgrayscale',
         'tranzoom:image:color_set': 'none',
-        'tranzoom:image:hash': '91b99d972c26a6a4d6116064b4528136a9104436cac3d9f48d679df37a875d97',
+        'tranzoom:image:hash': base.SEAHORSE_ANIMATED_HASH,
         'tranzoom:image:iter_depth:min': '98',
         'tranzoom:image:iter_depth:max': '1387',
         'tranzoom:image:iter_depth:search': '1387',
@@ -337,7 +339,7 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.P
         'tranzoom:image:palette': 'electric-ocean',
         'tranzoom:image:set_palette': 'sunset',
         'tranzoom:image:color_set': 'max',
-        'tranzoom:image:hash': 'd7b19b0f1783bb38127d2948140e2379c19656ff4923b7244f25da7fbf322a2a',
+        'tranzoom:image:hash': base.SUZANA_WAVE_HASH,
         'tranzoom:image:iter_depth:min': '43',
         'tranzoom:image:iter_depth:max': '1819',
         'tranzoom:image:iter_depth:search': '1819',
@@ -353,14 +355,16 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.P
         ),
         'tranzoom:image:exterior:pixel_count': '106710',
         'tranzoom:image:interior:histogram_summary': (
-          "[(1, 6741), (47, 1), (122, 1), ('...', 78704), (99949558, 1), "
-          '(99995934, 1), (100000000, 865)]'
+          "[(1, 1), (9349, 1), (18697, 1), ('...', 86021), (99957787, 1), (99960423, 1), "
+          '(100000000, 288)]'
         ),
         'tranzoom:image:interior:cumulative_histogram_summary': (
-          "[(1, 6741), (47, 6742), (122, 6743), ('...', 3609455247), "
-          '(99949558, 85448), (99995934, 85449), (100000000, 86314)]'
+          "[(1, 1), (9349, 2), (18697, 3), ('...', 3679815476), (99957787, 86025), "
+          '(99960423, 86026), (100000000, 86314)]'
         ),
         'tranzoom:image:interior:pixel_count': '86314',
+        'tranzoom:image:stats:max_lo': '1.0303269913803812829799720484633954828318221',
+        'tranzoom:image:stats:max_hi': '1.274341960143743658549164107217164534985235',
       }
   finally:
     shutil.rmtree(data_dir)  # remove created data to isolate the next CLI's read step
