@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - YYYY-MM-DD - Placeholder](#vvv---yyyy-mm-dd---placeholder)
+  - [1.4.0 - 2026-05-20](#140---2026-05-20)
   - [1.3.0 - 2026-05-16](#130---2026-05-16)
   - [1.2.0 - 2026-05-15](#120---2026-05-15)
   - [1.1.0 - 2026-05-14](#110---2026-05-14)
@@ -27,6 +28,38 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future changes.
+
+## 1.4.0 - 2026-05-20
+
+- Added
+  - **Grayscale palettes** (`grayscale`, `rgrayscale`): two new 8-stop grayscale gradient palettes designed for coloring interior Set points; `rgrayscale` (white-to-black, where white=deep interior, black=near boundary) is now the default `--set-palette`; `grayscale` is the reverse (black-to-white).
+  - **Interior (Set) point coloring**: new `--set ALGORITHM` global flag enables smooth coloring of interior (Set) points using a separate `--set-palette` (default `rgrayscale`); supported algorithms: `min` (minimum `|z|` at max depth), `max` (maximum `|z|`), `angle` (angle of `z`), `imaginary` (imaginary-weighted average of `z`); the same histogram-equalization approach used for exterior points is applied, cycling the set-palette once across the Set interior; defaults to off (all-black interior).
+  - New `SetHighlightAlgorithm` enum in `core/frame.py` with values `min`, `max`, `angle`, `imaginary`.
+  - New PNG metadata keys `tranzoom:image:set_palette` and `tranzoom:image:color_set`: embedded in all images to record the interior palette used and whether interior coloring was enabled.
+  - **`tranz zoom auto`** — new command that renders a GIF or MP4 zoom animation along a straight zoom-in path toward a given starting frame; specify the destination magnification exponent (`10^N` zoom) and pick any two of `--frames`, `--fps`, `--duration` to constrain the third; output format controlled by `--anim` (`gif` or `mp4`, default `gif`); GIF loop count via `--loop` (0 = infinite); optional intermediate frame saving via `--save-frames/--no-save-frames`.
+  - **GIF animation support**: `WriteAnimatedGIF()` function in `core/image.py` saves a sequence of rendered PNG frames as an animated GIF via `PIL.Image.save(...)`; frame timing and loop count are configurable.
+  - **MP4 video support**: `WriteVideoMP4()` function in `core/image.py` saves a sequence of rendered PNG frames as an H.264 MP4 video using `imageio-ffmpeg`; FPS is configurable.
+  - New `FractalStats` dataclass in `core/image.py`: collects interior-point statistics during the adaptive pre-pass render — min/max of `|z|` magnitudes, min/max of angles, min/max of imaginary-weighted averages; stored in `Image.stats` after rendering.
+  - New `AnimationType` enum in `core/image.py` with values `gif` and `mp4`.
+  - New animation constants in `core/image.py`: `MIN_FRAMES`, `MAX_FRAMES`, `MIN_DURATION`, `MAX_DURATION`, `MIN_FPS`, `MAX_FPS`, `MIN_LOOP`, `MAX_LOOP`, `DEFAULT_LOOP`, `DEFAULT_ANIMATION_TYPE`, `DEFAULT_DEST_MAGNIFICATION_10`, `MAX_ZOOM_MAGNIFICATION_10`.
+  - New animation PNG metadata keys embedded in each frame of a zoom animation: `tranzoom:image:animation`, `tranzoom:animation:frame:initial_width_re`, `tranzoom:animation:frame:initial_height_im`, `tranzoom:animation:zoom:magnitude`, `tranzoom:animation:zoom:magnitude_per_step`, `tranzoom:animation:zoom:magnification_per_step`, `tranzoom:animation:zoom:magnification_per_step_mpq`, `tranzoom:animation:duration`, `tranzoom:animation:frames`, `tranzoom:animation:steps`, `tranzoom:animation:fps`, `tranzoom:animation:loop`.
+  - New pixel-statistics PNG metadata keys embedded in all images: `tranzoom:image:exterior:pixel_count`, `tranzoom:image:interior:pixel_count`, `tranzoom:image:exterior:histogram_summary`, `tranzoom:image:interior:histogram_summary`, `tranzoom:image:exterior:cumulative_histogram_summary`, `tranzoom:image:interior:cumulative_histogram_summary`, `tranzoom:image:set_point:min`, `tranzoom:image:set_point:max`.
+  - New `ProduceFractalImage()` utility in `cli/base.py`: centralizes image rendering, saving, and iTerm2-printing logic, shared by all image and zoom commands.
+  - New `MPQFromFloatApprox()` utility in `core/frame.py`: converts a float to a `gmpy2.mpq` rational approximation using `fractions.Fraction`.
+  - New dependencies: `ImageIO>=2.37`, `imageio-ffmpeg>=0.6`, `numpy>=2.4` (for GIF/MP4 animation support).
+
+- Changed
+  - **Breaking**: `--palette`, `--set-palette`, and `--set` moved from the `tranz image` subgroup callback to the `tranz` global callback; they now apply to `tranz zoom ai`, `tranz zoom manual`, and `tranz zoom auto` commands as well; usage changes from `tranz image --palette NAME ...` to `tranz --palette NAME image ...`.
+  - **Breaking**: `GetBasicDataFromPNG()` renamed to `GetBasicDataFromImage()` in `core/image.py` to reflect support for GIF and other formats; any code that calls this by name must be updated.
+  - **Breaking**: `tranzoom:version` PNG metadata key removed; the version is no longer embedded in individual images to keep metadata stable across re-renders.
+  - **Breaking**: `tranzoom:iter_depth:min`, `tranzoom:iter_depth:max`, and `tranzoom:iter_depth:search` PNG metadata keys renamed to `tranzoom:image:iter_depth:min`, `tranzoom:image:iter_depth:max`, and `tranzoom:image:iter_depth:search`; images written by older versions will have the old keys which are not recognized by this version.
+  - **Breaking**: `Image.escape` array changed from unsigned int32 (`array.array('I')`) to signed int32 (`array.array('i')`); interior Set points are now stored as negative values `-(int(floor(scale * |z|)) + 1)`, enabling interior coloring; code that reads raw escape values must be updated.
+  - **Breaking**: `Image.escape_range` property now returns a 4-tuple `(exterior_min, exterior_max, interior_min, interior_max)` instead of a 2-tuple; exterior values are non-negative; interior values (if any Set points exist) are negative.
+  - `tranz zoom ai` and `tranz zoom manual` now propagate the active palette, set-palette, and set-points configuration into the zoom loop, enabling interior coloring during interactive zoom sessions.
+  - `Image.AsPNG()` and `Image.AsPixels()` now accept `set_pal` and `set_points` parameters for interior coloring.
+
+- Fixed
+  - N/A
 
 ## 1.3.0 - 2026-05-16
 

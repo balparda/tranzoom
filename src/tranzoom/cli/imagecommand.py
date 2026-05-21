@@ -16,11 +16,10 @@ import pathlib
 import click
 import typer
 from transcrypto.cli import clibase
-from transcrypto.utils import human, timer
 
 from tranzoom import tranz
 from tranzoom.cli import base
-from tranzoom.core import fractal, frame, image, palette
+from tranzoom.core import frame, image
 
 image_app = typer.Typer(
   no_args_is_help=True,
@@ -53,7 +52,6 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
   img_height: int = base.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
   img_size: int | None = base.IMAGE_SIZE_OPTION,  # type: ignore[assignment]
   max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
-  pal: palette.Palette = base.PALETTE_OPTION,  # type: ignore[assignment]
   mark_coords: str | None = base.MARK_COORDINATES_OPTION,  # type: ignore[assignment]
   mark_color: str = base.MARK_COLOR_OPTION,  # type: ignore[assignment]
   mark_width: int = base.MARK_WIDTH_OPTION,  # type: ignore[assignment]
@@ -73,7 +71,6 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
       img_height=img_height,
       img_size=img_size,
       max_iter=max_iter,
-      pal=pal,
       mark_coords=mark_coords,
       mark_color=image.Color[col],
       mark_width=mark_width,
@@ -111,7 +108,7 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
     frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
   )
   # we have the frame, now feed it to the producer
-  _ProduceFractalImage(frm, config)
+  base.ProduceFractalImage(frm, config)
 
 
 @image_app.command(
@@ -159,74 +156,7 @@ def Julia(  # documentation is help/epilog/args  # noqa: D103
     frm.size[1],
   )
   # we have the frame, now feed it to the producer
-  _ProduceFractalImage(frm, config)
-
-
-def _ProduceFractalImage(frm: frame.Frame, config: base.TranZoomConfig) -> None:
-  # determine width and height
-  width: int
-  height: int
-  width, height = (
-    frm.PixelDimensionsFromSize(config.img_size)
-    if config.img_size
-    else (config.img_width, config.img_height)
-  )
-  # add the mark?
-  mark_coords: tuple[int, int] | None = (
-    frm.CoordsTupleToPixel(config.mark_coords, width, height)
-    if config.mark_coords  # do this early to check the inputs ASAP
-    else None
-  )
-  # log
-  magnification, magnitude = frm.magnification
-  magnification_str: str = (
-    # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation
-    human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
-  )
-  config.console.print(
-    f'\n{width}x{height} {frm.fractal.value.capitalize()} in '
-    f'frame {frm}, precision ± {frm.Precision(width, height)} bits, '  # approx: b/c iters
-    f'{magnification_str} magnification, '
-    f'{"AUTO" if config.max_iter is None else config.max_iter} iterations...\n'
-  )
-  # render the image
-  raw_png: bytes
-  raw_hash: str
-  with timer.Timer(emit_log=False) as tmr:
-    img: image.Image = {
-      frame.Fractal.MANDELBROT: fractal.Mandelbrot,
-      frame.Fractal.JULIA: fractal.Julia,
-    }[frm.fractal](
-      frm,  # type: ignore[arg-type]  # we know this is the right type of frame
-      width,
-      height,
-      max_iter=config.max_iter,
-      n_processes=config.max_threads,
-      print_comm=config.console.print,
-    )
-    # fractal is ready, convert to PNG
-    raw_png, raw_hash = img.AsPNG(pal=config.pal)
-    if mark_coords:
-      # we were asked to mark a coordinate with a crosshair overlay: do it
-      raw_png = image.DrawCrossOverlay(
-        raw_png, mark_coords[0], mark_coords[1], col=config.mark_color, lw=config.mark_width
-      )
-  config.console.print(
-    f'{frm.fractal.value.capitalize()} image {raw_hash!r} in {tmr}, escape range {img.escape_range}'
-  )
-  # save the image to a file named by its time/hash
-  full_path: pathlib.Path = image.MakeImagePath(
-    config.img_output_path,
-    config.img_use_date,
-    config.img_use_hash,
-    config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
-    raw_hash,
-  )
-  full_path.write_bytes(raw_png)
-  config.console.print(f'Saved to "{full_path}"\n')
-  if config.iterm:
-    image.PrintITerm2(raw_png)
-    config.console.print()
+  base.ProduceFractalImage(frm, config)
 
 
 @image_app.command(
@@ -245,19 +175,23 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
   ctx: click.Context,
   image_path: pathlib.Path = base.IMAGE_PATH_INPUT_ARGUMENT,  # type: ignore[assignment]
 ) -> None:
-  # check sanity
   config: base.TranZoomConfig = ctx.obj
+  # read image
   image_path = image_path.expanduser().resolve()
   image_data: bytes = image_path.read_bytes()
-  w, h, png_hash, info = image.GetBasicDataFromPNG(image_data)
+  w, h, png_hash, info = image.GetBasicDataFromImage(image_data)
+  # print header
   config.console.print()
   config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')
   config.console.print(f'[green]{w}x{h}[/green] (wxh) / [cyan]{png_hash}[/cyan]')
   config.console.print()
+  # expand JSON, if needed
   if image.META_LLM_RESULT_JSON_KEY in info:
     info[image.META_LLM_RESULT_JSON_KEY] = json.loads(str(info[image.META_LLM_RESULT_JSON_KEY]))
+  # print the metadata in a nice format
   config.console.print_json(data=info, indent=2)
   config.console.print()
+  # iterm
   if config.iterm:
     image.PrintITerm2(image_data)
     config.console.print()

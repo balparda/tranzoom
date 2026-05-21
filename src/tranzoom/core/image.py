@@ -10,34 +10,57 @@ from __future__ import annotations
 
 import array
 import base64
+import dataclasses
 import enum
 import io
 import json
+import logging
 import math
 import pathlib
 import sys
 import time
+from collections import abc
 from typing import cast
 
 import gmpy2
+import imageio
+import numpy as np
 from PIL import Image as PILImage
 from PIL import ImageDraw, ImageFont, PngImagePlugin
 from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
-from tranzoom import __version__
 from tranzoom.core import frame, palette
 
-# metadata keys for PNG tEXt chunks; used to store the frame parameters and other info in the PNG
+# metadata keys for PNG tEXt chunks; used to store the frame parameters and other info in the PNG;
+# don't add "version", or "date", or other metadata that can change without changing the
+# actual image/mathematical data;
 # keys use a "tranzoom:" namespace to avoid collisions with other metadata
 # all are converted to str for storage in PNG metadata, but the original types are indicated below
-META_VERSION_KEY = 'tranzoom:version'  # str, like "1.1.0"
+META_IMAGE_ANIMATION_KEY = 'tranzoom:image:animation'  # AnimationType or "none" if static image
 META_IMAGE_WIDTH_KEY = 'tranzoom:image:width'  # int, in pixels
 META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
 META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
+META_ITER_DEPTH_MIN_KEY = 'tranzoom:image:iter_depth:min'  # int
+META_ITER_DEPTH_MAX_KEY = 'tranzoom:image:iter_depth:max'  # int
+META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:image:iter_depth:search'  # int, can be "-1" if unknown/unset
+META_SET_POINT_MIN_KEY = 'tranzoom:image:set_point:min'  # int
+META_SET_POINT_MAX_KEY = 'tranzoom:image:set_point:max'  # int
 META_IMAGE_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
+META_IMAGE_SET_PALETTE_KEY = 'tranzoom:image:set_palette'  # str, interior Set palette name
+META_IMAGE_COLOR_SET_KEY = 'tranzoom:image:color_set'  # frame.SetHighlightAlgorithm or "none"
 META_IMAGE_OVERLAY_KEY = 'tranzoom:image:overlay'  # bool; stored as "true"/"false"
+META_PIXEL_EXTERIOR_COUNT_KEY = 'tranzoom:image:exterior:pixel_count'  # int; count escaped
+META_PIXEL_INTERIOR_COUNT_KEY = 'tranzoom:image:interior:pixel_count'  # int; count set
+META_PIXEL_EXTERIOR_HISTOGRAM_KEY = 'tranzoom:image:exterior:histogram_summary'  # str
+META_PIXEL_INTERIOR_HISTOGRAM_KEY = 'tranzoom:image:interior:histogram_summary'  # str; can be ""!
+META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
+  'tranzoom:image:exterior:cumulative_histogram_summary'  # str
+)
+META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
+  'tranzoom:image:interior:cumulative_histogram_summary'  # str; can be ""!
+)
 META_FRACTAL_KEY = 'tranzoom:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal, lowercase
 META_TOP_RE_KEY = 'tranzoom:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
 META_TOP_IM_KEY = 'tranzoom:frame:top_im'  # gmpy2.mpq
@@ -50,12 +73,25 @@ META_HEIGHT_IM_KEY = 'tranzoom:frame:height_im'  # gmpy2.mpq
 META_PRECISION_KEY = 'tranzoom:frame:precision'  # int, in bits
 META_MAGNIFICATION_KEY = 'tranzoom:frame:magnification'  # gmpy2.mpfr -> converted to float
 META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'  # float
-META_ITER_DEPTH_MIN_KEY = 'tranzoom:iter_depth:min'  # int
-META_ITER_DEPTH_MAX_KEY = 'tranzoom:iter_depth:max'  # int
-META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:iter_depth:search'  # int, can be "-1" if unknown or not set
-# extra keys added to some images only (for example, when the LLM evaluates the image)
+# extra keys added to some images only
+# Julia extra keys
 META_JULIA_RE_KEY = 'tranzoom:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
 META_JULIA_IM_KEY = 'tranzoom:frame:julia_im'  # gmpy2.mpq, only added for Julia Set frames
+# Animation extra keys
+META_ANIM_INITIAL_WIDTH_RE_KEY = 'tranzoom:animation:frame:initial_width_re'  # gmpy2.mpq
+META_ANIM_INITIAL_HEIGHT_IM_KEY = 'tranzoom:animation:frame:initial_height_im'  # gmpy2.mpq
+META_ANIM_MAGNITUDE_KEY = 'tranzoom:animation:zoom:magnitude'  # float
+META_ANIM_MAGNITUDE_PER_STEP_KEY = 'tranzoom:animation:zoom:magnitude_per_step'  # float
+META_ANIM_MAGNIFICATION_PER_STEP_KEY = 'tranzoom:animation:zoom:magnification_per_step'  # float
+META_ANIM_MAGNIFICATION_PER_STEP_MPQ_KEY = (
+  'tranzoom:animation:zoom:magnification_per_step_mpq'  # gmpy2.mpq
+)
+META_ANIM_DURATION_KEY = 'tranzoom:animation:duration'  # float
+META_ANIM_FRAMES_KEY = 'tranzoom:animation:frames'  # int
+META_ANIM_STEPS_KEY = 'tranzoom:animation:steps'  # int
+META_ANIM_FPS_KEY = 'tranzoom:animation:fps'  # float
+META_ANIM_LOOP_KEY = 'tranzoom:animation:loop'  # int; 0 means infinite loop; meaningless for MP4
+# LLM extra keys
 META_LLM_MODEL_KEY = 'tranzoom:llm:model'  # str (or "HUMAN"/META_LLM_MODEL_VALUE_HUMAN for human)
 META_LLM_TEMPERATURE_KEY = 'tranzoom:llm:temperature'  # float
 META_LLM_SEED_KEY = 'tranzoom:llm:seed'  # int (0 if not set)
@@ -69,11 +105,9 @@ META_LLM_ZOOM_COUNT_KEY = 'tranzoom:llm:zoom:count'  # int; zoom iteration depth
 # special values
 META_LLM_MODEL_VALUE_HUMAN = 'HUMAN'  # used when the evaluation is done by a flesh-and-blood human
 
-# TODO: animated gif or videos of zooms
-
 # image constants
 
-type ImageUInt32Array = array.array[int]  # type alias for the type of our pixel data array
+type ImageInt32Array = array.array[int]  # type alias for the type of our pixel data array
 
 # constants for drawing
 
@@ -81,6 +115,12 @@ _SQRT_TWO: float = math.sqrt(2)
 _LINE_WIDTH_RATIO: int = 150  # line width will be max(1, sz//_LINE_WIDTH_RATIO) of the image width
 _CIRCLE_RADIUS: int = 20
 _LABEL_OFFSET: int = 5
+# scale factor for converting stored Set interior integers back to |z| float magnitudes;
+# interior points are stored as -(int(floor(scale * |z|)) + 1), with scale = RES / MAX_Z = RES / 2
+
+
+class Error(frame.Error):
+  """Base image exception."""
 
 
 class Color(enum.Enum):
@@ -96,6 +136,24 @@ class Color(enum.Enum):
   MAGENTA = (255, 0, 255)
 
 
+class FileType(enum.Enum):
+  """File type enum."""
+
+  PNG = 'png'  # also the file suffix!
+  GIF = 'gif'
+  MP4 = 'mp4'
+
+
+class AnimationType(enum.Enum):
+  """Animation type enum."""
+
+  GIF = 'gif'  # also the file suffix!
+  MP4 = 'mp4'
+
+
+DEFAULT_ANIMATION_TYPE: AnimationType = AnimationType.GIF
+
+
 # color constants
 
 
@@ -104,22 +162,65 @@ DEFAULT_MARK_WIDTH: int = 1
 MIN_MARK_WIDTH: int = 1
 MAX_MARK_WIDTH: int = 50
 
+# animation constants
 
-class Error(frame.Error):
-  """Base image exception."""
+MIN_FRAMES: int = 3  # sanity limit for number of frames in an animation
+MAX_FRAMES: int = 100_000  # sanity limit for number of frames in an animation
+MIN_DURATION: float = 0.1  # minimum duration of an animation in seconds, for sanity checking
+MAX_DURATION: float = 45000.0  # maximum duration of an animation in seconds, for sanity checking
+MIN_FPS: float = 0.1  # minimum frames per second for an animation, for sanity checking
+MAX_FPS: float = 30.0  # maximum frames per second for an animation, for sanity checking
+MIN_LOOP: int = 0  # minimum number of loops for a GIF animation; 0 means infinite loop
+MAX_LOOP: int = 1000  # maximum number of loops for a GIF animation, for sanity checking
+
+MAX_ZOOM_MAGNIFICATION_10: float = 10000.0  # this is 10**10000 which is more than enough
+DEFAULT_DEST_MAGNIFICATION_10: float = 1.0  # default dest magnification for zooms 10**1 = 10x zoom
+DEFAULT_LOOP: int = 0  # 0 means infinite loop for GIFs
+THRESHOLD_JUMPY_ZOOM_PER_FRAME: float = 1.25  # if zoom per frame is above this warn about jumpiness
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class FractalStats:
+  """Defines Mandelbrot stats values, collected over the sample run."""
+
+  # these 2 stats are always collected
+  n_px: int  # total number of pixels in the image
+  n_interior: int  # number of interior (Set) points in the image, pixels with escape iteration < 0
+
+  # limits of |z| magnitudes for interior (Set) points
+  max_lo: gmpy2.mpfr  # min(all max(|z|) for interior points)
+  max_hi: gmpy2.mpfr  # max(all max(|z|) for interior points)
+  min_lo: gmpy2.mpfr  # min(all min(|z|) for interior points)
+  min_hi: gmpy2.mpfr  # max(all min(|z|) for interior points)
+
+  # limits of angles for interior (Set) points, in [0, 1]
+  ang_lo: gmpy2.mpfr  # min(all angles for interior points)
+  ang_hi: gmpy2.mpfr  # max(all angles for interior points)
+
+  # limits of the Imaginary Weight Average for interior (Set) points, in [0, 1]
+  imag_lo: gmpy2.mpfr  # min(all sac values for interior points)
+  imag_hi: gmpy2.mpfr  # max(all sac values for interior points)
+
+
+# TODO: more stable animations
+# instead of rendering each frame independently, we can have a class that knows about the
+# whole intended journey and can have a special AsPixels() that normalizes once against all images
 
 
 class Image:
   """A fractal image. Encapsulates the image operations.
 
   Attributes:
-    escape (ImageUInt32Array): An array storing the escape iteration for each pixel;
+    escape (ImageInt32Array): An array storing the escape iteration for each pixel;
         this is not the color, but the raw data that will be converted to color later;
         the length of this array is equal to the total number of pixels in the image.
         You are encouraged to use the SetEscape() method to set the escape iterations,
         but for hot paths you can also set the escape iterations directly in the array,
         remembering that the pixel at coordinates (x, y) is stored at index (y * width + x)
         in the array.
+    stats (FractalStats | None): Optional stats about the fractal, collected during rendering;
+        DO NOT COUNT on this being present unless this was a sample 16.16 render
+        (see fractal._FractalAdaptiveIterations) where the stats are collected
 
   """
 
@@ -148,9 +249,10 @@ class Image:
     self._height: int = height
     self._depth: int | None = None  # may be set later by the fractal rendering function
     # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
-    self.escape: ImageUInt32Array = array.array('I', (0 for _ in range(width * height)))
+    self.escape: ImageInt32Array = array.array('i', (0 for _ in range(width * height)))  # signed32
     if self.escape.itemsize != frame.N_BYTES_UINT:
       raise Error(f'unsupported platform: array of unsigned ints is not {frame.N_BYTES_UINT} bytes')
+    self.stats: FractalStats | None = None  # may be set later by the fractal rendering function
 
   def SetEscape(self, x: int, y: int, escaped_at: int) -> None:
     """Set the escape iteration for a given pixel.
@@ -161,24 +263,63 @@ class Image:
       escaped_at (int): The escape iteration to set for the pixel.
 
     Raises:
-      Error: if the pixel coordinates are out of bounds or if the escape iteration is invalid
+      Error: if the pixel coordinates are out of bounds
 
     """
     if not (0 <= x < self._width) or not (0 <= y < self._height):
       raise Error(f'Pixel coordinates out of bounds: {x=}, {y=}, {self._width=}, {self._height=}')
-    if escaped_at < 0:
-      raise Error(f'Invalid escape iteration: {escaped_at=}')
     self.escape[y * self._width + x] = escaped_at
 
   @property
-  def escape_range(self) -> tuple[int, int]:
-    """Get the range of escape iterations in the image.
+  def size(self) -> tuple[int, int]:
+    """Get the size of the image as (width, height).
 
     Returns:
-      tuple[int, int]: A tuple containing the minimum and maximum escape iterations in the image.
+      tuple[int, int]: The size of the image.
 
     """
-    return (min(self.escape), max(self.escape))
+    return (self._width, self._height)
+
+  @property
+  def frm(self) -> frame.Frame:
+    """Get the frame associated with this image.
+
+    Returns:
+      frame.Frame: The frame associated with this image.
+
+    """
+    return self._frame
+
+  @property
+  def depth(self) -> int | None:
+    """Get the maximum iteration depth for the image, if set.
+
+    Returns:
+      int | None: The maximum iteration depth for the image, or None if not set.
+
+    """
+    return self._depth
+
+  @property
+  def escape_range(self) -> tuple[int, int, int, int]:
+    """Get the range of escape iterations and the range of the internal stored values.
+
+    The internal values map to different things depending on how they were computed.
+
+    Returns:
+      tuple[int, int, int, int]: (min_escape, max_escape, min_internal, max_internal)
+
+    """
+    exterior_points: list[int] = [e for e in self.escape if e >= 0]
+    interior_points: list[int] = [e for e in self.escape if e < 0]
+    return (
+      min(exterior_points) if exterior_points else 0,
+      self._depth
+      if interior_points and self._depth
+      else (max(exterior_points) if exterior_points else 0),
+      -max(interior_points) if interior_points else 0,
+      -min(interior_points) if interior_points else 0,
+    )
 
   @property
   def precision(self) -> int:
@@ -212,26 +353,38 @@ class Image:
       Error: if the depth is invalid or inconsistent with the escape iterations.
 
     """
-    _, max_escape = self.escape_range
+    _, max_escape, _, _ = self.escape_range
     if depth < max_escape:
       raise Error(f'Inconsistent depth: {depth=} is < than {max_escape=}')
     self._depth = depth
 
-  def AsPixels(self, *, pal: palette.Palette = palette.DEFAULT_PALETTE) -> bytes:
+  def AsPixels(
+    self,
+    *,
+    pal: palette.Palette = palette.DEFAULT_PALETTE,
+    set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
+    set_points: frame.SetHighlightAlgorithm | None = None,
+  ) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
-    Current palette:
-    - black for interior points (never escape)
-    - smooth multi-stop cycling gradient, histogram-equalized across escape iterations
+    Exterior points (escaped) are colored by mapping their escape iteration through a cumulative
+    histogram distribution (histogram equalization) into [0, 1), which is then fed into a smooth
+    cycling color gradient via (PixelPalette). This ensures the full color range is used
+    regardless of zoom depth or iteration distribution.
 
-    Interior points (that never escaped, i.e., escaped_at == max_iter) are rendered as
-    pure black. Exterior points are colored by mapping their escape iteration through a
-    cumulative histogram distribution (histogram equalization) into [0, 1), which is then
-    fed into a smooth cycling color gradient via (_PixelPalette). This ensures the full
-    color range is used regardless of zoom depth or iteration distribution.
+    Interior (Set) points that never escaped are rendered as pure black by default. When
+    `color_set_points=True`, they are instead colored using `set_pal` via the same histogram
+    equalization approach, applied to their stored |z| magnitude (the negative of the stored
+    escape value), so the full `set_pal` range is used across the Set interior.
 
     Args:
-      pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
+      pal (palette.Palette, optional): The color palette for exterior (escaped) pixels.
+          Defaults to DEFAULT_PALETTE.
+      set_pal (palette.Palette, optional): The color palette for interior Set points; only
+          used when `color_set_points=True`. Defaults to DEFAULT_SET_PALETTE.
+      set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
+          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
+          None, do not color the Set points (i.e., they will be black).
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
@@ -240,106 +393,204 @@ class Image:
       Error: on error
 
     """
-    # step 1: build histogram of escape iterations for exterior pixels only
-    histogram: dict[int, int] = {}
+    # step 1: build cumulative histogram for exterior pixels (escaped, 0 <= e < depth)
     min_escape: int
     max_escape: int
-    min_escape, max_escape = self.escape_range
+    total_exterior: int
+    cumulative: dict[int, int]
+    min_escape, max_escape, _, _ = self.escape_range
     depth: int = self._depth if self._depth is not None else max_escape
     if min_escape < 0 or depth < max_escape:
       raise Error(f'Invalid/Inconsistent {min_escape=} or {depth=} < {max_escape=}')
-    for escaped_at in self.escape:
-      if escaped_at < depth:
-        histogram[escaped_at] = histogram.get(escaped_at, 0) + 1
-    total_exterior: int = sum(histogram.values())
-    # step 2: compute cumulative distribution function for histogram equalization;
-    # cumulative[v] = number of exterior pixels with escape value <= v
-    cumulative: dict[int, int] = {}
-    cum: int = 0
-    for v in sorted(histogram):
-      cum += histogram[v]
-      cumulative[v] = cum
+    _, cumulative, total_exterior = BuildCumulative([e for e in self.escape if 0 <= e < depth])
+    # step 2: optionally build cumulative histogram for interior/Set pixels (escaped_at < 0);
+    # interior points store -|z| magnitude, so we flip the sign for the histogram key
+    set_cumulative: dict[int, int] = {}
+    total_set: int = 0
+    if set_points:
+      _, set_cumulative, total_set = BuildCumulative([-e for e in self.escape if e < 0])
     # step 3: map each pixel to an RGB color
-    r: int
-    g: int
-    b: int
     pixels = bytearray(self._width * self._height * 3)
     for i, escaped_at in enumerate(self.escape):
-      if escaped_at >= depth or total_exterior == 0:
-        r, g, b = 0, 0, 0  # interior point: black
-      else:
-        # keep t in [0, 1) so the highest escape bucket does not wrap
+      if 0 <= escaped_at < depth and total_exterior > 0:
+        # exterior point: histogram-equalized position in pal
         t: float = (cumulative[escaped_at] - 1) / total_exterior
-        r, g, b = PixelPalette(t, pal)
-      pixels[i * 3] = r
-      pixels[i * 3 + 1] = g
-      pixels[i * 3 + 2] = b
+        rgb: tuple[int, int, int] = PixelPalette(t, pal, palette.PALETTE_CYCLES)
+      elif set_points and total_set > 0 and escaped_at < 0:
+        # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
+        t_set: float = (set_cumulative[-escaped_at] - 1) / total_set
+        rgb = PixelPalette(t_set, set_pal, palette.SET_PALETTE_CYCLES)
+      else:
+        rgb = (0, 0, 0)  # black: interior point (default) or all-interior image
+      pixels[i * 3], pixels[i * 3 + 1], pixels[i * 3 + 2] = rgb
     return bytes(pixels)
 
-  def AsPNG(self, *, pal: palette.Palette = palette.DEFAULT_PALETTE) -> tuple[bytes, str]:
+  def AsPNG(
+    self,
+    *,
+    pal: palette.Palette = palette.DEFAULT_PALETTE,
+    set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
+    set_points: frame.SetHighlightAlgorithm | None = None,
+  ) -> tuple[bytes, str]:
     """Convert the image to PNG bytes and return it with its internal data hash.
 
     Args:
       pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
+      set_pal (palette.Palette, optional): The color palette for interior Set points.
+          Defaults to DEFAULT_SET_PALETTE.
+      set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
+          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
+          None, do not color the Set points (i.e., they will be black).
 
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
 
-    Raises:
-      Error: on error
-
     """
     # convert the raw pixel data to a PNG using PIL
-    raw_img: bytes = self.AsPixels(pal=pal)
+    raw_img: bytes = self.AsPixels(pal=pal, set_pal=set_pal, set_points=set_points)
     img_data_hash: str = hashes.Hash256(raw_img).hex()
     img: PILImage.Image = PILImage.frombytes('RGB', (self._width, self._height), raw_img)
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
     png_meta = PngImagePlugin.PngInfo()
-    # version
-    png_meta.add_text(META_VERSION_KEY, __version__)
-    # image parameters
-    png_meta.add_text(META_IMAGE_WIDTH_KEY, str(self._width))
-    png_meta.add_text(META_IMAGE_HEIGHT_KEY, str(self._height))
-    png_meta.add_text(META_IMAGE_HASH_KEY, img_data_hash)
-    png_meta.add_text(META_IMAGE_PALETTE_KEY, pal.value)
-    png_meta.add_text(META_IMAGE_OVERLAY_KEY, 'false')  # if it comes from this, it has no overlay
-    # frame type
-    png_meta.add_text(META_FRACTAL_KEY, self._frame.fractal.value.lower())
-    if self._frame.fractal == frame.Fractal.JULIA:
-      if not isinstance(self._frame, frame.FrameAndPoint):
-        raise Error(f'Expected FrameAndPoint for Julia Set frame, got {type(self._frame)}')
-      png_meta.add_text(META_JULIA_RE_KEY, str(self._frame.point_re))
-      png_meta.add_text(META_JULIA_IM_KEY, str(self._frame.point_im))
-    # frame as corners
-    png_meta.add_text(META_TOP_RE_KEY, str(self._frame.top_re))
-    png_meta.add_text(META_TOP_IM_KEY, str(self._frame.top_im))
-    png_meta.add_text(META_BOTTOM_RE_KEY, str(self._frame.bottom_re))
-    png_meta.add_text(META_BOTTOM_IM_KEY, str(self._frame.bottom_im))
-    # frame as center + size
-    center: tuple[gmpy2.mpq, gmpy2.mpq] = self._frame.center
-    sz: tuple[gmpy2.mpq, gmpy2.mpq] = self._frame.size
-    png_meta.add_text(META_CENTER_RE_KEY, str(center[0]))
-    png_meta.add_text(META_CENTER_IM_KEY, str(center[1]))
-    png_meta.add_text(META_WIDTH_RE_KEY, str(sz[0]))
-    png_meta.add_text(META_HEIGHT_IM_KEY, str(sz[1]))
-    # precision and magnification
-    png_meta.add_text(META_PRECISION_KEY, str(self.precision))
-    magnification, magnitude = self._frame.magnification
-    png_meta.add_text(META_MAGNIFICATION_KEY, str(float(magnification)))  # huge if not converted!
-    png_meta.add_text(META_MAGNIFICATION_ORDER_KEY, str(magnitude))
-    # escape iteration range in the image
-    min_escape: int
-    max_escape: int
-    min_escape, max_escape = self.escape_range
-    png_meta.add_text(META_ITER_DEPTH_MIN_KEY, str(min_escape))
-    png_meta.add_text(META_ITER_DEPTH_MAX_KEY, str(max_escape))
-    png_meta.add_text(
-      META_ITER_SEARCH_DEPTH_KEY, str(self._depth) if self._depth is not None else '-1'
-    )
+    for k, v in MakeImageMeta(
+      self, img_data_hash, pal=pal, set_pal=set_pal, set_points=set_points
+    ).items():
+      png_meta.add_text(k, v)
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
     img.save(buf, format='PNG', pnginfo=png_meta)
     return (buf.getvalue(), img_data_hash)
+
+
+def MakeImageMeta(
+  img: Image,
+  data_hash: str,
+  *,
+  pal: palette.Palette = palette.DEFAULT_PALETTE,
+  set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
+  set_points: frame.SetHighlightAlgorithm | None = None,
+) -> dict[str, str]:
+  """Create a metadata dictionary for the image.
+
+  Args:
+    img (Image): The image for which to create metadata.
+    data_hash (str): The hash of the image data, to include in the metadata.
+    pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
+    set_pal (palette.Palette, optional): The color palette for interior Set points.
+        Defaults to DEFAULT_SET_PALETTE.
+    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
+        interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
+        None, do not color the Set points (i.e., they will be black).
+
+  Returns:
+    dict[str, str]: A dictionary containing the metadata for the image, with keys as defined
+
+  Raises:
+    Error: on error
+
+  """
+  # prepare some data that will be needed
+  frm: frame.Frame = img.frm
+  center: tuple[gmpy2.mpq, gmpy2.mpq] = frm.center
+  sz: tuple[gmpy2.mpq, gmpy2.mpq] = frm.size
+  magnification: gmpy2.mpfr
+  magnitude: float
+  magnification, magnitude = frm.magnification
+  min_escape: int
+  max_escape: int
+  min_set: int
+  max_set: int
+  min_escape, max_escape, min_set, max_set = img.escape_range
+  # pixel counts and histograms; exterior pixels have escape >= 0, interior (Set) have escape < 0
+  depth: int = img.depth if img.depth is not None else max_escape
+  hist: dict[int, int]
+  cumulative: dict[int, int]
+  total: int
+  hist, cumulative, total = BuildCumulative([e for e in img.escape if 0 <= e < depth])
+  # first create a dict with all the ones that are always present, then add the optional ones
+  img_meta: dict[str, str] = {
+    # image parameters
+    META_IMAGE_ANIMATION_KEY: 'none',  # this is a static image for now, not an animation
+    META_IMAGE_WIDTH_KEY: str(img.size[0]),
+    META_IMAGE_HEIGHT_KEY: str(img.size[1]),
+    META_IMAGE_HASH_KEY: data_hash,
+    META_IMAGE_PALETTE_KEY: pal.value,
+    META_IMAGE_SET_PALETTE_KEY: set_pal.value,
+    META_IMAGE_COLOR_SET_KEY: str(set_points.value) if set_points else 'none',
+    META_IMAGE_OVERLAY_KEY: 'false',  # if it comes from this, it has no overlay
+    # frame
+    META_FRACTAL_KEY: frm.fractal.value.lower(),
+    # frame as corners
+    META_TOP_RE_KEY: str(frm.top_re),
+    META_TOP_IM_KEY: str(frm.top_im),
+    META_BOTTOM_RE_KEY: str(frm.bottom_re),
+    META_BOTTOM_IM_KEY: str(frm.bottom_im),
+    # frame as center + size
+    META_CENTER_RE_KEY: str(center[0]),
+    META_CENTER_IM_KEY: str(center[1]),
+    META_WIDTH_RE_KEY: str(sz[0]),
+    META_HEIGHT_IM_KEY: str(sz[1]),
+    # precision and magnification
+    META_PRECISION_KEY: str(img.precision),
+    META_MAGNIFICATION_KEY: str(float(magnification)),  # huge string if not converted!
+    META_MAGNIFICATION_ORDER_KEY: str(magnitude),
+    # escape iteration range in the image
+    META_ITER_DEPTH_MIN_KEY: str(min_escape),
+    META_ITER_DEPTH_MAX_KEY: str(max_escape),
+    META_SET_POINT_MIN_KEY: str(min_set),
+    META_SET_POINT_MAX_KEY: str(max_set),
+    META_ITER_SEARCH_DEPTH_KEY: str(img.depth) if img.depth is not None else '-1',
+    # histogram
+    META_PIXEL_EXTERIOR_HISTOGRAM_KEY: SummaryHistogram(sorted(hist.items())),
+    META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY: SummaryHistogram(sorted(cumulative.items())),
+    META_PIXEL_EXTERIOR_COUNT_KEY: str(total),
+  }
+  # Julia
+  if frm.fractal == frame.Fractal.JULIA:
+    if not isinstance(frm, frame.FrameAndPoint):
+      raise Error(f'Expected FrameAndPoint for Julia Set frame, got {type(frm)}')
+    img_meta[META_JULIA_RE_KEY] = str(frm.point_re)
+    img_meta[META_JULIA_IM_KEY] = str(frm.point_im)
+  # histogram for interior (Set) points
+  if set_points:
+    hist, cumulative, total = BuildCumulative([-e for e in img.escape if e < 0])
+    img_meta[META_PIXEL_INTERIOR_HISTOGRAM_KEY] = SummaryHistogram(sorted(hist.items()))
+    img_meta[META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY] = SummaryHistogram(
+      sorted(cumulative.items())
+    )
+    img_meta[META_PIXEL_INTERIOR_COUNT_KEY] = str(total)
+  else:
+    img_meta[META_PIXEL_INTERIOR_HISTOGRAM_KEY] = ''
+    img_meta[META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY] = ''
+    img_meta[META_PIXEL_INTERIOR_COUNT_KEY] = str(len([1 for e in img.escape if e < 0]))
+  # save to PNG bytes, hash and return
+  return img_meta
+
+
+def SummaryHistogram(sorted_histogram: list[tuple[int, int]]) -> str:
+  """Summarize a histogram as a string, showing the first 3, last 3 values, summarizing the middle.
+
+  Args:
+    sorted_histogram (list[tuple[int, int]]): A list of (key, count) tuples representing
+        the histogram, SORTED by key.
+
+  Returns:
+    str: A string representation of the histogram, showing the first 3 and last 3 values,
+        with the middle values summarized as a total count.
+
+  """
+  if len(sorted_histogram) <= 7:  # noqa: PLR2004
+    # small histogram, no need to summarize
+    return str(sorted_histogram)
+  # this is usually the case: many escape values, so summarize the middle ones
+  return str(
+    # make a new list with the first 3 and last 3 values, and a summary of the middle values "..."
+    [
+      *sorted_histogram[:3],
+      ('...', sum(count for _, count in sorted_histogram[3:-3])),
+      *sorted_histogram[-3:],
+    ]
+  )
 
 
 def MakeImagePath(
@@ -351,6 +602,7 @@ def MakeImagePath(
   *,
   tm: int | None = None,
   add_serial: int | None = None,
+  suffix: str = 'png',
 ) -> pathlib.Path:
   """Make a file path for saving the image, based on the configuration and image hash.
 
@@ -366,6 +618,7 @@ def MakeImagePath(
     add_serial (int | None): Optional serial number to include in the file name for uniqueness;
         if None, no serial number is included; if provided, it is formatted as a zero-padded
         5-digit number between the date and hash.
+    suffix (str): The file extension/suffix to use, default is "png".
 
   Returns:
     pathlib.Path: The full path for saving the image.
@@ -390,11 +643,11 @@ def MakeImagePath(
     # collision is 1 in 2**40 ~ 1 in 1 trillion, which is good enough for our use case
     filename += f'-{raw_hash[:20]}'
   # add .png extension, make full path, and save the file
-  filename += '.png'
+  filename += '.' + suffix.strip().lower()
   return pathlib.Path(filename) if img_output_path is None else img_output_path / filename
 
 
-def GetBasicDataFromPNG(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:
+def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:
   """Get basic data from a PNG image, including format, size, hash, and metadata text.
 
   Args:
@@ -412,9 +665,6 @@ def GetBasicDataFromPNG(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict
 
   """
   with PILImage.open(io.BytesIO(img_bytes)) as img:
-    # make sure format is PNG
-    if (img.format or '').upper() != 'PNG':
-      raise Error(f'Unsupported image format {img.format!r}, expected PNG')
     # get the internal data we need (size and hash)
     width: int = img.width
     height: int = img.height
@@ -423,6 +673,27 @@ def GetBasicDataFromPNG(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict
     raw_hash: str = hashes.Hash256(img.convert('RGB').tobytes()).hex()  # not 'RGBA'!!
     # extract metadata from PNG
     pil_info: tbase.JSONDict = img.info  # type: ignore[assignment]
+    # make sure format is known and do any format-specific operations
+    if (img_format := (img.format or '').upper()) == FileType.PNG.value.upper():
+      pass  # nothing else to do for PNG, the metadata is already extracted in pil_info
+    elif img_format == FileType.GIF.value.upper():
+      # for GIFs we expect the metadata to be stored in the "comment" field as a JSON string
+      if 'comment' in pil_info:
+        try:
+          pil_info = json.loads(cast('bytes', pil_info['comment']).decode('utf-8'))
+          # if we managed to extract this, then maybe we can also get the correct hash
+          if META_IMAGE_HASH_KEY in pil_info:
+            raw_hash = str(pil_info[META_IMAGE_HASH_KEY])
+          else:
+            logging.error('DO NOT trust this GIF hash')
+        except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError):
+          # if comment is not valid JSON, just keep the original pil_info
+          logging.error('GIF image has comment metadata but it is not valid JSON, ignoring it')  # noqa: TRY400
+          logging.error('DO NOT trust this GIF hash')  # noqa: TRY400
+    elif img_format == FileType.MP4.value.upper():
+      raise NotImplementedError('MP4 format is not supported yet')
+    else:
+      raise Error(f'Unsupported image format {img.format!r}, expected PNG')
   return (width, height, raw_hash, pil_info)
 
 
@@ -679,15 +950,22 @@ def PrintITerm2(img_data: bytes) -> None:
   sys.stdout.flush()
 
 
-def PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:
+def PixelPalette(
+  t: float,
+  pal: palette.Palette,
+  cycles: int,
+) -> tuple[int, int, int]:
   """Get the RGB color for a histogram-equalized normalized palette position.
 
   Smoothly interpolates between adjacent stops in the specified palette, cycling
-  _PALETTE_CYCLES times across the [0, 1) range for visual banding.
+  `cycles` times across the [0, 1) range. Use PALETTE_CYCLES (3) for exterior palettes
+  (tighter color banding) and SET_PALETTE_CYCLES (1) for the interior Set palette
+  (single smooth gradient, black near the boundary).
 
   Args:
     t (float): Normalized position in [0, 1) derived from histogram equalization.
     pal (Palette): The palette to use.
+    cycles (int): How many times to cycle through the palette across [0, 1)
 
   Returns:
     tuple[int, int, int]: The interpolated RGB color.
@@ -700,8 +978,8 @@ def PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:
   if pal not in palette.PALETTES:
     raise Error(f'Unknown palette {pal!r}, available: {list(palette.PALETTES.keys())}')
   palette_stops: tuple[tuple[int, int, int], ...] = palette.PALETTES[pal]
-  # cycle multiple times through the palette for visual banding
-  t_cycled: float = (t * palette.PALETTE_CYCLES) % 1.0
+  # cycle through the palette the requested number of times for visual banding
+  t_cycled: float = (t * cycles) % 1.0
   n: int = len(palette_stops)
   # fractional index into the palette
   idx: float = t_cycled * n
@@ -715,3 +993,169 @@ def PixelPalette(t: float, pal: palette.Palette) -> tuple[int, int, int]:
     int(g0 + frac * (g1 - g0)),
     int(b0 + frac * (b1 - b0)),
   )
+
+
+def BuildCumulative(values: list[int]) -> tuple[dict[int, int], dict[int, int], int]:
+  """Build a raw histogram and cumulative histogram from a pre-filtered list of integer values.
+
+  Args:
+    values (list[int]): The list of integer values to histogram.
+
+  Returns:
+    tuple[dict[int, int], dict[int, int], int]: (histogram, cumulative, total) where
+        histogram[v] = count of occurrences of value v, cumulative[v] = count of values ≤ v,
+        and total = len(values).
+
+  """
+  # build the raw histogram
+  histogram: dict[int, int] = {}
+  for v in values:
+    histogram[v] = histogram.get(v, 0) + 1
+  # build the cumulative histogram by iterating over the sorted keys of the raw histogram
+  total: int = len(values)
+  cumulative: dict[int, int] = {}
+  cum: int = 0
+  for v in sorted(histogram):
+    cum += histogram[v]
+    cumulative[v] = cum
+  return (histogram, cumulative, total)
+
+
+def _ImageNormalizeAndValidate(img_bytes: bytes, width: int, height: int) -> PILImage.Image:
+  with PILImage.open(io.BytesIO(img_bytes)) as img:
+    if img.size != (width, height):
+      raise Error(f'frame size {img.size} != {(width, height)}')
+    if img.mode != 'RGB':
+      raise Error(f'expected RGB frame, got mode {img.mode!r}')
+    return img.copy()
+
+
+def WriteAnimatedGIF(
+  frames: list[bytes],
+  path: pathlib.Path,
+  width: int,
+  height: int,
+  n_frames: int,
+  duration: float,
+  *,
+  meta: dict[str, str] | None = None,
+  loop: int = 0,  # 0 == infinite loop
+) -> None:
+  """Write PIL Image frames to an animated GIF.
+
+  Args:
+    frames: An iterable of PIL Image frames to include in the GIF.
+    path: The file path to save the GIF.
+    width: The width of the GIF frames.
+    height: The height of the GIF frames.
+    n_frames: The number of frames in the GIF: has to match exactly the number of frames provided.
+    duration: The duration of the GIF, in seconds.
+    loop: The number of times to loop the GIF (0 for infinite loop). Default is 0 (infinite loop).
+    meta: Optional metadata to include in the GIF; default None
+
+  Raises:
+    Error: on error
+
+  """
+  # check inputs
+  if not (MIN_FRAMES <= n_frames <= MAX_FRAMES):
+    raise Error(f'n_frames must be between {MIN_FRAMES} and {MAX_FRAMES}, got {n_frames}')
+  if not frames or len(frames) != n_frames:
+    raise Error('frames list does not match the expected number of frames')
+  if not (frame.MIN_IMAGE_SIZE <= width <= frame.MAX_IMAGE_SIZE) or not (
+    frame.MIN_IMAGE_SIZE <= height <= frame.MAX_IMAGE_SIZE
+  ):
+    raise Error(
+      f'{width=} and {height=} must be between {frame.MIN_IMAGE_SIZE} and {frame.MAX_IMAGE_SIZE}'
+    )
+  if not (MIN_DURATION <= duration <= MAX_DURATION):
+    raise Error(f'duration must be between {MIN_DURATION} and {MAX_DURATION}, got {duration}')
+  if loop < 0:
+    raise Error(f'loop must be >= 0, got {loop}')
+  # calculate fps and check sanity of duration vs n_frames
+  fps: float = n_frames / duration
+  if not (MIN_FPS <= fps <= MAX_FPS):
+    raise Error(f'FPS={fps:.2f} must be between {MIN_FPS:.2f} and {MAX_FPS:.2f}')
+  # save the whole GIF, normalizing each frame
+  img0: PILImage.Image = _ImageNormalizeAndValidate(frames[0], width, height)
+  img0.save(
+    # https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif
+    path,
+    save_all=True,
+    # append without repeating the first frame, which is already saved as img0
+    append_images=[_ImageNormalizeAndValidate(f, width, height) for f in frames[1:]],
+    duration=round(1000.0 * duration / n_frames),  # duration in milliseconds per frame
+    loop=loop,
+    disposal=1,  # 1 == do not dispose, overwrite; more efficient b/c we don't have any transparency
+    # delta-encode unchanged pixels as transparent to reduce file size
+    optimize=True,  # optimize the palette and compression for smaller file size
+    # GIF comment field can store arbitrary bytes, we use it to store JSON metadata
+    comment=json.dumps(meta).encode('utf-8') if meta is not None else None,
+  )
+
+
+def WriteVideoMP4(
+  frames: abc.Iterable[bytes],
+  path: pathlib.Path,
+  width: int,
+  height: int,
+  n_frames: int,
+  duration: float,
+  *,
+  meta: dict[str, str] | None = None,
+) -> None:
+  """Write PIL Image frames to an MP4 video using H.264, the most broadly compatible video format.
+
+  Args:
+    frames: An iterable of PIL Image frames to include in the video.
+    path: The file path to save the video.
+    width: The width of the video frames.
+    height: The height of the video frames.
+    n_frames: The number of frames in the video: has to match exactly the number of frames provided.
+    duration: The duration of the video, in seconds.
+    meta: Optional metadata to include in the video; default None
+
+  Raises:
+    Error: on error
+
+  """
+  # check inputs
+  if not (MIN_FRAMES <= n_frames <= MAX_FRAMES):
+    raise Error(f'n_frames must be between 2 and {MAX_FRAMES}, got {n_frames}')
+  if not (frame.MIN_IMAGE_SIZE <= width <= frame.MAX_IMAGE_SIZE) or not (
+    frame.MIN_IMAGE_SIZE <= height <= frame.MAX_IMAGE_SIZE
+  ):
+    raise Error(
+      f'{width=} and {height=} must be between {frame.MIN_IMAGE_SIZE} and {frame.MAX_IMAGE_SIZE}'
+    )
+  if not (MIN_DURATION <= duration <= MAX_DURATION):
+    raise Error(f'duration must be between {MIN_DURATION} and {MAX_DURATION}, got {duration}')
+  # calculate fps and check sanity of duration vs n_frames
+  fps: float = n_frames / duration
+  if not (MIN_FPS <= fps <= MAX_FPS):
+    raise Error(f'FPS={fps:.2f} must be between {MIN_FPS:.2f} and {MAX_FPS:.2f}')
+  # prepare metadata
+  output_params: list[str] = []
+  output_params.extend(['-movflags', '+faststart'])  # allows start playing before fully downloaded
+  output_params.extend(['-crf', '16'])  # good quality, lower is better
+  output_params.extend(['-preset', 'slow'])  # slower presets give better compression
+  if meta:
+    for k, v in meta.items():
+      output_params.extend(['-metadata', f'{k}={v}'])
+  # save the whole MP4, normalizing each frame
+  frame_count = 0
+  with imageio.get_writer(  # pyright: ignore[reportUnknownMemberType]
+    path,
+    fps=fps,
+    format='ffmpeg',  # type: ignore[arg-type]
+    codec='libx264',
+    pixelformat='yuv420p',
+    macro_block_size=1,
+    output_params=output_params,
+  ) as writer:
+    for frm in frames:
+      writer.append_data(np.asarray(_ImageNormalizeAndValidate(frm, width, height)))  # type: ignore[attr-defined]
+      frame_count += 1
+  # done, check that the frame count matches n_frames
+  if frame_count != n_frames:
+    raise Error(f'frames generator produced {frame_count} frames, expected {n_frames}')

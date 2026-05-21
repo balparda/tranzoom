@@ -15,6 +15,7 @@ from transcrypto.utils import config as app_config
 from transcrypto.utils import logging as cli_logging
 
 from tranzoom.cli import base
+from tranzoom.core import frame, palette
 
 from . import __version__
 
@@ -48,6 +49,10 @@ app = typer.Typer(
     'poetry run tranz --iterm zoom manual " -0.74303" "0.126433" "0.01611"\n\n'
     'poetry run tranz zoom manual "/path/to/image.png"\n\n'
     'poetry run tranz --iterm zoom -s 700 --fractal julia manual\n\n\n\n'
+    '# --- Auto Fractal Zoom: Make Video ---\n\n'
+    'poetry run tranz zoom -s 256 auto --fps 10 --duration 2\n\n'
+    'poetry run tranz zoom auto " -5578776469/7500000000" "8244620127/62500000000" '
+    '"0.00073801" "0.00073801" "2.1" --fps 10 --duration 15\n\n\n\n'
     '# --- Markdown Help ---\n\n'
     'poetry run tranz markdown > tranz.md'
   ),
@@ -90,6 +95,9 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   img_path_prefix: str | None = base.IMAGE_PREFIX_OPTION,  # type: ignore[assignment]
   img_use_date: bool = base.IMAGE_INCLUDE_DATE_OPTION,  # type: ignore[assignment]
   img_use_hash: bool = base.IMAGE_INCLUDE_HASH_OPTION,  # type: ignore[assignment]
+  pal: palette.Palette = base.PALETTE_OPTION,  # type: ignore[assignment]
+  set_pal: palette.Palette = base.SET_PALETTE_OPTION,  # type: ignore[assignment]
+  set_points: frame.SetHighlightAlgorithm | None = base.COLOR_SET_POINTS_OPTION,  # type: ignore[assignment]
   max_threads: int | None = base.MAX_THREADS_OPTION,  # type: ignore[assignment]
   # AI parameters from transai (EXCEPT model which is overridden to be a vision model!):
   model: str = base.MODEL_OPTION,  # type: ignore[assignment]
@@ -127,6 +135,9 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     img_path_prefix=img_path_prefix,
     img_use_date=img_use_date,
     img_use_hash=img_use_hash,
+    pal=pal,
+    set_pal=set_pal,
+    set_points=set_points,
     max_threads=max_threads,
     model=model,
     spec_tokens=spec_tokens,

@@ -7,6 +7,9 @@
 /*.png
 /*.jpg
 /*.jpeg
+/*.gif
+/*.bmp
+/*.mp4
 
 # Mac-specific
 .DS_Store

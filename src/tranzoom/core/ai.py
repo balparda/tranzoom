@@ -15,7 +15,7 @@ from transai.core import lms
 from transcrypto.utils import base as tbase
 from transcrypto.utils import human, timer
 
-from tranzoom.core import fractal, frame, image, queries
+from tranzoom.core import fractal, frame, image, palette, queries
 
 DEFAULT_MEMORY_SIZE: int = 5  # default number of iterations the LLM will remember
 MAX_MEMORY_SIZE: int = 30  # maximum number of iterations the LLM will remember
@@ -44,6 +44,9 @@ def ZoomLoop(
   img_use_date: bool,
   img_use_hash: bool,
   img_path_prefix: str,
+  pal: palette.Palette,
+  set_pal: palette.Palette,
+  set_points: frame.SetHighlightAlgorithm | None,
   max_threads: int | None,
   model: str,
   spec_tokens: int | None,
@@ -76,6 +79,11 @@ def ZoomLoop(
     img_use_date: Whether to include the current date in the image filename when saving.
     img_use_hash: Whether to include the image hash in the filename when saving.
     img_path_prefix: A prefix to add to the image filename when saving.
+    pal: The color palette to use for rendering the image.
+    set_pal: The color palette to use for interior Set points.
+    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
+          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
+          None, do not color the Set points (i.e., they will be black).
     max_threads: Optional maximum number of threads to use for rendering; if None, use all
         available CPU cores.
     model: The AI model identifier to use for the search.
@@ -108,6 +116,7 @@ def ZoomLoop(
   print_comm(
     f'Will run {width} x {height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
     + ('include reason field. ' if reason else '[cyan]NOT[/] include reason field. ')
+    + (f'"{set_points.value}" interior. ' if set_points else '')
     + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(
@@ -159,6 +168,9 @@ def ZoomLoop(
           img_use_date,
           img_use_hash,
           img_path_prefix,
+          pal,
+          set_pal,
+          set_points,
           max_threads,
           iterm,
           print_comm,
@@ -222,6 +234,9 @@ def ManualLoop(
   img_use_date: bool,
   img_use_hash: bool,
   img_path_prefix: str,
+  pal: palette.Palette,
+  set_pal: palette.Palette,
+  set_points: frame.SetHighlightAlgorithm | None,
   max_threads: int | None,
   max_steps: int,
   iterm: bool,
@@ -238,6 +253,11 @@ def ManualLoop(
     img_use_date: Whether to include the current date in the image filename when saving.
     img_use_hash: Whether to include the image hash in the filename when saving.
     img_path_prefix: A prefix to add to the image filename when saving.
+    pal: The color palette to use for rendering the image.
+    set_pal: The color palette to use for interior Set points.
+    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
+          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
+          None, do not color the Set points (i.e., they will be black).
     max_threads: Optional maximum number of threads to use for rendering; if None, use all
         available CPU cores.
     max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
@@ -249,6 +269,7 @@ def ManualLoop(
   zoom_tm: int = timer.Now()
   print_comm(
     f'Will run {width} x {height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
+    f'{f', "{set_points.value}" interior. ' if set_points else ""}'
     'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})\n')
@@ -273,6 +294,9 @@ def ManualLoop(
         img_use_date,
         img_use_hash,
         img_path_prefix,
+        pal,
+        set_pal,
+        set_points,
         max_threads,
         iterm,
         print_comm,
@@ -342,6 +366,9 @@ def _ComputeFractal(
   img_use_date: bool,
   img_use_hash: bool,
   img_path_prefix: str,
+  pal: palette.Palette,
+  set_pal: palette.Palette,
+  set_points: frame.SetHighlightAlgorithm | None,
   max_threads: int | None,
   iterm: bool,
   print_comm: abc.Callable[[str], None],
@@ -359,6 +386,11 @@ def _ComputeFractal(
     img_use_date: Whether to include the current date in the image filename when saving.
     img_use_hash: Whether to include the image hash in the filename when saving.
     img_path_prefix: A prefix to add to the image filename when saving.
+    pal: The color palette to use for rendering the image.
+    set_pal: The color palette to use for interior Set points.
+    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
+          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
+          None, do not color the Set points (i.e., they will be black).
     max_threads: Maximum number of threads to use for rendering.
     iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
     print_comm: A rich console callable for printing messages.
@@ -393,7 +425,7 @@ def _ComputeFractal(
       print_comm=print_comm,
     )
     # get PNG and overlay info on top of it
-    img_data, img_hash = img.AsPNG()
+    img_data, img_hash = img.AsPNG(pal=pal, set_pal=set_pal, set_points=set_points)
     img_data = image.DrawThirdsInfoOverlay(img_data)
   # log!
   full_path: pathlib.Path = image.MakeImagePath(
@@ -408,7 +440,7 @@ def _ComputeFractal(
   print_comm(
     f'\n{frm.fractal.value.capitalize()} zoom (#{count}) '
     f'with frame {frm}, precision {img.precision} bits, {magnification_str} magnification\n'
-    f'{img_hash!r} in {tmr}, escape range {img.escape_range}, will save as "{full_path}"'
+    f'{img_hash!r} in {tmr}, will save as "{full_path}"'
   )
   if iterm:
     print_comm('')
