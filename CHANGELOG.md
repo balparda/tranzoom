@@ -33,13 +33,14 @@ This project follows a pragmatic versioning approach:
 ## 1.4.1 - 2026-05-21
 
 - Added
-  - TBD
+  - Image stats (`max_lo`/`max_hi`, `min_lo`/`min_hi`, `ang_lo`/`ang_hi`, `imag_lo`/`imag_hi`) are now saved to PNG metadata under `tranzoom:image:stats:*` keys after rendering.
 
 - Changed
-  - TBD
+  - Render log magnification display now uses `10^X magnitude` format instead of the old humanized decimal string (e.g., `10^3.53 magnitude` instead of `3.387 k magnification`).
 
 - Fixed
-  - TBD
+  - **Multi-process interior coloring bug**: `FractalStats` from worker tasks was not being combined back into the final image in parallel renders, causing incorrect interior coloring (`--set` mode) when rendering with more than one CPU core (the default). Fixed in both `Mandelbrot()` and `Julia()`.
+  - **`tranz zoom auto --col` option**: invalid color strings now raise a clear `ClickException` with a list of valid colors, instead of an opaque `KeyError`.
 
 ## 1.4.0 - 2026-05-20
 
