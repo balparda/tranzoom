@@ -275,11 +275,18 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   save_frames: bool = base.ANIM_SAVE_FRAMES_OPTION,  # type: ignore[assignment]
 ) -> None:
   # we intend passing config, so we add the options here...
+  # check color so it won't raise plain KeyError
+  col: str = mark_color.strip().upper()
+  if col not in image.Color.__members__:
+    raise click.ClickException(
+      f'Invalid mark color {mark_color!r}; available colors: '
+      + ', '.join(sorted(repr(c.name.lower()) for c in image.Color))
+    )
   ctx.obj = dataclasses.replace(
     ctx.obj,
     max_iter=max_iter,
     mark_coords=mark_coords,
-    mark_color=mark_color,
+    mark_color=image.Color[col],
     mark_width=mark_width,
   )
   config: base.TranZoomConfig = ctx.obj
