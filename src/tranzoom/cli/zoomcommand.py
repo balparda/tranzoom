@@ -362,15 +362,15 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   frm = original_frm  # reset frm to the original for the actual rendering loop
   # log; log errors
   config.console.print(
-    f'\nProducing {width}x{height} 10^{dest_magnification_10:.2f} zoom animation, '
+    f'\nProducing {width}x{height} 10^{dest_magnification_10:.2f} magnification zoom animation, '
     f'{human.HumanizedSeconds(duration)} long, at {fps:.2f} FPS, '
     f'with {frames} frames, {100.0 * scalar_magnification_per_step:.2f}% per step ({mpq_mag}), '
     f'final magnification error {float(gmpy2.mpfr(100.0) * mag_error):.4f}%...\n'
   )
   if scalar_magnification_per_step >= image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
     config.console.print(
-      '[red]Warning: the zoom per frame is high: 10**(mag/(frames-1)) = '
-      f'10**({dest_magnification_10:.2f}/{steps}) = '
+      '[red]Warning: the zoom per frame is high: 10^(mag/(frames-1)) = '
+      f'10^({dest_magnification_10:.2f}/{steps}) = '
       f'{100.0 * scalar_magnification_per_step:.2f}%/step. '
       'The resulting animation may look jumpy. Consider increasing the number of frames '
       'or reducing the total magnification.[/]\n'

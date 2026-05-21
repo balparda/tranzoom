@@ -13,7 +13,7 @@ import gmpy2
 import typer
 from transcrypto.cli import clibase
 from transcrypto.utils import base as tbase
-from transcrypto.utils import human, timer
+from transcrypto.utils import timer
 
 from tranzoom.core import ai, fractal, frame, image, palette
 
@@ -581,16 +581,11 @@ def ProduceFractalImage(
     else None
   )
   # log
-  magnification, magnitude = frm.magnification
-  magnification_str: str = (
-    # beyond 10^21, human-readable formatting becomes ridiculous, so we use scientific notation
-    human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
-  )
   set_points_str: str = f', "{config.set_points.value}" interior' if config.set_points else ''
   config.console.print(
     f'\n{width}x{height} {frm.fractal.value.capitalize()} in '
     f'frame {frm}, precision ± {frm.Precision(width, height)} bits, '  # approx: b/c iters
-    f'{magnification_str} magnification, '
+    f'10^{frm.magnification[1]:.2f} magnitude, '
     f'{"AUTO" if config.max_iter is None else config.max_iter} iterations'
     f'{set_points_str}...'
   )
