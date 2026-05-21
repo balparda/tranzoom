@@ -445,7 +445,7 @@ def _ComputeFractal(
   return (img_data, full_path)
 
 
-def _MoveCenter(  # noqa: C901, PLR0912
+def _MoveCenter(  # noqa: C901
   frm: frame.Frame,
   query: str | None,
   response: queries.ZoomSectorScoring | queries.ZoomSectorCompleteScoring,
@@ -530,20 +530,12 @@ def _MoveCenter(  # noqa: C901, PLR0912
     )
   print_comm('')
   # build the new frame
-  if frm.fractal == frame.Fractal.JULIA:
-    return frame.Frame.FromPointAndCenter(
-      frm.fractal,
-      frm.point_re,
-      frm.point_im,
-      center_mpq_re,
-      center_mpq_im,
-      frame_width / frame.DEFAULT_MPQ_ZOOM,
-      frame_height / frame.DEFAULT_MPQ_ZOOM,
-    )
   return frame.Frame.FromCenter(
     frm.fractal,
     center_mpq_re,
     center_mpq_im,
     frame_width / frame.DEFAULT_MPQ_ZOOM,
-    frame_height / frame.DEFAULT_MPQ_ZOOM,
+    height=frame_height / frame.DEFAULT_MPQ_ZOOM,
+    point_re=frm.point_re,
+    point_im=frm.point_im,
   )
