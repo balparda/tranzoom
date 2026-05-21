@@ -244,7 +244,7 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   'auto',
   help='Create a GIF/MP4 zoom fractal animation.',
   epilog=(
-    'Examples:\n\n\n\n'  # TODO: update help
+    'Examples:\n\n\n\n'
     '$ poetry run tranz zoom -s 256 auto --fps 10 --duration 2\n\n'
     'Producing 256x256 10^1.00 zoom animation, 2.000 s long, at 10.00 FPS, '
     'with 20 frames, 112.88% per step...\n\n\n\n'
