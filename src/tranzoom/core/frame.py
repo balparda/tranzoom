@@ -45,6 +45,7 @@ PrecisionContext: abc.Callable[[], gmpy2.context] = lambda: gmpy2.local_context(
 )
 
 # gmpy2.mpq constants
+_MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 _MPQ_ONE: gmpy2.mpq = gmpy2.mpq('1')
 _MPQ_SQRT_TWO_NOT_EXACT: gmpy2.mpq = gmpy2.mpq('99/70')  # good enough for our purposes
 _MPQ_TWO: gmpy2.mpq = gmpy2.mpq('2')
@@ -68,6 +69,22 @@ DEFAULT_JULIA_CENTER_RE: str = '0'
 DEFAULT_JULIA_CENTER_IM: str = '0'
 DEFAULT_JULIA_WIDTH: str = '1.8'
 DEFAULT_JULIA_HEIGHT: str = '2.2'
+
+
+# TODO: create (optional) DB of stored frames
+# TODO: default output to be the one in config with the DB
+# TODO: for videos compute all mpq steps first with full mpq, then simplify fraction to 0.01% error;
+#     frames are now deterministic and as reasonably small as possible, they are the entries to DB
+# TODO: video/gif to save check the frames for existence, thus recovering from a crash
+# TODO: image to store: on non-set/escaped the iteration plus a float(?) to compute "nu"
+# TODO: image to store: on set/non-escaped the actual final value of the tracked constant;
+#     and if we store the mpfr on a dict for example, we will have space for more info in the array
+# TODO: make a way for images to be saved too, raw, so we can revisit computations;
+#     what parameters REALLY determine an image pre-render?
+# TODO: with all the frames in place (DB) and richer images and "nu" we can start video smoothing;
+#     a class for video objects with all the frames
+# TODO: before rendering video, decide on marker frames every X magnitude, make them first,
+#     use them to compute colors and then smooth colors between maker frames smoothly
 
 
 class Error(tbase.Error):
@@ -95,13 +112,21 @@ class SetHighlightAlgorithm(enum.Enum):
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class Frame:
-  """Defines a rectangular region of the complex plane, with arbitrary precision. Exact."""
+  """Defines a rectangular region of the complex plane, with arbitrary precision. Exact.
+
+  An optional point coordinate is included. This is used for Julia, and ignored for Mandelbrot.
+  This point is not required to be inside the rectangle; it is just an additional coordinate
+  that can be used for various purposes, such as marking a specific location in the image or
+  providing additional data like for the Julia fractal.
+  """
 
   fractal: Fractal
   top_re: gmpy2.mpq  # the top-left corner of the rectangle
   top_im: gmpy2.mpq
   bottom_re: gmpy2.mpq  # the bottom-right corner of the rectangle
   bottom_im: gmpy2.mpq
+  point_re: gmpy2.mpq = _MPQ_ZERO  # for Julia, the point whose orbit we track
+  point_im: gmpy2.mpq = _MPQ_ZERO
 
   def __post_init__(self) -> None:
     """Check rectangle has an area and top/bottom ordering.
@@ -110,10 +135,34 @@ class Frame:
       Error: if the rectangle is invalid.
 
     """
+    if self.fractal not in {Fractal.MANDELBROT, Fractal.JULIA}:
+      raise Error(f'Unknown fractal type: {self.fractal}')
     if self.top_re >= self.bottom_re:
       raise Error(f'top_re ({self.top_re}) must be < bottom_re ({self.bottom_re})')
     if self.top_im <= self.bottom_im:
       raise Error(f'top_im ({self.top_im}) must be > bottom_im ({self.bottom_im})')
+
+  def __str__(self) -> str:
+    """Get string representation of the frame.
+
+    Returns:
+      str: String representation of the frame.
+
+    Raises:
+      Error: if the fractal type is unknown (should not happen b/c checked in __post_init__).
+
+    """
+    cx, cy = self.center
+    dx, dy = self.size
+    if self.fractal == Fractal.MANDELBROT:
+      return f'[({cx}, {cy}) ± {dx}]' if dx == dy else f'[({cx}, {cy}) ± ({dx}, {dy})]'
+    if self.fractal == Fractal.JULIA:
+      return (
+        f'[({cx}, {cy}) ± {dx} @ ({self.point_re}, {self.point_im})]'
+        if dx == dy
+        else f'[({cx}, {cy}) ± ({dx}, {dy}) @ ({self.point_re}, {self.point_im})]'
+      )
+    raise Error(f'Unknown fractal type: {self.fractal}')
 
   @property
   def center(self) -> tuple[gmpy2.mpq, gmpy2.mpq]:
@@ -154,8 +203,7 @@ class Frame:
       gmpy2.mpq: The scale of the frame.
 
     """
-    s: tuple[gmpy2.mpq, gmpy2.mpq] = self.size
-    return min(s[0], s[1])
+    return min(*self.size)
 
   @property
   def area(self) -> gmpy2.mpq:
@@ -199,17 +247,6 @@ class Frame:
       abs(self.bottom_im),
       _MPQ_ONE,
     )
-
-  def __str__(self) -> str:
-    """Get string representation of the frame.
-
-    Returns:
-      str: String representation of the frame.
-
-    """
-    cx, cy = self.center
-    dx, dy = self.size
-    return f'[({cx}, {cy}) ± {dx}]' if dx == dy else f'[({cx}, {cy}) ± ({dx}, {dy})]'
 
   @staticmethod
   def FromCoords(
@@ -256,7 +293,10 @@ class Frame:
     center_re: ExactInputType,
     center_im: ExactInputType,
     width: ExactInputType,
+    *,
     height: ExactInputType | None = None,
+    point_re: ExactInputType | None = None,
+    point_im: ExactInputType | None = None,
   ) -> Frame:
     """Create a Frame from a center point and dimensions.
 
@@ -267,6 +307,9 @@ class Frame:
       width (ExactInputType): Width of the frame in the real direction.
       height (ExactInputType | None): Height of the frame in the imaginary direction. If None,
           height will be equal to width.
+      point_re (ExactInputType | None): For Julia, the real part of the point whose orbit we track.
+      point_im (ExactInputType | None): For Julia, the imaginary part of the point whose orbit
+          we track.
 
     Returns:
       Frame: A Frame object representing the rectangle defined by the center and dimensions.
@@ -281,11 +324,29 @@ class Frame:
     dy: gmpy2.mpq = (
       (height if isinstance(height, gmpy2.mpq) else gmpy2.mpq(height)) if height is not None else dx
     )
+    if (point_re is not None and point_im is None) or (point_re is None and point_im is not None):
+      raise Error('point_re and point_im must both be provided or both be None')
+    re: gmpy2.mpq = (
+      (point_re if isinstance(point_re, gmpy2.mpq) else gmpy2.mpq(point_re))
+      if point_re is not None
+      else _MPQ_ZERO
+    )
+    im: gmpy2.mpq = (
+      (point_im if isinstance(point_im, gmpy2.mpq) else gmpy2.mpq(point_im))
+      if point_im is not None
+      else _MPQ_ZERO
+    )
     if dx <= 0 or dy <= 0:
       raise Error(f'width and height must be positive, got {dx=} and {dy=}')
     dx, dy = dx / _MPQ_TWO, dy / _MPQ_TWO
     fr = Frame(
-      fractal=fractal, top_re=cx - dx, top_im=cy + dy, bottom_re=cx + dx, bottom_im=cy - dy
+      fractal=fractal,
+      top_re=cx - dx,
+      top_im=cy + dy,
+      bottom_re=cx + dx,
+      bottom_im=cy - dy,
+      point_re=re,
+      point_im=im,
     )
     if fr.center != (cx, cy):
       raise Error(f'calculated frame center {fr.center} does not match input center ({cx}, {cy})')
@@ -521,82 +582,14 @@ DEFAULT_MANDELBROT_FRAME: Frame = Frame.FromCenter(
   Fractal.MANDELBROT, DEFAULT_FRAME_CENTER_RE, DEFAULT_FRAME_CENTER_IM, DEFAULT_FRAME_SIZE
 )
 
-
-@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class FrameAndPoint(Frame):
-  """Defines a rectangular region and a point of the complex plane, with arbitrary precision. Exact.
-
-  The point is not required to be inside the rectangle; it is just an additional coordinate
-  that can be used for various purposes, such as marking a specific location in the image or
-  providing additional data like for the Julia fractal.
-  """
-
-  point_re: gmpy2.mpq
-  point_im: gmpy2.mpq
-
-  def __str__(self) -> str:
-    """Get string representation of the frame.
-
-    Returns:
-      str: String representation of the frame.
-
-    """
-    cx, cy = self.center
-    dx, dy = self.size
-    return (
-      f'[({cx}, {cy}) ± {dx} @ ({self.point_re}, {self.point_im})]'
-      if dx == dy
-      else f'[({cx}, {cy}) ± ({dx}, {dy}) @ ({self.point_re}, {self.point_im})]'
-    )
-
-  @staticmethod
-  def FromCenterAndPoint(
-    fractal: Fractal,
-    point_re: ExactInputType,
-    point_im: ExactInputType,
-    center_re: ExactInputType,
-    center_im: ExactInputType,
-    width: ExactInputType,
-    height: ExactInputType | None = None,
-  ) -> FrameAndPoint:
-    """Create a FrameAndPoint from a point, a center point, and dimensions.
-
-    Args:
-      fractal (Fractal): The type of fractal.
-      point_re (ExactInputType): Real part of the point.
-      point_im (ExactInputType): Imaginary part of the point.
-      center_re (ExactInputType): Real part of the center point.
-      center_im (ExactInputType): Imaginary part of the center point.
-      width (ExactInputType): Width of the frame in the real direction.
-      height (ExactInputType | None): Height of the frame in the imaginary direction. If None,
-          height will be equal to width.
-
-    Returns:
-      FrameAndPoint: A FrameAndPoint object representing the rectangle+point.
-
-    """
-    re: gmpy2.mpq = point_re if isinstance(point_re, gmpy2.mpq) else gmpy2.mpq(point_re)
-    im: gmpy2.mpq = point_im if isinstance(point_im, gmpy2.mpq) else gmpy2.mpq(point_im)
-    frm: Frame = Frame.FromCenter(fractal, center_re, center_im, width, height)
-    return FrameAndPoint(
-      fractal=frm.fractal,
-      top_re=frm.top_re,
-      top_im=frm.top_im,
-      bottom_re=frm.bottom_re,
-      bottom_im=frm.bottom_im,
-      point_re=re,
-      point_im=im,
-    )
-
-
-DEFAULT_JULIA_FRAME: FrameAndPoint = FrameAndPoint.FromCenterAndPoint(
+DEFAULT_JULIA_FRAME: Frame = Frame.FromCenter(
   Fractal.JULIA,
-  DEFAULT_JULIA_RE,
-  DEFAULT_JULIA_IM,
   DEFAULT_JULIA_CENTER_RE,
   DEFAULT_JULIA_CENTER_IM,
   DEFAULT_JULIA_WIDTH,
-  DEFAULT_JULIA_HEIGHT,
+  height=DEFAULT_JULIA_HEIGHT,
+  point_re=DEFAULT_JULIA_RE,
+  point_im=DEFAULT_JULIA_IM,
 )
 
 

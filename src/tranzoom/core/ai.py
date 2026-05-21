@@ -412,10 +412,7 @@ def _ComputeFractal(
   )
   # render the image for the current frame
   with timer.Timer(emit_log=False) as tmr:
-    img: image.Image = {
-      frame.Fractal.MANDELBROT: fractal.Mandelbrot,
-      frame.Fractal.JULIA: fractal.Julia,
-    }[frm.fractal](
+    img: image.Image = fractal.ComputeFractal(
       frm,  # type: ignore[arg-type]  # we know this should be fine
       width,
       height,
@@ -533,8 +530,8 @@ def _MoveCenter(  # noqa: C901, PLR0912
     )
   print_comm('')
   # build the new frame
-  if isinstance(frm, frame.FrameAndPoint):
-    return frame.FrameAndPoint.FromCenterAndPoint(
+  if frm.fractal == frame.Fractal.JULIA:
+    return frame.Frame.FromPointAndCenter(
       frm.fractal,
       frm.point_re,
       frm.point_im,

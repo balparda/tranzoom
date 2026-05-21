@@ -116,14 +116,19 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
   )
   # if it is a Julia, make the Julia point and add it to the frame
+  julia_re: gmpy2.mpq
+  julia_im: gmpy2.mpq
+  julia_re, julia_im = base.MakePointFromCLIArgs(
+    config.julia_re, config.julia_im, config.console.print
+  )
   frm = (
-    frame.FrameAndPoint.FromCenterAndPoint(
+    frame.Frame.FromCenter(
       frame.Fractal.JULIA,
-      *base.MakePointFromCLIArgs(config.julia_re, config.julia_im, config.console.print),
-      frm.center[0],
-      frm.center[1],
+      *frm.center,
       frm.size[0],
-      frm.size[1],
+      height=frm.size[1],
+      point_re=julia_re,
+      point_im=julia_im,
     )
     if config.fractal_type == frame.Fractal.JULIA
     else frm
@@ -201,14 +206,19 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
     config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
   )
   # if it is a Julia, make the Julia point and add it to the frame
+  julia_re: gmpy2.mpq
+  julia_im: gmpy2.mpq
+  julia_re, julia_im = base.MakePointFromCLIArgs(
+    config.julia_re, config.julia_im, config.console.print
+  )
   frm = (
-    frame.FrameAndPoint.FromCenterAndPoint(
+    frame.Frame.FromCenter(
       frame.Fractal.JULIA,
-      *base.MakePointFromCLIArgs(config.julia_re, config.julia_im, config.console.print),
-      frm.center[0],
-      frm.center[1],
+      *frm.center,
       frm.size[0],
-      frm.size[1],
+      height=frm.size[1],
+      point_re=julia_re,
+      point_im=julia_im,
     )
     if config.fractal_type == frame.Fractal.JULIA
     else frm
@@ -320,14 +330,19 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
   )
   # if it is a Julia, make the Julia point and add it to the frame
+  julia_re: gmpy2.mpq
+  julia_im: gmpy2.mpq
+  julia_re, julia_im = base.MakePointFromCLIArgs(
+    config.julia_re, config.julia_im, config.console.print
+  )
   frm = (
-    frame.FrameAndPoint.FromCenterAndPoint(
+    frame.Frame.FromCenter(
       frame.Fractal.JULIA,
-      *base.MakePointFromCLIArgs(config.julia_re, config.julia_im, config.console.print),
-      frm.center[0],
-      frm.center[1],
+      *frm.center,
       frm.size[0],
-      frm.size[1],
+      height=frm.size[1],
+      point_re=julia_re,
+      point_im=julia_im,
     )
     if config.fractal_type == frame.Fractal.JULIA
     else frm
@@ -351,10 +366,9 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   for _ in range(frames - 1):
     frm = frame.Frame.FromCenter(
       frm.fractal,
-      frm.center[0],
-      frm.center[1],
+      *frm.center,
       frm.size[0] / mpq_mag,
-      frm.size[1] / mpq_mag,
+      height=frm.size[1] / mpq_mag,
     )
   # now we can compute the actual final magnification
   actual_mag: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(original_frm.area / frm.area))
@@ -399,24 +413,13 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       all_frames.append(img_data)
       all_hash.append(data_hash)
       # zoom in the frame for the next iteration
-      frm = (
-        frame.FrameAndPoint.FromCenterAndPoint(
-          frm.fractal,
-          frm.point_re,
-          frm.point_im,
-          frm.center[0],
-          frm.center[1],
-          frm.size[0] / mpq_mag,
-          frm.size[1] / mpq_mag,
-        )
-        if isinstance(frm, frame.FrameAndPoint) and frm.fractal == frame.Fractal.JULIA
-        else frame.Frame.FromCenter(
-          frm.fractal,
-          frm.center[0],
-          frm.center[1],
-          frm.size[0] / mpq_mag,
-          frm.size[1] / mpq_mag,
-        )
+      frm = frame.Frame.FromCenter(
+        frm.fractal,
+        *frm.center,
+        frm.size[0] / mpq_mag,
+        height=frm.size[1] / mpq_mag,
+        point_re=frm.point_re,
+        point_im=frm.point_im,
       )
     # check we got something
     if not img:

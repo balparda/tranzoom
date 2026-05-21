@@ -498,9 +498,6 @@ def MakeImageMeta(
   Returns:
     dict[str, str]: A dictionary containing the metadata for the image, with keys as defined
 
-  Raises:
-    Error: on error
-
   """
   # prepare some data that will be needed
   frm: frame.Frame = img.frm
@@ -574,8 +571,6 @@ def MakeImageMeta(
       img_meta[META_IMAGE_STATS_IMAG_HI_KEY] = str(img.stats.imag_hi)
   # Julia
   if frm.fractal == frame.Fractal.JULIA:
-    if not isinstance(frm, frame.FrameAndPoint):
-      raise Error(f'Expected FrameAndPoint for Julia Set frame, got {type(frm)}')
     img_meta[META_JULIA_RE_KEY] = str(frm.point_re)
     img_meta[META_JULIA_IM_KEY] = str(frm.point_im)
   # histogram for interior (Set) points

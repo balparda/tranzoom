@@ -43,7 +43,7 @@ class Error(image.Error):
   """Base fractal exception."""
 
 
-def Mandelbrot(
+def ComputeFractal(
   frm: frame.Frame,
   width: int,
   height: int,
@@ -77,7 +77,6 @@ def Mandelbrot(
     Error: on error
 
   """
-  # TODO: most of this method is just repeated in Julia(): refactor
   # determine processes
   if n_processes is not None and n_processes < 1:
     raise Error(f'{n_processes=} must be a positive integer or None')
@@ -94,7 +93,8 @@ def Mandelbrot(
     else (max_iter, None)
   )
   logging.debug(
-    f'Mandelbrot using {n_processes} process(es) for {"PRE " if is_preprocess else ""}rendering'
+    f'{frm.fractal.value.upper()} using {n_processes} process(es) '
+    f'for {"PRE " if is_preprocess else ""}rendering'
   )
   # create inputs
   inp: list[_FractalTaskInput] = [
@@ -113,124 +113,19 @@ def Mandelbrot(
   ]
   # execute in processes
   results: list[_FractalTaskOutput]
+  computation: _FractalComputation = (
+    _MandelbrotComputation if frm.fractal == frame.Fractal.MANDELBROT else _JuliaComputation
+  )
   if n_processes == 1:
     # no multiprocessing, just run the single task directly in this process (also good for debug)
-    results = [_MandelbrotComputation(inp[0])]
+    results = [computation(inp[0])]
   else:
     # multiprocessing: run the tasks in separate processes and collect results
     with futures.ProcessPoolExecutor(max_workers=n_processes) as executor:
-      results = list(executor.map(_MandelbrotComputation, inp))
+      results = list(executor.map(computation, inp))
   # at this point all tasks are finished: check we have them all!
   if len(results) != n_processes:
-    raise Error(f'Expected {n_processes} results from Mandelbrot computations, got {len(results)}')
-  img: image.Image = results[0].img  # start with the first image to save time and space
-  if n_processes > 1:
-    # combine results into a single image; possible b/c each task wrote to a disjoint set of pixels
-    for result in results[1:]:
-      # copy only this task's interleaved pixels into the final image
-      n_task: int = result.n_task - 1  # convert to 0-based index for stepped slice indexing
-      img.escape[n_task::n_processes] = result.img.escape[n_task::n_processes]
-    # combine stats from all tasks: n_interior is additive, _lo fields take min, _hi take max
-    all_stats: list[image.FractalStats] = [r.img.stats for r in results if r.img.stats is not None]
-    if all_stats:
-      img.stats = image.FractalStats(
-        n_px=all_stats[0].n_px,  # same in all tasks (= width * height)
-        n_interior=sum(s.n_interior for s in all_stats),
-        max_lo=min(s.max_lo for s in all_stats),
-        max_hi=max(s.max_hi for s in all_stats),
-        min_lo=min(s.min_lo for s in all_stats),
-        min_hi=max(s.min_hi for s in all_stats),
-        ang_lo=min(s.ang_lo for s in all_stats),
-        ang_hi=max(s.ang_hi for s in all_stats),
-        imag_lo=min(s.imag_lo for s in all_stats),
-        imag_hi=max(s.imag_hi for s in all_stats),
-      )
-  # if the final image doesn't have stats, we can add them from the pre-process stats we collected
-  if img.stats is None and stats is not None:
-    img.stats = stats
-  # all copied, so we can return the final image
-  return img
-
-
-def Julia(
-  frm: frame.FrameAndPoint,
-  width: int,
-  height: int,
-  *,
-  max_iter: int | None = None,
-  set_points: frame.SetHighlightAlgorithm | None = None,
-  progress_bar: bool = True,
-  n_processes: int | None = None,
-  print_comm: abc.Callable[[str], None] = print,
-) -> image.Image:
-  """Render the Julia frame rectangle to an Image.
-
-  Args:
-    frm (FrameAndPoint): The frame to render.
-    width (int): The width of the output image in pixels.
-    height (int): The height of the output image in pixels.
-    max_iter (int | None, optional): The maximum number of iterations to determine escape.
-        Defaults to None, and that means "auto".
-    set_points (SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring the
-        interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-        None, do not color the Set points (i.e., they will be black).
-    progress_bar (bool, optional): Whether to show a progress bar. Defaults to True.
-    n_processes (int | None, optional): The number of processes to use for rendering. Defaults
-        to None, which means to use all available CPU cores. Will be limited to MAX_CONCURRENCE.
-    print_comm (Callable[[str], None], optional): A callable to print messages. Defaults to print.
-
-  Returns:
-    image.Image: The rendered fractal image.
-
-  Raises:
-    Error: on error
-
-  """
-  # determine processes
-  if n_processes is not None and n_processes < 1:
-    raise Error(f'{n_processes=} must be a positive integer or None')
-  is_preprocess: bool = width == frame.MIN_IMAGE_SIZE and height == frame.MIN_IMAGE_SIZE
-  n_processes = n_processes or AVAILABLE_CPU
-  n_processes = min(n_processes, _MAX_PRE_PROCESS_CONCURRENCE) if is_preprocess else n_processes
-  n_processes = min(n_processes, MAX_CONCURRENCE, AVAILABLE_CPU)  # never exceed CPU!
-  # if max_iter is None, we do an adaptive iteration limit calculation based on a small test render
-  # BEWARE: the method call will call Julia() recursively, but with a fixed max_iter!
-  stats: image.FractalStats | None
-  max_iter, stats = (
-    _FractalAdaptiveIterations(frm, progress_bar, n_processes, set_points, print_comm)
-    if max_iter is None
-    else (max_iter, None)
-  )
-  logging.debug(
-    f'Julia using {n_processes} process(es) for {"PRE " if is_preprocess else ""}rendering'
-  )
-  # create inputs
-  inp: list[_FractalTaskInput] = [
-    _FractalTaskInput(
-      frm=frm,
-      width=width,
-      height=height,
-      max_iter=max_iter,
-      highlight=set_points,
-      progress_bar=progress_bar,
-      n_task=i + 1,
-      total_tasks=n_processes,
-      stats=stats,
-    )
-    for i in range(n_processes)
-  ]
-  # execute in processes
-  results: list[_FractalTaskOutput]
-  if n_processes == 1:
-    # no multiprocessing, just run the single task directly in this process (also good for debug)
-    results = [_JuliaComputation(inp[0])]
-  else:
-    # multiprocessing: run the tasks in separate processes and collect results
-    with futures.ProcessPoolExecutor(max_workers=n_processes) as executor:
-      results = list(executor.map(_JuliaComputation, inp))
-  # at this point all tasks are finished: check we have them all!
-  if len(results) != n_processes:
-    raise Error(f'Expected {n_processes} results from Julia computations, got {len(results)}')
+    raise Error(f'Expected {n_processes} results from computations, got {len(results)}')
   img: image.Image = results[0].img  # start with the first image to save time and space
   if n_processes > 1:
     # combine results into a single image; possible b/c each task wrote to a disjoint set of pixels
@@ -299,10 +194,8 @@ def _FractalAdaptiveIterations(
   max_iter: int = frame.MAX_ITER
   for high_iter in frame.HIGH_ITERS:
     # make the smallest image
-    img16: image.Image = {frame.Fractal.MANDELBROT: Mandelbrot, frame.Fractal.JULIA: Julia}[
-      frm.fractal
-    ](
-      frm,  # type: ignore[arg-type]  # we know this should be correct
+    img16: image.Image = ComputeFractal(
+      frm,
       frame.MIN_IMAGE_SIZE,
       frame.MIN_IMAGE_SIZE,
       max_iter=high_iter,
@@ -388,6 +281,9 @@ class _FractalTaskOutput:
   img: image.Image
   n_task: int
   total_tasks: int
+
+
+type _FractalComputation = abc.Callable[[_FractalTaskInput], _FractalTaskOutput]
 
 
 def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C901, PLR0912, PLR0914, PLR0915
@@ -642,8 +538,8 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
     Error: on error
 
   """
-  if not isinstance(inp.frm, frame.FrameAndPoint):
-    raise Error(f'Expected FrameAndPoint for Julia computation, got {type(inp.frm)}')
+  if inp.frm.fractal != frame.Fractal.JULIA:
+    raise Error(f'Expected Julia computation, got {inp.frm.fractal}')
   is_preprocess: bool = inp.width == frame.MIN_IMAGE_SIZE and inp.height == frame.MIN_IMAGE_SIZE
   # create image; will also check the parameters and frame validity in the Image constructor
   img: image.Image = image.Image(inp.frm, inp.width, inp.height)

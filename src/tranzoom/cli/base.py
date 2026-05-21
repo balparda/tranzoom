@@ -593,10 +593,7 @@ def ProduceFractalImage(
   raw_png: bytes
   raw_hash: str
   with timer.Timer(emit_log=False) as tmr:
-    img: image.Image = {
-      frame.Fractal.MANDELBROT: fractal.Mandelbrot,
-      frame.Fractal.JULIA: fractal.Julia,
-    }[frm.fractal](
+    img: image.Image = fractal.ComputeFractal(
       frm,  # type: ignore[arg-type]  # we know this is the right type of frame
       width,
       height,
@@ -612,7 +609,7 @@ def ProduceFractalImage(
     if mark_coords:
       # we were asked to mark a coordinate with a crosshair overlay: do it
       raw_png = image.DrawCrossOverlay(
-        raw_png, mark_coords[0], mark_coords[1], col=config.mark_color, lw=config.mark_width
+        raw_png, *mark_coords, col=config.mark_color, lw=config.mark_width
       )
   # print stats
   config.console.print(f'{frm.fractal.value.capitalize()} image {raw_hash!r} in {tmr}')
@@ -665,7 +662,7 @@ def MakeFrameFromCLIArgs(
   """
   try:
     # the happy path is one line... if these coords work, we return the frame and we're done
-    return frame.Frame.FromCenter(fractal, center_re, center_im, f_width, f_height)
+    return frame.Frame.FromCenter(fractal, center_re, center_im, f_width, height=f_height)
   except ValueError as err:
     if 'invalid' not in str(err).lower():
       raise click.UsageError(f'Error: {center_re=}, {center_im=}, {f_width=}, {f_height=}') from err
@@ -691,7 +688,7 @@ def MakeFrameFromCLIArgs(
         str(info[image.META_CENTER_RE_KEY]),
         str(info[image.META_CENTER_IM_KEY]),
         str(info[image.META_WIDTH_RE_KEY]),
-        str(info[image.META_HEIGHT_IM_KEY]),
+        height=str(info[image.META_HEIGHT_IM_KEY]),
       )
     except Exception as err2:  # this error we cannot forgive
       raise click.UsageError(
