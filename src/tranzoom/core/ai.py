@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import pathlib
 from collections import abc
@@ -37,16 +38,13 @@ class Error(queries.Error):
 
 
 def ZoomLoop(
-  frm: frame.Frame,
-  width: int,
-  height: int,
+  params: frame.ComputationParameters,
   img_output_path: pathlib.Path | None,
   img_use_date: bool,
   img_use_hash: bool,
   img_path_prefix: str,
   pal: palette.Palette,
   set_pal: palette.Palette,
-  set_points: frame.SetHighlightAlgorithm | None,
   max_threads: int | None,
   model: str,
   spec_tokens: int | None,
@@ -71,9 +69,7 @@ def ZoomLoop(
   """Execute main loop for AI-guided fractal zoom search.
 
   Args:
-    frm: The initial frame for the fractal zoom search.
-    width: The width of the image to render.
-    height: The height of the image to render.
+    params: The computation parameters for the fractal zoom search.
     img_output_path: Optional path to save the rendered images; if None, images will be
         saved to current working directory.
     img_use_date: Whether to include the current date in the image filename when saving.
@@ -81,9 +77,6 @@ def ZoomLoop(
     img_path_prefix: A prefix to add to the image filename when saving.
     pal: The color palette to use for rendering the image.
     set_pal: The color palette to use for interior Set points.
-    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
-          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-          None, do not color the Set points (i.e., they will be black).
     max_threads: Optional maximum number of threads to use for rendering; if None, use all
         available CPU cores.
     model: The AI model identifier to use for the search.
@@ -114,9 +107,9 @@ def ZoomLoop(
   # capture the time and load model
   zoom_tm: int = timer.Now()
   print_comm(
-    f'Will run {width} x {height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
+    f'Run {params.width}x{params.height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
     + ('include reason field. ' if reason else '[cyan]NOT[/] include reason field. ')
-    + (f'"{set_points.value}" interior. ' if set_points else '')
+    + (f'"{params.set_points.value}" interior. ' if params.set_points else '')
     + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(
@@ -126,7 +119,7 @@ def ZoomLoop(
   setup_query: str
   image_query: str
   query = query.strip() if query else None
-  setup_query, image_query = queries.BuildImageThirdsPrompts(frm, reason, query)
+  setup_query, image_query = queries.BuildImageThirdsPrompts(params.frm, reason, query)
   logging.debug(f'AI setup query:\n{setup_query}\n')
   logging.debug(f'AI image query:\n{image_query}\n')
   # start
@@ -159,9 +152,7 @@ def ZoomLoop(
         count += 1
         # render the image for the current frame
         img_data, full_path = _ComputeFractal(
-          frm,
-          width,
-          height,
+          params,
           count,
           zoom_tm,
           img_output_path,
@@ -170,7 +161,6 @@ def ZoomLoop(
           img_path_prefix,
           pal,
           set_pal,
-          set_points,
           max_threads,
           iterm,
           print_comm,
@@ -215,7 +205,9 @@ def ZoomLoop(
           )
         )
         # implement the move command
-        frm = _MoveCenter(frm, query, response, tmr, target_weight, print_comm)
+        params = dataclasses.replace(
+          params, frm=_MoveCenter(params.frm, query, response, tmr, target_weight, print_comm)
+        )
         # stop if we've reached the maximum number of steps
         if max_steps and count >= max_steps:
           print_comm('[yellow]Reached maximum zoom step(s), stopping.[/yellow]')
@@ -223,20 +215,17 @@ def ZoomLoop(
   # we're out of the main loop
   except KeyboardInterrupt:
     print_comm(f'\n[yellow]Interrupted by user on step {count}.[/yellow]')
-  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {frm}\n')
+  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {params.frm}\n')
 
 
 def ManualLoop(
-  frm: frame.Frame,
-  width: int,
-  height: int,
+  params: frame.ComputationParameters,
   img_output_path: pathlib.Path | None,
   img_use_date: bool,
   img_use_hash: bool,
   img_path_prefix: str,
   pal: palette.Palette,
   set_pal: palette.Palette,
-  set_points: frame.SetHighlightAlgorithm | None,
   max_threads: int | None,
   max_steps: int,
   iterm: bool,
@@ -245,9 +234,7 @@ def ManualLoop(
   """Execute main loop for manually-guided fractal zoom search.
 
   Args:
-    frm: The initial frame for the fractal zoom search.
-    width: The width of the image to render.
-    height: The height of the image to render.
+    params: The computation parameters for the fractal zoom search.
     img_output_path: Optional path to save the rendered images; if None, images will be
         saved to current working directory.
     img_use_date: Whether to include the current date in the image filename when saving.
@@ -255,9 +242,6 @@ def ManualLoop(
     img_path_prefix: A prefix to add to the image filename when saving.
     pal: The color palette to use for rendering the image.
     set_pal: The color palette to use for interior Set points.
-    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
-          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-          None, do not color the Set points (i.e., they will be black).
     max_threads: Optional maximum number of threads to use for rendering; if None, use all
         available CPU cores.
     max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
@@ -268,8 +252,8 @@ def ManualLoop(
   # capture the time and load model
   zoom_tm: int = timer.Now()
   print_comm(
-    f'Will run {width} x {height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
-    f'{f', "{set_points.value}" interior. ' if set_points else ""}'
+    f'Will run {params.width}x{params.height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
+    f'{f', "{params.set_points.value}" interior. ' if params.set_points else ""}'
     'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})\n')
@@ -285,9 +269,7 @@ def ManualLoop(
       count += 1
       # render the image for the current frame
       img_data, full_path = _ComputeFractal(
-        frm,
-        width,
-        height,
+        params,
         count,
         zoom_tm,
         img_output_path,
@@ -296,7 +278,6 @@ def ManualLoop(
         img_path_prefix,
         pal,
         set_pal,
-        set_points,
         max_threads,
         iterm,
         print_comm,
@@ -345,7 +326,9 @@ def ManualLoop(
         )
       )
       # implement the move command
-      frm = _MoveCenter(frm, None, response, tmr, 0.0, print_comm)
+      params = dataclasses.replace(
+        params, frm=_MoveCenter(params.frm, None, response, tmr, 0.0, print_comm)
+      )
       # stop if we've reached the maximum number of steps
       if max_steps and count >= max_steps:
         print_comm('[yellow]Reached maximum zoom step(s), stopping.[/yellow]')
@@ -353,13 +336,11 @@ def ManualLoop(
   # we're out of the main loop
   except KeyboardInterrupt:
     print_comm(f'\n[yellow]Interrupted by user on step {count}.[/yellow]')
-  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {frm}\n')
+  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {params.frm}\n')
 
 
 def _ComputeFractal(
-  frm: frame.Frame,
-  width: int,
-  height: int,
+  params: frame.ComputationParameters,
   count: int,
   zoom_tm: int,
   img_output_path: pathlib.Path | None,
@@ -368,7 +349,6 @@ def _ComputeFractal(
   img_path_prefix: str,
   pal: palette.Palette,
   set_pal: palette.Palette,
-  set_points: frame.SetHighlightAlgorithm | None,
   max_threads: int | None,
   iterm: bool,
   print_comm: abc.Callable[[str], None],
@@ -376,9 +356,7 @@ def _ComputeFractal(
   """Compute the Mandelbrot or Julia image for the given frame.
 
   Args:
-    frm: The frame for which to compute the Mandelbrot or Julia image.
-    width: The width of the image to render.
-    height: The height of the image to render.
+    params: The computation parameters for the frame, including width, height, and other settings.
     count: The current zoom step count, used for logging and image naming.
     zoom_tm: The timestamp when the zoom session started, used for logging and image naming.
     img_output_path: Optional path to save the rendered image; if None, the image will not be
@@ -388,9 +366,6 @@ def _ComputeFractal(
     img_path_prefix: A prefix to add to the image filename when saving.
     pal: The color palette to use for rendering the image.
     set_pal: The color palette to use for interior Set points.
-    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
-          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-          None, do not color the Set points (i.e., they will be black).
     max_threads: Maximum number of threads to use for rendering.
     iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
     print_comm: A rich console callable for printing messages.
@@ -405,7 +380,7 @@ def _ComputeFractal(
   magnification: gmpy2.mpfr
   magnitude: float
   # calculate magnification
-  magnification, magnitude = frm.magnification
+  magnification, magnitude = params.frm.magnification
   magnification_str: str = (
     # beyond 10^21, use scientific notation
     human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
@@ -413,16 +388,14 @@ def _ComputeFractal(
   # render the image for the current frame
   with timer.Timer(emit_log=False) as tmr:
     img: image.Image = fractal.ComputeFractal(
-      frm,  # type: ignore[arg-type]  # we know this should be fine
-      width,
-      height,
+      params,
       max_iter=None,
       progress_bar=True,
       n_processes=max_threads,
       print_comm=print_comm,
     )
     # get PNG and overlay info on top of it
-    img_data, img_hash = img.AsPNG(pal=pal, set_pal=set_pal, set_points=set_points)
+    img_data, img_hash = img.AsPNG(pal=pal, set_pal=set_pal)
     img_data = image.DrawThirdsInfoOverlay(img_data)
   # log!
   full_path: pathlib.Path = image.MakeImagePath(
@@ -435,8 +408,8 @@ def _ComputeFractal(
     add_serial=count,
   )
   print_comm(
-    f'\n{frm.fractal.value.capitalize()} zoom (#{count}) '
-    f'with frame {frm}, precision {img.precision} bits, {magnification_str} magnification\n'
+    f'\n{params.frm.fractal.value.capitalize()} zoom (#{count}) '
+    f'with frame {params.frm}, precision {img.precision} bits, {magnification_str} magnification\n'
     f'{img_hash!r} in {tmr}, will save as "{full_path}"'
   )
   if iterm:

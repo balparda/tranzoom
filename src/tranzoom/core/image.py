@@ -237,32 +237,23 @@ class Image:
 
   """
 
-  def __init__(self, frm: frame.Frame, width: int, height: int) -> None:
+  def __init__(self, params: frame.ComputationParameters) -> None:
     """Construct image.
 
     Args:
-      frm (Frame): The frame to render.
-      width (int): The width of the output image in pixels.
-      height (int): The height of the output image in pixels.
+      params (frame.ComputationParameters): The computation parameters for the image.
 
     Raises:
       Error: on error
 
     """
-    # check parameters
-    if not (frame.MIN_IMAGE_SIZE <= width <= frame.MAX_IMAGE_SIZE) or not (
-      frame.MIN_IMAGE_SIZE <= height <= frame.MAX_IMAGE_SIZE
-    ):
-      raise Error(
-        f'{width=} and {height=} must be between {frame.MIN_IMAGE_SIZE} and {frame.MAX_IMAGE_SIZE}'
-      )
     # save objects
-    self._frame: frame.Frame = frm
-    self._width: int = width
-    self._height: int = height
+    self._params: frame.ComputationParameters = params
     self._depth: int | None = None  # may be set later by the fractal rendering function
     # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
-    self.escape: ImageInt32Array = array.array('i', (0 for _ in range(width * height)))  # signed32
+    self.escape: ImageInt32Array = array.array(  # signed32
+      'i', (0 for _ in range(self._params.width * self._params.height))
+    )
     if self.escape.itemsize != frame.N_BYTES_UINT:
       raise Error(f'unsupported platform: array of unsigned ints is not {frame.N_BYTES_UINT} bytes')
     self.stats: FractalStats | None = None  # may be set later by the fractal rendering function
@@ -279,9 +270,11 @@ class Image:
       Error: if the pixel coordinates are out of bounds
 
     """
-    if not (0 <= x < self._width) or not (0 <= y < self._height):
-      raise Error(f'Pixel coordinates out of bounds: {x=}, {y=}, {self._width=}, {self._height=}')
-    self.escape[y * self._width + x] = escaped_at
+    if not (0 <= x < self._params.width) or not (0 <= y < self._params.height):
+      raise Error(
+        f'Coordinates out of bounds: {x=}, {y=}, {self._params.width=}, {self._params.height=}'
+      )
+    self.escape[y * self._params.width + x] = escaped_at
 
   @property
   def size(self) -> tuple[int, int]:
@@ -291,17 +284,17 @@ class Image:
       tuple[int, int]: The size of the image.
 
     """
-    return (self._width, self._height)
+    return (self._params.width, self._params.height)
 
   @property
-  def frm(self) -> frame.Frame:
-    """Get the frame associated with this image.
+  def params(self) -> frame.ComputationParameters:
+    """Get the computation parameters associated with this image.
 
     Returns:
-      frame.Frame: The frame associated with this image.
+      frame.ComputationParameters: The computation parameters associated with this image.
 
     """
-    return self._frame
+    return self._params
 
   @property
   def depth(self) -> int | None:
@@ -342,9 +335,7 @@ class Image:
       int: The estimated number of bits of MPFR precision needed.
 
     """
-    return self._frame.Precision(
-      self._width, self._height, max_iter=self._depth or frame.DEFAULT_ITER
-    )
+    return self._params.Precision(max_iter=self._depth) if self._depth else self._params.Precision()
 
   @property
   def context(self) -> gmpy2.context:
@@ -376,7 +367,6 @@ class Image:
     *,
     pal: palette.Palette = palette.DEFAULT_PALETTE,
     set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-    set_points: frame.SetHighlightAlgorithm | None = None,
   ) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
@@ -395,9 +385,6 @@ class Image:
           Defaults to DEFAULT_PALETTE.
       set_pal (palette.Palette, optional): The color palette for interior Set points; only
           used when `color_set_points=True`. Defaults to DEFAULT_SET_PALETTE.
-      set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
-          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-          None, do not color the Set points (i.e., they will be black).
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
@@ -420,16 +407,16 @@ class Image:
     # interior points store -|z| magnitude, so we flip the sign for the histogram key
     set_cumulative: dict[int, int] = {}
     total_set: int = 0
-    if set_points:
+    if self._params.set_points:
       _, set_cumulative, total_set = BuildCumulative([-e for e in self.escape if e < 0])
     # step 3: map each pixel to an RGB color
-    pixels = bytearray(self._width * self._height * 3)
+    pixels = bytearray(self._params.width * self._params.height * 3)
     for i, escaped_at in enumerate(self.escape):
       if 0 <= escaped_at < depth and total_exterior > 0:
         # exterior point: histogram-equalized position in pal
         t: float = (cumulative[escaped_at] - 1) / total_exterior
         rgb: tuple[int, int, int] = PixelPalette(t, pal, palette.PALETTE_CYCLES)
-      elif set_points and total_set > 0 and escaped_at < 0:
+      elif self._params.set_points and total_set > 0 and escaped_at < 0:
         # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
         t_set: float = (set_cumulative[-escaped_at] - 1) / total_set
         rgb = PixelPalette(t_set, set_pal, palette.SET_PALETTE_CYCLES)
@@ -443,7 +430,6 @@ class Image:
     *,
     pal: palette.Palette = palette.DEFAULT_PALETTE,
     set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-    set_points: frame.SetHighlightAlgorithm | None = None,
   ) -> tuple[bytes, str]:
     """Convert the image to PNG bytes and return it with its internal data hash.
 
@@ -451,23 +437,20 @@ class Image:
       pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
       set_pal (palette.Palette, optional): The color palette for interior Set points.
           Defaults to DEFAULT_SET_PALETTE.
-      set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
-          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-          None, do not color the Set points (i.e., they will be black).
 
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
 
     """
     # convert the raw pixel data to a PNG using PIL
-    raw_img: bytes = self.AsPixels(pal=pal, set_pal=set_pal, set_points=set_points)
+    raw_img: bytes = self.AsPixels(pal=pal, set_pal=set_pal)
     img_data_hash: str = hashes.Hash256(raw_img).hex()
-    img: PILImage.Image = PILImage.frombytes('RGB', (self._width, self._height), raw_img)
+    img: PILImage.Image = PILImage.frombytes(
+      'RGB', (self._params.width, self._params.height), raw_img
+    )
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
     png_meta = PngImagePlugin.PngInfo()
-    for k, v in MakeImageMeta(
-      self, img_data_hash, pal=pal, set_pal=set_pal, set_points=set_points
-    ).items():
+    for k, v in MakeImageMeta(self, img_data_hash, pal=pal, set_pal=set_pal).items():
       png_meta.add_text(k, v)
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
@@ -481,7 +464,6 @@ def MakeImageMeta(
   *,
   pal: palette.Palette = palette.DEFAULT_PALETTE,
   set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-  set_points: frame.SetHighlightAlgorithm | None = None,
 ) -> dict[str, str]:
   """Create a metadata dictionary for the image.
 
@@ -491,16 +473,13 @@ def MakeImageMeta(
     pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
     set_pal (palette.Palette, optional): The color palette for interior Set points.
         Defaults to DEFAULT_SET_PALETTE.
-    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
-        interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-        None, do not color the Set points (i.e., they will be black).
 
   Returns:
     dict[str, str]: A dictionary containing the metadata for the image, with keys as defined
 
   """
   # prepare some data that will be needed
-  frm: frame.Frame = img.frm
+  frm: frame.Frame = img.params.frm
   center: tuple[gmpy2.mpq, gmpy2.mpq] = frm.center
   sz: tuple[gmpy2.mpq, gmpy2.mpq] = frm.size
   magnification: gmpy2.mpfr
@@ -526,7 +505,7 @@ def MakeImageMeta(
     META_IMAGE_HASH_KEY: data_hash,
     META_IMAGE_PALETTE_KEY: pal.value,
     META_IMAGE_SET_PALETTE_KEY: set_pal.value,
-    META_IMAGE_COLOR_SET_KEY: str(set_points.value) if set_points else 'none',
+    META_IMAGE_COLOR_SET_KEY: str(img.params.set_points.value) if img.params.set_points else 'none',
     META_IMAGE_OVERLAY_KEY: 'false',  # if it comes from this, it has no overlay
     # frame
     META_FRACTAL_KEY: frm.fractal.value.lower(),
@@ -574,7 +553,7 @@ def MakeImageMeta(
     img_meta[META_JULIA_RE_KEY] = str(frm.point_re)
     img_meta[META_JULIA_IM_KEY] = str(frm.point_im)
   # histogram for interior (Set) points
-  if set_points:
+  if img.params.set_points:
     hist, cumulative, total = BuildCumulative([-e for e in img.escape if e < 0])
     img_meta[META_PIXEL_INTERIOR_HISTOGRAM_KEY] = SummaryHistogram(sorted(hist.items()))
     img_meta[META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY] = SummaryHistogram(

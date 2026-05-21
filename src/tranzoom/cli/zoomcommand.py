@@ -141,18 +141,18 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     if config.img_size
     else (config.img_width, config.img_height)
   )
+  params: frame.ComputationParameters = frame.ComputationParameters(
+    frm=frm, width=width, height=height, set_points=config.set_points
+  )
   # we have a valid frame, let's start the AI search loop
   ai.ZoomLoop(
-    frm,
-    width,
-    height,
+    params,
     config.img_output_path,
     config.img_use_date,
     config.img_use_hash,
     config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
     config.pal,
     config.set_pal,
-    config.set_points,
     config.max_threads,
     config.model,
     config.spec_tokens,
@@ -231,18 +231,18 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
     if config.img_size
     else (config.img_width, config.img_height)
   )
+  params: frame.ComputationParameters = frame.ComputationParameters(
+    frm=frm, width=width, height=height, set_points=config.set_points
+  )
   # we have a valid frame, let's start the AI search loop
   ai.ManualLoop(
-    frm,
-    width,
-    height,
+    params,
     config.img_output_path,
     config.img_use_date,
     config.img_use_hash,
     config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
     config.pal,
     config.set_pal,
-    config.set_points,
     config.max_threads,
     config.max_steps,
     config.iterm,
@@ -443,7 +443,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     video_hash,
     pal=config.pal,
     set_pal=config.set_pal,
-    set_points=config.set_points,
   )
   # add video-specific metadata
   meta[image.META_IMAGE_ANIMATION_KEY] = anim_type.value.lower()

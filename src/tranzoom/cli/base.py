@@ -574,17 +574,18 @@ def ProduceFractalImage(
     if config.img_size
     else (config.img_width, config.img_height)
   )
-  # add the mark?
+  params: frame.ComputationParameters = frame.ComputationParameters(
+    frm=frm, width=width, height=height, set_points=config.set_points
+  )
+  # add the mark? do this early to check the inputs ASAP
   mark_coords: tuple[int, int] | None = (
-    frm.CoordsTupleToPixel(config.mark_coords, width, height)
-    if config.mark_coords  # do this early to check the inputs ASAP
-    else None
+    params.CoordsTupleToPixel(config.mark_coords) if config.mark_coords else None
   )
   # log
   set_points_str: str = f', "{config.set_points.value}" interior' if config.set_points else ''
   config.console.print(
     f'\n{width}x{height} {frm.fractal.value.capitalize()} in '
-    f'frame {frm}, precision ± {frm.Precision(width, height)} bits, '  # approx: b/c iters
+    f'frame {frm}, precision ± {params.Precision()} bits, '  # approx: b/c iters
     f'10^{frm.magnification[1]:.2f} magnitude, '
     f'{"AUTO" if config.max_iter is None else config.max_iter} iterations'
     f'{set_points_str}...'
@@ -594,18 +595,13 @@ def ProduceFractalImage(
   raw_hash: str
   with timer.Timer(emit_log=False) as tmr:
     img: image.Image = fractal.ComputeFractal(
-      frm,  # type: ignore[arg-type]  # we know this is the right type of frame
-      width,
-      height,
+      params,
       max_iter=config.max_iter,
-      set_points=config.set_points,
       n_processes=config.max_threads,
       print_comm=config.console.print,
     )
     # fractal is ready, convert to PNG
-    raw_png, raw_hash = img.AsPNG(
-      pal=config.pal, set_pal=config.set_pal, set_points=config.set_points
-    )
+    raw_png, raw_hash = img.AsPNG(pal=config.pal, set_pal=config.set_pal)
     if mark_coords:
       # we were asked to mark a coordinate with a crosshair overlay: do it
       raw_png = image.DrawCrossOverlay(

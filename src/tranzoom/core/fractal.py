@@ -44,12 +44,9 @@ class Error(image.Error):
 
 
 def ComputeFractal(
-  frm: frame.Frame,
-  width: int,
-  height: int,
+  params: frame.ComputationParameters,
   *,
   max_iter: int | None = None,
-  set_points: frame.SetHighlightAlgorithm | None = None,
   progress_bar: bool = True,
   n_processes: int | None = None,
   print_comm: abc.Callable[[str], None] = print,
@@ -57,14 +54,9 @@ def ComputeFractal(
   """Render the Mandelbrot frame rectangle to an Image.
 
   Args:
-    frm (Frame): The frame to render.
-    width (int): The width of the output image in pixels.
-    height (int): The height of the output image in pixels.
+    params (frame.ComputationParameters): The computation parameters for the image.
     max_iter (int | None, optional): The maximum number of iterations to determine escape.
         Defaults to None, and that means "auto".
-    set_points (SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring the
-        interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-        None, do not color the Set points (i.e., they will be black).
     progress_bar (bool, optional): Whether to show a progress bar. Defaults to True.
     n_processes (int | None, optional): The number of processes to use for rendering. Defaults
         to None, which means to use all available CPU cores. Will be limited to MAX_CONCURRENCE.
@@ -80,7 +72,9 @@ def ComputeFractal(
   # determine processes
   if n_processes is not None and n_processes < 1:
     raise Error(f'{n_processes=} must be a positive integer or None')
-  is_preprocess: bool = width == frame.MIN_IMAGE_SIZE and height == frame.MIN_IMAGE_SIZE
+  is_preprocess: bool = (
+    params.width == frame.MIN_IMAGE_SIZE and params.height == frame.MIN_IMAGE_SIZE
+  )
   n_processes = n_processes or AVAILABLE_CPU
   n_processes = min(n_processes, _MAX_PRE_PROCESS_CONCURRENCE) if is_preprocess else n_processes
   n_processes = min(n_processes, MAX_CONCURRENCE, AVAILABLE_CPU)  # never exceed CPU!
@@ -88,22 +82,19 @@ def ComputeFractal(
   # BEWARE: the method call will call Mandelbrot() recursively, but with a fixed max_iter!
   stats: image.FractalStats | None
   max_iter, stats = (
-    _FractalAdaptiveIterations(frm, progress_bar, n_processes, set_points, print_comm)
+    _FractalAdaptiveIterations(params.frm, params.set_points, progress_bar, n_processes, print_comm)
     if max_iter is None
     else (max_iter, None)
   )
   logging.debug(
-    f'{frm.fractal.value.upper()} using {n_processes} process(es) '
+    f'{params.frm.fractal.value.upper()} using {n_processes} process(es) '
     f'for {"PRE " if is_preprocess else ""}rendering'
   )
   # create inputs
   inp: list[_FractalTaskInput] = [
     _FractalTaskInput(
-      frm=frm,
-      width=width,
-      height=height,
+      params=params,
       max_iter=max_iter,
-      highlight=set_points,
       progress_bar=progress_bar,
       n_task=i + 1,
       total_tasks=n_processes,
@@ -114,7 +105,7 @@ def ComputeFractal(
   # execute in processes
   results: list[_FractalTaskOutput]
   computation: _FractalComputation = (
-    _MandelbrotComputation if frm.fractal == frame.Fractal.MANDELBROT else _JuliaComputation
+    _MandelbrotComputation if params.frm.fractal == frame.Fractal.MANDELBROT else _JuliaComputation
   )
   if n_processes == 1:
     # no multiprocessing, just run the single task directly in this process (also good for debug)
@@ -157,9 +148,9 @@ def ComputeFractal(
 
 def _FractalAdaptiveIterations(
   frm: frame.Frame,
+  set_points: frame.SetHighlightAlgorithm | None,
   progress_bar: bool,
   n_processes: int,
-  set_points: frame.SetHighlightAlgorithm | None,
   print_comm: abc.Callable[[str], None],
 ) -> tuple[int, image.FractalStats]:
   """Estimate a suitable max_iter for the full image by rendering a small test image.
@@ -178,10 +169,10 @@ def _FractalAdaptiveIterations(
 
   Args:
     frm (Frame): The frame to render.
-    progress_bar (bool): Whether to show a progress bar during the test render.
-    n_processes (int): The number of processes to use for the test render.
     set_points (SetHighlightAlgorithm | None): Which algorithm to use for coloring the
         interior Set points, either None, or one of the SetHighlightAlgorithm values
+    progress_bar (bool): Whether to show a progress bar during the test render.
+    n_processes (int): The number of processes to use for the test render.
     print_comm (Callable[[str], None]): A callable to print messages
 
   Returns:
@@ -195,11 +186,8 @@ def _FractalAdaptiveIterations(
   for high_iter in frame.HIGH_ITERS:
     # make the smallest image
     img16: image.Image = ComputeFractal(
-      frm,
-      frame.MIN_IMAGE_SIZE,
-      frame.MIN_IMAGE_SIZE,
+      frm.MakeProbeComputationParameters(set_points=set_points),
       max_iter=high_iter,
-      set_points=set_points,
       progress_bar=progress_bar,
       n_processes=n_processes,
       print_comm=print_comm,
@@ -241,14 +229,11 @@ def _FractalAdaptiveIterations(
 class _FractalTaskInput:
   """Defines a Mandelbrot task."""
 
-  frm: frame.Frame
-  width: int
-  height: int
+  params: frame.ComputationParameters
   max_iter: int
   progress_bar: bool
   n_task: int
   total_tasks: int
-  highlight: frame.SetHighlightAlgorithm | None
   stats: image.FractalStats | None = None
 
   def __post_init__(self) -> None:
@@ -258,14 +243,6 @@ class _FractalTaskInput:
       Error: on error
 
     """
-    # check size
-    if not (frame.MIN_IMAGE_SIZE <= self.width <= frame.MAX_IMAGE_SIZE) or not (
-      frame.MIN_IMAGE_SIZE <= self.height <= frame.MAX_IMAGE_SIZE
-    ):
-      raise Error(
-        f'{self.width=} and {self.height=} must be between '
-        f'{frame.MIN_IMAGE_SIZE} and {frame.MAX_IMAGE_SIZE}'
-      )
     # sanity check iter_limit: if error, it came from the user (b/c adaptive clamps to the limits)
     if not (frame.MIN_ITER <= self.max_iter <= frame.MAX_ITER):
       raise Error(f'{self.max_iter=} must be between {frame.MIN_ITER} and {frame.MAX_ITER}')
@@ -299,15 +276,17 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
     Error: on error
 
   """
-  is_preprocess: bool = inp.width == frame.MIN_IMAGE_SIZE and inp.height == frame.MIN_IMAGE_SIZE
+  is_preprocess: bool = (
+    inp.params.width == frame.MIN_IMAGE_SIZE and inp.params.height == frame.MIN_IMAGE_SIZE
+  )
   # create image; will also check the parameters and frame validity in the Image constructor
-  img: image.Image = image.Image(inp.frm, inp.width, inp.height)
+  img: image.Image = image.Image(inp.params)
   img.SetDepth(inp.max_iter)  # set the depth of the image to the max_iter we will use
   # compute pixel size in complex plane and check frame validity; exact computation (gmpy2.mpq)
   dx: gmpy2.mpq
   dy: gmpy2.mpq
-  dx, dy = inp.frm.size
-  dx, dy = dx / gmpy2.mpq(inp.width - 1), dy / gmpy2.mpq(inp.height - 1)
+  dx, dy = inp.params.frm.size
+  dx, dy = dx / gmpy2.mpq(inp.params.width - 1), dy / gmpy2.mpq(inp.params.height - 1)
   if dx <= 0 or dy <= 0:
     raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
   # start the mpfr context for floating-point computations with the precision needed
@@ -316,7 +295,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
     # are relatively expensive and we can reuse the x values across rows ("inner for loop");
     # also, this is where the "X" (real) coordinates are converted mpq->mpfr
     xs: list[gmpy2.mpfr] = [
-      gmpy2.mpfr(inp.frm.top_re + gmpy2.mpq(i) * dx) for i in range(inp.width)
+      gmpy2.mpfr(inp.params.frm.top_re + gmpy2.mpq(i) * dx) for i in range(inp.params.width)
     ]
     # variables for stats we will track; we pre-compute all we can!
     mpfr_pi: gmpy2.mpfr = gmpy2.const_pi()  # pi with the current context precision
@@ -370,7 +349,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
     has_procs: bool = inp.total_tasks > 1
     n_task: int = inp.n_task - 1  # convert to 0-based index for easier modulo math
     p_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
-      total=inp.width * inp.height,
+      total=inp.params.width * inp.params.height,
       desc='Pre' if is_preprocess else 'Img',
       unit='px',
       dynamic_ncols=True,
@@ -380,14 +359,14 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
     )
     # iterate over pixels in row-major order, computing escape iterations in mpfr
     px_count: int = -1
-    for py in range(inp.height):
+    for py in range(inp.params.height):
       # PILImage.frombytes interprets the first row written as the top row of the image, so
       # we iterate y inverted by starting at the top and going down;
       # this is the "outer for loop", no benefit in pre-computing y values;
       # also, this is where the "Y" (imaginary) coordinates are converted mpq->mpfr
-      cy: gmpy2.mpfr = gmpy2.mpfr(inp.frm.top_im - gmpy2.mpq(py) * dy)
+      cy: gmpy2.mpfr = gmpy2.mpfr(inp.params.frm.top_im - gmpy2.mpq(py) * dy)
       # iterate over columns, reusing x values and doing the escape test in mpfr for correctness
-      for px in range(inp.width):
+      for px in range(inp.params.width):
         px_count += 1
         if has_procs and (px_count % inp.total_tasks) != n_task:
           # this pixel is not for this process, skip it but still update the progress bar
@@ -399,7 +378,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
         # we can't do these tests for the other highlight algorithms, b/c we need to track
         # the max|z|/angle/etc for interior points, so we have to do the full escape-time
         # test in mpfr for all points, even those that would be interior by the fast tests
-        if inp.highlight is None:
+        if inp.params.set_points is None:
           # main cardioid test
           # see <https://en.wikipedia.org/wiki/Mandelbrot_set#Main_cardioid_and_period_bulbs>
           x_minus_quarter: gmpy2.mpfr = cx - _MPFR_FOURTH
@@ -434,15 +413,15 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
           if (mag_z2 := zx2 + zy2) > _MPFR_FOUR:
             break
           # Imaginary Weight Average: accumulate sin(arg(z))**2 = zy**2/|z|**2 BEFORE the update
-          if inp.highlight == frame.SetHighlightAlgorithm.IMAGINARY and mag_z2 > _MPFR_ZERO:
+          if inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY and mag_z2 > _MPFR_ZERO:
             imag_acc += zy2 / mag_z2
           # z = z^2 + c in terms of zx/zy: zx' = zx^2 - zy^2 + cx - the actual Mandelbrot iteration
           zy = _MPFR_TWO * zx * zy + cy
           zx = zx2 - zy2 + cx
           # accumulate |z|; don't do this first, or else, for example, min() will always be 0.0
-          if inp.highlight == frame.SetHighlightAlgorithm.MIN:
+          if inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
             min_z2 = min(min_z2, mag_z2)
-          elif inp.highlight == frame.SetHighlightAlgorithm.MAX:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
             max_z2 = max(max_z2, mag_z2)
         else:
           # if we didn't break, we reached max_iter, mark as non-escaped, so
@@ -452,10 +431,10 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
           # always count interior points, even if we don't do any special coloring for them
           n_interior += 1
           # now, for every possible set px algorithms, we do the final computations
-          if inp.highlight is None:
+          if inp.params.set_points is None:
             # default coloring: just mark as interior with a special negative value
             escaped_at = -frame.SET_INTERIOR_RESOLUTION  # negative to mark it as interior!
-          elif inp.highlight == frame.SetHighlightAlgorithm.MIN:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
             # track the min |z|^2; first the stats...
             min_lo = min(min_lo, min_z2)
             min_hi = max(min_hi, min_z2)
@@ -466,7 +445,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
               if stats_min
               else normalize(sqrt_min, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
             )
-          elif inp.highlight == frame.SetHighlightAlgorithm.MAX:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
             # track the max |z|^2; first the stats...
             max_lo = min(max_lo, max_z2)
             max_hi = max(max_hi, max_z2)
@@ -477,7 +456,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
               if stats_max
               else normalize(sqrt_max, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
             )
-          elif inp.highlight == frame.SetHighlightAlgorithm.ANGLE:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.ANGLE:
             # angle stats for interior points; first the stats...
             ang: gmpy2.mpfr = gmpy2.atan2(zy, zx)  # angle in radians, between -pi and pi
             ang = (ang + mpfr_pi) / mpfr_two_pi  # shift to [0, 2pi] then to [0, 1]
@@ -490,7 +469,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
               if stats_ang
               else normalize(ang, _MPFR_ZERO, _MPFR_ONE)
             )
-          elif inp.highlight == frame.SetHighlightAlgorithm.IMAGINARY:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY:
             # Imaginary Weight Average: mean(sin(arg(z))**2) over orbit; first the stats...
             imag_mean: gmpy2.mpfr = (imag_acc / max_iter_p_1) / frame.MPFR_MAX_SET_Z
             imag_lo = min(imag_lo, imag_mean)
@@ -503,7 +482,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
               else normalize(imag_mean, _MPFR_ZERO, _MPFR_ONE)
             )
           else:
-            raise Error(f'Unknown fractal type {inp.highlight=}; should never happen')
+            raise Error(f'Unknown fractal type {inp.params.set_points=}; should never happen')
         # either in or out of the set, we now should always have a value for escaped_at;
         # this is setting the pixel escape (not the coloring! that is done later in image.Image)
         img.escape[px_count] = escaped_at  # carefully set this directly in the array
@@ -511,7 +490,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
     # done; return the stats we collected with the task output
     p_bar.close()
     img.stats = image.FractalStats(
-      n_px=inp.width * inp.height,
+      n_px=inp.params.width * inp.params.height,
       n_interior=n_interior,
       max_lo=max_lo,
       max_hi=max_hi,
@@ -538,17 +517,19 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
     Error: on error
 
   """
-  if inp.frm.fractal != frame.Fractal.JULIA:
-    raise Error(f'Expected Julia computation, got {inp.frm.fractal}')
-  is_preprocess: bool = inp.width == frame.MIN_IMAGE_SIZE and inp.height == frame.MIN_IMAGE_SIZE
+  if inp.params.frm.fractal != frame.Fractal.JULIA:
+    raise Error(f'Expected Julia computation, got {inp.params.frm.fractal}')
+  is_preprocess: bool = (
+    inp.params.width == frame.MIN_IMAGE_SIZE and inp.params.height == frame.MIN_IMAGE_SIZE
+  )
   # create image; will also check the parameters and frame validity in the Image constructor
-  img: image.Image = image.Image(inp.frm, inp.width, inp.height)
+  img: image.Image = image.Image(inp.params)
   img.SetDepth(inp.max_iter)  # set the depth of the image to the max_iter we will use
   # compute pixel size in complex plane and check frame validity; exact computation (gmpy2.mpq)
   dx: gmpy2.mpq
   dy: gmpy2.mpq
-  dx, dy = inp.frm.size
-  dx, dy = dx / gmpy2.mpq(inp.width - 1), dy / gmpy2.mpq(inp.height - 1)
+  dx, dy = inp.params.frm.size
+  dx, dy = dx / gmpy2.mpq(inp.params.width - 1), dy / gmpy2.mpq(inp.params.height - 1)
   if dx <= 0 or dy <= 0:
     raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
   # start the mpfr context for floating-point computations with the precision needed
@@ -557,7 +538,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
     # are relatively expensive and we can reuse the x values across rows ("inner for loop");
     # also, this is where the "X" (real) coordinates are converted mpq->mpfr
     xs: list[gmpy2.mpfr] = [
-      gmpy2.mpfr(inp.frm.top_re + gmpy2.mpq(i) * dx) for i in range(inp.width)
+      gmpy2.mpfr(inp.params.frm.top_re + gmpy2.mpq(i) * dx) for i in range(inp.params.width)
     ]
     # variables for stats we will track; we pre-compute all we can!
     mpfr_pi: gmpy2.mpfr = gmpy2.const_pi()  # pi with the current context precision
@@ -611,7 +592,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
     has_procs: bool = inp.total_tasks > 1
     n_task: int = inp.n_task - 1  # convert to 0-based index for easier modulo math
     p_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
-      total=inp.width * inp.height,
+      total=inp.params.width * inp.params.height,
       desc='Pre' if is_preprocess else 'Img',
       unit='px',
       dynamic_ncols=True,
@@ -620,18 +601,18 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
       disable=not inp.progress_bar or (has_procs and n_task != 0),  # show for the 1st process only
     )
     # iterate over pixels in row-major order, computing escape iterations in mpfr
-    cx: gmpy2.mpfr = gmpy2.mpfr(inp.frm.point_re)
-    cy: gmpy2.mpfr = gmpy2.mpfr(inp.frm.point_im)
+    cx: gmpy2.mpfr = gmpy2.mpfr(inp.params.frm.point_re)
+    cy: gmpy2.mpfr = gmpy2.mpfr(inp.params.frm.point_im)
     px_count: int = -1
-    for py in range(inp.height):
+    for py in range(inp.params.height):
       # PILImage.frombytes interprets the first row written as the top row of the image, so
       # we iterate y inverted by starting at the top and going down;
       # this is the "outer for loop", no benefit in pre-computing y values;
       # also, this is where the "Y" (imaginary) coordinates are converted mpq->mpfr
-      img_y: gmpy2.mpfr = gmpy2.mpfr(inp.frm.top_im - gmpy2.mpq(py) * dy)
+      img_y: gmpy2.mpfr = gmpy2.mpfr(inp.params.frm.top_im - gmpy2.mpq(py) * dy)
       img_y2: gmpy2.mpfr = img_y * img_y  # precompute |img_y|*|img_y| once per row; reused per col
       # iterate over columns, reusing x values and doing the escape test in mpfr for correctness
-      for px in range(inp.width):
+      for px in range(inp.params.width):
         px_count += 1
         if has_procs and (px_count % inp.total_tasks) != n_task:
           # this pixel is not for this process, skip it but still update the progress bar
@@ -665,15 +646,15 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
           if (mag_z2 := zx2 + zy2) > _MPFR_FOUR:
             break
           # Imaginary Weight Average: accumulate sin(arg(z))**2 = zy**2/|z|**2 BEFORE the update
-          if inp.highlight == frame.SetHighlightAlgorithm.IMAGINARY and mag_z2 > _MPFR_ZERO:
+          if inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY and mag_z2 > _MPFR_ZERO:
             imag_acc += zy2 / mag_z2
           # z = z^2 + c in terms of zx/zy: zx' = zx^2 - zy^2 + cx - the actual Julia iteration
           zy = _MPFR_TWO * zx * zy + cy
           zx = zx2 - zy2 + cx
           # accumulate |z|; don't do this first, or else, for example, min() will always be 0.0
-          if inp.highlight == frame.SetHighlightAlgorithm.MIN:
+          if inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
             min_z2 = min(min_z2, mag_z2)
-          elif inp.highlight == frame.SetHighlightAlgorithm.MAX:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
             max_z2 = max(max_z2, mag_z2)
         else:
           # if we didn't break, we reached max_iter, mark as non-escaped, so
@@ -683,10 +664,10 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
           # always count interior points, even if we don't do any special coloring for them
           n_interior += 1
           # now, for every possible set px algorithms, we do the final computations
-          if inp.highlight is None:
+          if inp.params.set_points is None:
             # default coloring: just mark as interior with a special negative value
             escaped_at = -frame.SET_INTERIOR_RESOLUTION  # negative to mark it as interior!
-          elif inp.highlight == frame.SetHighlightAlgorithm.MIN:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
             # track the min |z|^2; first the stats...
             min_lo = min(min_lo, min_z2)
             min_hi = max(min_hi, min_z2)
@@ -697,7 +678,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
               if stats_min
               else normalize(sqrt_min, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
             )
-          elif inp.highlight == frame.SetHighlightAlgorithm.MAX:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
             # track the max |z|^2; first the stats...
             max_lo = min(max_lo, max_z2)
             max_hi = max(max_hi, max_z2)
@@ -708,7 +689,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
               if stats_max
               else normalize(sqrt_max, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
             )
-          elif inp.highlight == frame.SetHighlightAlgorithm.ANGLE:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.ANGLE:
             # angle stats for interior points; first the stats...
             ang: gmpy2.mpfr = gmpy2.atan2(zy, zx)  # angle in radians, between -pi and pi
             ang = (ang + mpfr_pi) / mpfr_two_pi  # shift to [0, 2pi] then to [0, 1]
@@ -721,7 +702,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
               if stats_ang
               else normalize(ang, _MPFR_ZERO, _MPFR_ONE)
             )
-          elif inp.highlight == frame.SetHighlightAlgorithm.IMAGINARY:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY:
             # Imaginary Weight Average: mean(sin(arg(z))**2) over orbit; first the stats...
             imag_mean: gmpy2.mpfr = (imag_acc / max_iter_p_1) / frame.MPFR_MAX_SET_Z
             imag_lo = min(imag_lo, imag_mean)
@@ -734,7 +715,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
               else normalize(imag_mean, _MPFR_ZERO, _MPFR_ONE)
             )
           else:
-            raise Error(f'Unknown fractal type {inp.highlight=}; should never happen')
+            raise Error(f'Unknown fractal type {inp.params.set_points=}; should never happen')
         # either in or out of the set, we now should always have a value for escaped_at;
         # this is setting the pixel escape (not the coloring! that is done later in image.Image)
         img.escape[px_count] = escaped_at  # carefully set this directly in the array
@@ -742,7 +723,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
     # done; return the stats we collected with the task output
     p_bar.close()
     img.stats = image.FractalStats(
-      n_px=inp.width * inp.height,
+      n_px=inp.params.width * inp.params.height,
       n_interior=n_interior,
       max_lo=max_lo,
       max_hi=max_hi,
