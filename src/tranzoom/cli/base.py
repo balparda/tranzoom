@@ -109,6 +109,22 @@ IMAGE_PATH_OUTPUT_OPTION: typer.models.OptionInfo = typer.Option(
     'if not given, the image will be saved in the current working directory'
   ),
 )
+DB_PATH_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '--db',
+  exists=True,
+  file_okay=False,
+  dir_okay=True,
+  readable=True,
+  writable=True,
+  help=(
+    'The local DB root directory path, ex: "~/foo/bar/"; '
+    'if not given (DEFAULT), the DB will be saved in the current app config directory, i.e.: '
+    'on MacOS this is "/Users/[user]/Library/Application Support/[app_name]{/[version]}"; '
+    'on Windows: "C:\\Users\\[user]\\AppData\\Local{\\[app_author]}\\[app_name]{\\[version]}"; '
+    'on Linux: "/home/[user]/.config/[app_name]{/[version]}"'
+  ),
+)
 IMAGE_PREFIX_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '--prefix',
@@ -498,6 +514,7 @@ class TranZoomConfig(clibase.CLIConfig):
   img_use_date: bool
   img_use_hash: bool
   img_path_prefix: str | None
+  db_path: pathlib.Path
   pal: palette.Palette
   set_pal: palette.Palette
   set_points: frame.SetHighlightAlgorithm | None

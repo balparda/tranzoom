@@ -5,3 +5,5 @@
 __all__: list[str] = ['__author__', '__version__']
 __version__ = '1.5.0'  # also update pyproject.toml
 __author__ = 'Daniel Balparda <balparda@github.com>, Bella Keri <BellaKeri@github.com>'
+
+__app__ = 'tranZoom'

@@ -72,7 +72,6 @@ DEFAULT_JULIA_HEIGHT: str = '2.2'
 
 
 # TODO: create (optional) DB of stored frames
-# TODO: default output to be the one in config with the DB
 # TODO: for videos compute all mpq steps first with full mpq, then simplify fraction to 0.01% error;
 #     frames are now deterministic and as reasonably small as possible, they are the entries to DB
 # TODO: video/gif to save check the frames for existence, thus recovering from a crash

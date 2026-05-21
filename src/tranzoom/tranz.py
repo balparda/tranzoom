@@ -17,14 +17,14 @@ from transcrypto.utils import logging as cli_logging
 from tranzoom.cli import base
 from tranzoom.core import frame, palette
 
-from . import __version__
+from . import __app__, __version__
 
 # CLI app setup, this is an important object and can be imported elsewhere and called
 app = typer.Typer(
   add_completion=True,
   no_args_is_help=True,
   # keep in sync with Main() app.callback help
-  help='TranZoom: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features',
+  help=f'{__app__}: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features',
   epilog=(
     'Examples:\n\n\n\n'
     '# --- Mandelbrot Image Generation ---\n\n'
@@ -67,7 +67,7 @@ def Run() -> None:
 @app.callback(
   invoke_without_command=True,
   # keep in sync with app help
-  help='TranZoom: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features',
+  help=f'{__app__}: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features',
 )  # have only one; this is the "constructor"
 @clibase.CLIErrorGuard
 def Main(  # documentation is help/epilog/args # noqa: D103
@@ -91,6 +91,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
       'Defaults to having colors.'  # state default because None default means docs don't show it
     ),
   ),
+  db_path: pathlib.Path | None = base.DB_PATH_OPTION,  # type: ignore[assignment]
   img_output_path: pathlib.Path | None = base.IMAGE_PATH_OUTPUT_OPTION,  # type: ignore[assignment]
   img_path_prefix: str | None = base.IMAGE_PREFIX_OPTION,  # type: ignore[assignment]
   img_use_date: bool = base.IMAGE_INCLUDE_DATE_OPTION,  # type: ignore[assignment]
@@ -126,15 +127,17 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     soft_wrap=False,  # decide if you want soft wrapping of long lines
   )
   # create context with the arguments we received
+  appconfig: app_config.AppConfig = app_config.InitConfig(__app__, 'config.bin')
   ctx.obj = base.TranZoomConfig(
     console=console,
     verbose=verbose,
     color=color,
-    appconfig=app_config.InitConfig('tranzoom', 'config.bin'),
+    appconfig=appconfig,
     img_output_path=None if img_output_path is None else img_output_path.expanduser().resolve(),
     img_path_prefix=img_path_prefix,
     img_use_date=img_use_date,
     img_use_hash=img_use_hash,
+    db_path=appconfig.dir if db_path is None else db_path.expanduser().resolve(),
     pal=pal,
     set_pal=set_pal,
     set_points=set_points,

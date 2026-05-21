@@ -6,7 +6,7 @@
 ```text
 Usage: tranz [OPTIONS] COMMAND [ARGS]...                                                                                                                  
                                                                                                                                                            
- TranZoom: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features                                                                  
+ tranZoom: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features                                                                  
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --version                                                                                       Show version and exit.                                  │
@@ -15,6 +15,12 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                                                             │
 │ --color                   --no-color                                                            Force enable/disable colored output (respects NO_COLOR  │
 │                                                                                                 env var if not provided). Defaults to having colors.    │
+│ --db                                    DIRECTORY                                               The local DB root directory path, ex: "~/foo/bar/"; if  │
+│                                                                                                 not given (DEFAULT), the DB will be saved in the        │
+│                                                                                                 current app config directory, i.e.: on MacOS this is    │
+│                                                                                                 "/Users//Library/Application Support/{/}"; on Windows:  │
+│                                                                                                 "C:\Users\AppData\Local{}{… │
+│                                                                                                 on Linux: "/home//.config/{/}"                          │
 │ --out                 -o                DIRECTORY                                               The local output root directory path, ex: "~/foo/bar/"; │
 │                                                                                                 if not given, the image will be saved in the current    │
 │                                                                                                 working directory                                       │
