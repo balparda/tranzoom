@@ -14,7 +14,7 @@ import gmpy2
 from transai.core import ai as transai_ai
 from transai.core import lms
 from transcrypto.utils import base as tbase
-from transcrypto.utils import human, timer
+from transcrypto.utils import timer
 
 from tranzoom.core import fractal, frame, image, palette, queries
 
@@ -107,9 +107,8 @@ def ZoomLoop(
   # capture the time and load model
   zoom_tm: int = timer.Now()
   print_comm(
-    f'Run {params.width}x{params.height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
+    f'Run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
     + ('include reason field. ' if reason else '[cyan]NOT[/] include reason field. ')
-    + (f'"{params.set_points.value}" interior. ' if params.set_points else '')
     + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(
@@ -336,7 +335,7 @@ def ManualLoop(
   # we're out of the main loop
   except KeyboardInterrupt:
     print_comm(f'\n[yellow]Interrupted by user on step {count}.[/yellow]')
-  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {params.frm}\n')
+  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {params}\n')
 
 
 def _ComputeFractal(
@@ -375,21 +374,12 @@ def _ComputeFractal(
         intended save path (not yet saved!)
 
   """
+  # render the image for the current frame
   img_data: bytes
   img_hash: str
-  magnification: gmpy2.mpfr
-  magnitude: float
-  # calculate magnification
-  magnification, magnitude = params.frm.magnification
-  magnification_str: str = (
-    # beyond 10^21, use scientific notation
-    human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
-  )
-  # render the image for the current frame
   with timer.Timer(emit_log=False) as tmr:
     img: image.Image = fractal.ComputeFractal(
       params,
-      max_iter=None,
       progress_bar=True,
       n_processes=max_threads,
       print_comm=print_comm,
@@ -397,7 +387,7 @@ def _ComputeFractal(
     # get PNG and overlay info on top of it
     img_data, img_hash = img.AsPNG(pal=pal, set_pal=set_pal)
     img_data = image.DrawThirdsInfoOverlay(img_data)
-  # log!
+  # make path
   full_path: pathlib.Path = image.MakeImagePath(
     img_output_path,
     img_use_date,
@@ -407,11 +397,13 @@ def _ComputeFractal(
     tm=zoom_tm,
     add_serial=count,
   )
+  # log
   print_comm(
-    f'\n{params.frm.fractal.value.capitalize()} zoom (#{count}) '
-    f'with frame {params.frm}, precision {img.precision} bits, {magnification_str} magnification\n'
+    f'\n{img.params} zoom, precision {img.params.precision} bits, '
+    f'10^{img.params.frm.magnification[1]:.2f} magnitude\n'
     f'{img_hash!r} in {tmr}, will save as "{full_path}"'
   )
+  # iterm
   if iterm:
     print_comm('')
     image.PrintITerm2(img_data)

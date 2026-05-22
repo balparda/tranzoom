@@ -44,7 +44,7 @@ META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
 META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
 META_ITER_DEPTH_MIN_KEY = 'tranzoom:image:iter_depth:min'  # int
 META_ITER_DEPTH_MAX_KEY = 'tranzoom:image:iter_depth:max'  # int
-META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:image:iter_depth:search'  # int, can be "-1" if unknown/unset
+META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:image:iter_depth:search'  # int
 META_SET_POINT_MIN_KEY = 'tranzoom:image:set_point:min'  # int
 META_SET_POINT_MAX_KEY = 'tranzoom:image:set_point:max'  # int
 META_IMAGE_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
@@ -249,7 +249,6 @@ class Image:
     """
     # save objects
     self._params: frame.ComputationParameters = params
-    self._depth: int | None = None  # may be set later by the fractal rendering function
     # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
     self.escape: ImageInt32Array = array.array(  # signed32
       'i', (0 for _ in range(self._params.width * self._params.height))
@@ -297,16 +296,6 @@ class Image:
     return self._params
 
   @property
-  def depth(self) -> int | None:
-    """Get the maximum iteration depth for the image, if set.
-
-    Returns:
-      int | None: The maximum iteration depth for the image, or None if not set.
-
-    """
-    return self._depth
-
-  @property
   def escape_range(self) -> tuple[int, int, int, int]:
     """Get the range of escape iterations and the range of the internal stored values.
 
@@ -320,47 +309,10 @@ class Image:
     interior_points: list[int] = [e for e in self.escape if e < 0]
     return (
       min(exterior_points) if exterior_points else 0,
-      self._depth
-      if interior_points and self._depth
-      else (max(exterior_points) if exterior_points else 0),
+      self._params.depth if interior_points else (max(exterior_points) if exterior_points else 0),
       -max(interior_points) if interior_points else 0,
       -min(interior_points) if interior_points else 0,
     )
-
-  @property
-  def precision(self) -> int:
-    """Estimate the MPFR precision needed to render this image. See Frame.Precision() for details.
-
-    Returns:
-      int: The estimated number of bits of MPFR precision needed.
-
-    """
-    return self._params.Precision(max_iter=self._depth) if self._depth else self._params.Precision()
-
-  @property
-  def context(self) -> gmpy2.context:
-    """Get gmpy2 context with precision to distinguish adjacent pixels in smaller complex-plane dim.
-
-    Returns:
-      gmpy2.context: A context with the estimated number of bits of precision needed.
-
-    """
-    return gmpy2.local_context(gmpy2.context(), precision=self.precision)
-
-  def SetDepth(self, depth: int) -> None:
-    """Set the maximum iteration depth for the image. Should be called after image is complete.
-
-    Args:
-      depth (int): The maximum iteration depth.
-
-    Raises:
-      Error: if the depth is invalid or inconsistent with the escape iterations.
-
-    """
-    _, max_escape, _, _ = self.escape_range
-    if depth < max_escape:
-      raise Error(f'Inconsistent depth: {depth=} is < than {max_escape=}')
-    self._depth = depth
 
   def AsPixels(
     self,
@@ -399,10 +351,9 @@ class Image:
     total_exterior: int
     cumulative: dict[int, int]
     min_escape, max_escape, _, _ = self.escape_range
-    depth: int = self._depth if self._depth is not None else max_escape
-    if min_escape < 0 or depth < max_escape:
-      raise Error(f'Invalid/Inconsistent {min_escape=} or {depth=} < {max_escape=}')
-    _, cumulative, total_exterior = BuildCumulative([e for e in self.escape if 0 <= e < depth])
+    if min_escape < 0 or self._params.depth < max_escape:
+      raise Error(f'Invalid/Inconsistent {min_escape=} or {self._params.depth=} < {max_escape=}')
+    _, cumulative, total_exterior = BuildCumulative([e for e in self.escape if e >= 0])
     # step 2: optionally build cumulative histogram for interior/Set pixels (escaped_at < 0);
     # interior points store -|z| magnitude, so we flip the sign for the histogram key
     set_cumulative: dict[int, int] = {}
@@ -412,7 +363,7 @@ class Image:
     # step 3: map each pixel to an RGB color
     pixels = bytearray(self._params.width * self._params.height * 3)
     for i, escaped_at in enumerate(self.escape):
-      if 0 <= escaped_at < depth and total_exterior > 0:
+      if escaped_at >= 0 and total_exterior > 0:
         # exterior point: histogram-equalized position in pal
         t: float = (cumulative[escaped_at] - 1) / total_exterior
         rgb: tuple[int, int, int] = PixelPalette(t, pal, palette.PALETTE_CYCLES)
@@ -491,11 +442,10 @@ def MakeImageMeta(
   max_set: int
   min_escape, max_escape, min_set, max_set = img.escape_range
   # pixel counts and histograms; exterior pixels have escape >= 0, interior (Set) have escape < 0
-  depth: int = img.depth if img.depth is not None else max_escape
   hist: dict[int, int]
   cumulative: dict[int, int]
   total: int
-  hist, cumulative, total = BuildCumulative([e for e in img.escape if 0 <= e < depth])
+  hist, cumulative, total = BuildCumulative([e for e in img.escape if e >= 0])
   # first create a dict with all the ones that are always present, then add the optional ones
   img_meta: dict[str, str] = {
     # image parameters
@@ -520,7 +470,7 @@ def MakeImageMeta(
     META_WIDTH_RE_KEY: str(sz[0]),
     META_HEIGHT_IM_KEY: str(sz[1]),
     # precision and magnification
-    META_PRECISION_KEY: str(img.precision),
+    META_PRECISION_KEY: str(img.params.precision),
     META_MAGNIFICATION_KEY: str(float(magnification)),  # huge string if not converted!
     META_MAGNIFICATION_ORDER_KEY: str(magnitude),
     # escape iteration range in the image
@@ -528,7 +478,7 @@ def MakeImageMeta(
     META_ITER_DEPTH_MAX_KEY: str(max_escape),
     META_SET_POINT_MIN_KEY: str(min_set),
     META_SET_POINT_MAX_KEY: str(max_set),
-    META_ITER_SEARCH_DEPTH_KEY: str(img.depth) if img.depth is not None else '-1',
+    META_ITER_SEARCH_DEPTH_KEY: str(img.params.depth),
     # histogram
     META_PIXEL_EXTERIOR_HISTOGRAM_KEY: SummaryHistogram(sorted(hist.items())),
     META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY: SummaryHistogram(sorted(cumulative.items())),

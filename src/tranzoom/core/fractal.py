@@ -46,7 +46,6 @@ class Error(image.Error):
 def ComputeFractal(
   params: frame.ComputationParameters,
   *,
-  max_iter: int | None = None,
   progress_bar: bool = True,
   n_processes: int | None = None,
   print_comm: abc.Callable[[str], None] = print,
@@ -55,8 +54,6 @@ def ComputeFractal(
 
   Args:
     params (frame.ComputationParameters): The computation parameters for the image.
-    max_iter (int | None, optional): The maximum number of iterations to determine escape.
-        Defaults to None, and that means "auto".
     progress_bar (bool, optional): Whether to show a progress bar. Defaults to True.
     n_processes (int | None, optional): The number of processes to use for rendering. Defaults
         to None, which means to use all available CPU cores. Will be limited to MAX_CONCURRENCE.
@@ -78,14 +75,17 @@ def ComputeFractal(
   n_processes = n_processes or AVAILABLE_CPU
   n_processes = min(n_processes, _MAX_PRE_PROCESS_CONCURRENCE) if is_preprocess else n_processes
   n_processes = min(n_processes, MAX_CONCURRENCE, AVAILABLE_CPU)  # never exceed CPU!
-  # if max_iter is None, we do an adaptive iteration limit calculation based on a small test render
-  # BEWARE: the method call will call Mandelbrot() recursively, but with a fixed max_iter!
-  stats: image.FractalStats | None
-  max_iter, stats = (
-    _FractalAdaptiveIterations(params.frm, params.set_points, progress_bar, n_processes, print_comm)
-    if max_iter is None
-    else (max_iter, None)
-  )
+  # if max_iter is MIN_ITER, we do an adaptive iteration limit calculation based on a small image;
+  # BEWARE: the method call will call ComputeFractal() recursively, so skip MIN_IMAGE_SIZE
+  stats: image.FractalStats | None = None
+  if params.depth == frame.MIN_ITER and max(params.size) > frame.MIN_IMAGE_SIZE:
+    # MIN_ITER is a special mark that means "automatically calculate the depth" based on the frame,
+    # but we only do this if the image is larger than the minimum size (we use those for probing)
+    max_iter: int
+    max_iter, stats = _FractalAdaptiveIterations(
+      params.frm, params.set_points, progress_bar, n_processes, print_comm
+    )
+    params = dataclasses.replace(params, depth=max_iter)  # update params with the new max_iter
   logging.debug(
     f'{params.frm.fractal.value.upper()} using {n_processes} process(es) '
     f'for {"PRE " if is_preprocess else ""}rendering'
@@ -94,7 +94,6 @@ def ComputeFractal(
   inp: list[_FractalTaskInput] = [
     _FractalTaskInput(
       params=params,
-      max_iter=max_iter,
       progress_bar=progress_bar,
       n_task=i + 1,
       total_tasks=n_processes,
@@ -186,8 +185,13 @@ def _FractalAdaptiveIterations(
   for high_iter in frame.HIGH_ITERS:
     # make the smallest image
     img16: image.Image = ComputeFractal(
-      frm.MakeProbeComputationParameters(set_points=set_points),
-      max_iter=high_iter,
+      frame.ComputationParameters(
+        frm=frm,  # same frame
+        width=frame.MIN_IMAGE_SIZE,  # smallest image size
+        height=frame.MIN_IMAGE_SIZE,
+        depth=high_iter,  # putative depth
+        set_points=set_points,
+      ),
       progress_bar=progress_bar,
       n_processes=n_processes,
       print_comm=print_comm,
@@ -230,7 +234,6 @@ class _FractalTaskInput:
   """Defines a Mandelbrot task."""
 
   params: frame.ComputationParameters
-  max_iter: int
   progress_bar: bool
   n_task: int
   total_tasks: int
@@ -243,9 +246,6 @@ class _FractalTaskInput:
       Error: on error
 
     """
-    # sanity check iter_limit: if error, it came from the user (b/c adaptive clamps to the limits)
-    if not (frame.MIN_ITER <= self.max_iter <= frame.MAX_ITER):
-      raise Error(f'{self.max_iter=} must be between {frame.MIN_ITER} and {frame.MAX_ITER}')
     # check task numbers
     if not (1 <= self.n_task <= self.total_tasks):
       raise Error(f'{self.n_task=} must be between 1 and {self.total_tasks}')
@@ -281,7 +281,6 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
   )
   # create image; will also check the parameters and frame validity in the Image constructor
   img: image.Image = image.Image(inp.params)
-  img.SetDepth(inp.max_iter)  # set the depth of the image to the max_iter we will use
   # compute pixel size in complex plane and check frame validity; exact computation (gmpy2.mpq)
   dx: gmpy2.mpq
   dy: gmpy2.mpq
@@ -290,7 +289,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
   if dx <= 0 or dy <= 0:
     raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
   # start the mpfr context for floating-point computations with the precision needed
-  with img.context:
+  with inp.params.context:
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
     # are relatively expensive and we can reuse the x values across rows ("inner for loop");
     # also, this is where the "X" (real) coordinates are converted mpq->mpfr
@@ -300,7 +299,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
     # variables for stats we will track; we pre-compute all we can!
     mpfr_pi: gmpy2.mpfr = gmpy2.const_pi()  # pi with the current context precision
     mpfr_two_pi: gmpy2.mpfr = _MPFR_TWO * mpfr_pi  # 2*pi with the current context precision
-    max_iter_p_1: gmpy2.mpfr = gmpy2.mpfr(inp.max_iter) + _MPFR_ONE
+    max_iter_p_1: gmpy2.mpfr = gmpy2.mpfr(inp.params.depth) + _MPFR_ONE
     n_interior: int = 0  # track how many points are interior (non-escaping)
     max_lo: gmpy2.mpfr = _MPFR_FOUR
     max_hi: gmpy2.mpfr = _MPFR_ZERO
@@ -406,7 +405,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
         escaped_at: int = 0
         imag_acc: gmpy2.mpfr = _MPFR_ZERO  # accumulate sin(arg(z)) over orbit for smooth SAC
         # escape-time loop, implemented with explicit zx/zy variables
-        for escaped_at in range(inp.max_iter):  # noqa: B007
+        for escaped_at in range(inp.params.depth):  # noqa: B007
           zx2: gmpy2.mpfr = zx * zx
           zy2: gmpy2.mpfr = zy * zy
           # avoid sqrt(abs(z)); compare squared magnitude to 2^2
@@ -524,7 +523,6 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
   )
   # create image; will also check the parameters and frame validity in the Image constructor
   img: image.Image = image.Image(inp.params)
-  img.SetDepth(inp.max_iter)  # set the depth of the image to the max_iter we will use
   # compute pixel size in complex plane and check frame validity; exact computation (gmpy2.mpq)
   dx: gmpy2.mpq
   dy: gmpy2.mpq
@@ -533,7 +531,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
   if dx <= 0 or dy <= 0:
     raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
   # start the mpfr context for floating-point computations with the precision needed
-  with img.context:
+  with inp.params.context:
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
     # are relatively expensive and we can reuse the x values across rows ("inner for loop");
     # also, this is where the "X" (real) coordinates are converted mpq->mpfr
@@ -543,7 +541,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
     # variables for stats we will track; we pre-compute all we can!
     mpfr_pi: gmpy2.mpfr = gmpy2.const_pi()  # pi with the current context precision
     mpfr_two_pi: gmpy2.mpfr = _MPFR_TWO * mpfr_pi  # 2*pi with the current context precision
-    max_iter_p_1: gmpy2.mpfr = gmpy2.mpfr(inp.max_iter) + _MPFR_ONE
+    max_iter_p_1: gmpy2.mpfr = gmpy2.mpfr(inp.params.depth) + _MPFR_ONE
     n_interior: int = 0  # track how many points are interior (non-escaping)
     max_lo: gmpy2.mpfr = _MPFR_FOUR
     max_hi: gmpy2.mpfr = _MPFR_ZERO
@@ -639,7 +637,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
         # did not escape at fast check, do the whole thing
         escaped_at: int = 0
         # escape-time loop, implemented with explicit zx/zy variables
-        for escaped_at in range(inp.max_iter):  # noqa: B007
+        for escaped_at in range(inp.params.depth):  # noqa: B007
           zx2: gmpy2.mpfr = zx * zx
           zy2: gmpy2.mpfr = zy * zy
           # avoid sqrt(abs(z)); compare squared magnitude to 2^2

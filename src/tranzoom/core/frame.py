@@ -24,7 +24,7 @@ DEFAULT_ZOOM_SIZE: int = 512  # smaller default for zoom, since it can be more e
 # iteration constants
 
 N_BYTES_UINT: int = 4  # we use array of int32 to store pixel data / array.array('i') / signed 32
-MIN_ITER: int = 1000
+MIN_ITER: int = 1000  # minimum, but also a mark that we want to automatically calculate the depth
 DEFAULT_ITER: int = 1000
 HIGH_ITERS: list[int] = [100_000, 1_000_000, 10_000_000]  # these are very high iteration counts
 SET_INTERIOR_RESOLUTION: int = 100_000_000  # interior points max val [0..SET_INTERIOR_RESOLUTION]
@@ -146,6 +146,14 @@ class Frame:
   def __str__(self) -> str:
     """Get string representation of the frame.
 
+    Format is:
+      - "[MANDELBROT: (c_re, c_im) ± (dx_re, dy_im)]" without the point for Mandelbrot; or
+      - "[JULIA: (c_re, c_im) ± (dx_re, dy_im) @ (p_re, p_im)]" for Julia; and note
+      - "(c_re, c_im)" is the center of the frame; and
+      - "(dx_re, dy_im)" is the size of the frame; and
+      - "(p_re, p_im)" is the point for Julia, if any; and
+      - if `dx_re` and `dy_im` are the same, we can simplify to "± dx" instead of "± (dx, dy)".
+
     Returns:
       str: String representation of the frame.
 
@@ -155,14 +163,12 @@ class Frame:
     """
     cx, cy = self.center
     dx, dy = self.size
+    deltas: str = f'± {dx}' if dx == dy else f'± ({dx}, {dy})'
+    fractal_str: str = self.fractal.value.upper()
     if self.fractal == Fractal.MANDELBROT:
-      return f'[({cx}, {cy}) ± {dx}]' if dx == dy else f'[({cx}, {cy}) ± ({dx}, {dy})]'
+      return f'[{fractal_str}: ({cx}, {cy}) {deltas}]'
     if self.fractal == Fractal.JULIA:
-      return (
-        f'[({cx}, {cy}) ± {dx} @ ({self.point_re}, {self.point_im})]'
-        if dx == dy
-        else f'[({cx}, {cy}) ± ({dx}, {dy}) @ ({self.point_re}, {self.point_im})]'
-      )
+      return f'[{fractal_str}: ({cx}, {cy}) {deltas} @ ({self.point_re}, {self.point_im})]'
     raise Error(f'Unknown fractal type: {self.fractal}')
 
   @property
@@ -384,23 +390,6 @@ class Frame:
       return (pixel_size, min(int(gmpy2.ceil(sz * dy / dx)), pixel_size))
     return (min(int(gmpy2.ceil(sz * dx / dy)), pixel_size), pixel_size)
 
-  def MakeProbeComputationParameters(
-    self, *, set_points: SetHighlightAlgorithm | None = None
-  ) -> ComputationParameters:
-    """Make a ComputationParameters object for a probe render of this frame.
-
-    Args:
-      set_points (SetHighlightAlgorithm | None): Which algorithm to use for coloring the
-          interior Set points, either None, or one of the SetHighlightAlgorithm values
-
-    Returns:
-      ComputationParameters: The computation parameters for the probe render.
-
-    """
-    return ComputationParameters(
-      frm=self, width=MIN_IMAGE_SIZE, height=MIN_IMAGE_SIZE, set_points=set_points
-    )
-
 
 # the standard/default frames for each fractal
 
@@ -429,10 +418,11 @@ DEFAULT_FRAMES: dict[Fractal, Frame] = {
 class ComputationParameters:
   """Arguments that determine a fractal computation completely (computation, not rendering)."""
 
+  frm: Frame
   width: int
   height: int
-  frm: Frame
-  set_points: SetHighlightAlgorithm | None
+  depth: int = MIN_ITER
+  set_points: SetHighlightAlgorithm | None = None
 
   def __post_init__(self) -> None:
     """Check rectangle has an area and top/bottom ordering.
@@ -448,6 +438,9 @@ class ComputationParameters:
       raise Error(
         f'{self.width=} and {self.height=} must be between {MIN_IMAGE_SIZE} and {MAX_IMAGE_SIZE}'
       )
+    # check depth is valid
+    if not (MIN_ITER <= self.depth <= MAX_ITER):
+      raise Error(f'{self.depth=} must be between {MIN_ITER} and {MAX_ITER}')
     # check SetHighlightAlgorithm is supported
     if self.set_points and self.set_points not in {
       SetHighlightAlgorithm.MIN,
@@ -458,15 +451,30 @@ class ComputationParameters:
       raise Error(f'Unsupported set highlight algorithm: {self.set_points}')
 
   def __str__(self) -> str:
-    """Get string representation of the frame.
+    """Get string representation of the computation parameters.
+
+    Format is:
+      - "{[MANDELBROT: (c_re, c_im) ± (dx_re, dy_im)] : [w, h, d]}" WITHOUT set points; or
+      - "{[MANDELBROT: (c_re, c_im) ± (dx_re, dy_im)] : [w, h, d] : <sp>}" WITH set point; or
+      - "{[JULIA: (c_re, c_im) ± (dx_re, dy_im) @ (p_re, p_im)] : [w, h, d]}" WITHOUT set points; or
+      - "{[JULIA: (c_re, c_im) ± (dx_re, dy_im) @ (p_re, p_im)] : [w, h, d] : <sp>}" WITH sp; and
+      - "(c_re, c_im)" is the center of the frame; and
+      - "(dx_re, dy_im)" is the size of the frame; and
+      - "(p_re, p_im)" is the point for Julia, if any; and
+      - if `dx_re` and `dy_im` are the same, we can simplify to "± dx" instead of "± (dx, dy)"; and
+      - `w`/`h` are the width/height in pixels; and
+      - `d` is the depth/iteration count, or "AUTO" if it is set to MIN_ITER; and
+      - `<sp>` is the set highlight algorithm, lowercase, if any.
 
     Returns:
-      str: String representation of the frame.
+      str: String representation of the computation parameters.
 
     """
     return (
-      f'{{{self.frm} : [{self.width}, {self.height}]'
-      + ('' if self.set_points is None else f' : {self.set_points.value}')
+      '{'
+      f'{self.frm} : '
+      f'[{self.width}, {self.height}, {self.depth if self.depth > MIN_ITER else "AUTO"}]'
+      + ('' if self.set_points is None else f' : {self.set_points.value.lower()}')
       + '}'
     )
 
@@ -548,7 +556,8 @@ class ComputationParameters:
     # convert the coordinate to pixel and draw the overlay
     return self.CoordToPixel(co_re[1:], co_im[:-1])
 
-  def Precision(self, *, max_iter: int = DEFAULT_ITER) -> int:
+  @property
+  def precision(self) -> int:
     """Estimate the MPFR precision needed to render this frame at the requested image size.
 
     This method chooses a conservative MPFR precision, in bits, for Mandelbrot-style arbitrary
@@ -608,10 +617,6 @@ class ComputationParameters:
       ambiguity should come from the fractal problem itself rather than from an obviously inadequate
       MPFR precision.
 
-    Args:
-      max_iter (int): The maximum number of iterations we expect to need to render this frame;
-          defaults to DEFAULT_ITER
-
     Returns:
       int: The estimated number of bits of MPFR precision needed
 
@@ -620,9 +625,6 @@ class ComputationParameters:
           estimated precision exceeds _MPFR_MAX_PRECISION
 
     """
-    # check inputs
-    if not (MIN_ITER <= max_iter <= MAX_ITER):
-      raise Error(f'{max_iter=} must be between {MIN_ITER} and {MAX_ITER}')
     # calculate pixel size and magnitude-to-pixel ratio, EXACT mpq computations
     pixel_re: gmpy2.mpq = (self.frm.bottom_re - self.frm.top_re) / gmpy2.mpq(self.width)
     pixel_im: gmpy2.mpq = (self.frm.top_im - self.frm.bottom_im) / gmpy2.mpq(self.height)
@@ -630,7 +632,7 @@ class ComputationParameters:
     magnitude_to_pixel_ratio: gmpy2.mpq = self.frm.coordinates_magnitude / pixel_size
     # calculate the number of bits needed so that MPFR spacing at this magnitude << pixel size
     with PrecisionContext():
-      iter_guard: int = 2 * int(gmpy2.ceil(gmpy2.log2(max_iter + 1)))
+      iter_guard: int = 2 * int(gmpy2.ceil(gmpy2.log2(self.depth + 1)))
       base_bits: int = int(gmpy2.ceil(gmpy2.log2(magnitude_to_pixel_ratio)))
     # join it all; check for precision cap and return
     n_precision: int = max(_MPFR_MIN_PRECISION, base_bits + iter_guard + _MPFR_MIN_GUARD_BITS)
@@ -638,18 +640,15 @@ class ComputationParameters:
       raise Error(f'Frame too small: estimated {n_precision} bits; max is {_MPFR_MAX_PRECISION}')
     return n_precision
 
-  def Context(self, *, max_iter: int = DEFAULT_ITER) -> gmpy2.context:
+  @property
+  def context(self) -> gmpy2.context:
     """Get gmpy2 context with precision to distinguish adjacent pixels in smaller complex-plane dim.
-
-    Args:
-      max_iter (int): The maximum number of iterations we expect to need to render this frame;
-          defaults to DEFAULT_ITER
 
     Returns:
       gmpy2.context: A context with the estimated number of bits of precision needed.
 
     """
-    return gmpy2.local_context(gmpy2.context(), precision=self.Precision(max_iter=max_iter))
+    return gmpy2.local_context(gmpy2.context(), precision=self.precision)
 
 
 def MPQFromFloatApprox(value: float, max_denominator: int) -> gmpy2.mpq:

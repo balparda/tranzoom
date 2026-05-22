@@ -591,21 +591,23 @@ def ProduceFractalImage(
     if config.img_size
     else (config.img_width, config.img_height)
   )
-  params: frame.ComputationParameters = frame.ComputationParameters(
-    frm=frm, width=width, height=height, set_points=config.set_points
+  params: frame.ComputationParameters = (
+    frame.ComputationParameters(
+      frm=frm, width=width, height=height, set_points=config.set_points, depth=config.max_iter
+    )
+    if config.max_iter
+    else frame.ComputationParameters(
+      frm=frm, width=width, height=height, set_points=config.set_points
+    )
   )
   # add the mark? do this early to check the inputs ASAP
   mark_coords: tuple[int, int] | None = (
     params.CoordsTupleToPixel(config.mark_coords) if config.mark_coords else None
   )
   # log
-  set_points_str: str = f', "{config.set_points.value}" interior' if config.set_points else ''
   config.console.print(
-    f'\n{width}x{height} {frm.fractal.value.capitalize()} in '
-    f'frame {frm}, precision ± {params.Precision()} bits, '  # approx: b/c iters
-    f'10^{frm.magnification[1]:.2f} magnitude, '
-    f'{"AUTO" if config.max_iter is None else config.max_iter} iterations'
-    f'{set_points_str}...'
+    f'\n{params}, precision ± {params.precision} bits, '  # approx: b/c depth is probably temporary
+    f'10^{frm.magnification[1]:.2f} magnitude...'
   )
   # render the image
   raw_png: bytes
@@ -613,7 +615,6 @@ def ProduceFractalImage(
   with timer.Timer(emit_log=False) as tmr:
     img: image.Image = fractal.ComputeFractal(
       params,
-      max_iter=config.max_iter,
       n_processes=config.max_threads,
       print_comm=config.console.print,
     )
