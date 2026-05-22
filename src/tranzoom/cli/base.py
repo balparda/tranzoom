@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 import pathlib
 from collections import abc
+from typing import TypedDict, cast
 
 import click
 import gmpy2
@@ -15,6 +17,7 @@ from transcrypto.cli import clibase
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
+from tranzoom import __version__
 from tranzoom.core import ai, fractal, frame, frdb, image, palette
 
 # global CLI data, and some test stuff
@@ -110,9 +113,12 @@ IMAGE_PATH_OUTPUT_OPTION: typer.models.OptionInfo = typer.Option(
   ),
 )
 USE_DB_OPTION: typer.models.OptionInfo = typer.Option(
-  False,
+  None,
   '--db/--no-db',
-  help=('Use local DB in `--db`? True means use it, False means do not use it; default is False'),
+  help=(
+    'Use local DB in `--db`? True means use it, False means do not use it; default is False; '
+    'this option can also be loaded from the disk config, but if given should override the config'
+  ),
 )
 DB_PATH_OPTION: typer.models.OptionInfo = typer.Option(
   None,
@@ -129,6 +135,17 @@ DB_PATH_OPTION: typer.models.OptionInfo = typer.Option(
     'on MacOS this is "/Users/[user]/Library/Application Support/[app_name]{/[version]}"; '
     'on Windows: "C:\\Users\\[user]\\AppData\\Local{\\[app_author]}\\[app_name]{\\[version]}"; '
     'on Linux: "/home/[user]/.config/[app_name]{/[version]}"'
+  ),
+)
+USE_DB_COMPRESSION_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '--db-compression/--no-db-compression',
+  help=(
+    'Use compression for the local DB to save space? '
+    'True means use it but the file will be unreadable by humans, '
+    'False means do not use it and file will be readable; '
+    'default is False, a larger, readable file; '
+    'this option can also be loaded from the disk config, but if given should override the config'
   ),
 )
 IMAGE_PREFIX_OPTION: typer.models.OptionInfo = typer.Option(
@@ -511,6 +528,59 @@ ANIM_SAVE_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
   ),
 )
 
+CONFIG_SETTABLE_KEYS: dict[str, type] = {
+  # the keys you can actually read/set
+  'use_db': bool,
+  'db_compression': bool,
+}
+
+# Config Options
+CONFIG_KEY_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  ...,
+  help=(f'Config key to set, possible values: {sorted(CONFIG_SETTABLE_KEYS)}'),
+)
+CONFIG_VALUE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  ...,
+  help=('Config value to set'),
+)
+
+
+class ConfigType(TypedDict):
+  """Config object type.
+
+  Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
+  Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
+  """
+
+  app_version: str  # package version (tranzoom.__version__) at time of last save
+  last_save: int  # timestamp of last save
+
+  # actual options come here:
+  use_db: bool  # default is False, USE_DB_OPTION
+  db_compression: bool  # default is False, USE_DB_COMPRESSION_OPTION
+  # if you add a key here, remember to add it to CONFIG_SETTABLE_KEYS!!!
+
+
+def _ConfigTypeFactory(overrides: dict[str, object] | None = None) -> ConfigType:
+  """Create new ConfigType object with default values.
+
+  Args:
+    overrides (dict[str, object] | None): dict of fields to override from the defaults; if None,
+        will use all defaults
+
+  Returns:
+    ConfigType: A new ConfigType object with default values.
+
+  """
+  obj: ConfigType = {
+    'app_version': __version__,  # set to current package version on creation
+    'last_save': timer.Now(),
+    'use_db': False,  # this is where USE_DB_OPTION default lives
+    'db_compression': False,  # this is where USE_DB_COMPRESSION_OPTION default lives
+  }
+  obj.update(overrides or {})  # type: ignore[typeddict-item]
+  return obj
+
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class TranZoomConfig(clibase.CLIConfig):
@@ -520,7 +590,8 @@ class TranZoomConfig(clibase.CLIConfig):
   img_use_date: bool
   img_use_hash: bool
   img_path_prefix: str | None
-  db: frdb.FractalDatabase
+  db_read_only: bool
+  db_compress: bool
   pal: palette.Palette
   set_pal: palette.Palette
   set_points: frame.SetHighlightAlgorithm | None
@@ -552,6 +623,44 @@ class TranZoomConfig(clibase.CLIConfig):
   fractal_type: frame.Fractal = frame.DEFAULT_FRACTAL  # for `zoom` command
   julia_re: str = frame.DEFAULT_JULIA_RE  # for `zoom` command
   julia_im: str = frame.DEFAULT_JULIA_IM  # for `zoom` command
+
+  def OpenDB(self) -> frdb.FractalDatabase:
+    """Make a fractal database instance from the config. This is also a context! Prefer context use.
+
+    Returns:
+      frdb.FractalDatabase: an instance of the fractal database ready to be used
+
+    """
+    return frdb.FractalDatabase(
+      self.appconfig,
+      read_only=self.db_read_only,
+      compress_save=self.db_compress,  # either compress unreadable or not compress readable
+      format_json=not self.db_compress,
+    )
+
+  def GetConfig(self) -> ConfigType:
+    """Get a dict of the config values from the disk config.
+
+    Returns:
+      ConfigType: a dict of the config values, creates the default config if none on disk yet
+
+    """
+    if self.appconfig.path.exists():
+      logging.info(f'Loading config from "{self.appconfig.path}"')
+      return cast('ConfigType', self.appconfig.DeSerialize())
+    return _ConfigTypeFactory()
+
+  def SetConfig(self, cnf: ConfigType) -> None:
+    """Set a dict of the config values, save config to disk."""
+    cnf.update(
+      # always update these fields
+      {
+        'app_version': __version__,  # set to current package version on creation
+        'last_save': timer.Now(),
+      }
+    )
+    self.appconfig.Serialize(cnf)
+    logging.info(f'Saved config to "{self.appconfig.path}": {cnf}')
 
 
 def ProduceFractalImage(

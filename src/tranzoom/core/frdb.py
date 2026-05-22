@@ -4,8 +4,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
+from collections import abc
+from pathlib import Path
 from typing import Self, TypedDict, cast
 
 from transcrypto.core import aes, key
@@ -18,8 +21,13 @@ from tranzoom.core import fractal
 
 # DB constants
 
+_DB_FILE_NAME = 'tranZ_DB.json'  # default DB file name
 _DB_COMPRESS_LEVEL = 5  # default compression level for DB saving
 _DB_DISK_LOCK: threading.Lock = threading.Lock()  # lock for thread-safe DB operations
+
+_PicklePrettyJSON: abc.Callable[[tbase.JSONDict], bytes] = lambda d: json.dumps(
+  d, indent=2, separators=(',', ': ')
+).encode('utf-8')
 
 
 class Error(fractal.Error):
@@ -70,6 +78,7 @@ class FractalDatabase:
     aes_key: aes.AESKey | None = None,
     safe_save: bool = True,
     compress_save: bool = False,
+    format_json: bool = True,
   ) -> None:
     """Initialize the fractal database.
 
@@ -85,24 +94,31 @@ class FractalDatabase:
           overwrite the file directly
       compress_save (bool): (default False) Whether to compress the DB file when saving; if True,
           it will save as a compressed file
+      format_json (bool): (default True) Whether to format the JSON output with indentation
+          for readability.
 
     """
     self._config: app_config.AppConfig = appconfig
+    self._path: Path = self._config.dir / _DB_FILE_NAME
     self._read_only: bool = read_only
     self._key: aes.AESKey | None = aes_key
     self._safe_save: bool = safe_save
     self._compress_save: bool = compress_save
+    self._format_json: bool = format_json
     self._db: _DBType
     self._open = timer.Timer('FractalDatabase', emit_log=False)
     with _DB_DISK_LOCK:  # ensure thread-safe load operations
-      if self._config.path.exists():
+      if self._path.exists():
         self._db = cast(
-          '_DBType', self._config.DeSerialize(decryption_key=self._key, unpickler=key.UnpickleJSON)
+          '_DBType',
+          self._config.DeSerialize(
+            config_name=_DB_FILE_NAME, decryption_key=self._key, unpickler=key.UnpickleJSON
+          ),
         )
-        logging.info(f'Loaded DB from {self._config.path}: {self.label}')
+        logging.info(f'Loaded DB from "{self._path}": {self.label}')
       else:
         self._db = _DBTypeFactory()
-        logging.warning(f'DB file not found, will start fresh, {self.label}')
+        logging.warning(f'DB file not found, will work in "{self._config.dir}", {self.label}')
     if self._read_only:
       logging.warning('ATTENTION: Database opened in read-only mode, changes will not be saved!')
 
@@ -157,12 +173,15 @@ class FractalDatabase:
       return
     with _DB_DISK_LOCK:  # ensure thread-safe save operations
       # check on previous save
-      if self._safe_save and self._config.path.exists():
+      if self._safe_save and self._path.exists():
         logging.debug('Safe save enabled, reading existing DB before saving to prevent data loss')
         existing_db: _DBType = cast(
           '_DBType',
           self._config.DeSerialize(
-            decryption_key=self._key, unpickler=key.UnpickleJSON, silent=True
+            config_name=_DB_FILE_NAME,
+            decryption_key=self._key,
+            unpickler=key.UnpickleJSON,
+            silent=True,
           ),
         )
         if (
@@ -186,11 +205,12 @@ class FractalDatabase:
       # save the DB to disk with optional encryption and compression
       self._config.Serialize(
         cast('tbase.JSONDict', self._db),
+        config_name=_DB_FILE_NAME,
         encryption_key=self._key,
-        pickler=key.PickleJSON,
+        pickler=_PicklePrettyJSON if self._format_json else key.PickleJSON,
         compress=_DB_COMPRESS_LEVEL if self._compress_save else None,
       )
-      logging.info(f'DB saved to {self._config.path}: {prev_label} -> {self.label}')
+      logging.info(f'DB saved to "{self._path}": {prev_label} -> {self.label}')
 
 
 def _DBLabel(db: _DBType) -> str:

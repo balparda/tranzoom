@@ -114,6 +114,7 @@
     "codz",
     "colorama",
     "commonmark",
+    "configcommand",
     "configpath",
     "Connor",
     "coolcli",

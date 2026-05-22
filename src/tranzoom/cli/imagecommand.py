@@ -3,6 +3,7 @@
 """CLI: Fractal image utils command.
 
 <https://en.wikipedia.org/wiki/Mandelbrot_set>
+<https://en.wikipedia.org/wiki/Julia_set>
 
 README.md has good examples for different zoom levels.
 """

@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""CLI: Mandelbrot zoom search with AI command.
+"""CLI: Fractal zoom search with AI command.
 
 <https://en.wikipedia.org/wiki/Mandelbrot_set>
 
