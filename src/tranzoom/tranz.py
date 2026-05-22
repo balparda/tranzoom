@@ -171,7 +171,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   ctx.obj = dataclasses.replace(
     tzc,
     # config values should have "None" to mean override the config!
-    db_read_only=cnf['use_db'] if db is None else db,
+    db_read_only=(not cnf['use_db']) if db is None else db,  # INVERT!
     db_compress=cnf['db_compression'] if db_compress is None else db_compress,
   )
   # even though this is a convenient place to print(), beware that this runs even when
