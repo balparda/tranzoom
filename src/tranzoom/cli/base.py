@@ -26,7 +26,7 @@ from tranzoom.core import ai, fractal, frame, frdb, image, palette
 # this indicates that the mathematical computation or the setting of colors has changed;
 # this should NOT change over metadata changes, as it is computed from raw pixel data
 SEAHORSE_TAIL_HASH: str = 'bc8befe1492f4d296cf93994ba201ef06c3fa4858a47a657bb7f136f42bceb5d'
-SEAHORSE_ANIMATED_HASH: str = '91b99d972c26a6a4d6116064b4528136a9104436cac3d9f48d679df37a875d97'
+SEAHORSE_ANIMATED_HASH: str = '4cc2c56c0d6363bcb4bf63d7221843cf668f12e8582490ed3fac7100b413b2c9'
 SUZANA_WAVE_HASH: str = '4be1409a9c55b4f9cbe21f45fa29d0bfc11622bffc248a5639fbffdea0cd80fe'
 # this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 

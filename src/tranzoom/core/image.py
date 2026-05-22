@@ -79,7 +79,6 @@ META_CENTER_IM_KEY = 'tranzoom:frame:center_im'  # gmpy2.mpq
 META_WIDTH_RE_KEY = 'tranzoom:frame:width_re'  # gmpy2.mpq
 META_HEIGHT_IM_KEY = 'tranzoom:frame:height_im'  # gmpy2.mpq
 META_PRECISION_KEY = 'tranzoom:frame:precision'  # int, in bits
-META_MAGNIFICATION_KEY = 'tranzoom:frame:magnification'  # gmpy2.mpfr -> converted to float
 META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'  # float
 # extra keys added to some images only
 # Julia extra keys
@@ -430,9 +429,6 @@ def MakeImageMeta(
   frm: frame.Frame = img.params.frm
   center: tuple[gmpy2.mpq, gmpy2.mpq] = frm.center
   sz: tuple[gmpy2.mpq, gmpy2.mpq] = frm.size
-  magnification: gmpy2.mpfr
-  magnitude: float
-  magnification, magnitude = frm.magnification
   min_escape: int
   max_escape: int
   min_set: int
@@ -468,8 +464,7 @@ def MakeImageMeta(
     META_HEIGHT_IM_KEY: str(sz[1]),
     # precision and magnification
     META_PRECISION_KEY: str(img.params.precision),
-    META_MAGNIFICATION_KEY: str(float(magnification)),  # huge string if not converted!
-    META_MAGNIFICATION_ORDER_KEY: str(magnitude),
+    META_MAGNIFICATION_ORDER_KEY: str(frm.magnification[1]),
     # escape iteration range in the image
     META_ITER_DEPTH_MIN_KEY: str(min_escape),
     META_ITER_DEPTH_MAX_KEY: str(max_escape),

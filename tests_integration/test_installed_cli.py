@@ -95,7 +95,6 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pa
         'tranzoom:frame:top_im': '26450209/200000000',
         'tranzoom:frame:bottom_re': '-148656179/200000000',
         'tranzoom:frame:bottom_im': '26302607/200000000',
-        'tranzoom:frame:magnification': '3387.487974417691',
         'tranzoom:frame:magnification_order': '3.529877762139788',
         'tranzoom:frame:precision': '140',
         'tranzoom:image:animation': 'none',
@@ -182,56 +181,13 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: path
         'tranzoom:frame:fractal': 'mandelbrot',
         'tranzoom:frame:center_re': '-5578776469/7500000000',
         'tranzoom:frame:center_im': '8244620127/62500000000',
-        'tranzoom:frame:width_re': (
-          '394700400953661590553616724317870192525469889275737006657253707335768639485663099'
-          '695925839684875477648434348637256312965640559393473922680946705397127915876263661'
-          '1154072074092457592767213/'
-          '5348171413748421239709805163332082939873341883577655906656426867183408178387094688'
-          '3953027107369269589537547464842284335072656926801487991547810763756287817341217305'
-          '511236190795898437500000000'
-        ),
-        'tranzoom:frame:height_im': (
-          '394700400953661590553616724317870192525469889275737006657253707335768639485663099'
-          '695925839684875477648434348637256312965640559393473922680946705397127915876263661'
-          '1154072074092457592767213/'
-          '534817141374842123970980516333208293987334188357765590665642686718340817838709468'
-          '839530271073692695895375474648422843350726569268014879915478107637562878173412173'
-          '05511236190795898437500000000'
-        ),
-        'tranzoom:frame:top_re': (
-          '-23870186369361385383165956397190334360754969642063958656006959500531755988164919'
-          '566014769483751920040819293974152531020515748911162180153082682646300871105841593'
-          '0508074796997272959440649395389/'
-          '320890284824905274382588309799924976392400513014659354399385612031004490703225681'
-          '303718162644215617537225284789053706010435941560808927949286864582537726904047303'
-          '833067417144775390625000000000'
-        ),
-        'tranzoom:frame:top_im': (
-          '141139123417491456614689765796771669870174420026036158198265758084602002041505837'
-          '557965451979806333973105737019137812770367552633882871753440538352348459243317642'
-          '30969510741619266102612298463/'
-          '106963428274968424794196103266641658797466837671553118133128537343668163567741893'
-          '767906054214738539179075094929684568670145313853602975983095621527512575634682434'
-          '611022472381591796875000000000'
-        ),
-        'tranzoom:frame:bottom_re': (
-          '-23867818166955663413622634696844427139599816822728304233967015978287741376328005'
-          '587416593928713810787953403368060707482637955067805819309546596966068488338346335'
-          '4688407872564828404695092792111/'
-          '320890284824905274382588309799924976392400513014659354399385612031004490703225681'
-          '303718162644215617537225284789053706010435941560808927949286864582537726904047303'
-          '833067417144775390625000000000'
-        ),
-        'tranzoom:frame:bottom_im': (
-          '141060183337300724296579042451908095831669326048181010796934307343134848313608704'
-          '938026266811869358877576050149410361507774424522004176968904349011269033660142389'
-          '57747202597471081187426764037/'
-          '106963428274968424794196103266641658797466837671553118133128537343668163567741893'
-          '767906054214738539179075094929684568670145313853602975983095621527512575634682434'
-          '611022472381591796875000000000'
-        ),
-        'tranzoom:frame:magnification': '33874.87953411216',
-        'tranzoom:frame:magnification_order': '4.529877759446643',
+        'tranzoom:frame:top_re': '-22316212891/30000000000',
+        'tranzoom:frame:top_im': '32987705633/250000000000',
+        'tranzoom:frame:bottom_re': '-22313998861/30000000000',
+        'tranzoom:frame:bottom_im': '32969255383/250000000000',
+        'tranzoom:frame:width_re': '73801/1000000000',
+        'tranzoom:frame:height_im': '73801/1000000000',
+        'tranzoom:frame:magnification_order': '4.529877762139788',
         'tranzoom:frame:precision': '140',
         'tranzoom:image:animation': 'gif',
         'tranzoom:image:width': '220',
@@ -241,22 +197,22 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: path
         'tranzoom:image:color_set': 'none',
         'tranzoom:image:hash': base.SEAHORSE_ANIMATED_HASH,
         'tranzoom:image:iter_depth:min': '98',
-        'tranzoom:image:iter_depth:max': '1387',
-        'tranzoom:image:iter_depth:search': '1387',
+        'tranzoom:image:iter_depth:max': '1423',
+        'tranzoom:image:iter_depth:search': '1423',
         'tranzoom:image:set_point:min': '100000000',
         'tranzoom:image:set_point:max': '100000000',
         'tranzoom:image:overlay': 'false',
         'tranzoom:image:exterior:histogram_summary': (
-          "[(98, 8), (99, 2), (100, 8), ('...', 48378), (1267, 1), (1291, 1), (1344, 1)]"
+          "[(98, 8), (99, 2), (100, 8), ('...', 48376), (1276, 1), (1278, 1), (1336, 1)]"
         ),
         'tranzoom:image:exterior:cumulative_histogram_summary': (
-          "[(98, 8), (99, 10), (100, 18), ('...', 32151410), (1267, 48397), "
-          '(1291, 48398), (1344, 48399)]'
+          "[(98, 8), (99, 10), (100, 18), ('...', 31624747), (1276, 48395), "
+          '(1278, 48396), (1336, 48397)]'
         ),
-        'tranzoom:image:exterior:pixel_count': '48399',
+        'tranzoom:image:exterior:pixel_count': '48397',
         'tranzoom:image:interior:histogram_summary': '',
         'tranzoom:image:interior:cumulative_histogram_summary': '',
-        'tranzoom:image:interior:pixel_count': '1',
+        'tranzoom:image:interior:pixel_count': '3',
         'tranzoom:animation:frame:initial_width_re': '73801/100000000',
         'tranzoom:animation:frame:initial_height_im': '73801/100000000',
         'tranzoom:animation:duration': '4.0',
@@ -266,7 +222,6 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: path
         'tranzoom:animation:zoom:magnitude': '1.0',
         'tranzoom:animation:zoom:magnitude_per_step': '0.02564102564102564',
         'tranzoom:animation:zoom:magnification_per_step': '1.0608183551394486',
-        'tranzoom:animation:zoom:magnification_per_step_mpq': '48455/45677',
         'tranzoom:animation:loop': '0',
       }
   finally:
@@ -330,7 +285,6 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.P
         'tranzoom:frame:top_im': '6587/10000',
         'tranzoom:frame:bottom_re': '-312251747/429687500',
         'tranzoom:frame:bottom_im': '6547/10000',
-        'tranzoom:frame:magnification': '426.5973442458908',
         'tranzoom:frame:magnification_order': '2.630018147449685',
         'tranzoom:frame:precision': '140',
         'tranzoom:image:animation': 'none',
