@@ -565,8 +565,10 @@ def ProduceFractalImage(
   """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
 
   Args:
-    frm: the frame to produce the image from; must be already validated and ready for rendering
-    config: the global configuration with all the options needed for rendering and saving the image
+    frm (frame.Frame): the frame to produce the image from; must be already validated and ready
+        for rendering
+    config (TranZoomConfig): the global configuration with all the options needed for rendering
+        and saving the image
     tm (int | None): Optional timestamp to use for the date in the file name. If None, the
         current time is used.
     add_serial (int | None): Optional serial number to include in the file name for uniqueness;
@@ -576,7 +578,8 @@ def ProduceFractalImage(
         not be saved; default is True.
 
   Returns:
-    A tuple of (image.Image object, raw PNG bytes, internal hash of the raw PNG)
+    tuple[image.Image, bytes, str]: A tuple of (image.Image object, raw PNG bytes, internal hash
+        of the raw PNG)
 
   This is a high-level function that takes care of all the steps needed to produce the final image,
   including:
@@ -665,15 +668,16 @@ def MakeFrameFromCLIArgs(
   """Make a frame or die. Tries float/mpq first, then tries reading from a file metadata.
 
   Args:
-    fractal: the fractal type to create the frame for
-    center_re: the real part of the center, or an image path to read the frame from
-    center_im: the imaginary part of the center (ignored if center_re is an image path)
-    f_width: the width of the frame (ignored if center_re is an image path)
-    f_height: the height of the frame (ignored if center_re is an image path)
-    print_call: a callable to print messages, used for logging during frame creation
+    fractal (frame.Fractal): the fractal type to create the frame for
+    center_re (str): the real part of the center, or an image path to read the frame from
+    center_im (str): the imaginary part of the center (ignored if center_re is an image path)
+    f_width (str): the width of the frame (ignored if center_re is an image path)
+    f_height (str | None): the height of the frame (ignored if center_re is an image path)
+    print_call (abc.Callable[[str], None]): a callable to print messages, used for logging during
+        frame creation
 
   Returns:
-    A valid frame object
+    frame.Frame: A valid frame object
 
   Raises:
     click.UsageError: if arguments can't be turned into a valid frame
@@ -726,12 +730,13 @@ def MakePointFromCLIArgs(
   """Make a point or die. Tries float/mpq first, then tries reading from a file metadata.
 
   Args:
-    point_re: the real part of the point
-    point_im: the imaginary part of the point
-    print_call: a callable to print messages, used for logging during frame creation
+    point_re (frame.ExactInputType): the real part of the point
+    point_im (frame.ExactInputType): the imaginary part of the point
+    print_call (abc.Callable[[str], None]): a callable to print messages, used for logging during
+        frame creation
 
   Returns:
-    A valid point
+    tuple[gmpy2.mpq, gmpy2.mpq]: A valid point
 
   Raises:
     click.UsageError: if arguments can't be turned into a valid point

@@ -29,13 +29,13 @@ def BuildImageThirdsPrompts(
   """Build the AI setup and image prompts for the thirds scoring method.
 
   Args:
-    frm: The current frame for the fractal zoom search.
-    reason: Whether to include the reasoning field in the prompts
-    target_search: Optional string describing the targeted search query;
+    frm (frame.Frame): The current frame for the fractal zoom search.
+    reason (bool): Whether to include the reasoning field in the prompts
+    target_search (str | None): Optional string describing the targeted search query;
         if None, targeted search is inactive
 
   Returns:
-    A tuple of (setup_prompt, image_prompt)
+    tuple[str, str]: A tuple of (setup_prompt, image_prompt)
 
   """
   # make targeted search blocks
@@ -190,11 +190,11 @@ class ImageScore(pydantic.BaseModel, abstract.ABC):
     """Calculate the final score for this sector, blending fractal_score and target_match_score.
 
     Args:
-      target_weight: Weight assigned to `target_match_score` when targeted search is active;
-          default is 0.8
+      target_weight (float): Weight assigned to `target_match_score` when targeted search is
+          active; default is 0.8
 
     Returns:
-      The final blended score for this sector.
+      int: The final blended score for this sector.
 
     Raises:
       Error: on error
@@ -267,7 +267,7 @@ class ImageScores[ScoreT: ImageScore](pydantic.BaseModel, abstract.ABC):
     """Validate that sectors contain exactly one evaluation for each sector.
 
     Returns:
-      The same ImageScores instance if validation passes.
+      Self: The same ImageScores instance if validation passes.
 
     Raises:
       ValueError: If the sectors do not contain exactly one evaluation for each of the 9 sectors.
@@ -288,11 +288,11 @@ class ImageScores[ScoreT: ImageScore](pydantic.BaseModel, abstract.ABC):
     `target_match_score`, giving more weight to the target match.
 
     Args:
-      target_weight: Weight assigned to `target_match_score` when targeted search is active;
-          default is 0.8
+      target_weight (float): Weight assigned to `target_match_score` when targeted search is
+          active; default is 0.8
 
     Returns:
-      The sector evaluation with the highest final score.
+      ScoreT: The sector evaluation with the highest final score.
 
     Raises:
       Error: If target_weight is not between 0.0 and 1.0
@@ -307,7 +307,8 @@ class ImageScores[ScoreT: ImageScore](pydantic.BaseModel, abstract.ABC):
     """Get a JSON-serializable dict representation of this scoring object.
 
     Returns:
-      A dict with a "sectors" key containing a list of dicts for each sector evaluation.
+      tbase.JSONDict: A dict with a "sectors" key containing a list of dicts for each sector
+          evaluation.
 
     """
     return {'sectors': [item.model_dump() for item in self.sectors]}
@@ -317,10 +318,11 @@ class ImageScores[ScoreT: ImageScore](pydantic.BaseModel, abstract.ABC):
     """Create a scoring object instance from a JSON dict.
 
     Args:
-      json_dict: A dict with a "sectors" key containing a list of dicts for each sector evaluation.
+      json_dict (tbase.JSONDict): A dict with a "sectors" key containing a list of dicts for each
+          sector evaluation.
 
     Returns:
-      A scoring object instance created from the JSON dict.
+      Self: A scoring object instance created from the JSON dict.
 
     """
     return cls.model_validate(json_dict)
@@ -340,7 +342,7 @@ class ZoomSectorScoring(ImageScores[SectorEvaluation]):
     """Validate that sectors contain exactly one evaluation for each sector.
 
     Returns:
-      The same ZoomSectorScoring instance if validation passes.
+      Self: The same ZoomSectorScoring instance if validation passes.
 
     """
     return self._PrivateValidateSectors()
@@ -360,7 +362,7 @@ class ZoomSectorCompleteScoring(ImageScores[SectorCompleteEvaluation]):
     """Validate that sectors contain exactly one evaluation for each sector.
 
     Returns:
-      The same ZoomSectorCompleteScoring instance if validation passes.
+      Self: The same ZoomSectorCompleteScoring instance if validation passes.
 
     """
     return self._PrivateValidateSectors()

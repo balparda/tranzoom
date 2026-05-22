@@ -43,10 +43,11 @@ def _DBTypeFactory(overrides: dict[str, object] | None = None) -> _DBType:
   """Create new _DBType object with default values.
 
   Args:
-    overrides: dict of fields to override from the defaults; if None, will use all defaults
+    overrides (dict[str, object] | None): dict of fields to override from the defaults; if None,
+        will use all defaults
 
   Returns:
-    A new _DBType object with default values.
+    _DBType: A new _DBType object with default values.
 
   """
   obj: _DBType = {
@@ -73,16 +74,17 @@ class FractalDatabase:
     """Initialize the fractal database.
 
     Args:
-      appconfig: AppConfig object for configuration and directory management.
-      read_only: If True, the database will be opened in read-only mode; default is
+      appconfig (app_config.AppConfig): AppConfig object for configuration and directory management.
+      read_only (bool): If True, the database will be opened in read-only mode; default is
           False, meaning it can be read and written to; if True, any attempt to write to the DB
           will raise an error.
-      aes_key: (default None) Optional AES key for encrypting/decrypting the database file
-      safe_save: (default True) Whether to use a safe save method that reads the existing DB file
-          before writing, to prevent data loss from clobbering; if False, it will overwrite
-          the file directly
-      compress_save: (default False) Whether to compress the DB file when saving; if True, it will
-          save as a compressed file
+      aes_key (aes.AESKey | None): (default None) Optional AES key for encrypting/decrypting the
+          database file
+      safe_save (bool): (default True) Whether to use a safe save method that reads the existing
+          DB file before writing, to prevent data loss from clobbering; if False, it will
+          overwrite the file directly
+      compress_save (bool): (default False) Whether to compress the DB file when saving; if True,
+          it will save as a compressed file
 
     """
     self._config: app_config.AppConfig = appconfig
@@ -108,7 +110,7 @@ class FractalDatabase:
     """Context manager entry, returns self.
 
     Returns:
-      self, for use within the context
+      Self: self, for use within the context
 
     """
     return self
@@ -122,9 +124,9 @@ class FractalDatabase:
     """Context manager exit. If not exception, saves the database to file.
 
     Args:
-      exc_type: exception type, if any
-      _exc_value: exception value, if any
-      _traceback: traceback object, if any
+      exc_type (type[BaseException] | None): exception type, if any
+      _exc_value (BaseException | None): exception value, if any
+      _traceback (object): traceback object, if any
 
     """
     logging.info(f'Database was open for {self._open}')
@@ -173,11 +175,14 @@ class FractalDatabase:
           )
       # update DB metadata before saving
       prev_label: str = self.label
-      self._db.update({
-        'db_version': self._db['db_version'] + 1,  # increment DB version on each save
-        'app_version': __version__,  # set to current package version on creation
-        'last_save': timer.Now(),
-      })
+      self._db.update(
+        # this part is always updated on save
+        {
+          'db_version': self._db['db_version'] + 1,  # increment DB version on each save
+          'app_version': __version__,  # set to current package version on creation
+          'last_save': timer.Now(),
+        }
+      )
       # save the DB to disk with optional encryption and compression
       self._config.Serialize(
         cast('tbase.JSONDict', self._db),
@@ -191,8 +196,11 @@ class FractalDatabase:
 def _DBLabel(db: _DBType) -> str:
   """Get a human-readable label for the database, for logging and display purposes.
 
+  Args:
+    db (_DBType): The database object to get the label for.
+
   Returns:
-    string '#<N>@<tm>'
+    str: string '#<N>@<tm>'
 
   """
   return f'#{db["db_version"]}@{timer.TimeStr(db["last_save"])}'

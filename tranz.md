@@ -15,7 +15,10 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                                                             │
 │ --color                   --no-color                                                            Force enable/disable colored output (respects NO_COLOR  │
 │                                                                                                 env var if not provided). Defaults to having colors.    │
-│ --db                                    DIRECTORY                                               The local DB root directory path, ex: "~/foo/bar/"; if  │
+│ --db                      --no-db                                                               Use local DB in `--db`? True means use it, False means  │
+│                                                                                                 do not use it; default is False                         │
+│                                                                                                                                         │
+│ --db-path             -d                DIRECTORY                                               The local DB root directory path, ex: "~/foo/bar/"; if  │
 │                                                                                                 not given (DEFAULT), the DB will be saved in the        │
 │                                                                                                 current app config directory, i.e.: on MacOS this is    │
 │                                                                                                 "/Users//Library/Application Support/{/}"; on Windows:  │

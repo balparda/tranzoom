@@ -602,10 +602,10 @@ def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDi
   """Get basic data from a PNG image, including format, size, hash, and metadata text.
 
   Args:
-    img_bytes: The PNG image data as bytes.
+    img_bytes (bytes): The PNG image data as bytes.
 
   Returns:
-    (width, height, hash, metadata) where:
+    tuple[int, int, str, tbase.JSONDict]: (width, height, hash, metadata) where:
       - width: The width of the image in pixels.
       - height: The height of the image in pixels.
       - hash: A hash of the image data (SHA256 of RGB bytes).
@@ -663,10 +663,10 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
   Fix these and it can work well on other sizes too...
 
   Args:
-    img_data: The PNG image data as bytes.
+    img_data (bytes): The PNG image data as bytes.
 
   Returns:
-    The modified PNG image data with the overlay drawn.
+    bytes: The modified PNG image data with the overlay drawn.
 
   """
   w: int
@@ -720,10 +720,10 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
   - large green number labels (1-9) centered in each section, left-to-right, top-to-bottom
 
   Args:
-    img_data: The PNG image data as bytes.
+    img_data (bytes): The PNG image data as bytes.
 
   Returns:
-    The modified PNG image data with the overlay drawn.
+    bytes: The modified PNG image data with the overlay drawn.
 
   """
   w: int
@@ -771,14 +771,14 @@ def DrawCrossOverlay(
   - a vertical line spanning the image at the given x-coordinate
 
   Args:
-    img_data: The PNG image data as bytes.
-    x: The x-coordinate of the center of the cross.
-    y: The y-coordinate of the center of the cross.
-    col: The color of the cross.
-    lw: The line width of the cross.
+    img_data (bytes): The PNG image data as bytes.
+    x (int): The x-coordinate of the center of the cross.
+    y (int): The y-coordinate of the center of the cross.
+    col (Color): The color of the cross.
+    lw (int): The line width of the cross.
 
   Returns:
-    The modified PNG image data with the overlay drawn.
+    bytes: The modified PNG image data with the overlay drawn.
 
   Raises:
     Error: If the coordinates are out of bounds or if there are issues processing the image.
@@ -804,11 +804,11 @@ def SaveWithMeta(img: PILImage.Image, *, extra_meta: dict[str, str] | None = Non
   """Save a PIL image to PNG bytes, including its metadata.
 
   Args:
-    img: The PIL image to save.
-    extra_meta: Optional additional metadata to include in the PNG.
+    img (PILImage.Image): The PIL image to save.
+    extra_meta (dict[str, str] | None): Optional additional metadata to include in the PNG.
 
   Returns:
-    The PNG image data as bytes.
+    bytes: The PNG image data as bytes.
 
   Raises:
     Error: if there are issues saving the image or with the metadata.
@@ -845,22 +845,22 @@ def AddEvaluationMetaToImage(
   """Add LLM evaluation info to the image metadata and return the modified PNG bytes.
 
   Args:
-    img_data: The original PNG image data as bytes.
-    response: The LLM evaluation response to add to the metadata.
-    model: The LLM model used for evaluation; if this is "HUMAN"/META_LLM_MODEL_VALUE_HUMAN,
+    img_data (bytes): The original PNG image data as bytes.
+    response (tbase.JSONDict): The LLM evaluation response to add to the metadata.
+    model (str): The LLM model used for evaluation; if this is "HUMAN"/META_LLM_MODEL_VALUE_HUMAN,
         then it will not add temperature, seed, reason, query_memory, query_setup, query_image, nor
         query_manual to the metadata.
-    temperature: The temperature setting used for the LLM evaluation.
-    seed: The random seed used for the LLM evaluation.
-    reason: Whether the LLM response includes reasoning steps
-    query_memory: The memory parameter used for the LLM evaluation.
-    query_setup: The setup query given to the LLM.
-    query_image: The image query given to the LLM.
-    query_manual: The manual query passed as extra into the query.
-    count: The zoom step count at which this evaluation was made.
+    temperature (float): The temperature setting used for the LLM evaluation.
+    seed (int): The random seed used for the LLM evaluation.
+    reason (bool): Whether the LLM response includes reasoning steps
+    query_memory (int): The memory parameter used for the LLM evaluation.
+    query_setup (str): The setup query given to the LLM.
+    query_image (str): The image query given to the LLM.
+    query_manual (str | None): The manual query passed as extra into the query.
+    count (int): The zoom step count at which this evaluation was made.
 
   Returns:
-    The modified PNG image data as bytes, with the evaluation info added to the metadata.
+    bytes: The modified PNG image data as bytes, with the evaluation info added to the metadata.
 
   """
   # start with the metadata that all zoom images have, for now
@@ -892,7 +892,7 @@ def PrintITerm2(img_data: bytes) -> None:
   <https://iterm2.com/documentation-images.html>
 
   Args:
-    img_data: The original PNG image data as bytes.
+    img_data (bytes): The original PNG image data as bytes.
 
   """
   sys.stdout.write(
@@ -995,14 +995,16 @@ def WriteAnimatedGIF(
   """Write PIL Image frames to an animated GIF.
 
   Args:
-    frames: An iterable of PIL Image frames to include in the GIF.
-    path: The file path to save the GIF.
-    width: The width of the GIF frames.
-    height: The height of the GIF frames.
-    n_frames: The number of frames in the GIF: has to match exactly the number of frames provided.
-    duration: The duration of the GIF, in seconds.
-    loop: The number of times to loop the GIF (0 for infinite loop). Default is 0 (infinite loop).
-    meta: Optional metadata to include in the GIF; default None
+    frames (list[bytes]): An iterable of PIL Image frames to include in the GIF.
+    path (pathlib.Path): The file path to save the GIF.
+    width (int): The width of the GIF frames.
+    height (int): The height of the GIF frames.
+    n_frames (int): The number of frames in the GIF: has to match exactly the number of frames
+        provided.
+    duration (float): The duration of the GIF, in seconds.
+    loop (int): The number of times to loop the GIF (0 for infinite loop). Default is 0
+        (infinite loop).
+    meta (dict[str, str] | None): Optional metadata to include in the GIF; default None
 
   Raises:
     Error: on error
@@ -1058,13 +1060,14 @@ def WriteVideoMP4(
   """Write PIL Image frames to an MP4 video using H.264, the most broadly compatible video format.
 
   Args:
-    frames: An iterable of PIL Image frames to include in the video.
-    path: The file path to save the video.
-    width: The width of the video frames.
-    height: The height of the video frames.
-    n_frames: The number of frames in the video: has to match exactly the number of frames provided.
-    duration: The duration of the video, in seconds.
-    meta: Optional metadata to include in the video; default None
+    frames (abc.Iterable[bytes]): An iterable of PIL Image frames to include in the video.
+    path (pathlib.Path): The file path to save the video.
+    width (int): The width of the video frames.
+    height (int): The height of the video frames.
+    n_frames (int): The number of frames in the video: has to match exactly the number of frames
+        provided.
+    duration (float): The duration of the video, in seconds.
+    meta (dict[str, str] | None): Optional metadata to include in the video; default None
 
   Raises:
     Error: on error

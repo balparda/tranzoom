@@ -69,39 +69,43 @@ def ZoomLoop(
   """Execute main loop for AI-guided fractal zoom search.
 
   Args:
-    params: The computation parameters for the fractal zoom search.
-    img_output_path: Optional path to save the rendered images; if None, images will be
-        saved to current working directory.
-    img_use_date: Whether to include the current date in the image filename when saving.
-    img_use_hash: Whether to include the image hash in the filename when saving.
-    img_path_prefix: A prefix to add to the image filename when saving.
-    pal: The color palette to use for rendering the image.
-    set_pal: The color palette to use for interior Set points.
-    max_threads: Optional maximum number of threads to use for rendering; if None, use all
-        available CPU cores.
-    model: The AI model identifier to use for the search.
-    spec_tokens: Optional number of tokens to use for the model's specification; if None,
-        use the model's default.
-    seed: Optional random seed for the model; if None, use a random seed.
-    context: The context window size (in tokens) for the model.
-    temperature: The sampling temperature for the model's responses.
-    gpu: The GPU usage ratio for the model (0.0 to 1.0).
-    gpu_layers: The number of layers of the model to offload to the GPU.
-    fp16: Whether to use FP16 precision for the model; default is False.
-    use_mmap: Whether to use memory-mapped files for the model; default is False.
-    flash: Whether to use flash attention for the model; default is False.
-    kv_cache: Optional size of the key-value cache for the model; if None, use the model's default.
-    timeout: The timeout (in seconds) for model operations.
-    query: Optional query to be added to the default prompt; if None, no additional query.
-    reason: Whether to include the `reason` field in the AI output.
-    memory: The number of previous iterations the LLM will remember in its chat history;
+    params (frame.ComputationParameters): The computation parameters for the fractal zoom search.
+    img_output_path (pathlib.Path | None): Optional path to save the rendered images; if None,
+        images will be saved to current working directory.
+    img_use_date (bool): Whether to include the current date in the image filename when saving.
+    img_use_hash (bool): Whether to include the image hash in the filename when saving.
+    img_path_prefix (str): A prefix to add to the image filename when saving.
+    pal (palette.Palette): The color palette to use for rendering the image.
+    set_pal (palette.Palette): The color palette to use for interior Set points.
+    max_threads (int | None): Optional maximum number of threads to use for rendering; if None,
+        use all available CPU cores.
+    model (str): The AI model identifier to use for the search.
+    spec_tokens (int | None): Optional number of tokens to use for the model's specification;
+        if None, use the model's default.
+    seed (int | None): Optional random seed for the model; if None, use a random seed.
+    context (int): The context window size (in tokens) for the model.
+    temperature (float): The sampling temperature for the model's responses.
+    gpu (float): The GPU usage ratio for the model (0.0 to 1.0).
+    gpu_layers (int): The number of layers of the model to offload to the GPU.
+    fp16 (bool): Whether to use FP16 precision for the model; default is False.
+    use_mmap (bool): Whether to use memory-mapped files for the model; default is False.
+    flash (bool): Whether to use flash attention for the model; default is False.
+    kv_cache (int | None): Optional size of the key-value cache for the model; if None, use
+        the model's default.
+    timeout (float): The timeout (in seconds) for model operations.
+    query (str | None): Optional query to be added to the default prompt; if None, no additional
+        query.
+    reason (bool): Whether to include the `reason` field in the AI output.
+    memory (int): The number of previous iterations the LLM will remember in its chat history;
         0 means no memory.
-    max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
-    iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
-    target_weight: The weight (0.0 to 1.0) to give to the target match score when determining the
-        best sector; if 0.0, only the fractal score is used; if 1.0, only the target match
-        score is used.
-    print_comm: A rich console callable for printing messages.
+    max_steps (int): Maximum number of zoom steps to run; 0 means run until manually stopped
+        (Ctrl+C)
+    iterm (bool): Whether to print the image inline in iTerm2 using the iTerm2 inline image
+        protocol.
+    target_weight (float): The weight (0.0 to 1.0) to give to the target match score when
+        determining the best sector; if 0.0, only the fractal score is used; if 1.0, only the
+        target match score is used.
+    print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
 
   """
   # capture the time and load model
@@ -233,19 +237,21 @@ def ManualLoop(
   """Execute main loop for manually-guided fractal zoom search.
 
   Args:
-    params: The computation parameters for the fractal zoom search.
-    img_output_path: Optional path to save the rendered images; if None, images will be
-        saved to current working directory.
-    img_use_date: Whether to include the current date in the image filename when saving.
-    img_use_hash: Whether to include the image hash in the filename when saving.
-    img_path_prefix: A prefix to add to the image filename when saving.
-    pal: The color palette to use for rendering the image.
-    set_pal: The color palette to use for interior Set points.
-    max_threads: Optional maximum number of threads to use for rendering; if None, use all
-        available CPU cores.
-    max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
-    iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
-    print_comm: A rich console callable for printing messages.
+    params (frame.ComputationParameters): The computation parameters for the fractal zoom search.
+    img_output_path (pathlib.Path | None): Optional path to save the rendered images; if None,
+        images will be saved to current working directory.
+    img_use_date (bool): Whether to include the current date in the image filename when saving.
+    img_use_hash (bool): Whether to include the image hash in the filename when saving.
+    img_path_prefix (str): A prefix to add to the image filename when saving.
+    pal (palette.Palette): The color palette to use for rendering the image.
+    set_pal (palette.Palette): The color palette to use for interior Set points.
+    max_threads (int | None): Optional maximum number of threads to use for rendering; if None,
+        use all available CPU cores.
+    max_steps (int): Maximum number of zoom steps to run; 0 means run until manually stopped
+        (Ctrl+C)
+    iterm (bool): Whether to print the image inline in iTerm2 using the iTerm2 inline image
+        protocol.
+    print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
 
   """
   # capture the time and load model
@@ -354,22 +360,24 @@ def _ComputeFractal(
   """Compute the Mandelbrot or Julia image for the given frame.
 
   Args:
-    params: The computation parameters for the frame, including width, height, and other settings.
-    count: The current zoom step count, used for logging and image naming.
-    zoom_tm: The timestamp when the zoom session started, used for logging and image naming.
-    img_output_path: Optional path to save the rendered image; if None, the image will not be
-        saved to disk.
-    img_use_date: Whether to include the current date in the image filename when saving.
-    img_use_hash: Whether to include the image hash in the filename when saving.
-    img_path_prefix: A prefix to add to the image filename when saving.
-    pal: The color palette to use for rendering the image.
-    set_pal: The color palette to use for interior Set points.
-    max_threads: Maximum number of threads to use for rendering.
-    iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
-    print_comm: A rich console callable for printing messages.
+    params (frame.ComputationParameters): The computation parameters for the frame, including
+        width, height, and other settings.
+    count (int): The current zoom step count, used for logging and image naming.
+    zoom_tm (int): The timestamp when the zoom session started, used for logging and image naming.
+    img_output_path (pathlib.Path | None): Optional path to save the rendered image; if None,
+        the image will not be saved to disk.
+    img_use_date (bool): Whether to include the current date in the image filename when saving.
+    img_use_hash (bool): Whether to include the image hash in the filename when saving.
+    img_path_prefix (str): A prefix to add to the image filename when saving.
+    pal (palette.Palette): The color palette to use for rendering the image.
+    set_pal (palette.Palette): The color palette to use for interior Set points.
+    max_threads (int | None): Maximum number of threads to use for rendering.
+    iterm (bool): Whether to print the image inline in iTerm2 using the iTerm2 inline image
+        protocol.
+    print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
 
   Returns:
-    (bytes, pathlib.Path): A tuple with the PNG image bytes (minus the evaluation) and the
+    tuple[bytes, pathlib.Path]: A tuple with the PNG image bytes (minus the evaluation) and the
         intended save path (not yet saved!)
 
   """
@@ -420,14 +428,15 @@ def _MoveCenter(  # noqa: C901
   """Move the frame center according to the AI response.
 
   Args:
-    frm: The current frame.
-    query: The optional search query used for targeted scoring.
-    response: The AI response containing the sector evaluations.
-    tmr: The timer for the current operation.
-    target_weight: The weight (0.0 to 1.0) to give to the target match score when determining the
-        best sector; if 0.0, only the fractal score is used; if 1.0, only the
+    frm (frame.Frame): The current frame.
+    query (str | None): The optional search query used for targeted scoring.
+    response (queries.ZoomSectorScoring | queries.ZoomSectorCompleteScoring): The AI response
+        containing the sector evaluations.
+    tmr (timer.Timer): The timer for the current operation.
+    target_weight (float): The weight (0.0 to 1.0) to give to the target match score when
+        determining the best sector; if 0.0, only the fractal score is used; if 1.0, only the
         target match score is used.
-    print_comm: A rich console callable for printing messages.
+    print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
 
   Returns:
     frame.Frame: The new frame with the updated center.
