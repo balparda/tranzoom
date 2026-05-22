@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+import json
 from collections import abc
 from typing import cast
 
 import gmpy2
+from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 
 # basic constants
@@ -116,6 +118,7 @@ class Frame:
   providing additional data like for the Julia fractal.
   """
 
+  # ATTENTION: changing anything here changes the HASH!!
   fractal: Fractal
   top_re: gmpy2.mpq  # the top-left corner of the rectangle
   top_im: gmpy2.mpq
@@ -139,6 +142,11 @@ class Frame:
       raise Error(f'top_re ({self.top_re}) must be < bottom_re ({self.bottom_re})')
     if self.top_im <= self.bottom_im:
       raise Error(f'top_im ({self.top_im}) must be > bottom_im ({self.bottom_im})')
+    # disallow non-zero points for Mandelbrot as a safety for now, no use for them
+    if self.fractal == Fractal.MANDELBROT and (
+      self.point_re != _MPQ_ZERO or self.point_im != _MPQ_ZERO
+    ):
+      raise Error('Mandelbrot frames should not have a non-zero point coordinate')
 
   def __str__(self) -> str:
     """Get string representation of the frame.
@@ -263,6 +271,7 @@ class Frame:
 
     """
     return {
+      # ATTENTION: changing anything here changes the HASH!!
       'fractal': self.fractal.value,
       'top_re': str(self.top_re),
       'top_im': str(self.top_im),
@@ -271,6 +280,57 @@ class Frame:
       'point_re': str(self.point_re),
       'point_im': str(self.point_im),
     }
+
+  @staticmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> Frame:
+    """Create a Frame from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from Frame.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the frame. If the
+          calculated hash does not match, an error is raised.
+
+    Returns:
+      Frame: A Frame object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      frm = Frame(  # object creation will check the data is valid and consistent, and raise if not
+        fractal=Fractal(data['fractal']),
+        top_re=gmpy2.mpq(str(data['top_re'])),
+        top_im=gmpy2.mpq(str(data['top_im'])),
+        bottom_re=gmpy2.mpq(str(data['bottom_re'])),
+        bottom_im=gmpy2.mpq(str(data['bottom_im'])),
+        point_re=gmpy2.mpq(str(data['point_re'])),
+        point_im=gmpy2.mpq(str(data['point_im'])),
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid Frame JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and frm.sha != check_hash:
+      raise Error(f'Frame {frm.sha!r} does not match expected {check_hash!r}')
+    return frm
+
+  @property
+  def binary(self) -> bytes:
+    """Get a stable binary representation of the Frame, for hashing and storage."""
+    return json.dumps(self.json, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode(
+      'utf-8'
+    )
+
+  @property
+  def sha(self) -> str:
+    """SHA-256 hash of the Frame.
+
+    Returns:
+      str: The SHA-256 hash of the Frame, as a hex string.
+
+    """
+    return hashes.Hash256(self.binary).hex()
 
   @staticmethod
   def FromCoords(
@@ -435,6 +495,7 @@ DEFAULT_FRAMES: dict[Fractal, Frame] = {
 class ComputationParameters:
   """Arguments that determine a fractal computation completely (computation, not rendering)."""
 
+  # ATTENTION: changing anything here changes the HASH!!
   frm: Frame
   width: int
   height: int
@@ -516,6 +577,7 @@ class ComputationParameters:
       tbase.JSONDict: A dictionary representation of the computation parameters.
 
     """
+    # ATTENTION: changing anything here changes the HASH!!
     return {
       'frm': self.frm.json,
       'width': self.width,
@@ -523,6 +585,55 @@ class ComputationParameters:
       'depth': self.depth,
       'set_points': self.set_points.value if self.set_points else None,
     }
+
+  @staticmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> ComputationParameters:
+    """Create a ComputationParameters from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from ComputationParameters.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the frame. If the
+          calculated hash does not match, an error is raised.
+
+    Returns:
+      ComputationParameters: A ComputationParameters object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      params = ComputationParameters(  # object creation will check the data is valid and consistent
+        frm=Frame.FromJson(cast('tbase.JSONDict', data['frm'])),  # also checks the data
+        width=int(str(data['width'])),
+        height=int(str(data['height'])),
+        depth=int(str(data['depth'])),
+        set_points=SetHighlightAlgorithm(data['set_points']) if data['set_points'] else None,
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid ComputationParameters JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and params.sha != check_hash:
+      raise Error(f'ComputationParameters {params.sha!r} does not match expected {check_hash!r}')
+    return params
+
+  @property
+  def binary(self) -> bytes:
+    """Get a stable binary representation of the Frame, for hashing and storage."""
+    return json.dumps(self.json, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode(
+      'utf-8'
+    )
+
+  @property
+  def sha(self) -> str:
+    """SHA-256 hash of the Frame.
+
+    Returns:
+      str: The SHA-256 hash of the Frame, as a hex string.
+
+    """
+    return hashes.Hash256(self.binary).hex()
 
   def CoordToPixel(self, re_inp: ExactInputType, im_inp: ExactInputType) -> tuple[int, int]:
     """Convert complex-plane coordinates to pixel coordinates in the image.
