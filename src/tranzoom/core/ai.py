@@ -214,7 +214,7 @@ def ZoomLoop(
   # we're out of the main loop
   except KeyboardInterrupt:
     print_comm(f'\n[yellow]Interrupted by user on step {count}.[/yellow]')
-  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {params.frm}\n')
+  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {params}\n')
 
 
 def ManualLoop(
@@ -251,8 +251,7 @@ def ManualLoop(
   # capture the time and load model
   zoom_tm: int = timer.Now()
   print_comm(
-    f'Will run {params.width}x{params.height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
-    f'{f', "{params.set_points.value}" interior. ' if params.set_points else ""}'
+    f'Will run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
     'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})\n')
