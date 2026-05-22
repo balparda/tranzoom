@@ -127,6 +127,9 @@ _MPFR_ZERO: gmpy2.mpfr = gmpy2.mpfr('0')
 _MPFR_ONE: gmpy2.mpfr = gmpy2.mpfr('1')
 _MPFR_FOUR: gmpy2.mpfr = gmpy2.mpfr('4')
 
+# gmpy2.mpq constants
+_MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
+
 
 class Error(frame.Error):
   """Base image exception."""
@@ -158,6 +161,13 @@ class AnimationType(enum.Enum):
 
   GIF = 'gif'  # also the file suffix!
   MP4 = 'mp4'
+
+
+class OverlayType(enum.Enum):
+  """Overlay type enum."""
+
+  GRID = 'grid'
+  CARDINAL = 'cardinal'
 
 
 DEFAULT_ANIMATION_TYPE: AnimationType = AnimationType.GIF
@@ -214,6 +224,174 @@ class FractalStats:
 # TODO: more stable animations
 # instead of rendering each frame independently, we can have a class that knows about the
 # whole intended journey and can have a special AsPixels() that normalizes once against all images
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class RenderParameters:
+  """Defines a transformation from math to image."""
+
+  # ATTENTION: changing anything here changes the HASH!!
+  tp: FileType = FileType.PNG
+  escaped_pal: palette.Palette = palette.DEFAULT_PALETTE
+  set_pal: palette.Palette | None = None  # if None, this must be a non-Set-computation
+  mark_re: gmpy2.mpq = _MPQ_ZERO
+  mark_im: gmpy2.mpq = _MPQ_ZERO
+  mark_color: Color | None = None  # if None, no mark will be drawn
+  mark_width: int = DEFAULT_MARK_WIDTH
+  overlay: OverlayType | None = None  # overlay is independent of mark!
+
+  def __post_init__(self) -> None:
+    """Check parameters for validity.
+
+    Raises:
+      Error: if any parameter is invalid.
+
+    """
+    # check type is valid
+    if self.tp not in {FileType.PNG, FileType.GIF, FileType.MP4}:
+      raise Error(f'Unknown file type: {self.tp}')
+    # check overlay is valid: for now we only allow GRID overlay
+    if self.overlay and self.overlay != OverlayType.GRID:
+      raise Error(f'Unknown file type: {self.tp}')
+    # check palettes are valid
+    for pal in (self.escaped_pal, self.set_pal):
+      if pal not in palette.Palette:
+        raise Error(f'Unknown palette: {pal}')
+    # check mark width is valid
+    if not (MIN_MARK_WIDTH <= self.mark_width <= MAX_MARK_WIDTH):
+      raise Error(
+        f'Mark width must be between {MIN_MARK_WIDTH} and {MAX_MARK_WIDTH}, got {self.mark_width}'
+      )
+    # check mark color is valid
+    if self.mark_color is None:
+      # we do not allow mark_re/im to be non-zero if no mark to be added to image
+      if self.mark_re != _MPQ_ZERO or self.mark_im != _MPQ_ZERO:
+        raise Error(
+          'Mark positions expected to be (0, 0) when no mark color is specified, '
+          f'got ({self.mark_re}, {self.mark_im})'
+        )
+    else:
+      if self.mark_color not in Color:
+        raise Error(f'Unknown mark color: {self.mark_color}')
+      r: int
+      g: int
+      b: int
+      r, g, b = self.mark_color.value
+      if not (0 <= r <= 255 and 0 <= g <= 255 and 0 <= b <= 255):  # noqa: PLR2004
+        raise Error(f'Mark color RGB values must be between 0 and 255, got {self.mark_color}')
+
+  def __str__(self) -> str:
+    """Get string representation of the RenderParameters.
+
+    Format is:
+    - "{[<FILE_TYPE>: <ESCAPED_PALETTE>, <SET_PALETTE>]<MARK_IF_ANY><OVERLAY_IF_ANY>}"
+    - `<FILE_TYPE>` is the file type in uppercase, like "PNG".
+    - `<ESCAPED_PALETTE>` is the name of the palette used for escaped points, in
+        lowercase, like "sunset".
+    - `<SET_PALETTE>` is the name of the palette used for interior Set points, in lowercase,
+        like "ocean", or "none" if not used.
+    - `<MARK_IF_ANY>` is " + [MARK: <MARK_COLOR>/<MARK_WIDTH> @ (<MARK_RE>, <MARK_IM>)]" if a
+        mark is specified, or "" if no mark is specified.
+    - `<OVERLAY_IF_ANY>` is " + [OVERLAY: <OVERLAY_TYPE>]" if an overlay is specified,
+        or "" if no overlay is specified.
+
+    Returns:
+      str: String representation of the RenderParameters.
+
+    """
+    mark: str = (
+      ''
+      if self.mark_color is None
+      else (
+        f' + [MARK: {self.mark_color.name.lower()}/{self.mark_width} '
+        f'@ ({self.mark_re}, {self.mark_im})]'
+      )
+    )
+    overlay: str = '' if self.overlay is None else f' + [OVERLAY: {self.overlay.name}]'
+    return (
+      '{'
+      f'[{self.tp.name.upper()}, {self.escaped_pal.name}, '
+      f'{self.set_pal.name if self.set_pal else "none"}]{mark}{overlay}'
+      '}'
+    )
+
+  @property
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the RenderParameters.
+
+    Keys: `tp`, `escaped_pal`, `set_pal`, `mark_re`, `mark_im`, `mark_color`,
+    `mark_width`, `overlay`.
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the RenderParameters.
+
+    """
+    return {
+      # ATTENTION: changing anything here changes the HASH!!
+      'tp': self.tp.value,
+      'escaped_pal': self.escaped_pal.value,
+      'set_pal': self.set_pal.value if self.set_pal else None,
+      'mark_re': str(self.mark_re),
+      'mark_im': str(self.mark_im),
+      # BEWARE: we store the mark color as lowercase name, not the RGB value
+      'mark_color': self.mark_color.name.lower() if self.mark_color else None,
+      'mark_width': self.mark_width,
+      'overlay': self.overlay.value if self.overlay else None,
+    }
+
+  @staticmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> RenderParameters:
+    """Create a RenderParameters from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from RenderParameters.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the RenderParameters.
+          If the calculated hash does not match, an error is raised.
+
+    Returns:
+      RenderParameters: A RenderParameters object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      params = RenderParameters(  # object creation will check the data is valid and consistent
+        tp=FileType(data['tp']),
+        escaped_pal=palette.Palette(data['escaped_pal']),
+        set_pal=palette.Palette(data['set_pal']) if data['set_pal'] is not None else None,
+        mark_re=gmpy2.mpq(str(data['mark_re'])),
+        mark_im=gmpy2.mpq(str(data['mark_im'])),
+        mark_color=(  # upper -> convert by name
+          Color[str(data['mark_color']).upper()] if data['mark_color'] is not None else None
+        ),
+        mark_width=int(str(data['mark_width'])),
+        overlay=OverlayType(data['overlay']) if data['overlay'] is not None else None,
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid RenderParameters JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and params.sha != check_hash:
+      raise Error(f'RenderParameters {params.sha!r} does not match expected {check_hash!r}')
+    return params
+
+  @property
+  def binary(self) -> bytes:
+    """Get a stable binary representation of the RenderParameters, for hashing and storage."""
+    return json.dumps(self.json, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode(
+      'utf-8'
+    )
+
+  @property
+  def sha(self) -> str:
+    """SHA-256 hash of the RenderParameters.
+
+    Returns:
+      str: The SHA-256 hash of the RenderParameters, as a hex string.
+
+    """
+    return hashes.Hash256(self.binary).hex()
 
 
 class Image:

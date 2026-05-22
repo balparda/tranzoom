@@ -149,7 +149,7 @@ class Frame:
       raise Error('Mandelbrot frames should not have a non-zero point coordinate')
 
   def __str__(self) -> str:
-    """Get string representation of the frame.
+    """Get string representation of the Frame.
 
     Format is:
       - "[MANDELBROT: (c_re, c_im) ± (dx_re, dy_im)]" without the point for Mandelbrot; or
@@ -160,7 +160,7 @@ class Frame:
       - if `dx_re` and `dy_im` are the same, we can simplify to "± dx" instead of "± (dx, dy)".
 
     Returns:
-      str: String representation of the frame.
+      str: String representation of the Frame.
 
     Raises:
       Error: if the fractal type is unknown (should not happen b/c checked in __post_init__).
@@ -503,10 +503,10 @@ class ComputationParameters:
   set_points: SetHighlightAlgorithm | None = None
 
   def __post_init__(self) -> None:
-    """Check rectangle has an area and top/bottom ordering.
+    """Check parameters for validity.
 
     Raises:
-      Error: if the rectangle is invalid.
+      Error: if any parameter is invalid.
 
     """
     # check width and height are valid
@@ -529,7 +529,7 @@ class ComputationParameters:
       raise Error(f'Unsupported set highlight algorithm: {self.set_points}')
 
   def __str__(self) -> str:
-    """Get string representation of the computation parameters.
+    """Get string representation of the ComputationParameters.
 
     Format is:
       - "{[MANDELBROT: (c_re, c_im) ± (dx_re, dy_im)] : [w, h, d]}" WITHOUT set points; or
@@ -545,7 +545,7 @@ class ComputationParameters:
       - `<sp>` is the set highlight algorithm, lowercase, if any.
 
     Returns:
-      str: String representation of the computation parameters.
+      str: String representation of the ComputationParameters.
 
     """
     return (
@@ -620,17 +620,17 @@ class ComputationParameters:
 
   @property
   def binary(self) -> bytes:
-    """Get a stable binary representation of the Frame, for hashing and storage."""
+    """Get a stable binary representation of the ComputationParameters, for hashing and storage."""
     return json.dumps(self.json, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode(
       'utf-8'
     )
 
   @property
   def sha(self) -> str:
-    """SHA-256 hash of the Frame.
+    """SHA-256 hash of the ComputationParameters.
 
     Returns:
-      str: The SHA-256 hash of the Frame, as a hex string.
+      str: The SHA-256 hash of the ComputationParameters, as a hex string.
 
     """
     return hashes.Hash256(self.binary).hex()
