@@ -20,7 +20,7 @@ config_app = typer.Typer(
     'Examples:\n\n\n\n'
     'poetry run tranz config get\n'
     'poetry run tranz config set use_db true\n'
-    'poetry run tranz config set foo bar'
+    'poetry run tranz config set foo bar  # (example made up key)'
   ),
 )
 tranz.app.add_typer(config_app, name='config')
@@ -62,8 +62,8 @@ def Get(  # documentation is help/epilog/args  # noqa: D103
     'Examples:\n\n\n\n'
     '$ poetry run tranz config set use_db true\n\n'
     '<set use_db option to True>\n\n\n\n'
-    '$ poetry run tranz config set foo bar\n\n'
-    '<set option "foo" to value "bar">'
+    '$ poetry run tranz config set foo bar  # (example made up key)\n\n'
+    '<set some putative option "foo" to some putative value "bar">'
   ),
 )
 @clibase.CLIErrorGuard

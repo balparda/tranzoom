@@ -57,7 +57,7 @@ app = typer.Typer(
     '# --- Get/Set Config Values ---\n\n'
     'poetry run tranz config get\n\n'
     'poetry run tranz config set use_db true\n\n'
-    'poetry run tranz config set foo bar\n\n\n\n'
+    'poetry run tranz config set foo bar  # (example made up key)\n\n\n\n'
     '# --- Markdown Help ---\n\n'
     'poetry run tranz markdown > tranz.md'
   ),

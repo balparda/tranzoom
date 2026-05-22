@@ -359,11 +359,12 @@ MAX_ITERATIONS_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '-i',
   '--iter',
-  min=frame.MIN_ITER,
+  # everywhere we check MIN_ITER <= i <= MAX_ITER, but we use MIN_ITER as a sentinel value for AUTO!
+  min=frame.MIN_ITER + 1,  # steer users away from the sentinel value
   max=frame.MAX_ITER,
   help=(
     'Maximum iterations (depth) to compute before determining escape; '
-    f'{frame.MIN_ITER} ≤ iter ≤ {frame.MAX_ITER}; '
+    f'{frame.MIN_ITER + 1} ≤ iter ≤ {frame.MAX_ITER}; '  # steer users away from the sentinel value
     f'default is None (automatic search for optimal iterations --- recommended)'
   ),
 )

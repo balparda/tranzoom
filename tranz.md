@@ -177,7 +177,7 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
  # --- Get/Set Config Values ---                                                                                                                           
  poetry run tranz config get                                                                                                                               
  poetry run tranz config set use_db true                                                                                                                   
- poetry run tranz config set foo bar                                                                                                                       
+ poetry run tranz config set foo bar  # (example made up key)                                                                                              
                                                                                                                                                            
  # --- Markdown Help ---                                                                                                                                   
  poetry run tranz markdown > tranz.md
@@ -192,7 +192,7 @@ Usage: tranz config [OPTIONS] COMMAND [ARGS]...
                                                                                                                                                            
  poetry run tranz config get                                                                                                                               
  poetry run tranz config set use_db true                                                                                                                   
- poetry run tranz config set foo bar                                                                                                                       
+ poetry run tranz config set foo bar  # (example made up key)                                                                                              
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                                                                                             │
@@ -240,8 +240,8 @@ Usage: tranz config set [OPTIONS] KEY VALUE
  $ poetry run tranz config set use_db true                                                                                                                 
  <set use_db option to True>                                                                                                                               
                                                                                                                                                            
- $ poetry run tranz config set foo bar                                                                                                                     
- <set option "foo" to value "bar">
+ $ poetry run tranz config set foo bar  # (example made up key)                                                                                            
+ <set some putative option "foo" to some putative value "bar">
 ```
 
 ## `tranz image` Command
@@ -272,7 +272,7 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
 │                                                            S) or (S, S), where x < S, and will make the final image ratio/proportion be the same as the │
 │                                                            frame; 16 ≤ S ≤ 16384; default is None, i.e., follow the explicit `-w/--width` and           │
 │                                                            `-h/--height` options                                                                        │
-│ --iter        -i      INTEGER RANGE [1000<=x<=2147483647]  Maximum iterations (depth) to compute before determining escape; 1000 ≤ iter ≤ 2147483647;   │
+│ --iter        -i      INTEGER RANGE [1001<=x<=2147483647]  Maximum iterations (depth) to compute before determining escape; 1001 ≤ iter ≤ 2147483647;   │
 │                                                            default is None (automatic search for optimal iterations --- recommended)                    │
 │ --mark                TEXT                                 A point formatted as "(re, im)" to add a crosshair overlay, `re` and `im` multi-precision;   │
 │                                                            this can be a float (ex: "(0.34, -0.56)") or a fraction of ints (rational numbers, ex:       │
@@ -572,7 +572,7 @@ Usage: tranz zoom auto [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │ --loop                                 INTEGER RANGE [0<=x<=1000]           Number of loops for the GIF (NOT MP4!); 0 ≤ loop ≤ 1000; default is 0; zero │
 │                                                                             (0) means infinite loops                                                    │
 │                                                                                                                                             │
-│ --iter         -i                      INTEGER RANGE [1000<=x<=2147483647]  Maximum iterations (depth) to compute before determining escape; 1000 ≤     │
+│ --iter         -i                      INTEGER RANGE [1001<=x<=2147483647]  Maximum iterations (depth) to compute before determining escape; 1001 ≤     │
 │                                                                             iter ≤ 2147483647; default is None (automatic search for optimal iterations │
 │                                                                             --- recommended)                                                            │
 │ --mark                                 TEXT                                 A point formatted as "(re, im)" to add a crosshair overlay, `re` and `im`   │
