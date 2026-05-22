@@ -15,7 +15,7 @@ from transcrypto.cli import clibase
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
-from tranzoom.core import ai, fractal, frame, image, palette
+from tranzoom.core import ai, fractal, frame, frdb, image, palette
 
 # global CLI data, and some test stuff
 
@@ -109,9 +109,15 @@ IMAGE_PATH_OUTPUT_OPTION: typer.models.OptionInfo = typer.Option(
     'if not given, the image will be saved in the current working directory'
   ),
 )
+USE_DB_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--db/--no-db',
+  help=('Use local DB in `--db`? True means use it, False means do not use it; default is False'),
+)
 DB_PATH_OPTION: typer.models.OptionInfo = typer.Option(
   None,
-  '--db',
+  '-d',
+  '--db-path',
   exists=True,
   file_okay=False,
   dir_okay=True,
@@ -514,7 +520,7 @@ class TranZoomConfig(clibase.CLIConfig):
   img_use_date: bool
   img_use_hash: bool
   img_path_prefix: str | None
-  db_path: pathlib.Path
+  db: frdb.FractalDatabase
   pal: palette.Palette
   set_pal: palette.Palette
   set_points: frame.SetHighlightAlgorithm | None

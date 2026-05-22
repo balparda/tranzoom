@@ -15,7 +15,7 @@ from transcrypto.utils import config as app_config
 from transcrypto.utils import logging as cli_logging
 
 from tranzoom.cli import base
-from tranzoom.core import frame, palette
+from tranzoom.core import frame, frdb, palette
 
 from . import __app__, __version__
 
@@ -91,6 +91,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
       'Defaults to having colors.'  # state default because None default means docs don't show it
     ),
   ),
+  db: bool = base.USE_DB_OPTION,  # type: ignore[assignment]
   db_path: pathlib.Path | None = base.DB_PATH_OPTION,  # type: ignore[assignment]
   img_output_path: pathlib.Path | None = base.IMAGE_PATH_OUTPUT_OPTION,  # type: ignore[assignment]
   img_path_prefix: str | None = base.IMAGE_PREFIX_OPTION,  # type: ignore[assignment]
@@ -127,7 +128,9 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     soft_wrap=False,  # decide if you want soft wrapping of long lines
   )
   # create context with the arguments we received
-  appconfig: app_config.AppConfig = app_config.InitConfig(__app__, 'config.bin')
+  appconfig: app_config.AppConfig = app_config.InitConfig(
+    __app__, 'config.bin', fixed_dir=None if db_path is None else db_path.expanduser().resolve()
+  )
   ctx.obj = base.TranZoomConfig(
     console=console,
     verbose=verbose,
@@ -137,7 +140,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     img_path_prefix=img_path_prefix,
     img_use_date=img_use_date,
     img_use_hash=img_use_hash,
-    db_path=appconfig.dir if db_path is None else db_path.expanduser().resolve(),
+    db=frdb.FractalDatabase(appconfig, read_only=not db),  # this is where you turn the DB off
     pal=pal,
     set_pal=set_pal,
     set_points=set_points,

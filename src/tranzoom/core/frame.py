@@ -72,6 +72,7 @@ DEFAULT_JULIA_HEIGHT: str = '2.2'
 
 
 # TODO: create (optional) DB of stored frames
+# TODO: create a config command and ways to set permanent configurations, such as use DB and path
 # TODO: for videos compute all mpq steps first with full mpq, then simplify fraction to 0.01% error;
 #     frames are now deterministic and as reasonably small as possible, they are the entries to DB
 # TODO: video/gif to save check the frames for existence, thus recovering from a crash
@@ -254,6 +255,26 @@ class Frame:
       abs(self.bottom_im),
       _MPQ_ONE,
     )
+
+  @property
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the frame.
+
+    Keys: `fractal`, `top_re`, `top_im`, `bottom_re`, `bottom_im`, `point_re`, `point_im`, all str.
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the frame.
+
+    """
+    return {
+      'fractal': self.fractal.value,
+      'top_re': str(self.top_re),
+      'top_im': str(self.top_im),
+      'bottom_re': str(self.bottom_re),
+      'bottom_im': str(self.bottom_im),
+      'point_re': str(self.point_re),
+      'point_im': str(self.point_im),
+    }
 
   @staticmethod
   def FromCoords(
@@ -487,6 +508,25 @@ class ComputationParameters:
 
     """
     return (self.width, self.height)
+
+  @property
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the computation parameters.
+
+    Keys: `frm`, `width`, `height`, `depth`, `set_points`, where `frm` is the frame as a JSON dict,
+        `width` and `height` and `depth` are int, and `set_points` is str | None.
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the computation parameters.
+
+    """
+    return {
+      'frm': self.frm.json,
+      'width': self.width,
+      'height': self.height,
+      'depth': self.depth,
+      'set_points': self.set_points.value if self.set_points else None,
+    }
 
   def CoordToPixel(self, re_inp: ExactInputType, im_inp: ExactInputType) -> tuple[int, int]:
     """Convert complex-plane coordinates to pixel coordinates in the image.
