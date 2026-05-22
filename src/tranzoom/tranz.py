@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import pathlib
 
 import click
@@ -17,14 +18,14 @@ from transcrypto.utils import logging as cli_logging
 from tranzoom.cli import base
 from tranzoom.core import frame, palette
 
-from . import __version__
+from . import __app__, __version__
 
 # CLI app setup, this is an important object and can be imported elsewhere and called
 app = typer.Typer(
   add_completion=True,
   no_args_is_help=True,
   # keep in sync with Main() app.callback help
-  help='TranZoom: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features',
+  help=f'{__app__}: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features',
   epilog=(
     'Examples:\n\n\n\n'
     '# --- Mandelbrot Image Generation ---\n\n'
@@ -53,6 +54,10 @@ app = typer.Typer(
     'poetry run tranz zoom -s 256 auto --fps 10 --duration 2\n\n'
     'poetry run tranz zoom auto " -5578776469/7500000000" "8244620127/62500000000" '
     '"0.00073801" "0.00073801" "2.1" --fps 10 --duration 15\n\n\n\n'
+    '# --- Get/Set Config Values ---\n\n'
+    'poetry run tranz config get\n\n'
+    'poetry run tranz config set use_db true\n\n'
+    'poetry run tranz config set foo bar  # (example made up key)\n\n\n\n'
     '# --- Markdown Help ---\n\n'
     'poetry run tranz markdown > tranz.md'
   ),
@@ -67,7 +72,7 @@ def Run() -> None:
 @app.callback(
   invoke_without_command=True,
   # keep in sync with app help
-  help='TranZoom: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features',
+  help=f'{__app__}: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features',
 )  # have only one; this is the "constructor"
 @clibase.CLIErrorGuard
 def Main(  # documentation is help/epilog/args # noqa: D103
@@ -91,6 +96,9 @@ def Main(  # documentation is help/epilog/args # noqa: D103
       'Defaults to having colors.'  # state default because None default means docs don't show it
     ),
   ),
+  db: bool | None = base.USE_DB_OPTION,  # type: ignore[assignment]
+  db_path: pathlib.Path | None = base.DB_PATH_OPTION,  # type: ignore[assignment]
+  db_compress: bool | None = base.USE_DB_COMPRESSION_OPTION,  # type: ignore[assignment]
   img_output_path: pathlib.Path | None = base.IMAGE_PATH_OUTPUT_OPTION,  # type: ignore[assignment]
   img_path_prefix: str | None = base.IMAGE_PREFIX_OPTION,  # type: ignore[assignment]
   img_use_date: bool = base.IMAGE_INCLUDE_DATE_OPTION,  # type: ignore[assignment]
@@ -126,15 +134,20 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     soft_wrap=False,  # decide if you want soft wrapping of long lines
   )
   # create context with the arguments we received
-  ctx.obj = base.TranZoomConfig(
+  appconfig: app_config.AppConfig = app_config.InitConfig(  # this always has the path
+    __app__, 'config.bin', fixed_dir=None if db_path is None else db_path.expanduser().resolve()
+  )
+  tzc: base.TranZoomConfig = base.TranZoomConfig(
     console=console,
     verbose=verbose,
     color=color,
-    appconfig=app_config.InitConfig('tranzoom', 'config.bin'),
+    appconfig=appconfig,
     img_output_path=None if img_output_path is None else img_output_path.expanduser().resolve(),
     img_path_prefix=img_path_prefix,
     img_use_date=img_use_date,
     img_use_hash=img_use_hash,
+    db_read_only=False,  # sentinel only: will load from config below!
+    db_compress=False,  # sentinel only: will load from config below!
     pal=pal,
     set_pal=set_pal,
     set_points=set_points,
@@ -153,9 +166,25 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     timeout=timeout,
     iterm=iterm,
   )
+  # open config and update the config values
+  cnf: base.ConfigType = tzc.GetConfig()
+  ctx.obj = dataclasses.replace(
+    tzc,
+    # config values should have "None" to mean override the config!
+    db_read_only=(not cnf['use_db']) if db is None else db,  # INVERT!
+    db_compress=cnf['db_compression'] if db_compress is None else db_compress,
+  )
   # even though this is a convenient place to print(), beware that this runs even when
   # a subcommand is invoked; so prefer logging.debug/info/warning/error instead of print();
   # for example, if you run `markdown` subcommand, this will still print and spoil the output
+
+
+# Import CLI modules to register their commands with the app -- keep import order
+from tranzoom.cli import (  # noqa: E402, I001
+  imagecommand,  # pyright: ignore[reportUnusedImport] # noqa: F401
+  zoomcommand,  # pyright: ignore[reportUnusedImport] # noqa: F401
+  configcommand,  # pyright: ignore[reportUnusedImport] # noqa: F401
+)
 
 
 @app.command(
@@ -167,10 +196,3 @@ def Main(  # documentation is help/epilog/args # noqa: D103
 def Markdown(*, ctx: click.Context) -> None:  # documentation is help/epilog/args # noqa: D103
   config: base.TranZoomConfig = ctx.obj
   config.console.print(clibase.GenerateTyperHelpMarkdown(app, prog_name='tranz'))
-
-
-# Import CLI modules to register their commands with the app
-from tranzoom.cli import (  # noqa: E402
-  imagecommand,  # pyright: ignore[reportUnusedImport] # noqa: F401
-  zoomcommand,  # pyright: ignore[reportUnusedImport] # noqa: F401
-)

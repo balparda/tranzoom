@@ -3,6 +3,7 @@
 """CLI: Fractal image utils command.
 
 <https://en.wikipedia.org/wiki/Mandelbrot_set>
+<https://en.wikipedia.org/wiki/Julia_set>
 
 README.md has good examples for different zoom levels.
 """
@@ -14,6 +15,7 @@ import json
 import pathlib
 
 import click
+import gmpy2
 import typer
 from transcrypto.cli import clibase
 
@@ -147,13 +149,16 @@ def Julia(  # documentation is help/epilog/args  # noqa: D103
     frame.Fractal.JULIA, center_re, center_im, f_width, f_height, config.console.print
   )
   # load Julia point and make frame
-  frm = frame.FrameAndPoint.FromCenterAndPoint(
+  julia_re: gmpy2.mpq
+  julia_im: gmpy2.mpq
+  julia_re, julia_im = base.MakePointFromCLIArgs(point_re, point_im, config.console.print)
+  frm = frame.Frame.FromCenter(
     frame.Fractal.JULIA,
-    *base.MakePointFromCLIArgs(point_re, point_im, config.console.print),
-    frm.center[0],
-    frm.center[1],
+    *frm.center,
     frm.size[0],
-    frm.size[1],
+    height=frm.size[1],
+    point_re=julia_re,
+    point_im=julia_im,
   )
   # we have the frame, now feed it to the producer
   base.ProduceFractalImage(frm, config)

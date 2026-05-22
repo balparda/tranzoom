@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 import pathlib
 from collections import abc
+from typing import TypedDict, cast
 
 import click
 import gmpy2
@@ -15,7 +17,8 @@ from transcrypto.cli import clibase
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
-from tranzoom.core import ai, fractal, frame, image, palette
+from tranzoom import __version__
+from tranzoom.core import ai, fractal, frame, frdb, image, palette
 
 # global CLI data, and some test stuff
 
@@ -23,7 +26,7 @@ from tranzoom.core import ai, fractal, frame, image, palette
 # this indicates that the mathematical computation or the setting of colors has changed;
 # this should NOT change over metadata changes, as it is computed from raw pixel data
 SEAHORSE_TAIL_HASH: str = 'bc8befe1492f4d296cf93994ba201ef06c3fa4858a47a657bb7f136f42bceb5d'
-SEAHORSE_ANIMATED_HASH: str = '91b99d972c26a6a4d6116064b4528136a9104436cac3d9f48d679df37a875d97'
+SEAHORSE_ANIMATED_HASH: str = '4cc2c56c0d6363bcb4bf63d7221843cf668f12e8582490ed3fac7100b413b2c9'
 SUZANA_WAVE_HASH: str = '4be1409a9c55b4f9cbe21f45fa29d0bfc11622bffc248a5639fbffdea0cd80fe'
 # this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 
@@ -107,6 +110,42 @@ IMAGE_PATH_OUTPUT_OPTION: typer.models.OptionInfo = typer.Option(
   help=(
     'The local output root directory path, ex: "~/foo/bar/"; '
     'if not given, the image will be saved in the current working directory'
+  ),
+)
+USE_DB_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '--db/--no-db',
+  help=(
+    'Use local DB in `--db`? True means use it, False means do not use it; default is False; '
+    'this option can also be loaded from the disk config, but if given should override the config'
+  ),
+)
+DB_PATH_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '-d',
+  '--db-path',
+  exists=True,
+  file_okay=False,
+  dir_okay=True,
+  readable=True,
+  writable=True,
+  help=(
+    'The local DB root directory path, ex: "~/foo/bar/"; '
+    'if not given (DEFAULT), the DB will be saved in the current app config directory, i.e.: '
+    'on MacOS this is "/Users/[user]/Library/Application Support/[app_name]{/[version]}"; '
+    'on Windows: "C:\\Users\\[user]\\AppData\\Local{\\[app_author]}\\[app_name]{\\[version]}"; '
+    'on Linux: "/home/[user]/.config/[app_name]{/[version]}"'
+  ),
+)
+USE_DB_COMPRESSION_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '--db-compression/--no-db-compression',
+  help=(
+    'Use compression for the local DB to save space? '
+    'True means use it but the file will be unreadable by humans, '
+    'False means do not use it and file will be readable; '
+    'default is False, a larger, readable file; '
+    'this option can also be loaded from the disk config, but if given should override the config'
   ),
 )
 IMAGE_PREFIX_OPTION: typer.models.OptionInfo = typer.Option(
@@ -320,11 +359,12 @@ MAX_ITERATIONS_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '-i',
   '--iter',
-  min=frame.MIN_ITER,
+  # everywhere we check MIN_ITER <= i <= MAX_ITER, but we use MIN_ITER as a sentinel value for AUTO!
+  min=frame.MIN_ITER + 1,  # steer users away from the sentinel value
   max=frame.MAX_ITER,
   help=(
     'Maximum iterations (depth) to compute before determining escape; '
-    f'{frame.MIN_ITER} ≤ iter ≤ {frame.MAX_ITER}; '
+    f'{frame.MIN_ITER + 1} ≤ iter ≤ {frame.MAX_ITER}; '  # steer users away from the sentinel value
     f'default is None (automatic search for optimal iterations --- recommended)'
   ),
 )
@@ -489,6 +529,59 @@ ANIM_SAVE_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
   ),
 )
 
+CONFIG_SETTABLE_KEYS: dict[str, type] = {
+  # the keys you can actually read/set
+  'use_db': bool,
+  'db_compression': bool,
+}
+
+# Config Options
+CONFIG_KEY_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  ...,
+  help=(f'Config key to set, possible values: {sorted(CONFIG_SETTABLE_KEYS)}'),
+)
+CONFIG_VALUE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
+  ...,
+  help=('Config value to set'),
+)
+
+
+class ConfigType(TypedDict):
+  """Config object type.
+
+  Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
+  Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
+  """
+
+  app_version: str  # package version (tranzoom.__version__) at time of last save
+  last_save: int  # timestamp of last save
+
+  # actual options come here:
+  use_db: bool  # default is False, USE_DB_OPTION
+  db_compression: bool  # default is False, USE_DB_COMPRESSION_OPTION
+  # if you add a key here, remember to add it to CONFIG_SETTABLE_KEYS!!!
+
+
+def _ConfigTypeFactory(overrides: dict[str, object] | None = None) -> ConfigType:
+  """Create new ConfigType object with default values.
+
+  Args:
+    overrides (dict[str, object] | None): dict of fields to override from the defaults; if None,
+        will use all defaults
+
+  Returns:
+    ConfigType: A new ConfigType object with default values.
+
+  """
+  obj: ConfigType = {
+    'app_version': __version__,  # set to current package version on creation
+    'last_save': timer.Now(),
+    'use_db': False,  # this is where USE_DB_OPTION default lives
+    'db_compression': False,  # this is where USE_DB_COMPRESSION_OPTION default lives
+  }
+  obj.update(overrides or {})  # type: ignore[typeddict-item]
+  return obj
+
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class TranZoomConfig(clibase.CLIConfig):
@@ -498,6 +591,8 @@ class TranZoomConfig(clibase.CLIConfig):
   img_use_date: bool
   img_use_hash: bool
   img_path_prefix: str | None
+  db_read_only: bool
+  db_compress: bool
   pal: palette.Palette
   set_pal: palette.Palette
   set_points: frame.SetHighlightAlgorithm | None
@@ -530,6 +625,44 @@ class TranZoomConfig(clibase.CLIConfig):
   julia_re: str = frame.DEFAULT_JULIA_RE  # for `zoom` command
   julia_im: str = frame.DEFAULT_JULIA_IM  # for `zoom` command
 
+  def OpenDB(self) -> frdb.FractalDatabase:
+    """Make a fractal database instance from the config. This is also a context! Prefer context use.
+
+    Returns:
+      frdb.FractalDatabase: an instance of the fractal database ready to be used
+
+    """
+    return frdb.FractalDatabase(
+      self.appconfig,
+      read_only=self.db_read_only,
+      compress_save=self.db_compress,  # either compress unreadable or not compress readable
+      format_json=not self.db_compress,
+    )
+
+  def GetConfig(self) -> ConfigType:
+    """Get a dict of the config values from the disk config.
+
+    Returns:
+      ConfigType: a dict of the config values, creates the default config if none on disk yet
+
+    """
+    if self.appconfig.path.exists():
+      logging.info(f'Loading config from "{self.appconfig.path}"')
+      return cast('ConfigType', self.appconfig.DeSerialize())
+    return _ConfigTypeFactory()
+
+  def SetConfig(self, cnf: ConfigType) -> None:
+    """Set a dict of the config values, save config to disk."""
+    cnf.update(
+      # always update these fields
+      {
+        'app_version': __version__,  # set to current package version on creation
+        'last_save': timer.Now(),
+      }
+    )
+    self.appconfig.Serialize(cnf)
+    logging.info(f'Saved config to "{self.appconfig.path}": {cnf}')
+
 
 def ProduceFractalImage(
   frm: frame.Frame,
@@ -542,8 +675,10 @@ def ProduceFractalImage(
   """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
 
   Args:
-    frm: the frame to produce the image from; must be already validated and ready for rendering
-    config: the global configuration with all the options needed for rendering and saving the image
+    frm (frame.Frame): the frame to produce the image from; must be already validated and ready
+        for rendering
+    config (TranZoomConfig): the global configuration with all the options needed for rendering
+        and saving the image
     tm (int | None): Optional timestamp to use for the date in the file name. If None, the
         current time is used.
     add_serial (int | None): Optional serial number to include in the file name for uniqueness;
@@ -553,7 +688,8 @@ def ProduceFractalImage(
         not be saved; default is True.
 
   Returns:
-    A tuple of (image.Image object, raw PNG bytes, internal hash of the raw PNG)
+    tuple[image.Image, bytes, str]: A tuple of (image.Image object, raw PNG bytes, internal hash
+        of the raw PNG)
 
   This is a high-level function that takes care of all the steps needed to produce the final image,
   including:
@@ -574,45 +710,39 @@ def ProduceFractalImage(
     if config.img_size
     else (config.img_width, config.img_height)
   )
-  # add the mark?
+  params: frame.ComputationParameters = (
+    frame.ComputationParameters(
+      frm=frm, width=width, height=height, set_points=config.set_points, depth=config.max_iter
+    )
+    if config.max_iter
+    else frame.ComputationParameters(
+      frm=frm, width=width, height=height, set_points=config.set_points
+    )
+  )
+  # add the mark? do this early to check the inputs ASAP
   mark_coords: tuple[int, int] | None = (
-    frm.CoordsTupleToPixel(config.mark_coords, width, height)
-    if config.mark_coords  # do this early to check the inputs ASAP
-    else None
+    params.CoordsTupleToPixel(config.mark_coords) if config.mark_coords else None
   )
   # log
-  set_points_str: str = f', "{config.set_points.value}" interior' if config.set_points else ''
   config.console.print(
-    f'\n{width}x{height} {frm.fractal.value.capitalize()} in '
-    f'frame {frm}, precision ± {frm.Precision(width, height)} bits, '  # approx: b/c iters
-    f'10^{frm.magnification[1]:.2f} magnitude, '
-    f'{"AUTO" if config.max_iter is None else config.max_iter} iterations'
-    f'{set_points_str}...'
+    f'\n{params}, precision ± {params.precision} bits, '  # approx: b/c depth is probably temporary
+    f'10^{frm.magnification[1]:.2f} magnitude...'
   )
   # render the image
   raw_png: bytes
   raw_hash: str
   with timer.Timer(emit_log=False) as tmr:
-    img: image.Image = {
-      frame.Fractal.MANDELBROT: fractal.Mandelbrot,
-      frame.Fractal.JULIA: fractal.Julia,
-    }[frm.fractal](
-      frm,  # type: ignore[arg-type]  # we know this is the right type of frame
-      width,
-      height,
-      max_iter=config.max_iter,
-      set_points=config.set_points,
+    img: image.Image = fractal.ComputeFractal(
+      params,
       n_processes=config.max_threads,
       print_comm=config.console.print,
     )
     # fractal is ready, convert to PNG
-    raw_png, raw_hash = img.AsPNG(
-      pal=config.pal, set_pal=config.set_pal, set_points=config.set_points
-    )
+    raw_png, raw_hash = img.AsPNG(pal=config.pal, set_pal=config.set_pal)
     if mark_coords:
       # we were asked to mark a coordinate with a crosshair overlay: do it
       raw_png = image.DrawCrossOverlay(
-        raw_png, mark_coords[0], mark_coords[1], col=config.mark_color, lw=config.mark_width
+        raw_png, *mark_coords, col=config.mark_color, lw=config.mark_width
       )
   # print stats
   config.console.print(f'{frm.fractal.value.capitalize()} image {raw_hash!r} in {tmr}')
@@ -648,15 +778,16 @@ def MakeFrameFromCLIArgs(
   """Make a frame or die. Tries float/mpq first, then tries reading from a file metadata.
 
   Args:
-    fractal: the fractal type to create the frame for
-    center_re: the real part of the center, or an image path to read the frame from
-    center_im: the imaginary part of the center (ignored if center_re is an image path)
-    f_width: the width of the frame (ignored if center_re is an image path)
-    f_height: the height of the frame (ignored if center_re is an image path)
-    print_call: a callable to print messages, used for logging during frame creation
+    fractal (frame.Fractal): the fractal type to create the frame for
+    center_re (str): the real part of the center, or an image path to read the frame from
+    center_im (str): the imaginary part of the center (ignored if center_re is an image path)
+    f_width (str): the width of the frame (ignored if center_re is an image path)
+    f_height (str | None): the height of the frame (ignored if center_re is an image path)
+    print_call (abc.Callable[[str], None]): a callable to print messages, used for logging during
+        frame creation
 
   Returns:
-    A valid frame object
+    frame.Frame: A valid frame object
 
   Raises:
     click.UsageError: if arguments can't be turned into a valid frame
@@ -665,7 +796,7 @@ def MakeFrameFromCLIArgs(
   """
   try:
     # the happy path is one line... if these coords work, we return the frame and we're done
-    return frame.Frame.FromCenter(fractal, center_re, center_im, f_width, f_height)
+    return frame.Frame.FromCenter(fractal, center_re, center_im, f_width, height=f_height)
   except ValueError as err:
     if 'invalid' not in str(err).lower():
       raise click.UsageError(f'Error: {center_re=}, {center_im=}, {f_width=}, {f_height=}') from err
@@ -691,7 +822,7 @@ def MakeFrameFromCLIArgs(
         str(info[image.META_CENTER_RE_KEY]),
         str(info[image.META_CENTER_IM_KEY]),
         str(info[image.META_WIDTH_RE_KEY]),
-        str(info[image.META_HEIGHT_IM_KEY]),
+        height=str(info[image.META_HEIGHT_IM_KEY]),
       )
     except Exception as err2:  # this error we cannot forgive
       raise click.UsageError(
@@ -709,12 +840,13 @@ def MakePointFromCLIArgs(
   """Make a point or die. Tries float/mpq first, then tries reading from a file metadata.
 
   Args:
-    point_re: the real part of the point
-    point_im: the imaginary part of the point
-    print_call: a callable to print messages, used for logging during frame creation
+    point_re (frame.ExactInputType): the real part of the point
+    point_im (frame.ExactInputType): the imaginary part of the point
+    print_call (abc.Callable[[str], None]): a callable to print messages, used for logging during
+        frame creation
 
   Returns:
-    A valid point
+    tuple[gmpy2.mpq, gmpy2.mpq]: A valid point
 
   Raises:
     click.UsageError: if arguments can't be turned into a valid point

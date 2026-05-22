@@ -40,6 +40,7 @@ Built with:
     - [What this tool is not](#what-this-tool-is-not)
     - [Key concepts and terminology](#key-concepts-and-terminology)
       - [Frame Representation](#frame-representation)
+      - [Computation Parameters](#computation-parameters)
       - [Precision](#precision)
     - [Inputs and outputs](#inputs-and-outputs)
       - [Inputs](#inputs)
@@ -178,7 +179,8 @@ Starting with version 1.4.0, tranZoom can render animated GIF and MP4 zoom anima
 ### Key concepts and terminology
 
 - **[Frame](#frame-representation)**: A rectangular region of the complex plane, defined by a center + width. Stored as `gmpy2.mpq` (exact rationals) to avoid any accumulation of rounding error in coordinates.
-- **[Precision](#precision)**: The number of bits of `mpfr` floating-point precision used for escape-time iteration. Computed automatically from the frame size; never needs to be set manually.
+- **[ComputationParameters](#computation-parameters)**: The complete description of a fractal computation: a `Frame`, pixel image dimensions, iteration depth, and (optionally) an interior Set coloring algorithm. Used as the sole input to all rendering functions.
+- **[Precision](#precision)**: The number of bits of `mpfr` floating-point precision used for escape-time iteration. Computed automatically from the frame geometry, image dimensions, and iteration depth; never needs to be set manually.
 - **Magnification**: Ratio of the default full-set frame area to the current frame area. 1× = full set; 1G× = zoomed in one billion times.
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
 - **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
@@ -194,8 +196,8 @@ Starting with version 1.4.0, tranZoom can render animated GIF and MP4 zoom anima
 
 A **Frame** is an exact representation of a rectangular region of the complex plane, it is ***your view*** into a fractal, the viewport, the part of the plane to be computed and transformed into an image or visualization. It can be printed by the CLI like:
 
-1. **`[(-3/4, 0) ± 5/2]`** A ***square*** Frame, centered on $-3/4+0j$ and with *width* and *height* of $5/2$, `[(center_re, center_im) ± square_side]`; or
-1. **`[(-3/4, 0) ± (5/2, 5/3)]`** A **rectangular** Frame, centered on $-3/4+0j$ and with *width* of $5/2$ (on the *real* scale) and *height* of $5/3$ (on the *imaginary* scale), `[(center_re, center_im) ± (width_re, height_im)]`.
+- **`[MANDELBROT: (-3/4, 0) ± 5/2]`** A ***square*** Frame, centered on $-3/4+0j$ and with *width* and *height* of $5/2$, `[FRACTAL: (center_re, center_im) ± square_side]`; or
+- **`[MANDELBROT: (-3/4, 0) ± (5/2, 5/3)]`** A **rectangular** Frame, centered on $-3/4+0j$ and with *width* of $5/2$ (on the *real* scale) and *height* of $5/3$ (on the *imaginary* scale), `[FRACTAL: (center_re, center_im) ± (width_re, height_im)]`.
 
 Frames are stored as [`gmpy2.mpq` (exact rationals)](https://gmpy2.readthedocs.io/en/latest/mpq.html) to avoid any accumulation of rounding error in coordinates. You can provide a `mpq` to the CLI as:
 
@@ -207,7 +209,7 @@ Here is an example with mixed use:
 ```txt
 " -0.74303" "0.126433" "1611/100000" "0.0176"
 will create the Frame:
-[(-74303/100000, 126433/1000000) ± (1611/100000, 11/625)]
+[MANDELBROT: (-74303/100000, 126433/1000000) ± (1611/100000, 11/625)]
 ```
 
 Here is one example with numbers that would usually *NOT* be representable with regular `float`:
@@ -215,7 +217,7 @@ Here is one example with numbers that would usually *NOT* be representable with 
 ```txt
 " -929554858796448380940239382643467500000001/1250000000000000000000000000000000000000000" "0.13182590420531197049313205638514950000008" "0.00000000000001"
 will create the Frame:
-[(-929554858796448380940239382643467500000001/1250000000000000000000000000000000000000000,
+[MANDELBROT: (-929554858796448380940239382643467500000001/1250000000000000000000000000000000000000000,
 1647823802566399631164150704814368750001/12500000000000000000000000000000000000000) ± 1/100000000000000]
 ```
 
@@ -223,17 +225,34 @@ Frame will keep these numbers exact always, no matter the precision.
 
 For Julia and other uses the Frame can also receive an extra complex number, a point, determined by real and image parts. It will be represented as:
 
-`[(center_re, center_im) ± (width_re, height_im) @ (point_re, point_im)]`
+`[JULIA: (center_re, center_im) ± (width_re, height_im) @ (point_re, point_im)]`
 
 where the `(point_re, point_im)` part is added after an `@`. For example:
 
-`[(-3/4, 0) ± (5/2, 5/3) @ (13667/50000, 371/50000)]`
+`[JULIA: (-3/4, 0) ± (5/2, 5/3) @ (13667/50000, 371/50000)]`
+
+#### Computation Parameters
+
+**`ComputationParameters`** bundles everything that determines a fractal computation: the `Frame` (coordinates), pixel image dimensions (`width` × `height`), iteration depth (`depth`), and an optional interior Set coloring algorithm. It is the sole argument passed to the rendering engine. It can be printed by the CLI like:
+
+- **`{[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}`** — square Mandelbrot, adaptive depth
+- **`{[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, 50000]}`** — explicit or already computed depth of 50,000
+- **`{[JULIA: (-3/4, 0) ± (5/2, 5/3) @ (13667/50000, 371/50000)] : [800, 600, AUTO] : angle}`** — Julia with `angle` Set interior coloring
+
+The format is `{[Frame] : [width, height, depth] : set_algorithm}` where:
+
+- `[Frame]` is the `Frame` string representation described above
+- `width` and `height` are the pixel dimensions of the output image
+- `depth` is either `AUTO` (meaning the engine will probe for an optimal iteration limit) or an explicit integer from `-i/--iter`
+- `set_algorithm` is the interior Set coloring algorithm name (lowercase), only shown when `--set` is given
+
+The `depth=AUTO` sentinel value (`MIN_ITER = 1000`) triggers an adaptive probe: a tiny `16×16` test image is rendered at each candidate depth in `[100k, 1M, 10M]` and the smallest depth where the escape histogram is not saturated is chosen and multiplied by a safety factor. The resolved depth replaces the `AUTO` sentinel before the full render begins, and `ComputationParameters.precision` (and `.context`) always see the final resolved depth.
 
 #### Precision
 
 **Precision** is the number of [MPFR (arbitrary-precision floating-point)](https://www.mpfr.org/) **bits** used during fractal iteration. Mandelbrot computation involves repeated complex-plane arithmetic starting from the frame's coordinates; insufficient floating-point precision causes visible artifacts — pixels classified as escaped or non-escaped incorrectly — especially at high magnification where neighboring pixels differ only in the final bits of their coordinates.
 
-TransZoom computes the required precision automatically for every `(frame, image size, max-iteration)` combination via `Frame.Precision()` and `Image.precision`. You never need to set it manually. The estimate is conservative by design: it aims to keep numerical noise far below one output pixel.
+TransZoom computes the required precision automatically for every `(frame, image dimensions, depth)` combination via `ComputationParameters.precision`. You never need to set it manually. The estimate is conservative by design: it aims to keep numerical noise far below one output pixel.
 
 The formula is:
 
@@ -245,7 +264,7 @@ where:
 
 - **`h`** = `min(frame_width / pixel_width, frame_height / pixel_height)` — the smaller complex-plane distance that maps to one output pixel (the tighter precision constraint)
 - **`M`** = `max(|top_re|, |bottom_re|, |top_im|, |bottom_im|, 1)` — the largest coordinate magnitude in the frame; because MPFR precision is *relative* (not absolute), frames far from the origin need more bits to represent fine detail at a given scale
-- **`N`** — `max_iter`, the iteration ceiling for the render; the `2 * ceil(log2(N + 1))` term is an iteration guard that grows logarithmically to account for accumulated rounding error over many iterations
+- **`N`** — `params.depth`, the iteration ceiling for the render (the resolved depth after any `AUTO` probe); the `2 * ceil(log2(N + 1))` term is an iteration guard that grows logarithmically to account for accumulated rounding error over many iterations
 - **`G = 88`** — `_MPFR_MIN_GUARD_BITS`, a fixed safety margin of 88 extra bits beyond the bare minimum to distinguish neighboring pixels
 - **`P_min = 140`** — `_MPFR_MIN_PRECISION`, the floor (≈42 decimal digits), active for low-magnification frames where the base term is small
 
@@ -253,10 +272,8 @@ The maximum allowed precision is `_MPFR_MAX_PRECISION = 300 000` bits (≈90 000
 
 The computed precision is exposed as:
 
-- `Frame.Precision(pixel_width, pixel_height, max_iter=...)` → `int` bits
-- `Frame.Context(pixel_width, pixel_height, max_iter=...)` → ready-to-use `gmpy2.context`
-- `Image.precision` → `int` bits (uses the image's own dimensions and current depth)
-- `Image.context` → ready-to-use `gmpy2.context` (same)
+- `ComputationParameters.precision` → `int` bits (property; uses `params.depth`, `params.width`, `params.height`, and `params.frm`)
+- `ComputationParameters.context` → ready-to-use `gmpy2.context` (property; same inputs as `.precision`)
 
 ### Inputs and outputs
 
@@ -825,7 +842,7 @@ The CLI respects the `NO_COLOR` environment variable and the `--no-color` / `--c
 | `cli/imagecommand.py` | `tranz image mandel`, `tranz image julia`, and `tranz image read` command implementations |
 | `cli/zoomcommand.py` | `tranz zoom ai`, `tranz zoom manual`, and `tranz zoom auto` command implementations |
 | `core/fractal.py` | `Mandelbrot()` and `Julia()` renderers — fractal math |
-| `core/frame.py` | `Frame` class, `Fractal` enum, and base coordinate math |
+| `core/frame.py` | `Frame` class, `ComputationParameters` class, `Fractal` enum, and base coordinate math |
 | `core/image.py` | `Image` class; image utilities, overlays, iTerm2 printing, metadata helpers |
 | `core/palette.py` | Palette definitions and color mapping |
 | `core/queries.py` | AI prompt templates and Pydantic models for structured LLM responses |

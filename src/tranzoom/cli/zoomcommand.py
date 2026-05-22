@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""CLI: Mandelbrot zoom search with AI command.
+"""CLI: Fractal zoom search with AI command.
 
 <https://en.wikipedia.org/wiki/Mandelbrot_set>
 
@@ -26,7 +26,8 @@ from tranzoom.cli import base
 from tranzoom.core import ai, frame, image
 
 _MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the fractal score
-_MAX_TOLERATED_MAG_ERROR: float = 0.02  # 2%
+_MAX_TOLERATED_FRAME_MAG_ERROR: float = 0.00002  # 0.002%
+_MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.02  # 2%
 
 
 zoom_app = typer.Typer(
@@ -116,14 +117,19 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
   )
   # if it is a Julia, make the Julia point and add it to the frame
+  julia_re: gmpy2.mpq
+  julia_im: gmpy2.mpq
+  julia_re, julia_im = base.MakePointFromCLIArgs(
+    config.julia_re, config.julia_im, config.console.print
+  )
   frm = (
-    frame.FrameAndPoint.FromCenterAndPoint(
+    frame.Frame.FromCenter(
       frame.Fractal.JULIA,
-      *base.MakePointFromCLIArgs(config.julia_re, config.julia_im, config.console.print),
-      frm.center[0],
-      frm.center[1],
+      *frm.center,
       frm.size[0],
-      frm.size[1],
+      height=frm.size[1],
+      point_re=julia_re,
+      point_im=julia_im,
     )
     if config.fractal_type == frame.Fractal.JULIA
     else frm
@@ -136,18 +142,18 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     if config.img_size
     else (config.img_width, config.img_height)
   )
+  params: frame.ComputationParameters = frame.ComputationParameters(
+    frm=frm, width=width, height=height, set_points=config.set_points
+  )
   # we have a valid frame, let's start the AI search loop
   ai.ZoomLoop(
-    frm,
-    width,
-    height,
+    params,
     config.img_output_path,
     config.img_use_date,
     config.img_use_hash,
     config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
     config.pal,
     config.set_pal,
-    config.set_points,
     config.max_threads,
     config.model,
     config.spec_tokens,
@@ -201,14 +207,19 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
     config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
   )
   # if it is a Julia, make the Julia point and add it to the frame
+  julia_re: gmpy2.mpq
+  julia_im: gmpy2.mpq
+  julia_re, julia_im = base.MakePointFromCLIArgs(
+    config.julia_re, config.julia_im, config.console.print
+  )
   frm = (
-    frame.FrameAndPoint.FromCenterAndPoint(
+    frame.Frame.FromCenter(
       frame.Fractal.JULIA,
-      *base.MakePointFromCLIArgs(config.julia_re, config.julia_im, config.console.print),
-      frm.center[0],
-      frm.center[1],
+      *frm.center,
       frm.size[0],
-      frm.size[1],
+      height=frm.size[1],
+      point_re=julia_re,
+      point_im=julia_im,
     )
     if config.fractal_type == frame.Fractal.JULIA
     else frm
@@ -221,18 +232,18 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
     if config.img_size
     else (config.img_width, config.img_height)
   )
+  params: frame.ComputationParameters = frame.ComputationParameters(
+    frm=frm, width=width, height=height, set_points=config.set_points
+  )
   # we have a valid frame, let's start the AI search loop
   ai.ManualLoop(
-    frm,
-    width,
-    height,
+    params,
     config.img_output_path,
     config.img_use_date,
     config.img_use_hash,
     config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
     config.pal,
     config.set_pal,
-    config.set_points,
     config.max_threads,
     config.max_steps,
     config.iterm,
@@ -320,19 +331,23 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
   )
   # if it is a Julia, make the Julia point and add it to the frame
+  julia_re: gmpy2.mpq
+  julia_im: gmpy2.mpq
+  julia_re, julia_im = base.MakePointFromCLIArgs(
+    config.julia_re, config.julia_im, config.console.print
+  )
   frm = (
-    frame.FrameAndPoint.FromCenterAndPoint(
+    frame.Frame.FromCenter(
       frame.Fractal.JULIA,
-      *base.MakePointFromCLIArgs(config.julia_re, config.julia_im, config.console.print),
-      frm.center[0],
-      frm.center[1],
+      *frm.center,
       frm.size[0],
-      frm.size[1],
+      height=frm.size[1],
+      point_re=julia_re,
+      point_im=julia_im,
     )
     if config.fractal_type == frame.Fractal.JULIA
     else frm
   )
-  original_frm: frame.Frame = frm
   # determine width and height
   width: int
   height: int
@@ -346,25 +361,17 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   mag_per_step: float = dest_magnification_10 / steps
   scalar_magnification: gmpy2.mpfr = gmpy2.exp10(dest_magnification_10)
   scalar_magnification_per_step: float = math.pow(10.0, mag_per_step)
-  mpq_mag: gmpy2.mpq = frame.MPQFromFloatApprox(scalar_magnification_per_step, 100_000)
-  # reproduce the zoom run to check the actual magnification we will get
-  for _ in range(frames - 1):
-    frm = frame.Frame.FromCenter(
-      frm.fractal,
-      frm.center[0],
-      frm.center[1],
-      frm.size[0] / mpq_mag,
-      frm.size[1] / mpq_mag,
-    )
+  all_reasonable_frames: list[frame.Frame] = _ComputeReasonableFrames(
+    frm, frames, scalar_magnification_per_step
+  )
   # now we can compute the actual final magnification
-  actual_mag: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(original_frm.area / frm.area))
+  actual_mag: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(frm.area / all_reasonable_frames[-1].area))
   mag_error: gmpy2.mpfr = abs(actual_mag - scalar_magnification) / scalar_magnification
-  frm = original_frm  # reset frm to the original for the actual rendering loop
   # log; log errors
   config.console.print(
     f'\nProducing {width}x{height} 10^{dest_magnification_10:.2f} magnification zoom animation, '
     f'{human.HumanizedSeconds(duration)} long, at {fps:.2f} FPS, '
-    f'with {frames} frames, {100.0 * scalar_magnification_per_step:.2f}% per step ({mpq_mag}), '
+    f'with {frames} frames, {100.0 * scalar_magnification_per_step:.2f}% per step, '
     f'final magnification error {float(gmpy2.mpfr(100.0) * mag_error):.4f}%...\n'
   )
   if scalar_magnification_per_step >= image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
@@ -375,7 +382,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       'The resulting animation may look jumpy. Consider increasing the number of frames '
       'or reducing the total magnification.[/]\n'
     )
-  if mag_error > _MAX_TOLERATED_MAG_ERROR:
+  if mag_error > _MAX_TOLERATED_TOTAL_MAG_ERROR:
     config.console.print(
       f'[red]Warning: the actual magnification achieved by zooming in the frame is '
       f'{float(actual_mag):.2f}, which is {float(gmpy2.mpfr(100.0) * mag_error):.4f}% different '
@@ -390,7 +397,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   all_frames: list[bytes] = []
   all_hash: list[str] = []
   with timer.Timer(emit_log=False) as tmr:
-    for i in range(frames):
+    for i, frm in enumerate(all_reasonable_frames):
       config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
       # we have the frame, now feed it to the producer
       img, img_data, data_hash = base.ProduceFractalImage(
@@ -398,26 +405,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       )
       all_frames.append(img_data)
       all_hash.append(data_hash)
-      # zoom in the frame for the next iteration
-      frm = (
-        frame.FrameAndPoint.FromCenterAndPoint(
-          frm.fractal,
-          frm.point_re,
-          frm.point_im,
-          frm.center[0],
-          frm.center[1],
-          frm.size[0] / mpq_mag,
-          frm.size[1] / mpq_mag,
-        )
-        if isinstance(frm, frame.FrameAndPoint) and frm.fractal == frame.Fractal.JULIA
-        else frame.Frame.FromCenter(
-          frm.fractal,
-          frm.center[0],
-          frm.center[1],
-          frm.size[0] / mpq_mag,
-          frm.size[1] / mpq_mag,
-        )
-      )
     # check we got something
     if not img:
       raise click.ClickException('No image produced for animation! should never happen; report bug')
@@ -436,23 +423,21 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   )
   # create metadata
   meta: dict[str, str] = image.MakeImageMeta(
-    img,
+    img,  # using LAST FRAME!
     video_hash,
     pal=config.pal,
     set_pal=config.set_pal,
-    set_points=config.set_points,
   )
   # add video-specific metadata
   meta[image.META_IMAGE_ANIMATION_KEY] = anim_type.value.lower()
   meta.update(
     # the extra animation keys
     {
-      image.META_ANIM_INITIAL_WIDTH_RE_KEY: str(original_frm.size[0]),
-      image.META_ANIM_INITIAL_HEIGHT_IM_KEY: str(original_frm.size[1]),
+      image.META_ANIM_INITIAL_WIDTH_RE_KEY: str(all_reasonable_frames[0].size[0]),
+      image.META_ANIM_INITIAL_HEIGHT_IM_KEY: str(all_reasonable_frames[0].size[1]),
       image.META_ANIM_MAGNITUDE_KEY: str(dest_magnification_10),
       image.META_ANIM_MAGNITUDE_PER_STEP_KEY: str(mag_per_step),
       image.META_ANIM_MAGNIFICATION_PER_STEP_KEY: str(scalar_magnification_per_step),
-      image.META_ANIM_MAGNIFICATION_PER_STEP_MPQ_KEY: str(mpq_mag),
       image.META_ANIM_DURATION_KEY: str(duration),
       image.META_ANIM_FRAMES_KEY: str(frames),
       image.META_ANIM_STEPS_KEY: str(steps),
@@ -476,3 +461,53 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   if config.iterm and anim_type != image.AnimationType.MP4:  # iTerm2 does not support MP4, only GIF
     image.PrintITerm2(video_path.read_bytes())
     config.console.print()
+
+
+def _ComputeReasonableFrames(
+  initial_frame: frame.Frame, frames: int, scalar_magnification_per_step: float
+) -> list[frame.Frame]:
+  dx: gmpy2.mpq
+  dy: gmpy2.mpq
+  rdx: gmpy2.mpq
+  rdy: gmpy2.mpq
+  steps: int = frames - 1
+  mpq_mag: gmpy2.mpq = gmpy2.mpq(scalar_magnification_per_step)
+  reduced_frm: frame.Frame
+  all_frames: list[frame.Frame] = [initial_frame]  # start with initial frame, keep as-is
+  # reproduce the zoom run with full precision
+  frm: frame.Frame = initial_frame
+  for i in range(steps):
+    # keep frm full precision and iterate
+    frm = frame.Frame.FromCenter(
+      frm.fractal,
+      *frm.center,
+      frm.size[0] / mpq_mag,
+      height=frm.size[1] / mpq_mag,
+      point_re=frm.point_re,
+      point_im=frm.point_im,
+    )
+    # make a less aggressive version of the zoom
+    max_denominator: int = 10_000 * (10 ** math.ceil(frm.magnification[1]))
+    reduced_frm = frame.Frame.FromCenter(
+      frm.fractal,
+      *frm.center,
+      frm.size[0].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+      height=frm.size[1].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+      point_re=frm.point_re,
+      point_im=frm.point_im,
+    )
+    all_frames.append(reduced_frm)
+    # test error
+    dx, dy = frm.size
+    rdx, rdy = reduced_frm.size
+    error_x: gmpy2.mpq = abs(dx - rdx) / dx
+    error_y: gmpy2.mpq = abs(dy - rdy) / dy
+    if error_x > _MAX_TOLERATED_FRAME_MAG_ERROR or error_y > _MAX_TOLERATED_FRAME_MAG_ERROR:
+      raise click.ClickException(
+        f'Frame {i + 2} has size {frm.size} but reduced frame has size {reduced_frm.size}, '
+        f'which is {float(gmpy2.mpq(100) * error_x):.6f}% different in width '
+        f'and {float(gmpy2.mpq(100) * error_y):.6f}% '
+        'different in height, which is above the tolerated error threshold. This is a bug!'
+      )
+  # done adding frames, return
+  return all_frames

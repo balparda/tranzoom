@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import pathlib
 from collections import abc
@@ -13,7 +14,7 @@ import gmpy2
 from transai.core import ai as transai_ai
 from transai.core import lms
 from transcrypto.utils import base as tbase
-from transcrypto.utils import human, timer
+from transcrypto.utils import timer
 
 from tranzoom.core import fractal, frame, image, palette, queries
 
@@ -37,16 +38,13 @@ class Error(queries.Error):
 
 
 def ZoomLoop(
-  frm: frame.Frame,
-  width: int,
-  height: int,
+  params: frame.ComputationParameters,
   img_output_path: pathlib.Path | None,
   img_use_date: bool,
   img_use_hash: bool,
   img_path_prefix: str,
   pal: palette.Palette,
   set_pal: palette.Palette,
-  set_points: frame.SetHighlightAlgorithm | None,
   max_threads: int | None,
   model: str,
   spec_tokens: int | None,
@@ -71,52 +69,50 @@ def ZoomLoop(
   """Execute main loop for AI-guided fractal zoom search.
 
   Args:
-    frm: The initial frame for the fractal zoom search.
-    width: The width of the image to render.
-    height: The height of the image to render.
-    img_output_path: Optional path to save the rendered images; if None, images will be
-        saved to current working directory.
-    img_use_date: Whether to include the current date in the image filename when saving.
-    img_use_hash: Whether to include the image hash in the filename when saving.
-    img_path_prefix: A prefix to add to the image filename when saving.
-    pal: The color palette to use for rendering the image.
-    set_pal: The color palette to use for interior Set points.
-    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
-          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-          None, do not color the Set points (i.e., they will be black).
-    max_threads: Optional maximum number of threads to use for rendering; if None, use all
-        available CPU cores.
-    model: The AI model identifier to use for the search.
-    spec_tokens: Optional number of tokens to use for the model's specification; if None,
-        use the model's default.
-    seed: Optional random seed for the model; if None, use a random seed.
-    context: The context window size (in tokens) for the model.
-    temperature: The sampling temperature for the model's responses.
-    gpu: The GPU usage ratio for the model (0.0 to 1.0).
-    gpu_layers: The number of layers of the model to offload to the GPU.
-    fp16: Whether to use FP16 precision for the model; default is False.
-    use_mmap: Whether to use memory-mapped files for the model; default is False.
-    flash: Whether to use flash attention for the model; default is False.
-    kv_cache: Optional size of the key-value cache for the model; if None, use the model's default.
-    timeout: The timeout (in seconds) for model operations.
-    query: Optional query to be added to the default prompt; if None, no additional query.
-    reason: Whether to include the `reason` field in the AI output.
-    memory: The number of previous iterations the LLM will remember in its chat history;
+    params (frame.ComputationParameters): The computation parameters for the fractal zoom search.
+    img_output_path (pathlib.Path | None): Optional path to save the rendered images; if None,
+        images will be saved to current working directory.
+    img_use_date (bool): Whether to include the current date in the image filename when saving.
+    img_use_hash (bool): Whether to include the image hash in the filename when saving.
+    img_path_prefix (str): A prefix to add to the image filename when saving.
+    pal (palette.Palette): The color palette to use for rendering the image.
+    set_pal (palette.Palette): The color palette to use for interior Set points.
+    max_threads (int | None): Optional maximum number of threads to use for rendering; if None,
+        use all available CPU cores.
+    model (str): The AI model identifier to use for the search.
+    spec_tokens (int | None): Optional number of tokens to use for the model's specification;
+        if None, use the model's default.
+    seed (int | None): Optional random seed for the model; if None, use a random seed.
+    context (int): The context window size (in tokens) for the model.
+    temperature (float): The sampling temperature for the model's responses.
+    gpu (float): The GPU usage ratio for the model (0.0 to 1.0).
+    gpu_layers (int): The number of layers of the model to offload to the GPU.
+    fp16 (bool): Whether to use FP16 precision for the model; default is False.
+    use_mmap (bool): Whether to use memory-mapped files for the model; default is False.
+    flash (bool): Whether to use flash attention for the model; default is False.
+    kv_cache (int | None): Optional size of the key-value cache for the model; if None, use
+        the model's default.
+    timeout (float): The timeout (in seconds) for model operations.
+    query (str | None): Optional query to be added to the default prompt; if None, no additional
+        query.
+    reason (bool): Whether to include the `reason` field in the AI output.
+    memory (int): The number of previous iterations the LLM will remember in its chat history;
         0 means no memory.
-    max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
-    iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
-    target_weight: The weight (0.0 to 1.0) to give to the target match score when determining the
-        best sector; if 0.0, only the fractal score is used; if 1.0, only the target match
-        score is used.
-    print_comm: A rich console callable for printing messages.
+    max_steps (int): Maximum number of zoom steps to run; 0 means run until manually stopped
+        (Ctrl+C)
+    iterm (bool): Whether to print the image inline in iTerm2 using the iTerm2 inline image
+        protocol.
+    target_weight (float): The weight (0.0 to 1.0) to give to the target match score when
+        determining the best sector; if 0.0, only the fractal score is used; if 1.0, only the
+        target match score is used.
+    print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
 
   """
   # capture the time and load model
   zoom_tm: int = timer.Now()
   print_comm(
-    f'Will run {width} x {height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
+    f'Run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
     + ('include reason field. ' if reason else '[cyan]NOT[/] include reason field. ')
-    + (f'"{set_points.value}" interior. ' if set_points else '')
     + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(
@@ -126,7 +122,7 @@ def ZoomLoop(
   setup_query: str
   image_query: str
   query = query.strip() if query else None
-  setup_query, image_query = queries.BuildImageThirdsPrompts(frm, reason, query)
+  setup_query, image_query = queries.BuildImageThirdsPrompts(params.frm, reason, query)
   logging.debug(f'AI setup query:\n{setup_query}\n')
   logging.debug(f'AI image query:\n{image_query}\n')
   # start
@@ -159,9 +155,7 @@ def ZoomLoop(
         count += 1
         # render the image for the current frame
         img_data, full_path = _ComputeFractal(
-          frm,
-          width,
-          height,
+          params,
           count,
           zoom_tm,
           img_output_path,
@@ -170,7 +164,6 @@ def ZoomLoop(
           img_path_prefix,
           pal,
           set_pal,
-          set_points,
           max_threads,
           iterm,
           print_comm,
@@ -215,7 +208,9 @@ def ZoomLoop(
           )
         )
         # implement the move command
-        frm = _MoveCenter(frm, query, response, tmr, target_weight, print_comm)
+        params = dataclasses.replace(
+          params, frm=_MoveCenter(params.frm, query, response, tmr, target_weight, print_comm)
+        )
         # stop if we've reached the maximum number of steps
         if max_steps and count >= max_steps:
           print_comm('[yellow]Reached maximum zoom step(s), stopping.[/yellow]')
@@ -223,20 +218,17 @@ def ZoomLoop(
   # we're out of the main loop
   except KeyboardInterrupt:
     print_comm(f'\n[yellow]Interrupted by user on step {count}.[/yellow]')
-  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {frm}\n')
+  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {params}\n')
 
 
 def ManualLoop(
-  frm: frame.Frame,
-  width: int,
-  height: int,
+  params: frame.ComputationParameters,
   img_output_path: pathlib.Path | None,
   img_use_date: bool,
   img_use_hash: bool,
   img_path_prefix: str,
   pal: palette.Palette,
   set_pal: palette.Palette,
-  set_points: frame.SetHighlightAlgorithm | None,
   max_threads: int | None,
   max_steps: int,
   iterm: bool,
@@ -245,31 +237,27 @@ def ManualLoop(
   """Execute main loop for manually-guided fractal zoom search.
 
   Args:
-    frm: The initial frame for the fractal zoom search.
-    width: The width of the image to render.
-    height: The height of the image to render.
-    img_output_path: Optional path to save the rendered images; if None, images will be
-        saved to current working directory.
-    img_use_date: Whether to include the current date in the image filename when saving.
-    img_use_hash: Whether to include the image hash in the filename when saving.
-    img_path_prefix: A prefix to add to the image filename when saving.
-    pal: The color palette to use for rendering the image.
-    set_pal: The color palette to use for interior Set points.
-    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
-          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-          None, do not color the Set points (i.e., they will be black).
-    max_threads: Optional maximum number of threads to use for rendering; if None, use all
-        available CPU cores.
-    max_steps: Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C)
-    iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
-    print_comm: A rich console callable for printing messages.
+    params (frame.ComputationParameters): The computation parameters for the fractal zoom search.
+    img_output_path (pathlib.Path | None): Optional path to save the rendered images; if None,
+        images will be saved to current working directory.
+    img_use_date (bool): Whether to include the current date in the image filename when saving.
+    img_use_hash (bool): Whether to include the image hash in the filename when saving.
+    img_path_prefix (str): A prefix to add to the image filename when saving.
+    pal (palette.Palette): The color palette to use for rendering the image.
+    set_pal (palette.Palette): The color palette to use for interior Set points.
+    max_threads (int | None): Optional maximum number of threads to use for rendering; if None,
+        use all available CPU cores.
+    max_steps (int): Maximum number of zoom steps to run; 0 means run until manually stopped
+        (Ctrl+C)
+    iterm (bool): Whether to print the image inline in iTerm2 using the iTerm2 inline image
+        protocol.
+    print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
 
   """
   # capture the time and load model
   zoom_tm: int = timer.Now()
   print_comm(
-    f'Will run {width} x {height} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
-    f'{f', "{set_points.value}" interior. ' if set_points else ""}'
+    f'Will run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
     'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
   )
   print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})\n')
@@ -285,9 +273,7 @@ def ManualLoop(
       count += 1
       # render the image for the current frame
       img_data, full_path = _ComputeFractal(
-        frm,
-        width,
-        height,
+        params,
         count,
         zoom_tm,
         img_output_path,
@@ -296,7 +282,6 @@ def ManualLoop(
         img_path_prefix,
         pal,
         set_pal,
-        set_points,
         max_threads,
         iterm,
         print_comm,
@@ -345,7 +330,9 @@ def ManualLoop(
         )
       )
       # implement the move command
-      frm = _MoveCenter(frm, None, response, tmr, 0.0, print_comm)
+      params = dataclasses.replace(
+        params, frm=_MoveCenter(params.frm, None, response, tmr, 0.0, print_comm)
+      )
       # stop if we've reached the maximum number of steps
       if max_steps and count >= max_steps:
         print_comm('[yellow]Reached maximum zoom step(s), stopping.[/yellow]')
@@ -353,13 +340,11 @@ def ManualLoop(
   # we're out of the main loop
   except KeyboardInterrupt:
     print_comm(f'\n[yellow]Interrupted by user on step {count}.[/yellow]')
-  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {frm}\n')
+  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {params}\n')
 
 
 def _ComputeFractal(
-  frm: frame.Frame,
-  width: int,
-  height: int,
+  params: frame.ComputationParameters,
   count: int,
   zoom_tm: int,
   img_output_path: pathlib.Path | None,
@@ -368,7 +353,6 @@ def _ComputeFractal(
   img_path_prefix: str,
   pal: palette.Palette,
   set_pal: palette.Palette,
-  set_points: frame.SetHighlightAlgorithm | None,
   max_threads: int | None,
   iterm: bool,
   print_comm: abc.Callable[[str], None],
@@ -376,58 +360,41 @@ def _ComputeFractal(
   """Compute the Mandelbrot or Julia image for the given frame.
 
   Args:
-    frm: The frame for which to compute the Mandelbrot or Julia image.
-    width: The width of the image to render.
-    height: The height of the image to render.
-    count: The current zoom step count, used for logging and image naming.
-    zoom_tm: The timestamp when the zoom session started, used for logging and image naming.
-    img_output_path: Optional path to save the rendered image; if None, the image will not be
-        saved to disk.
-    img_use_date: Whether to include the current date in the image filename when saving.
-    img_use_hash: Whether to include the image hash in the filename when saving.
-    img_path_prefix: A prefix to add to the image filename when saving.
-    pal: The color palette to use for rendering the image.
-    set_pal: The color palette to use for interior Set points.
-    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
-          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-          None, do not color the Set points (i.e., they will be black).
-    max_threads: Maximum number of threads to use for rendering.
-    iterm: Whether to print the image inline in iTerm2 using the iTerm2 inline image protocol.
-    print_comm: A rich console callable for printing messages.
+    params (frame.ComputationParameters): The computation parameters for the frame, including
+        width, height, and other settings.
+    count (int): The current zoom step count, used for logging and image naming.
+    zoom_tm (int): The timestamp when the zoom session started, used for logging and image naming.
+    img_output_path (pathlib.Path | None): Optional path to save the rendered image; if None,
+        the image will not be saved to disk.
+    img_use_date (bool): Whether to include the current date in the image filename when saving.
+    img_use_hash (bool): Whether to include the image hash in the filename when saving.
+    img_path_prefix (str): A prefix to add to the image filename when saving.
+    pal (palette.Palette): The color palette to use for rendering the image.
+    set_pal (palette.Palette): The color palette to use for interior Set points.
+    max_threads (int | None): Maximum number of threads to use for rendering.
+    iterm (bool): Whether to print the image inline in iTerm2 using the iTerm2 inline image
+        protocol.
+    print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
 
   Returns:
-    (bytes, pathlib.Path): A tuple with the PNG image bytes (minus the evaluation) and the
+    tuple[bytes, pathlib.Path]: A tuple with the PNG image bytes (minus the evaluation) and the
         intended save path (not yet saved!)
 
   """
+  # render the image for the current frame
   img_data: bytes
   img_hash: str
-  magnification: gmpy2.mpfr
-  magnitude: float
-  # calculate magnification
-  magnification, magnitude = frm.magnification
-  magnification_str: str = (
-    # beyond 10^21, use scientific notation
-    human.HumanizedDecimal(float(magnification)) if magnitude < 21 else f'{magnification:e}'  # noqa: PLR2004
-  )
-  # render the image for the current frame
   with timer.Timer(emit_log=False) as tmr:
-    img: image.Image = {
-      frame.Fractal.MANDELBROT: fractal.Mandelbrot,
-      frame.Fractal.JULIA: fractal.Julia,
-    }[frm.fractal](
-      frm,  # type: ignore[arg-type]  # we know this should be fine
-      width,
-      height,
-      max_iter=None,
+    img: image.Image = fractal.ComputeFractal(
+      params,
       progress_bar=True,
       n_processes=max_threads,
       print_comm=print_comm,
     )
     # get PNG and overlay info on top of it
-    img_data, img_hash = img.AsPNG(pal=pal, set_pal=set_pal, set_points=set_points)
+    img_data, img_hash = img.AsPNG(pal=pal, set_pal=set_pal)
     img_data = image.DrawThirdsInfoOverlay(img_data)
-  # log!
+  # make path
   full_path: pathlib.Path = image.MakeImagePath(
     img_output_path,
     img_use_date,
@@ -437,18 +404,20 @@ def _ComputeFractal(
     tm=zoom_tm,
     add_serial=count,
   )
+  # log
   print_comm(
-    f'\n{frm.fractal.value.capitalize()} zoom (#{count}) '
-    f'with frame {frm}, precision {img.precision} bits, {magnification_str} magnification\n'
+    f'\n{img.params} zoom, precision {img.params.precision} bits, '
+    f'10^{img.params.frm.magnification[1]:.2f} magnitude\n'
     f'{img_hash!r} in {tmr}, will save as "{full_path}"'
   )
+  # iterm
   if iterm:
     print_comm('')
     image.PrintITerm2(img_data)
   return (img_data, full_path)
 
 
-def _MoveCenter(  # noqa: C901, PLR0912
+def _MoveCenter(  # noqa: C901
   frm: frame.Frame,
   query: str | None,
   response: queries.ZoomSectorScoring | queries.ZoomSectorCompleteScoring,
@@ -459,14 +428,15 @@ def _MoveCenter(  # noqa: C901, PLR0912
   """Move the frame center according to the AI response.
 
   Args:
-    frm: The current frame.
-    query: The optional search query used for targeted scoring.
-    response: The AI response containing the sector evaluations.
-    tmr: The timer for the current operation.
-    target_weight: The weight (0.0 to 1.0) to give to the target match score when determining the
-        best sector; if 0.0, only the fractal score is used; if 1.0, only the
+    frm (frame.Frame): The current frame.
+    query (str | None): The optional search query used for targeted scoring.
+    response (queries.ZoomSectorScoring | queries.ZoomSectorCompleteScoring): The AI response
+        containing the sector evaluations.
+    tmr (timer.Timer): The timer for the current operation.
+    target_weight (float): The weight (0.0 to 1.0) to give to the target match score when
+        determining the best sector; if 0.0, only the fractal score is used; if 1.0, only the
         target match score is used.
-    print_comm: A rich console callable for printing messages.
+    print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
 
   Returns:
     frame.Frame: The new frame with the updated center.
@@ -533,20 +503,12 @@ def _MoveCenter(  # noqa: C901, PLR0912
     )
   print_comm('')
   # build the new frame
-  if isinstance(frm, frame.FrameAndPoint):
-    return frame.FrameAndPoint.FromCenterAndPoint(
-      frm.fractal,
-      frm.point_re,
-      frm.point_im,
-      center_mpq_re,
-      center_mpq_im,
-      frame_width / frame.DEFAULT_MPQ_ZOOM,
-      frame_height / frame.DEFAULT_MPQ_ZOOM,
-    )
   return frame.Frame.FromCenter(
     frm.fractal,
     center_mpq_re,
     center_mpq_im,
     frame_width / frame.DEFAULT_MPQ_ZOOM,
-    frame_height / frame.DEFAULT_MPQ_ZOOM,
+    height=frame_height / frame.DEFAULT_MPQ_ZOOM,
+    point_re=frm.point_re,
+    point_im=frm.point_im,
   )

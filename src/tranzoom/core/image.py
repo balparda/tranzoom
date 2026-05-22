@@ -44,7 +44,7 @@ META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
 META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
 META_ITER_DEPTH_MIN_KEY = 'tranzoom:image:iter_depth:min'  # int
 META_ITER_DEPTH_MAX_KEY = 'tranzoom:image:iter_depth:max'  # int
-META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:image:iter_depth:search'  # int, can be "-1" if unknown/unset
+META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:image:iter_depth:search'  # int
 META_SET_POINT_MIN_KEY = 'tranzoom:image:set_point:min'  # int
 META_SET_POINT_MAX_KEY = 'tranzoom:image:set_point:max'  # int
 META_IMAGE_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
@@ -79,7 +79,6 @@ META_CENTER_IM_KEY = 'tranzoom:frame:center_im'  # gmpy2.mpq
 META_WIDTH_RE_KEY = 'tranzoom:frame:width_re'  # gmpy2.mpq
 META_HEIGHT_IM_KEY = 'tranzoom:frame:height_im'  # gmpy2.mpq
 META_PRECISION_KEY = 'tranzoom:frame:precision'  # int, in bits
-META_MAGNIFICATION_KEY = 'tranzoom:frame:magnification'  # gmpy2.mpfr -> converted to float
 META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'  # float
 # extra keys added to some images only
 # Julia extra keys
@@ -91,9 +90,6 @@ META_ANIM_INITIAL_HEIGHT_IM_KEY = 'tranzoom:animation:frame:initial_height_im'  
 META_ANIM_MAGNITUDE_KEY = 'tranzoom:animation:zoom:magnitude'  # float
 META_ANIM_MAGNITUDE_PER_STEP_KEY = 'tranzoom:animation:zoom:magnitude_per_step'  # float
 META_ANIM_MAGNIFICATION_PER_STEP_KEY = 'tranzoom:animation:zoom:magnification_per_step'  # float
-META_ANIM_MAGNIFICATION_PER_STEP_MPQ_KEY = (
-  'tranzoom:animation:zoom:magnification_per_step_mpq'  # gmpy2.mpq
-)
 META_ANIM_DURATION_KEY = 'tranzoom:animation:duration'  # float
 META_ANIM_FRAMES_KEY = 'tranzoom:animation:frames'  # int
 META_ANIM_STEPS_KEY = 'tranzoom:animation:steps'  # int
@@ -237,32 +233,22 @@ class Image:
 
   """
 
-  def __init__(self, frm: frame.Frame, width: int, height: int) -> None:
+  def __init__(self, params: frame.ComputationParameters) -> None:
     """Construct image.
 
     Args:
-      frm (Frame): The frame to render.
-      width (int): The width of the output image in pixels.
-      height (int): The height of the output image in pixels.
+      params (frame.ComputationParameters): The computation parameters for the image.
 
     Raises:
       Error: on error
 
     """
-    # check parameters
-    if not (frame.MIN_IMAGE_SIZE <= width <= frame.MAX_IMAGE_SIZE) or not (
-      frame.MIN_IMAGE_SIZE <= height <= frame.MAX_IMAGE_SIZE
-    ):
-      raise Error(
-        f'{width=} and {height=} must be between {frame.MIN_IMAGE_SIZE} and {frame.MAX_IMAGE_SIZE}'
-      )
     # save objects
-    self._frame: frame.Frame = frm
-    self._width: int = width
-    self._height: int = height
-    self._depth: int | None = None  # may be set later by the fractal rendering function
+    self._params: frame.ComputationParameters = params
     # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
-    self.escape: ImageInt32Array = array.array('i', (0 for _ in range(width * height)))  # signed32
+    self.escape: ImageInt32Array = array.array(  # signed32
+      'i', (0 for _ in range(self._params.width * self._params.height))
+    )
     if self.escape.itemsize != frame.N_BYTES_UINT:
       raise Error(f'unsupported platform: array of unsigned ints is not {frame.N_BYTES_UINT} bytes')
     self.stats: FractalStats | None = None  # may be set later by the fractal rendering function
@@ -279,9 +265,11 @@ class Image:
       Error: if the pixel coordinates are out of bounds
 
     """
-    if not (0 <= x < self._width) or not (0 <= y < self._height):
-      raise Error(f'Pixel coordinates out of bounds: {x=}, {y=}, {self._width=}, {self._height=}')
-    self.escape[y * self._width + x] = escaped_at
+    if not (0 <= x < self._params.width) or not (0 <= y < self._params.height):
+      raise Error(
+        f'Coordinates out of bounds: {x=}, {y=}, {self._params.width=}, {self._params.height=}'
+      )
+    self.escape[y * self._params.width + x] = escaped_at
 
   @property
   def size(self) -> tuple[int, int]:
@@ -291,27 +279,17 @@ class Image:
       tuple[int, int]: The size of the image.
 
     """
-    return (self._width, self._height)
+    return (self._params.width, self._params.height)
 
   @property
-  def frm(self) -> frame.Frame:
-    """Get the frame associated with this image.
+  def params(self) -> frame.ComputationParameters:
+    """Get the computation parameters associated with this image.
 
     Returns:
-      frame.Frame: The frame associated with this image.
+      frame.ComputationParameters: The computation parameters associated with this image.
 
     """
-    return self._frame
-
-  @property
-  def depth(self) -> int | None:
-    """Get the maximum iteration depth for the image, if set.
-
-    Returns:
-      int | None: The maximum iteration depth for the image, or None if not set.
-
-    """
-    return self._depth
+    return self._params
 
   @property
   def escape_range(self) -> tuple[int, int, int, int]:
@@ -327,56 +305,16 @@ class Image:
     interior_points: list[int] = [e for e in self.escape if e < 0]
     return (
       min(exterior_points) if exterior_points else 0,
-      self._depth
-      if interior_points and self._depth
-      else (max(exterior_points) if exterior_points else 0),
+      self._params.depth if interior_points else (max(exterior_points) if exterior_points else 0),
       -max(interior_points) if interior_points else 0,
       -min(interior_points) if interior_points else 0,
     )
-
-  @property
-  def precision(self) -> int:
-    """Estimate the MPFR precision needed to render this image. See Frame.Precision() for details.
-
-    Returns:
-      int: The estimated number of bits of MPFR precision needed.
-
-    """
-    return self._frame.Precision(
-      self._width, self._height, max_iter=self._depth or frame.DEFAULT_ITER
-    )
-
-  @property
-  def context(self) -> gmpy2.context:
-    """Get gmpy2 context with precision to distinguish adjacent pixels in smaller complex-plane dim.
-
-    Returns:
-      gmpy2.context: A context with the estimated number of bits of precision needed.
-
-    """
-    return gmpy2.local_context(gmpy2.context(), precision=self.precision)
-
-  def SetDepth(self, depth: int) -> None:
-    """Set the maximum iteration depth for the image. Should be called after image is complete.
-
-    Args:
-      depth (int): The maximum iteration depth.
-
-    Raises:
-      Error: if the depth is invalid or inconsistent with the escape iterations.
-
-    """
-    _, max_escape, _, _ = self.escape_range
-    if depth < max_escape:
-      raise Error(f'Inconsistent depth: {depth=} is < than {max_escape=}')
-    self._depth = depth
 
   def AsPixels(
     self,
     *,
     pal: palette.Palette = palette.DEFAULT_PALETTE,
     set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-    set_points: frame.SetHighlightAlgorithm | None = None,
   ) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
@@ -395,9 +333,6 @@ class Image:
           Defaults to DEFAULT_PALETTE.
       set_pal (palette.Palette, optional): The color palette for interior Set points; only
           used when `color_set_points=True`. Defaults to DEFAULT_SET_PALETTE.
-      set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
-          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-          None, do not color the Set points (i.e., they will be black).
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
@@ -412,24 +347,23 @@ class Image:
     total_exterior: int
     cumulative: dict[int, int]
     min_escape, max_escape, _, _ = self.escape_range
-    depth: int = self._depth if self._depth is not None else max_escape
-    if min_escape < 0 or depth < max_escape:
-      raise Error(f'Invalid/Inconsistent {min_escape=} or {depth=} < {max_escape=}')
-    _, cumulative, total_exterior = BuildCumulative([e for e in self.escape if 0 <= e < depth])
+    if min_escape < 0 or self._params.depth < max_escape:
+      raise Error(f'Invalid/Inconsistent {min_escape=} or {self._params.depth=} < {max_escape=}')
+    _, cumulative, total_exterior = BuildCumulative([e for e in self.escape if e >= 0])
     # step 2: optionally build cumulative histogram for interior/Set pixels (escaped_at < 0);
     # interior points store -|z| magnitude, so we flip the sign for the histogram key
     set_cumulative: dict[int, int] = {}
     total_set: int = 0
-    if set_points:
+    if self._params.set_points:
       _, set_cumulative, total_set = BuildCumulative([-e for e in self.escape if e < 0])
     # step 3: map each pixel to an RGB color
-    pixels = bytearray(self._width * self._height * 3)
+    pixels = bytearray(self._params.width * self._params.height * 3)
     for i, escaped_at in enumerate(self.escape):
-      if 0 <= escaped_at < depth and total_exterior > 0:
+      if escaped_at >= 0 and total_exterior > 0:
         # exterior point: histogram-equalized position in pal
         t: float = (cumulative[escaped_at] - 1) / total_exterior
         rgb: tuple[int, int, int] = PixelPalette(t, pal, palette.PALETTE_CYCLES)
-      elif set_points and total_set > 0 and escaped_at < 0:
+      elif self._params.set_points and total_set > 0 and escaped_at < 0:
         # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
         t_set: float = (set_cumulative[-escaped_at] - 1) / total_set
         rgb = PixelPalette(t_set, set_pal, palette.SET_PALETTE_CYCLES)
@@ -443,7 +377,6 @@ class Image:
     *,
     pal: palette.Palette = palette.DEFAULT_PALETTE,
     set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-    set_points: frame.SetHighlightAlgorithm | None = None,
   ) -> tuple[bytes, str]:
     """Convert the image to PNG bytes and return it with its internal data hash.
 
@@ -451,23 +384,20 @@ class Image:
       pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
       set_pal (palette.Palette, optional): The color palette for interior Set points.
           Defaults to DEFAULT_SET_PALETTE.
-      set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
-          interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-          None, do not color the Set points (i.e., they will be black).
 
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
 
     """
     # convert the raw pixel data to a PNG using PIL
-    raw_img: bytes = self.AsPixels(pal=pal, set_pal=set_pal, set_points=set_points)
+    raw_img: bytes = self.AsPixels(pal=pal, set_pal=set_pal)
     img_data_hash: str = hashes.Hash256(raw_img).hex()
-    img: PILImage.Image = PILImage.frombytes('RGB', (self._width, self._height), raw_img)
+    img: PILImage.Image = PILImage.frombytes(
+      'RGB', (self._params.width, self._params.height), raw_img
+    )
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
     png_meta = PngImagePlugin.PngInfo()
-    for k, v in MakeImageMeta(
-      self, img_data_hash, pal=pal, set_pal=set_pal, set_points=set_points
-    ).items():
+    for k, v in MakeImageMeta(self, img_data_hash, pal=pal, set_pal=set_pal).items():
       png_meta.add_text(k, v)
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
@@ -481,7 +411,6 @@ def MakeImageMeta(
   *,
   pal: palette.Palette = palette.DEFAULT_PALETTE,
   set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-  set_points: frame.SetHighlightAlgorithm | None = None,
 ) -> dict[str, str]:
   """Create a metadata dictionary for the image.
 
@@ -491,35 +420,25 @@ def MakeImageMeta(
     pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
     set_pal (palette.Palette, optional): The color palette for interior Set points.
         Defaults to DEFAULT_SET_PALETTE.
-    set_points (frame.SetHighlightAlgorithm | None, optional): Which algorithm to use for coloring
-        interior Set points, either None, or one of the SetHighlightAlgorithm values; default is
-        None, do not color the Set points (i.e., they will be black).
 
   Returns:
     dict[str, str]: A dictionary containing the metadata for the image, with keys as defined
 
-  Raises:
-    Error: on error
-
   """
   # prepare some data that will be needed
-  frm: frame.Frame = img.frm
+  frm: frame.Frame = img.params.frm
   center: tuple[gmpy2.mpq, gmpy2.mpq] = frm.center
   sz: tuple[gmpy2.mpq, gmpy2.mpq] = frm.size
-  magnification: gmpy2.mpfr
-  magnitude: float
-  magnification, magnitude = frm.magnification
   min_escape: int
   max_escape: int
   min_set: int
   max_set: int
   min_escape, max_escape, min_set, max_set = img.escape_range
   # pixel counts and histograms; exterior pixels have escape >= 0, interior (Set) have escape < 0
-  depth: int = img.depth if img.depth is not None else max_escape
   hist: dict[int, int]
   cumulative: dict[int, int]
   total: int
-  hist, cumulative, total = BuildCumulative([e for e in img.escape if 0 <= e < depth])
+  hist, cumulative, total = BuildCumulative([e for e in img.escape if e >= 0])
   # first create a dict with all the ones that are always present, then add the optional ones
   img_meta: dict[str, str] = {
     # image parameters
@@ -529,7 +448,7 @@ def MakeImageMeta(
     META_IMAGE_HASH_KEY: data_hash,
     META_IMAGE_PALETTE_KEY: pal.value,
     META_IMAGE_SET_PALETTE_KEY: set_pal.value,
-    META_IMAGE_COLOR_SET_KEY: str(set_points.value) if set_points else 'none',
+    META_IMAGE_COLOR_SET_KEY: str(img.params.set_points.value) if img.params.set_points else 'none',
     META_IMAGE_OVERLAY_KEY: 'false',  # if it comes from this, it has no overlay
     # frame
     META_FRACTAL_KEY: frm.fractal.value.lower(),
@@ -544,15 +463,14 @@ def MakeImageMeta(
     META_WIDTH_RE_KEY: str(sz[0]),
     META_HEIGHT_IM_KEY: str(sz[1]),
     # precision and magnification
-    META_PRECISION_KEY: str(img.precision),
-    META_MAGNIFICATION_KEY: str(float(magnification)),  # huge string if not converted!
-    META_MAGNIFICATION_ORDER_KEY: str(magnitude),
+    META_PRECISION_KEY: str(img.params.precision),
+    META_MAGNIFICATION_ORDER_KEY: str(frm.magnification[1]),
     # escape iteration range in the image
     META_ITER_DEPTH_MIN_KEY: str(min_escape),
     META_ITER_DEPTH_MAX_KEY: str(max_escape),
     META_SET_POINT_MIN_KEY: str(min_set),
     META_SET_POINT_MAX_KEY: str(max_set),
-    META_ITER_SEARCH_DEPTH_KEY: str(img.depth) if img.depth is not None else '-1',
+    META_ITER_SEARCH_DEPTH_KEY: str(img.params.depth),
     # histogram
     META_PIXEL_EXTERIOR_HISTOGRAM_KEY: SummaryHistogram(sorted(hist.items())),
     META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY: SummaryHistogram(sorted(cumulative.items())),
@@ -574,12 +492,10 @@ def MakeImageMeta(
       img_meta[META_IMAGE_STATS_IMAG_HI_KEY] = str(img.stats.imag_hi)
   # Julia
   if frm.fractal == frame.Fractal.JULIA:
-    if not isinstance(frm, frame.FrameAndPoint):
-      raise Error(f'Expected FrameAndPoint for Julia Set frame, got {type(frm)}')
     img_meta[META_JULIA_RE_KEY] = str(frm.point_re)
     img_meta[META_JULIA_IM_KEY] = str(frm.point_im)
   # histogram for interior (Set) points
-  if set_points:
+  if img.params.set_points:
     hist, cumulative, total = BuildCumulative([-e for e in img.escape if e < 0])
     img_meta[META_PIXEL_INTERIOR_HISTOGRAM_KEY] = SummaryHistogram(sorted(hist.items()))
     img_meta[META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY] = SummaryHistogram(
@@ -678,10 +594,10 @@ def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDi
   """Get basic data from a PNG image, including format, size, hash, and metadata text.
 
   Args:
-    img_bytes: The PNG image data as bytes.
+    img_bytes (bytes): The PNG image data as bytes.
 
   Returns:
-    (width, height, hash, metadata) where:
+    tuple[int, int, str, tbase.JSONDict]: (width, height, hash, metadata) where:
       - width: The width of the image in pixels.
       - height: The height of the image in pixels.
       - hash: A hash of the image data (SHA256 of RGB bytes).
@@ -739,10 +655,10 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
   Fix these and it can work well on other sizes too...
 
   Args:
-    img_data: The PNG image data as bytes.
+    img_data (bytes): The PNG image data as bytes.
 
   Returns:
-    The modified PNG image data with the overlay drawn.
+    bytes: The modified PNG image data with the overlay drawn.
 
   """
   w: int
@@ -796,10 +712,10 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
   - large green number labels (1-9) centered in each section, left-to-right, top-to-bottom
 
   Args:
-    img_data: The PNG image data as bytes.
+    img_data (bytes): The PNG image data as bytes.
 
   Returns:
-    The modified PNG image data with the overlay drawn.
+    bytes: The modified PNG image data with the overlay drawn.
 
   """
   w: int
@@ -847,14 +763,14 @@ def DrawCrossOverlay(
   - a vertical line spanning the image at the given x-coordinate
 
   Args:
-    img_data: The PNG image data as bytes.
-    x: The x-coordinate of the center of the cross.
-    y: The y-coordinate of the center of the cross.
-    col: The color of the cross.
-    lw: The line width of the cross.
+    img_data (bytes): The PNG image data as bytes.
+    x (int): The x-coordinate of the center of the cross.
+    y (int): The y-coordinate of the center of the cross.
+    col (Color): The color of the cross.
+    lw (int): The line width of the cross.
 
   Returns:
-    The modified PNG image data with the overlay drawn.
+    bytes: The modified PNG image data with the overlay drawn.
 
   Raises:
     Error: If the coordinates are out of bounds or if there are issues processing the image.
@@ -880,11 +796,11 @@ def SaveWithMeta(img: PILImage.Image, *, extra_meta: dict[str, str] | None = Non
   """Save a PIL image to PNG bytes, including its metadata.
 
   Args:
-    img: The PIL image to save.
-    extra_meta: Optional additional metadata to include in the PNG.
+    img (PILImage.Image): The PIL image to save.
+    extra_meta (dict[str, str] | None): Optional additional metadata to include in the PNG.
 
   Returns:
-    The PNG image data as bytes.
+    bytes: The PNG image data as bytes.
 
   Raises:
     Error: if there are issues saving the image or with the metadata.
@@ -921,22 +837,22 @@ def AddEvaluationMetaToImage(
   """Add LLM evaluation info to the image metadata and return the modified PNG bytes.
 
   Args:
-    img_data: The original PNG image data as bytes.
-    response: The LLM evaluation response to add to the metadata.
-    model: The LLM model used for evaluation; if this is "HUMAN"/META_LLM_MODEL_VALUE_HUMAN,
+    img_data (bytes): The original PNG image data as bytes.
+    response (tbase.JSONDict): The LLM evaluation response to add to the metadata.
+    model (str): The LLM model used for evaluation; if this is "HUMAN"/META_LLM_MODEL_VALUE_HUMAN,
         then it will not add temperature, seed, reason, query_memory, query_setup, query_image, nor
         query_manual to the metadata.
-    temperature: The temperature setting used for the LLM evaluation.
-    seed: The random seed used for the LLM evaluation.
-    reason: Whether the LLM response includes reasoning steps
-    query_memory: The memory parameter used for the LLM evaluation.
-    query_setup: The setup query given to the LLM.
-    query_image: The image query given to the LLM.
-    query_manual: The manual query passed as extra into the query.
-    count: The zoom step count at which this evaluation was made.
+    temperature (float): The temperature setting used for the LLM evaluation.
+    seed (int): The random seed used for the LLM evaluation.
+    reason (bool): Whether the LLM response includes reasoning steps
+    query_memory (int): The memory parameter used for the LLM evaluation.
+    query_setup (str): The setup query given to the LLM.
+    query_image (str): The image query given to the LLM.
+    query_manual (str | None): The manual query passed as extra into the query.
+    count (int): The zoom step count at which this evaluation was made.
 
   Returns:
-    The modified PNG image data as bytes, with the evaluation info added to the metadata.
+    bytes: The modified PNG image data as bytes, with the evaluation info added to the metadata.
 
   """
   # start with the metadata that all zoom images have, for now
@@ -968,7 +884,7 @@ def PrintITerm2(img_data: bytes) -> None:
   <https://iterm2.com/documentation-images.html>
 
   Args:
-    img_data: The original PNG image data as bytes.
+    img_data (bytes): The original PNG image data as bytes.
 
   """
   sys.stdout.write(
@@ -1071,14 +987,16 @@ def WriteAnimatedGIF(
   """Write PIL Image frames to an animated GIF.
 
   Args:
-    frames: An iterable of PIL Image frames to include in the GIF.
-    path: The file path to save the GIF.
-    width: The width of the GIF frames.
-    height: The height of the GIF frames.
-    n_frames: The number of frames in the GIF: has to match exactly the number of frames provided.
-    duration: The duration of the GIF, in seconds.
-    loop: The number of times to loop the GIF (0 for infinite loop). Default is 0 (infinite loop).
-    meta: Optional metadata to include in the GIF; default None
+    frames (list[bytes]): An iterable of PIL Image frames to include in the GIF.
+    path (pathlib.Path): The file path to save the GIF.
+    width (int): The width of the GIF frames.
+    height (int): The height of the GIF frames.
+    n_frames (int): The number of frames in the GIF: has to match exactly the number of frames
+        provided.
+    duration (float): The duration of the GIF, in seconds.
+    loop (int): The number of times to loop the GIF (0 for infinite loop). Default is 0
+        (infinite loop).
+    meta (dict[str, str] | None): Optional metadata to include in the GIF; default None
 
   Raises:
     Error: on error
@@ -1134,13 +1052,14 @@ def WriteVideoMP4(
   """Write PIL Image frames to an MP4 video using H.264, the most broadly compatible video format.
 
   Args:
-    frames: An iterable of PIL Image frames to include in the video.
-    path: The file path to save the video.
-    width: The width of the video frames.
-    height: The height of the video frames.
-    n_frames: The number of frames in the video: has to match exactly the number of frames provided.
-    duration: The duration of the video, in seconds.
-    meta: Optional metadata to include in the video; default None
+    frames (abc.Iterable[bytes]): An iterable of PIL Image frames to include in the video.
+    path (pathlib.Path): The file path to save the video.
+    width (int): The width of the video frames.
+    height (int): The height of the video frames.
+    n_frames (int): The number of frames in the video: has to match exactly the number of frames
+        provided.
+    duration (float): The duration of the video, in seconds.
+    meta (dict[str, str] | None): Optional metadata to include in the video; default None
 
   Raises:
     Error: on error

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import dataclasses
 import enum
-import fractions
 from collections import abc
 from typing import cast
 
@@ -24,7 +23,7 @@ DEFAULT_ZOOM_SIZE: int = 512  # smaller default for zoom, since it can be more e
 # iteration constants
 
 N_BYTES_UINT: int = 4  # we use array of int32 to store pixel data / array.array('i') / signed 32
-MIN_ITER: int = 1000
+MIN_ITER: int = 1000  # minimum, but also a mark that we want to automatically calculate the depth
 DEFAULT_ITER: int = 1000
 HIGH_ITERS: list[int] = [100_000, 1_000_000, 10_000_000]  # these are very high iteration counts
 SET_INTERIOR_RESOLUTION: int = 100_000_000  # interior points max val [0..SET_INTERIOR_RESOLUTION]
@@ -45,6 +44,7 @@ PrecisionContext: abc.Callable[[], gmpy2.context] = lambda: gmpy2.local_context(
 )
 
 # gmpy2.mpq constants
+_MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 _MPQ_ONE: gmpy2.mpq = gmpy2.mpq('1')
 _MPQ_SQRT_TWO_NOT_EXACT: gmpy2.mpq = gmpy2.mpq('99/70')  # good enough for our purposes
 _MPQ_TWO: gmpy2.mpq = gmpy2.mpq('2')
@@ -68,6 +68,19 @@ DEFAULT_JULIA_CENTER_RE: str = '0'
 DEFAULT_JULIA_CENTER_IM: str = '0'
 DEFAULT_JULIA_WIDTH: str = '1.8'
 DEFAULT_JULIA_HEIGHT: str = '2.2'
+
+
+# TODO: create (optional) DB of stored frames
+# TODO: video/gif to save check the frames for existence, thus recovering from a crash
+# TODO: image to store: on non-set/escaped the iteration plus a float(?) to compute "nu"
+# TODO: image to store: on set/non-escaped the actual final value of the tracked constant;
+#     and if we store the mpfr on a dict for example, we will have space for more info in the array
+# TODO: make a way for images to be saved too, raw, so we can revisit computations;
+#     what parameters REALLY determine an image pre-render?
+# TODO: with all the frames in place (DB) and richer images and "nu" we can start video smoothing;
+#     a class for video objects with all the frames
+# TODO: before rendering video, decide on marker frames every X magnitude, make them first,
+#     use them to compute colors and then smooth colors between maker frames smoothly
 
 
 class Error(tbase.Error):
@@ -95,13 +108,21 @@ class SetHighlightAlgorithm(enum.Enum):
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class Frame:
-  """Defines a rectangular region of the complex plane, with arbitrary precision. Exact."""
+  """Defines a rectangular region of the complex plane, with arbitrary precision. Exact.
+
+  An optional point coordinate is included. This is used for Julia, and ignored for Mandelbrot.
+  This point is not required to be inside the rectangle; it is just an additional coordinate
+  that can be used for various purposes, such as marking a specific location in the image or
+  providing additional data like for the Julia fractal.
+  """
 
   fractal: Fractal
   top_re: gmpy2.mpq  # the top-left corner of the rectangle
   top_im: gmpy2.mpq
   bottom_re: gmpy2.mpq  # the bottom-right corner of the rectangle
   bottom_im: gmpy2.mpq
+  point_re: gmpy2.mpq = _MPQ_ZERO  # for Julia, the point whose orbit we track
+  point_im: gmpy2.mpq = _MPQ_ZERO
 
   def __post_init__(self) -> None:
     """Check rectangle has an area and top/bottom ordering.
@@ -110,10 +131,42 @@ class Frame:
       Error: if the rectangle is invalid.
 
     """
+    # check fractal
+    if self.fractal not in {Fractal.MANDELBROT, Fractal.JULIA}:
+      raise Error(f'Unknown fractal type: {self.fractal}')
+    # check rectangle is valid and in the expected order
     if self.top_re >= self.bottom_re:
       raise Error(f'top_re ({self.top_re}) must be < bottom_re ({self.bottom_re})')
     if self.top_im <= self.bottom_im:
       raise Error(f'top_im ({self.top_im}) must be > bottom_im ({self.bottom_im})')
+
+  def __str__(self) -> str:
+    """Get string representation of the frame.
+
+    Format is:
+      - "[MANDELBROT: (c_re, c_im) ± (dx_re, dy_im)]" without the point for Mandelbrot; or
+      - "[JULIA: (c_re, c_im) ± (dx_re, dy_im) @ (p_re, p_im)]" for Julia; and note
+      - "(c_re, c_im)" is the center of the frame; and
+      - "(dx_re, dy_im)" is the size of the frame; and
+      - "(p_re, p_im)" is the point for Julia, if any; and
+      - if `dx_re` and `dy_im` are the same, we can simplify to "± dx" instead of "± (dx, dy)".
+
+    Returns:
+      str: String representation of the frame.
+
+    Raises:
+      Error: if the fractal type is unknown (should not happen b/c checked in __post_init__).
+
+    """
+    cx, cy = self.center
+    dx, dy = self.size
+    deltas: str = f'± {dx}' if dx == dy else f'± ({dx}, {dy})'
+    fractal_str: str = self.fractal.value.upper()
+    if self.fractal == Fractal.MANDELBROT:
+      return f'[{fractal_str}: ({cx}, {cy}) {deltas}]'
+    if self.fractal == Fractal.JULIA:
+      return f'[{fractal_str}: ({cx}, {cy}) {deltas} @ ({self.point_re}, {self.point_im})]'
+    raise Error(f'Unknown fractal type: {self.fractal}')
 
   @property
   def center(self) -> tuple[gmpy2.mpq, gmpy2.mpq]:
@@ -154,8 +207,7 @@ class Frame:
       gmpy2.mpq: The scale of the frame.
 
     """
-    s: tuple[gmpy2.mpq, gmpy2.mpq] = self.size
-    return min(s[0], s[1])
+    return min(*self.size)
 
   @property
   def area(self) -> gmpy2.mpq:
@@ -200,16 +252,25 @@ class Frame:
       _MPQ_ONE,
     )
 
-  def __str__(self) -> str:
-    """Get string representation of the frame.
+  @property
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the frame.
+
+    Keys: `fractal`, `top_re`, `top_im`, `bottom_re`, `bottom_im`, `point_re`, `point_im`, all str.
 
     Returns:
-      str: String representation of the frame.
+      tbase.JSONDict: A dictionary representation of the frame.
 
     """
-    cx, cy = self.center
-    dx, dy = self.size
-    return f'[({cx}, {cy}) ± {dx}]' if dx == dy else f'[({cx}, {cy}) ± ({dx}, {dy})]'
+    return {
+      'fractal': self.fractal.value,
+      'top_re': str(self.top_re),
+      'top_im': str(self.top_im),
+      'bottom_re': str(self.bottom_re),
+      'bottom_im': str(self.bottom_im),
+      'point_re': str(self.point_re),
+      'point_im': str(self.point_im),
+    }
 
   @staticmethod
   def FromCoords(
@@ -256,7 +317,10 @@ class Frame:
     center_re: ExactInputType,
     center_im: ExactInputType,
     width: ExactInputType,
+    *,
     height: ExactInputType | None = None,
+    point_re: ExactInputType | None = None,
+    point_im: ExactInputType | None = None,
   ) -> Frame:
     """Create a Frame from a center point and dimensions.
 
@@ -267,6 +331,9 @@ class Frame:
       width (ExactInputType): Width of the frame in the real direction.
       height (ExactInputType | None): Height of the frame in the imaginary direction. If None,
           height will be equal to width.
+      point_re (ExactInputType | None): For Julia, the real part of the point whose orbit we track.
+      point_im (ExactInputType | None): For Julia, the imaginary part of the point whose orbit
+          we track.
 
     Returns:
       Frame: A Frame object representing the rectangle defined by the center and dimensions.
@@ -281,11 +348,29 @@ class Frame:
     dy: gmpy2.mpq = (
       (height if isinstance(height, gmpy2.mpq) else gmpy2.mpq(height)) if height is not None else dx
     )
+    if (point_re is not None and point_im is None) or (point_re is None and point_im is not None):
+      raise Error('point_re and point_im must both be provided or both be None')
+    re: gmpy2.mpq = (
+      (point_re if isinstance(point_re, gmpy2.mpq) else gmpy2.mpq(point_re))
+      if point_re is not None
+      else _MPQ_ZERO
+    )
+    im: gmpy2.mpq = (
+      (point_im if isinstance(point_im, gmpy2.mpq) else gmpy2.mpq(point_im))
+      if point_im is not None
+      else _MPQ_ZERO
+    )
     if dx <= 0 or dy <= 0:
       raise Error(f'width and height must be positive, got {dx=} and {dy=}')
     dx, dy = dx / _MPQ_TWO, dy / _MPQ_TWO
     fr = Frame(
-      fractal=fractal, top_re=cx - dx, top_im=cy + dy, bottom_re=cx + dx, bottom_im=cy - dy
+      fractal=fractal,
+      top_re=cx - dx,
+      top_im=cy + dy,
+      bottom_re=cx + dx,
+      bottom_im=cy - dy,
+      point_re=re,
+      point_im=im,
     )
     if fr.center != (cx, cy):
       raise Error(f'calculated frame center {fr.center} does not match input center ({cx}, {cy})')
@@ -322,9 +407,124 @@ class Frame:
       return (pixel_size, min(int(gmpy2.ceil(sz * dy / dx)), pixel_size))
     return (min(int(gmpy2.ceil(sz * dx / dy)), pixel_size), pixel_size)
 
-  def CoordToPixel(
-    self, re_inp: ExactInputType, im_inp: ExactInputType, pixel_width: int, pixel_height: int
-  ) -> tuple[int, int]:
+
+# the standard/default frames for each fractal
+
+DEFAULT_MANDELBROT_FRAME: Frame = Frame.FromCenter(
+  Fractal.MANDELBROT, DEFAULT_FRAME_CENTER_RE, DEFAULT_FRAME_CENTER_IM, DEFAULT_FRAME_SIZE
+)
+
+DEFAULT_JULIA_FRAME: Frame = Frame.FromCenter(
+  Fractal.JULIA,
+  DEFAULT_JULIA_CENTER_RE,
+  DEFAULT_JULIA_CENTER_IM,
+  DEFAULT_JULIA_WIDTH,
+  height=DEFAULT_JULIA_HEIGHT,
+  point_re=DEFAULT_JULIA_RE,
+  point_im=DEFAULT_JULIA_IM,
+)
+
+
+DEFAULT_FRAMES: dict[Fractal, Frame] = {
+  Fractal.MANDELBROT: DEFAULT_MANDELBROT_FRAME,
+  Fractal.JULIA: DEFAULT_JULIA_FRAME,
+}
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class ComputationParameters:
+  """Arguments that determine a fractal computation completely (computation, not rendering)."""
+
+  frm: Frame
+  width: int
+  height: int
+  depth: int = MIN_ITER
+  set_points: SetHighlightAlgorithm | None = None
+
+  def __post_init__(self) -> None:
+    """Check rectangle has an area and top/bottom ordering.
+
+    Raises:
+      Error: if the rectangle is invalid.
+
+    """
+    # check width and height are valid
+    if not (MIN_IMAGE_SIZE <= self.width <= MAX_IMAGE_SIZE) or not (
+      MIN_IMAGE_SIZE <= self.height <= MAX_IMAGE_SIZE
+    ):
+      raise Error(
+        f'{self.width=} and {self.height=} must be between {MIN_IMAGE_SIZE} and {MAX_IMAGE_SIZE}'
+      )
+    # check depth is valid
+    if not (MIN_ITER <= self.depth <= MAX_ITER):
+      raise Error(f'{self.depth=} must be between {MIN_ITER} and {MAX_ITER}')
+    # check SetHighlightAlgorithm is supported
+    if self.set_points and self.set_points not in {
+      SetHighlightAlgorithm.MIN,
+      SetHighlightAlgorithm.MAX,
+      SetHighlightAlgorithm.ANGLE,
+      SetHighlightAlgorithm.IMAGINARY,
+    }:
+      raise Error(f'Unsupported set highlight algorithm: {self.set_points}')
+
+  def __str__(self) -> str:
+    """Get string representation of the computation parameters.
+
+    Format is:
+      - "{[MANDELBROT: (c_re, c_im) ± (dx_re, dy_im)] : [w, h, d]}" WITHOUT set points; or
+      - "{[MANDELBROT: (c_re, c_im) ± (dx_re, dy_im)] : [w, h, d] : <sp>}" WITH set point; or
+      - "{[JULIA: (c_re, c_im) ± (dx_re, dy_im) @ (p_re, p_im)] : [w, h, d]}" WITHOUT set points; or
+      - "{[JULIA: (c_re, c_im) ± (dx_re, dy_im) @ (p_re, p_im)] : [w, h, d] : <sp>}" WITH sp; and
+      - "(c_re, c_im)" is the center of the frame; and
+      - "(dx_re, dy_im)" is the size of the frame; and
+      - "(p_re, p_im)" is the point for Julia, if any; and
+      - if `dx_re` and `dy_im` are the same, we can simplify to "± dx" instead of "± (dx, dy)"; and
+      - `w`/`h` are the width/height in pixels; and
+      - `d` is the depth/iteration count, or "AUTO" if it is set to MIN_ITER; and
+      - `<sp>` is the set highlight algorithm, lowercase, if any.
+
+    Returns:
+      str: String representation of the computation parameters.
+
+    """
+    return (
+      '{'
+      f'{self.frm} : '
+      f'[{self.width}, {self.height}, {self.depth if self.depth > MIN_ITER else "AUTO"}]'
+      + ('' if self.set_points is None else f' : {self.set_points.value.lower()}')
+      + '}'
+    )
+
+  @property
+  def size(self) -> tuple[int, int]:
+    """Get the size of the image as (width, height).
+
+    Returns:
+      tuple[int, int]: The size of the image.
+
+    """
+    return (self.width, self.height)
+
+  @property
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the computation parameters.
+
+    Keys: `frm`, `width`, `height`, `depth`, `set_points`, where `frm` is the frame as a JSON dict,
+        `width` and `height` and `depth` are int, and `set_points` is str | None.
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the computation parameters.
+
+    """
+    return {
+      'frm': self.frm.json,
+      'width': self.width,
+      'height': self.height,
+      'depth': self.depth,
+      'set_points': self.set_points.value if self.set_points else None,
+    }
+
+  def CoordToPixel(self, re_inp: ExactInputType, im_inp: ExactInputType) -> tuple[int, int]:
     """Convert complex-plane coordinates to pixel coordinates in the image.
 
     Calculate pixel coordinates, with (0, 0) at the top-left corner of the image and
@@ -339,8 +539,6 @@ class Frame:
     Args:
       re_inp (ExactInputType): Real part of the complex coordinate.
       im_inp (ExactInputType): Imaginary part of the complex coordinate.
-      pixel_width (int): Width of the image in pixels.
-      pixel_height (int): Height of the image in pixels.
 
     Returns:
       tuple[int, int]: The (x, y) pixel coordinates corresponding to the complex coordinate.
@@ -352,33 +550,30 @@ class Frame:
     re: gmpy2.mpq = re_inp if isinstance(re_inp, gmpy2.mpq) else gmpy2.mpq(re_inp)
     im: gmpy2.mpq = im_inp if isinstance(im_inp, gmpy2.mpq) else gmpy2.mpq(im_inp)
     # check parameters
-    if not (self.top_re <= re <= self.bottom_re) or not (self.bottom_im <= im <= self.top_im):
-      raise Error(f'coordinates ({re}, {im}) are outside the frame {self}')
-    if not (MIN_IMAGE_SIZE <= pixel_width <= MAX_IMAGE_SIZE) or not (
-      MIN_IMAGE_SIZE <= pixel_height <= MAX_IMAGE_SIZE
+    if not (self.frm.top_re <= re <= self.frm.bottom_re) or not (
+      self.frm.bottom_im <= im <= self.frm.top_im
     ):
-      raise Error(
-        f'{pixel_width=} and {pixel_height=} must be between {MIN_IMAGE_SIZE} and {MAX_IMAGE_SIZE}'
-      )
+      raise Error(f'coordinates ({re}, {im}) are outside the frame {self.frm}')
     # do computation
-    return (
-      int(
-        gmpy2.floor((re - self.top_re) / (self.bottom_re - self.top_re) * gmpy2.mpq(pixel_width))
-      ),
-      int(
-        gmpy2.floor((self.top_im - im) / (self.top_im - self.bottom_im) * gmpy2.mpq(pixel_height))
-      ),
+    x: int = int(
+      gmpy2.floor(
+        (re - self.frm.top_re) / (self.frm.bottom_re - self.frm.top_re) * gmpy2.mpq(self.width)
+      )
     )
+    y: int = int(
+      gmpy2.floor(
+        (self.frm.top_im - im) / (self.frm.top_im - self.frm.bottom_im) * gmpy2.mpq(self.height)
+      )
+    )
+    return (min(max(x, 0), self.width - 1), min(max(y, 0), self.height - 1))
 
-  def CoordsTupleToPixel(self, inp: str, pixel_width: int, pixel_height: int) -> tuple[int, int]:
+  def CoordsTupleToPixel(self, inp: str) -> tuple[int, int]:
     """Parse a complex-plane tuple coordinates to pixel coordinates in the image.
 
     See CoordToPixel() for more details.
 
     Args:
       inp (str): A string representing the complex coordinate in the format "(re, im)".
-      pixel_width (int): Width of the image in pixels.
-      pixel_height (int): Height of the image in pixels.
 
     Returns:
       tuple[int, int]: The (x, y) pixel coordinates corresponding to the complex coordinate
@@ -395,9 +590,10 @@ class Frame:
     if not co_re.startswith('(') or not co_im.endswith(')'):
       raise Error(f'Expected "(re,im)" input got {inp!r}')
     # convert the coordinate to pixel and draw the overlay
-    return self.CoordToPixel(co_re[1:], co_im[:-1], pixel_width, pixel_height)
+    return self.CoordToPixel(co_re[1:], co_im[:-1])
 
-  def Precision(self, pixel_width: int, pixel_height: int, *, max_iter: int = DEFAULT_ITER) -> int:
+  @property
+  def precision(self) -> int:
     """Estimate the MPFR precision needed to render this frame at the requested image size.
 
     This method chooses a conservative MPFR precision, in bits, for Mandelbrot-style arbitrary
@@ -457,12 +653,6 @@ class Frame:
       ambiguity should come from the fractal problem itself rather than from an obviously inadequate
       MPFR precision.
 
-    Args:
-      pixel_width (int): The width of the putative image in pixels.
-      pixel_height (int): The height of the putative image in pixels.
-      max_iter (int): The maximum number of iterations we expect to need to render this frame;
-          defaults to DEFAULT_ITER
-
     Returns:
       int: The estimated number of bits of MPFR precision needed
 
@@ -471,23 +661,14 @@ class Frame:
           estimated precision exceeds _MPFR_MAX_PRECISION
 
     """
-    # check inputs
-    if not (MIN_IMAGE_SIZE <= pixel_width <= MAX_IMAGE_SIZE) or not (
-      MIN_IMAGE_SIZE <= pixel_height <= MAX_IMAGE_SIZE
-    ):
-      raise Error(
-        f'{pixel_width=} and {pixel_height=} must be between {MIN_IMAGE_SIZE} and {MAX_IMAGE_SIZE}'
-      )
-    if not (MIN_ITER <= max_iter <= MAX_ITER):
-      raise Error(f'{max_iter=} must be between {MIN_ITER} and {MAX_ITER}')
     # calculate pixel size and magnitude-to-pixel ratio, EXACT mpq computations
-    pixel_re: gmpy2.mpq = (self.bottom_re - self.top_re) / gmpy2.mpq(pixel_width)
-    pixel_im: gmpy2.mpq = (self.top_im - self.bottom_im) / gmpy2.mpq(pixel_height)
+    pixel_re: gmpy2.mpq = (self.frm.bottom_re - self.frm.top_re) / gmpy2.mpq(self.width)
+    pixel_im: gmpy2.mpq = (self.frm.top_im - self.frm.bottom_im) / gmpy2.mpq(self.height)
     pixel_size: gmpy2.mpq = min(pixel_re, pixel_im)
-    magnitude_to_pixel_ratio: gmpy2.mpq = self.coordinates_magnitude / pixel_size
+    magnitude_to_pixel_ratio: gmpy2.mpq = self.frm.coordinates_magnitude / pixel_size
     # calculate the number of bits needed so that MPFR spacing at this magnitude << pixel size
     with PrecisionContext():
-      iter_guard: int = 2 * int(gmpy2.ceil(gmpy2.log2(max_iter + 1)))
+      iter_guard: int = 2 * int(gmpy2.ceil(gmpy2.log2(self.depth + 1)))
       base_bits: int = int(gmpy2.ceil(gmpy2.log2(magnitude_to_pixel_ratio)))
     # join it all; check for precision cap and return
     n_precision: int = max(_MPFR_MIN_PRECISION, base_bits + iter_guard + _MPFR_MIN_GUARD_BITS)
@@ -495,127 +676,12 @@ class Frame:
       raise Error(f'Frame too small: estimated {n_precision} bits; max is {_MPFR_MAX_PRECISION}')
     return n_precision
 
-  def Context(
-    self, pixel_width: int, pixel_height: int, *, max_iter: int = DEFAULT_ITER
-  ) -> gmpy2.context:
+  @property
+  def context(self) -> gmpy2.context:
     """Get gmpy2 context with precision to distinguish adjacent pixels in smaller complex-plane dim.
-
-    Args:
-      pixel_width (int): The width of the putative image in pixels.
-      pixel_height (int): The height of the putative image in pixels.
-      max_iter (int): The maximum number of iterations we expect to need to render this frame;
-          defaults to DEFAULT_ITER
 
     Returns:
       gmpy2.context: A context with the estimated number of bits of precision needed.
 
     """
-    return gmpy2.local_context(
-      gmpy2.context(), precision=self.Precision(pixel_width, pixel_height, max_iter=max_iter)
-    )
-
-
-# the standard/default frames for each fractal
-
-DEFAULT_MANDELBROT_FRAME: Frame = Frame.FromCenter(
-  Fractal.MANDELBROT, DEFAULT_FRAME_CENTER_RE, DEFAULT_FRAME_CENTER_IM, DEFAULT_FRAME_SIZE
-)
-
-
-@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class FrameAndPoint(Frame):
-  """Defines a rectangular region and a point of the complex plane, with arbitrary precision. Exact.
-
-  The point is not required to be inside the rectangle; it is just an additional coordinate
-  that can be used for various purposes, such as marking a specific location in the image or
-  providing additional data like for the Julia fractal.
-  """
-
-  point_re: gmpy2.mpq
-  point_im: gmpy2.mpq
-
-  def __str__(self) -> str:
-    """Get string representation of the frame.
-
-    Returns:
-      str: String representation of the frame.
-
-    """
-    cx, cy = self.center
-    dx, dy = self.size
-    return (
-      f'[({cx}, {cy}) ± {dx} @ ({self.point_re}, {self.point_im})]'
-      if dx == dy
-      else f'[({cx}, {cy}) ± ({dx}, {dy}) @ ({self.point_re}, {self.point_im})]'
-    )
-
-  @staticmethod
-  def FromCenterAndPoint(
-    fractal: Fractal,
-    point_re: ExactInputType,
-    point_im: ExactInputType,
-    center_re: ExactInputType,
-    center_im: ExactInputType,
-    width: ExactInputType,
-    height: ExactInputType | None = None,
-  ) -> FrameAndPoint:
-    """Create a FrameAndPoint from a point, a center point, and dimensions.
-
-    Args:
-      fractal (Fractal): The type of fractal.
-      point_re (ExactInputType): Real part of the point.
-      point_im (ExactInputType): Imaginary part of the point.
-      center_re (ExactInputType): Real part of the center point.
-      center_im (ExactInputType): Imaginary part of the center point.
-      width (ExactInputType): Width of the frame in the real direction.
-      height (ExactInputType | None): Height of the frame in the imaginary direction. If None,
-          height will be equal to width.
-
-    Returns:
-      FrameAndPoint: A FrameAndPoint object representing the rectangle+point.
-
-    """
-    re: gmpy2.mpq = point_re if isinstance(point_re, gmpy2.mpq) else gmpy2.mpq(point_re)
-    im: gmpy2.mpq = point_im if isinstance(point_im, gmpy2.mpq) else gmpy2.mpq(point_im)
-    frm: Frame = Frame.FromCenter(fractal, center_re, center_im, width, height)
-    return FrameAndPoint(
-      fractal=frm.fractal,
-      top_re=frm.top_re,
-      top_im=frm.top_im,
-      bottom_re=frm.bottom_re,
-      bottom_im=frm.bottom_im,
-      point_re=re,
-      point_im=im,
-    )
-
-
-DEFAULT_JULIA_FRAME: FrameAndPoint = FrameAndPoint.FromCenterAndPoint(
-  Fractal.JULIA,
-  DEFAULT_JULIA_RE,
-  DEFAULT_JULIA_IM,
-  DEFAULT_JULIA_CENTER_RE,
-  DEFAULT_JULIA_CENTER_IM,
-  DEFAULT_JULIA_WIDTH,
-  DEFAULT_JULIA_HEIGHT,
-)
-
-
-DEFAULT_FRAMES: dict[Fractal, Frame] = {
-  Fractal.MANDELBROT: DEFAULT_MANDELBROT_FRAME,
-  Fractal.JULIA: DEFAULT_JULIA_FRAME,
-}
-
-
-def MPQFromFloatApprox(value: float, max_denominator: int) -> gmpy2.mpq:
-  """Convert a float to a gmpy2.mpq, using fractions.Fraction to find a good rational approximation.
-
-  Args:
-    value (float): The float value to convert.
-    max_denominator (int): The maximum denominator to use for the approximation.
-
-  Returns:
-    gmpy2.mpq: The rational approximation of the float as a gmpy2.mpq.
-
-  """
-  frac: fractions.Fraction = fractions.Fraction(value).limit_denominator(max_denominator)
-  return gmpy2.mpq(frac.numerator, frac.denominator)
+    return gmpy2.local_context(gmpy2.context(), precision=self.precision)
