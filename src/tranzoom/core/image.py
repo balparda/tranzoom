@@ -91,9 +91,6 @@ META_ANIM_INITIAL_HEIGHT_IM_KEY = 'tranzoom:animation:frame:initial_height_im'  
 META_ANIM_MAGNITUDE_KEY = 'tranzoom:animation:zoom:magnitude'  # float
 META_ANIM_MAGNITUDE_PER_STEP_KEY = 'tranzoom:animation:zoom:magnitude_per_step'  # float
 META_ANIM_MAGNIFICATION_PER_STEP_KEY = 'tranzoom:animation:zoom:magnification_per_step'  # float
-META_ANIM_MAGNIFICATION_PER_STEP_MPQ_KEY = (
-  'tranzoom:animation:zoom:magnification_per_step_mpq'  # gmpy2.mpq
-)
 META_ANIM_DURATION_KEY = 'tranzoom:animation:duration'  # float
 META_ANIM_FRAMES_KEY = 'tranzoom:animation:frames'  # int
 META_ANIM_STEPS_KEY = 'tranzoom:animation:steps'  # int

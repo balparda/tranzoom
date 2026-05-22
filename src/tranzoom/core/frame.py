@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import dataclasses
 import enum
-import fractions
 from collections import abc
 from typing import cast
 
@@ -72,8 +71,6 @@ DEFAULT_JULIA_HEIGHT: str = '2.2'
 
 
 # TODO: create (optional) DB of stored frames
-# TODO: for videos compute all mpq steps first with full mpq, then simplify fraction to 0.01% error;
-#     frames are now deterministic and as reasonably small as possible, they are the entries to DB
 # TODO: video/gif to save check the frames for existence, thus recovering from a crash
 # TODO: image to store: on non-set/escaped the iteration plus a float(?) to compute "nu"
 # TODO: image to store: on set/non-escaped the actual final value of the tracked constant;
@@ -688,18 +685,3 @@ class ComputationParameters:
 
     """
     return gmpy2.local_context(gmpy2.context(), precision=self.precision)
-
-
-def MPQFromFloatApprox(value: float, max_denominator: int) -> gmpy2.mpq:
-  """Convert a float to a gmpy2.mpq, using fractions.Fraction to find a good rational approximation.
-
-  Args:
-    value (float): The float value to convert.
-    max_denominator (int): The maximum denominator to use for the approximation.
-
-  Returns:
-    gmpy2.mpq: The rational approximation of the float as a gmpy2.mpq.
-
-  """
-  frac: fractions.Fraction = fractions.Fraction(value).limit_denominator(max_denominator)
-  return gmpy2.mpq(frac.numerator, frac.denominator)
