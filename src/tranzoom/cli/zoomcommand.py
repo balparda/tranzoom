@@ -507,7 +507,7 @@ def _ComputeReasonableFrames(
         f'Frame {i + 2} has size {frm.size} but reduced frame has size {reduced_frm.size}, '
         f'which is {float(gmpy2.mpq(100) * error_x):.6f}% different in width '
         f'and {float(gmpy2.mpq(100) * error_y):.6f}% '
-        'different in height, which is above the tolerated error threshold.This is a bug!'
+        'different in height, which is above the tolerated error threshold. This is a bug!'
       )
   # done adding frames, return
   return all_frames
