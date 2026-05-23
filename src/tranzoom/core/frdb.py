@@ -228,6 +228,10 @@ def _DBTypeFactory(overrides: dict[str, object] | None = None) -> _DBType:
 class FractalDatabase:
   """Fractal database class, for storing and retrieving frames/images and their metadata."""
 
+  # process-wide lock: only one FractalDatabase instance may be open at any time, in any thread:
+  # acquired in __init__() and released in Close() or __exit__().
+  _CONTEXT_LOCK: threading.Lock = threading.Lock()
+
   def __init__(
     self,
     appconfig: app_config.AppConfig,
@@ -255,6 +259,9 @@ class FractalDatabase:
       format_json (bool): (default True) Whether to format the JSON output with indentation
           for readability.
 
+    Raises:
+      Error: if another instance of FractalDatabase is already open
+
     """
     self._config: app_config.AppConfig = appconfig
     self._path: Path = self._config.dir / _DB_FILE_NAME
@@ -264,7 +271,19 @@ class FractalDatabase:
     self._compress_save: bool = compress_save
     self._format_json: bool = format_json
     self._db: _DBType
+    self._closed: bool = False  # True once Close() / __exit__ has been called
     self._open = timer.Timer('FractalDatabase', emit_log=False)
+    if not FractalDatabase._CONTEXT_LOCK.acquire(blocking=False):
+      raise Error('Cannot open FractalDatabase: another instance is already open!')
+    try:
+      self._InitLoad()
+    except Exception:
+      FractalDatabase._CONTEXT_LOCK.release()  # don't leak the lock if init fails
+      self._closed = True
+      raise
+
+  def _InitLoad(self) -> None:
+    """Load the database from disk (or create a new one). Called only from __init__()."""
     with _DB_DISK_LOCK:  # ensure thread-safe load operations
       if self._path.exists():
         self._db = cast(
@@ -295,7 +314,7 @@ class FractalDatabase:
     _exc_value: BaseException | None,
     _traceback: object,
   ) -> None:
-    """Context manager exit. If not exception, saves the database to file.
+    """Context manager exit. Calls Close() unless an exception occurred.
 
     Args:
       exc_type (type[BaseException] | None): exception type, if any
@@ -303,11 +322,38 @@ class FractalDatabase:
       _traceback (object): traceback object, if any
 
     """
-    logging.info(f'Database was open for {self._open}')
     if exc_type is not None:
       logging.error('Exception occurred in Database context: *NOT* saving DB due to exception')
-      return  # do not save if there was an exception
-    self.Save()
+      self._DoClose(save=False)
+      return
+    self._DoClose(save=True)
+
+  def Close(self) -> None:
+    """Save and close the database, releasing the process-wide lock.
+
+    Must be called exactly once when done with the database (unless using as a context manager).
+    Subsequent calls are silently ignored.
+
+    """
+    self._DoClose(save=True)
+
+  def _DoClose(self, *, save: bool) -> None:
+    """Close implementation: optionally saves, logs, and releases the lock.
+
+    Args:
+      save (bool): whether to save the database before releasing the lock
+
+    """
+    if self._closed:
+      logging.warning('FractalDatabase already closed, ignoring redundant close call')
+      return
+    self._closed = True
+    logging.info(f'Database was open for {self._open}')
+    try:
+      if save:
+        self.Save()
+    finally:
+      FractalDatabase._CONTEXT_LOCK.release()
 
   @property
   def label(self) -> str:
