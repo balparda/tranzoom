@@ -182,7 +182,7 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
       config.max_steps,
       config.iterm,
       _MANUAL_QUERY_WEIGHT,
-      config.console.print,
+      print_comm=config.console.print,
     )
 
 
@@ -257,15 +257,16 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
     prefix=config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
   )
   with config.OpenDB() as db:
-    ai.ManualLoop(
+    ai.ZoomLoop(
       db,
       params,
       render,
       out,
       config.max_threads,
-      config.max_steps,
-      config.iterm,
-      config.console.print,
+      max_steps=config.max_steps,
+      iterm=config.iterm,
+      print_comm=config.console.print,
+      manual=True,
     )
 
 
