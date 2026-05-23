@@ -353,6 +353,9 @@ def CoreComputeImage(
         - str: the SHA-256 hash of the raw PNG before any post-processing overlays
         - pathlib.Path: the intended save path (NOT yet written to disk; caller must save)
 
+  Raises:
+    Error: on error
+
   """
   # render the image for the current frame
   img_data: bytes
