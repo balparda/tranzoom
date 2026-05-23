@@ -255,9 +255,10 @@ class RenderParameters(frame.SerializingFractalObject):
     if self.overlay and self.overlay != OverlayType.GRID:
       raise Error(f'Unknown file type: {self.tp}')
     # check palettes are valid
-    for pal in (self.escaped_pal, self.set_pal):
-      if pal not in palette.Palette:
-        raise Error(f'Unknown palette: {pal}')
+    if self.escaped_pal not in palette.Palette:
+      raise Error(f'Unknown escaped palette: {self.escaped_pal}')
+    if self.set_pal is not None and self.set_pal not in palette.Palette:
+      raise Error(f'Unknown set palette: {self.set_pal}')
     # check mark width is valid
     if not (MIN_MARK_WIDTH <= self.mark_width <= MAX_MARK_WIDTH):
       raise Error(
@@ -586,12 +587,7 @@ class Image:
       -min(interior_points) if interior_points else 0,
     )
 
-  def AsPixels(
-    self,
-    *,
-    pal: palette.Palette = palette.DEFAULT_PALETTE,
-    set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-  ) -> bytes:
+  def AsPixels(self, render: RenderParameters) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
     Exterior points (escaped) are colored by mapping their escape iteration through a cumulative
@@ -605,10 +601,7 @@ class Image:
     escape value), so the full `set_pal` range is used across the Set interior.
 
     Args:
-      pal (palette.Palette, optional): The color palette for exterior (escaped) pixels.
-          Defaults to DEFAULT_PALETTE.
-      set_pal (palette.Palette, optional): The color palette for interior Set points; only
-          used when `color_set_points=True`. Defaults to DEFAULT_SET_PALETTE.
+      render (RenderParameters): The render parameters to use for generating the PNG metadata.
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
@@ -638,42 +631,37 @@ class Image:
       if escaped_at >= 0 and total_exterior > 0:
         # exterior point: histogram-equalized position in pal
         t: float = (cumulative[escaped_at] - 1) / total_exterior
-        rgb: tuple[int, int, int] = PixelPalette(t, pal, palette.PALETTE_CYCLES)
+        rgb: tuple[int, int, int] = PixelPalette(t, render.escaped_pal, palette.PALETTE_CYCLES)
       elif self._params.set_points and total_set > 0 and escaped_at < 0:
         # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
         t_set: float = (set_cumulative[-escaped_at] - 1) / total_set
-        rgb = PixelPalette(t_set, set_pal, palette.SET_PALETTE_CYCLES)
+        if render.set_pal is None:
+          raise Error('set_pal must be specified in RenderParameters when set_points is True')
+        rgb = PixelPalette(t_set, render.set_pal, palette.SET_PALETTE_CYCLES)
       else:
         rgb = (0, 0, 0)  # black: interior point (default) or all-interior image
       pixels[i * 3], pixels[i * 3 + 1], pixels[i * 3 + 2] = rgb
     return bytes(pixels)
 
-  def AsPNG(
-    self,
-    *,
-    pal: palette.Palette = palette.DEFAULT_PALETTE,
-    set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-  ) -> tuple[bytes, str]:
+  def AsPNG(self, render: RenderParameters) -> tuple[bytes, str]:
     """Convert the image to PNG bytes and return it with its internal data hash.
 
     Args:
-      pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
-      set_pal (palette.Palette, optional): The color palette for interior Set points.
-          Defaults to DEFAULT_SET_PALETTE.
+      render (RenderParameters): The render parameters to use for generating the PNG metadata.
 
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
 
     """
     # convert the raw pixel data to a PNG using PIL
-    raw_img: bytes = self.AsPixels(pal=pal, set_pal=set_pal)
+    raw_img: bytes = self.AsPixels(render)
     img_data_hash: str = hashes.Hash256(raw_img).hex()
     img: PILImage.Image = PILImage.frombytes(
       'RGB', (self._params.width, self._params.height), raw_img
     )
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
     png_meta = PngImagePlugin.PngInfo()
-    for k, v in MakeImageMeta(self, img_data_hash, pal=pal, set_pal=set_pal).items():
+    for k, v in MakeImageMeta(self, render, img_data_hash).items():
       png_meta.add_text(k, v)
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
@@ -681,21 +669,13 @@ class Image:
     return (buf.getvalue(), img_data_hash)
 
 
-def MakeImageMeta(
-  img: Image,
-  data_hash: str,
-  *,
-  pal: palette.Palette = palette.DEFAULT_PALETTE,
-  set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-) -> dict[str, str]:
+def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[str, str]:
   """Create a metadata dictionary for the image.
 
   Args:
     img (Image): The image for which to create metadata.
+    render (RenderParameters): The render parameters used for the image.
     data_hash (str): The hash of the image data, to include in the metadata.
-    pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
-    set_pal (palette.Palette, optional): The color palette for interior Set points.
-        Defaults to DEFAULT_SET_PALETTE.
 
   Returns:
     dict[str, str]: A dictionary containing the metadata for the image, with keys as defined
@@ -722,8 +702,8 @@ def MakeImageMeta(
     META_IMAGE_WIDTH_KEY: str(img.size[0]),
     META_IMAGE_HEIGHT_KEY: str(img.size[1]),
     META_IMAGE_HASH_KEY: data_hash,
-    META_IMAGE_PALETTE_KEY: pal.value,
-    META_IMAGE_SET_PALETTE_KEY: set_pal.value,
+    META_IMAGE_PALETTE_KEY: render.escaped_pal.value,
+    META_IMAGE_SET_PALETTE_KEY: render.set_pal.value if render.set_pal else 'none',
     META_IMAGE_COLOR_SET_KEY: str(img.params.set_points.value) if img.params.set_points else 'none',
     META_IMAGE_OVERLAY_KEY: 'false',  # if it comes from this, it has no overlay
     # frame

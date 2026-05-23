@@ -63,7 +63,7 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
     # check color so it won't raise plain KeyError
     col: str = mark_color.strip().upper()
     if col not in image.Color.__members__:
-      raise click.ClickException(
+      raise base.UsageError(
         f'Invalid mark color {mark_color!r}; available colors: '
         + ', '.join(sorted(repr(c.name.lower()) for c in image.Color))
       )
@@ -110,7 +110,8 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
     frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
   )
   # we have the frame, now feed it to the producer
-  base.ProduceFractalImage(frm, config)
+  with config.OpenDB() as db:
+    base.ProduceFractalImage(db, frm, config)
 
 
 @image_app.command(
@@ -161,7 +162,8 @@ def Julia(  # documentation is help/epilog/args  # noqa: D103
     point_im=julia_im,
   )
   # we have the frame, now feed it to the producer
-  base.ProduceFractalImage(frm, config)
+  with config.OpenDB() as db:
+    base.ProduceFractalImage(db, frm, config)
 
 
 @image_app.command(

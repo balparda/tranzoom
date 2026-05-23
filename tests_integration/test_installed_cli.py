@@ -193,7 +193,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: path
         'tranzoom:image:width': '220',
         'tranzoom:image:height': '220',
         'tranzoom:image:palette': 'blue-to-yellow-to-brown',
-        'tranzoom:image:set_palette': 'rgrayscale',
+        'tranzoom:image:set_palette': 'none',
         'tranzoom:image:color_set': 'none',
         'tranzoom:image:hash': base.SEAHORSE_ANIMATED_HASH,
         'tranzoom:image:iter_depth:min': '98',

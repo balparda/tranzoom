@@ -672,7 +672,9 @@ class ComputationParameters(SerializingFractalObject):
       raise Error(f'ComputationParameters {params.sha!r} does not match expected {check_hash!r}')
     return params
 
-  def CoordToPixel(self, re_inp: ExactInputType, im_inp: ExactInputType) -> tuple[int, int]:
+  def CoordToPixel(
+    self, re_inp: ExactInputType, im_inp: ExactInputType
+  ) -> tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]:
     """Convert complex-plane coordinates to pixel coordinates in the image.
 
     Calculate pixel coordinates, with (0, 0) at the top-left corner of the image and
@@ -689,7 +691,8 @@ class ComputationParameters(SerializingFractalObject):
       im_inp (ExactInputType): Imaginary part of the complex coordinate.
 
     Returns:
-      tuple[int, int]: The (x, y) pixel coordinates corresponding to the complex coordinate.
+      tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]: The (re, im) complex coordinates and
+          the (x, y) pixel coordinates corresponding to the complex coordinate
 
     Raises:
       Error: If the input coordinates are outside the frame or if the image dimensions are invalid.
@@ -713,9 +716,9 @@ class ComputationParameters(SerializingFractalObject):
         (self.frm.top_im - im) / (self.frm.top_im - self.frm.bottom_im) * gmpy2.mpq(self.height)
       )
     )
-    return (min(max(x, 0), self.width - 1), min(max(y, 0), self.height - 1))
+    return ((re, im), (min(max(x, 0), self.width - 1), min(max(y, 0), self.height - 1)))
 
-  def CoordsTupleToPixel(self, inp: str) -> tuple[int, int]:
+  def CoordsTupleToPixel(self, inp: str) -> tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]:
     """Parse a complex-plane tuple coordinates to pixel coordinates in the image.
 
     See CoordToPixel() for more details.
@@ -724,7 +727,8 @@ class ComputationParameters(SerializingFractalObject):
       inp (str): A string representing the complex coordinate in the format "(re, im)".
 
     Returns:
-      tuple[int, int]: The (x, y) pixel coordinates corresponding to the complex coordinate
+      tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]: The (re, im) complex coordinates and
+          the (x, y) pixel coordinates corresponding to the complex coordinate
 
     Raises:
       Error: If the input string is not in the correct format or if the coordinates are invalid

@@ -46,7 +46,7 @@ from tranzoom.core import frame, image, palette
     (
       'gif',
       'electric-ocean',
-      'grayscale',
+      None,
       '-11/17',
       '9/2',
       'red',
@@ -55,9 +55,9 @@ from tranzoom.core import frame, image, palette
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
       (
         '{"escaped_pal":"electric-ocean","mark_color":"red","mark_im":"9/2",'
-        '"mark_re":"-11/17","mark_width":2,"overlay":"grid","set_pal":"grayscale","tp":"gif"}'
+        '"mark_re":"-11/17","mark_width":2,"overlay":"grid","set_pal":null,"tp":"gif"}'
       ),
-      'e382dbcc8c3db3a64140a8c1b30e3c90bcbfc4000e188910b5d780fccb54bfe0',
+      'dd407595070636f3496391519681ea5b7b23860dec4b8316b90047d8348a0cc8',
     ),
     (
       'mp4',
@@ -80,7 +80,7 @@ from tranzoom.core import frame, image, palette
 def test_render_hash_stability_and_serialization_consistency(
   tp: str,
   e_pal: str,
-  s_pal: str,
+  s_pal: str | None,
   m_re: str,
   m_im: str,
   m_col: str | None,
@@ -93,7 +93,7 @@ def test_render_hash_stability_and_serialization_consistency(
   params: image.RenderParameters = image.RenderParameters(
     tp=image.FileType(tp),
     escaped_pal=palette.Palette(e_pal),
-    set_pal=palette.Palette(s_pal),
+    set_pal=palette.Palette(s_pal) if s_pal else None,
     mark_re=gmpy2.mpq(m_re),
     mark_im=gmpy2.mpq(m_im),
     mark_color=image.Color[m_col.upper()] if m_col is not None else None,

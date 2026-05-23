@@ -20,6 +20,19 @@ from transcrypto.utils import timer
 from tranzoom import __version__
 from tranzoom.core import ai, fractal, frame, frdb, image, palette
 
+
+class Error(ai.Error, click.ClickException):
+  """Base CLI/click exception."""
+
+
+class UsageError(Error, click.UsageError):
+  """Base CLI/click usage exception."""
+
+
+# gmpy2.mpq constants
+_MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
+
+
 # global CLI data, and some test stuff
 
 # if `tests/data/images/demo-mandel-seahorse-tail.png` internal data changes this will change!
@@ -665,16 +678,18 @@ class TranZoomConfig(clibase.CLIConfig):
 
 
 def ProduceFractalImage(
+  db: frdb.FractalDatabase,
   frm: frame.Frame,
   config: TranZoomConfig,
   *,
   tm: int | None = None,
   add_serial: int | None = None,
   save_image: bool = True,
-) -> tuple[image.Image, bytes, str]:
+) -> tuple[image.Image, bytes, str, image.RenderParameters]:
   """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
 
   Args:
+    db (frdb.FractalDatabase): the fractal database instance to use
     frm (frame.Frame): the frame to produce the image from; must be already validated and ready
         for rendering
     config (TranZoomConfig): the global configuration with all the options needed for rendering
@@ -688,8 +703,8 @@ def ProduceFractalImage(
         not be saved; default is True.
 
   Returns:
-    tuple[image.Image, bytes, str]: A tuple of (image.Image object, raw PNG bytes, internal hash
-        of the raw PNG)
+    tuple[image.Image, bytes, str, image.RenderParameters]: A tuple of
+        (image.Image object, raw PNG bytes, internal hash of the raw PNG, RenderParameters)
 
   This is a high-level function that takes care of all the steps needed to produce the final image,
   including:
@@ -720,9 +735,21 @@ def ProduceFractalImage(
     )
   )
   # add the mark? do this early to check the inputs ASAP
-  mark_coords: tuple[int, int] | None = (
+  mark_coords: tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]] | None = (
     params.CoordsTupleToPixel(config.mark_coords) if config.mark_coords else None
   )
+  # create render object with the parameters needed for rendering and marking
+  render: image.RenderParameters = image.RenderParameters(
+    escaped_pal=config.pal,
+    set_pal=None if config.set_points is None else config.set_pal,
+    mark_re=_MPQ_ZERO if mark_coords is None else mark_coords[0][0],
+    mark_im=_MPQ_ZERO if mark_coords is None else mark_coords[0][1],
+    mark_color=None if mark_coords is None else config.mark_color,
+    mark_width=config.mark_width,
+    # TODO: overlay?
+    # TODO: can AI zoom be migrated to ProduceFractalImage()?
+  )
+  # check the DB for a cached image with the same parameters
   # log
   config.console.print(
     f'\n{params}, precision ± {params.precision} bits, '  # approx: b/c depth is probably temporary
@@ -738,11 +765,11 @@ def ProduceFractalImage(
       print_comm=config.console.print,
     )
     # fractal is ready, convert to PNG
-    raw_png, raw_hash = img.AsPNG(pal=config.pal, set_pal=config.set_pal)
+    raw_png, raw_hash = img.AsPNG(render)
     if mark_coords:
       # we were asked to mark a coordinate with a crosshair overlay: do it
       raw_png = image.DrawCrossOverlay(
-        raw_png, *mark_coords, col=config.mark_color, lw=config.mark_width
+        raw_png, *mark_coords[1], col=config.mark_color, lw=config.mark_width
       )
   # print stats
   config.console.print(f'{frm.fractal.value.capitalize()} image {raw_hash!r} in {tmr}')
@@ -764,7 +791,7 @@ def ProduceFractalImage(
   if config.iterm:
     image.PrintITerm2(raw_png)
     config.console.print()
-  return (img, raw_png, raw_hash)
+  return (img, raw_png, raw_hash, render)
 
 
 def MakeFrameFromCLIArgs(
@@ -790,8 +817,8 @@ def MakeFrameFromCLIArgs(
     frame.Frame: A valid frame object
 
   Raises:
-    click.UsageError: if arguments can't be turned into a valid frame
-    ValueError: internally (but this is caught and turned into UsageError with a helpful message)
+    UsageError: if arguments can't be turned into a valid frame
+    Error: (not really)
 
   """
   try:
@@ -799,13 +826,13 @@ def MakeFrameFromCLIArgs(
     return frame.Frame.FromCenter(fractal, center_re, center_im, f_width, height=f_height)
   except ValueError as err:
     if 'invalid' not in str(err).lower():
-      raise click.UsageError(f'Error: {center_re=}, {center_im=}, {f_width=}, {f_height=}') from err
+      raise UsageError(f'Error: {center_re=}, {center_im=}, {f_width=}, {f_height=}') from err
     # maybe the user gave us an image path instead of coordinates? let's try to read it as image
     try:
       # convert and validate path
       img_path: pathlib.Path = pathlib.Path(center_re).expanduser().resolve()
       if not img_path.exists() or not img_path.is_file():
-        raise ValueError(f'Image "{img_path}" does not exist or is not a file')  # noqa: TRY301
+        raise Error(f'Image "{img_path}" does not exist or is not a file')  # noqa: TRY301
       # make sure we have the needed metadata
       info: tbase.JSONDict = image.GetBasicDataFromImage(img_path.read_bytes())[-1]
       if (
@@ -814,7 +841,7 @@ def MakeFrameFromCLIArgs(
         or image.META_WIDTH_RE_KEY not in info
         or image.META_HEIGHT_IM_KEY not in info
       ):
-        raise ValueError(f'Image "{img_path}" missing tranZoom frame metadata keys')  # noqa: TRY301
+        raise Error(f'Image "{img_path}" missing tranZoom frame metadata keys')  # noqa: TRY301
       fract: str = str(info.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
       print_call(f'Reading frame from "{img_path}", [red]tranZoom[/], {fract} fractal...')
       return frame.Frame.FromCenter(
@@ -825,11 +852,11 @@ def MakeFrameFromCLIArgs(
         height=str(info[image.META_HEIGHT_IM_KEY]),
       )
     except Exception as err2:  # this error we cannot forgive
-      raise click.UsageError(
+      raise UsageError(
         f'Error/not path: {center_re=}, {center_im=}, {f_width=}, {f_height=}'
       ) from err2
   except Exception as err:  # this error we cannot forgive
-    raise click.UsageError(f'Error: {center_re=}, {center_im=}, {f_width=}, {f_height=}') from err
+    raise UsageError(f'Error: {center_re=}, {center_im=}, {f_width=}, {f_height=}') from err
 
 
 def MakePointFromCLIArgs(
@@ -849,8 +876,8 @@ def MakePointFromCLIArgs(
     tuple[gmpy2.mpq, gmpy2.mpq]: A valid point
 
   Raises:
-    click.UsageError: if arguments can't be turned into a valid point
-    ValueError: internally (but this is caught and turned into UsageError with a helpful message)
+    UsageError: if arguments can't be turned into a valid point
+    Error: (not really)
 
   """
   try:
@@ -860,17 +887,17 @@ def MakePointFromCLIArgs(
     return (cx, cy)
   except ValueError as err:
     if 'invalid' not in str(err).lower():
-      raise click.UsageError(f'Error: {point_re=}, {point_im=}') from err
+      raise UsageError(f'Error: {point_re=}, {point_im=}') from err
     # maybe the user gave us an image path instead of coordinates? let's try to read it as image
     try:
       # convert and validate path
       img_path: pathlib.Path = pathlib.Path(str(point_re)).expanduser().resolve()
       if not img_path.exists() or not img_path.is_file():
-        raise ValueError(f'Image "{img_path}" does not exist or is not a file')  # noqa: TRY301
+        raise Error(f'Image "{img_path}" does not exist or is not a file') from err  # noqa: TRY301
       # make sure we have the needed metadata
       info: tbase.JSONDict = image.GetBasicDataFromImage(img_path.read_bytes())[-1]
       if image.META_CENTER_RE_KEY not in info or image.META_CENTER_IM_KEY not in info:
-        raise ValueError(f'Image "{img_path}" missing tranZoom frame metadata keys')  # noqa: TRY301
+        raise Error(f'Image "{img_path}" missing tranZoom frame metadata keys') from err  # noqa: TRY301
       fract: str = str(info.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
       print_call(f'Reading frame from "{img_path}", [red]tranZoom[/], {fract} fractal...')
       return (
@@ -878,6 +905,6 @@ def MakePointFromCLIArgs(
         gmpy2.mpq(str(info[image.META_CENTER_IM_KEY])),
       )
     except Exception as err2:  # this error we cannot forgive
-      raise click.UsageError(f'Error/not path: {point_re=}, {point_im=}') from err2
+      raise UsageError(f'Error/not path: {point_re=}, {point_im=}') from err2
   except Exception as err:  # this error we cannot forgive
-    raise click.UsageError(f'Error: {point_re=}, {point_im=}') from err
+    raise UsageError(f'Error: {point_re=}, {point_im=}') from err

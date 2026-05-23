@@ -17,7 +17,7 @@ from transcrypto.utils import config as app_config
 from transcrypto.utils import timer
 
 from tranzoom import __version__
-from tranzoom.core import ai
+from tranzoom.core import fractal
 
 # DB constants
 
@@ -30,7 +30,7 @@ _PicklePrettyJSON: abc.Callable[[tbase.JSONDict], bytes] = lambda d: json.dumps(
 ).encode('utf-8')
 
 
-class Error(ai.Error):
+class Error(fractal.Error):
   """Base fractal database exception."""
 
 

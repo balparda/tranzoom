@@ -79,12 +79,12 @@ def Set(  # documentation is help/epilog/args  # noqa: D103
   # check parameters
   key = key.strip().lower()
   if key not in base.CONFIG_SETTABLE_KEYS:
-    raise click.ClickException(
+    raise base.UsageError(
       f'Invalid config key {key!r}. Valid keys: {sorted(base.CONFIG_SETTABLE_KEYS)}'
     )
   value = value.strip()
   if not value:
-    raise click.ClickException('Config value cannot be empty')
+    raise base.UsageError('Config value cannot be empty')
   # convert value to the right type
   try:
     if base.CONFIG_SETTABLE_KEYS[key] is bool:
@@ -98,7 +98,7 @@ def Set(  # documentation is help/epilog/args  # noqa: D103
     else:
       cnf[key] = base.CONFIG_SETTABLE_KEYS[key](value)  # type: ignore[literal-required]
   except ValueError as err:
-    raise click.ClickException(
+    raise base.UsageError(
       f'Invalid value for {key!r}: {value!r}; '
       f'expecting type {base.CONFIG_SETTABLE_KEYS[key].__name__}'
     ) from err
