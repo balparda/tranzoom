@@ -17,7 +17,7 @@ from transcrypto.utils import config as app_config
 from transcrypto.utils import timer
 
 from tranzoom import __version__
-from tranzoom.core import fractal
+from tranzoom.core import ai
 
 # DB constants
 
@@ -30,8 +30,146 @@ _PicklePrettyJSON: abc.Callable[[tbase.JSONDict], bytes] = lambda d: json.dumps(
 ).encode('utf-8')
 
 
-class Error(fractal.Error):
+class Error(ai.Error):
   """Base fractal database exception."""
+
+
+class FrameData(TypedDict):
+  """Frame data type, for storing frame metadata and parameters.
+
+  Attributes:
+    frm (tbase.JSONDict): (CORE DATA) frame.Frame.json
+    mag (float): (CACHE) frame magnitude; 10^(mag) is the magnification proper but that can
+        be beyond float so we make sure to keep just the magnitude
+    cps (dict[str, ComputationData]): (CHILDREN) one frame can have multiple computations; dict of
+        {cp_hash: ComputationData}
+
+  Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
+  Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
+
+  """
+
+  # CORE DATA
+  frm: tbase.JSONDict  # frame.Frame.json
+
+  # CACHE
+  mag: float  # frame magnitude
+
+  # CHILDREN: one frame can have multiple computations
+  cps: dict[str, ComputationData]  # {cp_hash: ComputationData}
+
+
+class ComputationData(TypedDict):
+  """Computation data type, for storing computation metadata and parameters.
+
+  Attributes:
+    frm (str): (CORE DATA) Frame hash (frame_hash) -> points back to father Frame
+    cp (str): (CORE DATA) ComputationParameters hash (cp_hash) - we don't store here,
+        look in _DBType.cps
+    tm (int): (CACHE) timestamp of computation (raw data) creation
+    raw_data_path (str): (CACHE) path to raw data file (if not on disk, this computation
+        entry becomes moot!) so we must have it here or remove the entry
+    renders (dict[str, ImageData]): (CHILDREN) one computation can have multiple renders;
+        dict of {render_hash: ImageData}
+
+  Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
+  Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
+
+  """
+
+  # CORE DATA: Frame + ComputationParameters = a specific computation
+  frm: str  # Frame hash (frame_hash)
+  cp: str  # ComputationParameters hash (cp_hash) - look in _DBType.cps
+
+  # CACHE: the raw data is the most expensive to compute, so we store it
+  tm: int  # timestamp of computation
+  raw_data_path: str  # path to raw data file
+
+  # CHILDREN: one computation can have multiple renders
+  renders: dict[str, ImageData]  # {render_hash: ImageData}
+
+
+class ImageCoreKey(TypedDict):
+  """The 3 hashes that uniquely identify an image: frame_hash, cp_hash, and render_hash.
+
+  Attributes:
+    frm (str): (CORE DATA) Frame hash (frame_hash) -> points back to grandfather Frame
+    cp (str): (CORE DATA) ComputationParameters hash (cp_hash) -> points back to
+        father ComputationParameters
+    render (str): (CORE DATA) RenderParameters hash (render_hash) - we don't store here,
+        look in _DBType.renders
+
+  Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
+  Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
+
+  """
+
+  # Frame + ComputationParameters + RenderParameters = a specific PNG image
+  frm: str  # Frame hash
+  cp: str  # ComputationParameters hash
+  render: str  # RenderParameters hash (render_hash) - look in _DBType.renders
+
+
+class ImageData(TypedDict):
+  """Image data type, for storing PNG image/frame metadata and parameters. CANNOT be a video/GIF.
+
+  Attributes:
+    core (ImageCoreKey): (CORE DATA) the 3 hashes that uniquely identify an image: frame_hash,
+        cp_hash, and render_hash
+    data_hash (str): (CACHE) hash of the image PNG data; if we have this entry,
+        we must have the hash!
+    tm (int | None): (CACHE) timestamp of rendered image creation; None if not saved
+    rendered_path (str | None): (CACHE) path to image PNG file; None if not saved
+
+  Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
+  Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
+
+  """
+
+  # CORE DATA: Frame + ComputationParameters + RenderParameters = a specific PNG image
+  core: ImageCoreKey  # we nest the core data
+
+  # CACHE
+  data_hash: str  # hash of the image PNG data
+  tm: int | None  # timestamp of rendered image creation; None if not saved
+  rendered_path: str | None  # path to image PNG file; None if not saved
+
+
+class ZoomData(TypedDict):
+  """Video/GIF zoom data type, for storing zoom metadata and parameters.
+
+  Attributes:
+    zoom (tbase.JSONDict): (CORE DATA) image.ZoomParameters.json
+    fps (float): (CACHE) frames-per-second; number of total frames is exactly len(frames)
+    step_mag (float): (CACHE) video step scalar magnification (magnification per frame step)
+    data_hash (str): (CACHE) hash of the video/GIF data; if we have this entry,
+        we must have the hash!
+    tm (int | None): (CACHE) timestamp of rendered video/GIF creation; None if not saved
+    rendered_path (str | None): (CACHE) path to video/GIF file; None if not saved
+    frames (list[str]): ("CHILDREN") list of Frame hashes -> grandfather Frames; ordered by
+        magnification ascending; len >=3
+    markers (list[str]): ("CHILDREN") subset of frames entry: key Frame(s) for color
+        normalization; len >=1
+
+  Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
+  Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
+
+  """
+
+  # CORE DATA: ZoomParameters = a specific video, the rest is computed
+  zoom: tbase.JSONDict  # image.ZoomParameters.json
+
+  # CACHE
+  fps: float  # = len(`frames`) / `zoom.duration`
+  step_mag: float  # video step SCALAR magnification (total magnitude is in `zoom.mag`)
+  data_hash: str  # hash of the video/GIF data = SHA-256('|'.join(data_hash for all frames))
+  tm: int | None  # timestamp of rendered video/GIF creation; None if not saved
+  rendered_path: str | None  # path to video/GIF file; None if not saved
+
+  # "CHILDREN" would be the individual frames/images that compose the video;
+  # we compute this from core data, so this could be "CACHE" too...
+  frames: list[str]  # Frame hashes; ordered by magnification ascending; len >=3
+  markers: list[str]  # subset of frames entry: key Frame(s); len >=1
 
 
 class _DBType(TypedDict):
@@ -41,10 +179,22 @@ class _DBType(TypedDict):
   Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
   """
 
+  # DB internal data and metadata
   db_version: int  # DB version; increment on save
   app_version: str  # package version (tranzoom.__version__) at time of last save
   last_save: int  # timestamp of last save
-  # TODO: we have to add data
+
+  # actual fractals data
+  frames: dict[str, FrameData]  # {frame_hash: FrameData}
+  cps: dict[str, tbase.JSONDict]  # {cp_hash: frame.ComputationParameters.json}
+  renders: dict[str, tbase.JSONDict]  # {render_hash: image.RenderParameters.json}
+  videos: dict[str, ZoomData]  # {video_hash: ZoomData}, video_hash is the ZoomData.sha hash!
+
+  # suggested indexes:
+  images_idx: dict[str, ImageCoreKey]  # {data_hash: ImageCoreKey}
+  videos_idx: dict[str, str]  # {data_hash: video_hash}
+  img_paths_idx: dict[str, str]  # {img_path: data_hash} for easy lookup of PNG image paths
+  video_paths_idx: dict[str, str]  # {video_path: video_hash} for easy lookup of GIF/video paths
 
 
 def _DBTypeFactory(overrides: dict[str, object] | None = None) -> _DBType:
@@ -62,6 +212,14 @@ def _DBTypeFactory(overrides: dict[str, object] | None = None) -> _DBType:
     'db_version': 0,
     'app_version': __version__,  # set to current package version on creation
     'last_save': timer.Now(),
+    'frames': {},
+    'cps': {},
+    'renders': {},
+    'videos': {},
+    'images_idx': {},
+    'videos_idx': {},
+    'img_paths_idx': {},
+    'video_paths_idx': {},
   }
   obj.update(overrides or {})  # type: ignore[typeddict-item]
   return obj

@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
+import abc as abstract_abc
 import dataclasses
 import enum
 import json
 from collections import abc
-from typing import cast
+from typing import cast, final
 
 import gmpy2
 from transcrypto.core import hashes
@@ -109,7 +110,77 @@ class SetHighlightAlgorithm(enum.Enum):
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class Frame:
+class SerializingFractalObject(abstract_abc.ABC):
+  """Base class for useful fractal objects that can be serialized to JSON with a hash."""
+
+  @abstract_abc.abstractmethod
+  def __post_init__(self) -> None:
+    """Check object validity.
+
+    Raises:
+      Error: if the object is invalid.
+
+    """
+
+  @abstract_abc.abstractmethod
+  def __str__(self) -> str:
+    """Get string representation of the object.
+
+    Returns:
+      str: String representation of the object.
+
+    """
+
+  @staticmethod
+  @abstract_abc.abstractmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> SerializingFractalObject:
+    """Create a SerializingFractalObject from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from Frame.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the frame. If the
+          calculated hash does not match, an error is raised.
+
+    Returns:
+      SerializingFractalObject: A SerializingFractalObject object
+
+    Raises:
+      Error: on error
+
+    """
+
+  @property
+  @abstract_abc.abstractmethod
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the object.
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the object.
+
+    """
+
+  @final  # this affects the HASH, let's avoid trouble...
+  @property
+  def binary(self) -> bytes:
+    """Get a stable binary representation of the object, for hashing and storage."""
+    return json.dumps(self.json, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode(
+      'utf-8'
+    )
+
+  @final  # this affects the HASH, let's avoid trouble...
+  @property
+  def sha(self) -> str:
+    """SHA-256 hash of the object.
+
+    Returns:
+      str: The SHA-256 hash of the object, as a hex string.
+
+    """
+    return hashes.Hash256(self.binary).hex()
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class Frame(SerializingFractalObject):
   """Defines a rectangular region of the complex plane, with arbitrary precision. Exact.
 
   An optional point coordinate is included. This is used for Julia, and ignored for Mandelbrot.
@@ -315,23 +386,6 @@ class Frame:
       raise Error(f'Frame {frm.sha!r} does not match expected {check_hash!r}')
     return frm
 
-  @property
-  def binary(self) -> bytes:
-    """Get a stable binary representation of the Frame, for hashing and storage."""
-    return json.dumps(self.json, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode(
-      'utf-8'
-    )
-
-  @property
-  def sha(self) -> str:
-    """SHA-256 hash of the Frame.
-
-    Returns:
-      str: The SHA-256 hash of the Frame, as a hex string.
-
-    """
-    return hashes.Hash256(self.binary).hex()
-
   @staticmethod
   def FromCoords(
     fractal: Fractal,
@@ -492,7 +546,7 @@ DEFAULT_FRAMES: dict[Fractal, Frame] = {
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class ComputationParameters:
+class ComputationParameters(SerializingFractalObject):
   """Arguments that determine a fractal computation completely (computation, not rendering)."""
 
   # ATTENTION: changing anything here changes the HASH!!
@@ -617,23 +671,6 @@ class ComputationParameters:
     if check_hash is not None and params.sha != check_hash:
       raise Error(f'ComputationParameters {params.sha!r} does not match expected {check_hash!r}')
     return params
-
-  @property
-  def binary(self) -> bytes:
-    """Get a stable binary representation of the ComputationParameters, for hashing and storage."""
-    return json.dumps(self.json, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode(
-      'utf-8'
-    )
-
-  @property
-  def sha(self) -> str:
-    """SHA-256 hash of the ComputationParameters.
-
-    Returns:
-      str: The SHA-256 hash of the ComputationParameters, as a hex string.
-
-    """
-    return hashes.Hash256(self.binary).hex()
 
   def CoordToPixel(self, re_inp: ExactInputType, im_inp: ExactInputType) -> tuple[int, int]:
     """Convert complex-plane coordinates to pixel coordinates in the image.

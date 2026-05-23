@@ -187,6 +187,7 @@ MIN_FRAMES: int = 3  # sanity limit for number of frames in an animation
 MAX_FRAMES: int = 100_000  # sanity limit for number of frames in an animation
 MIN_DURATION: float = 0.1  # minimum duration of an animation in seconds, for sanity checking
 MAX_DURATION: float = 45000.0  # maximum duration of an animation in seconds, for sanity checking
+VIDEO_DURATION_STORE_SCALE = 40_000  # MAX_DURATION * VIDEO_DURATION_STORE_SCALE < 2**31; HASH!
 MIN_FPS: float = 0.1  # minimum frames per second for an animation, for sanity checking
 MAX_FPS: float = 30.0  # maximum frames per second for an animation, for sanity checking
 MIN_LOOP: int = 0  # minimum number of loops for a GIF animation; 0 means infinite loop
@@ -227,7 +228,7 @@ class FractalStats:
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class RenderParameters:
+class RenderParameters(frame.SerializingFractalObject):
   """Defines a transformation from math to image."""
 
   # ATTENTION: changing anything here changes the HASH!!
@@ -376,22 +377,119 @@ class RenderParameters:
       raise Error(f'RenderParameters {params.sha!r} does not match expected {check_hash!r}')
     return params
 
-  @property
-  def binary(self) -> bytes:
-    """Get a stable binary representation of the RenderParameters, for hashing and storage."""
-    return json.dumps(self.json, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode(
-      'utf-8'
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class ZoomParameters(frame.SerializingFractalObject):
+  """Defines the zoom parameters for video planning and rendering."""
+
+  # ATTENTION: changing anything here changes the HASH!!
+  tp: AnimationType  # 'gif' or 'mp4'
+  img: frame.ComputationParameters  # initial frame and computation parameters for all images
+  render: RenderParameters  # render parameters for all images
+  mag: gmpy2.mpq  # destination magnification
+  n_frames: int  # number of frames in the animation
+  duration: int  # round(duration in seconds * VIDEO_DURATION_STORE_SCALE): no float precision snafu
+  loop: int = 0  # number of loops for GIFs; 0 means infinite loop; ignored for non-GIFs
+
+  def __post_init__(self) -> None:
+    """Check ZoomParameters for validity.
+
+    Raises:
+      Error: if any parameter is invalid.
+
+    """
+    # check type is valid
+    if self.tp not in {AnimationType.GIF, AnimationType.MP4}:
+      raise Error(f'Unknown animation type: {self.tp}')
+    # check magnification is valid
+    if not (-MAX_ZOOM_MAGNIFICATION_10 <= self.mag <= MAX_ZOOM_MAGNIFICATION_10):
+      raise Error(f'Magnification abs() must be <= {MAX_ZOOM_MAGNIFICATION_10}, got {self.mag}')
+    if self.mag == _MPQ_ZERO:
+      raise Error('Magnification cannot be zero')
+    # check number of frames is valid
+    if not (MIN_FRAMES <= self.n_frames <= MAX_FRAMES):
+      raise Error(
+        f'Number of frames must be between {MIN_FRAMES} and {MAX_FRAMES}, got {self.n_frames}'
+      )
+    # check duration is valid
+    if not (MIN_DURATION <= (dur := self.duration / VIDEO_DURATION_STORE_SCALE) <= MAX_DURATION):
+      raise Error(f'Duration must be between {MIN_DURATION} and {MAX_DURATION} seconds, got {dur}')
+    # check loop count is valid for GIFs
+    if self.tp == AnimationType.GIF and not (MIN_LOOP <= self.loop <= MAX_LOOP):
+      raise Error(f'Loop count for GIFs must be between {MIN_LOOP} and {MAX_LOOP}, got {self.loop}')
+    if self.tp != AnimationType.GIF and self.loop != 0:
+      raise Error(f'Loop count is only applicable for GIFs, got {self.loop} for {self.tp}')
+
+  def __str__(self) -> str:
+    """Get string representation of the ZoomParameters.
+
+    Format is:
+      "<[ANIMATION_TYPE]: [RENDER_PARAMETERS] -> [COMPUTATION_PARAMETERS] / "
+      "([MAGNIFICATION], [N_FRAMES], [DURATION], [LOOP])>"
+
+    Returns:
+      str: String representation of the ZoomParameters.
+
+    """
+    return (
+      f'<{self.tp.name.upper()}: {self.img} -> {self.render} / '
+      f'({self.mag}, {self.n_frames}, {self.duration}, {self.loop})>'
     )
 
   @property
-  def sha(self) -> str:
-    """SHA-256 hash of the RenderParameters.
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the ZoomParameters.
+
+    Keys: `tp`, `img`, `render`, `mag`, `n_frames`, `duration`, `loop`.
 
     Returns:
-      str: The SHA-256 hash of the RenderParameters, as a hex string.
+      tbase.JSONDict: A dictionary representation of the ZoomParameters.
 
     """
-    return hashes.Hash256(self.binary).hex()
+    return {
+      # ATTENTION: changing anything here changes the HASH!!
+      'tp': self.tp.value,
+      'img': self.img.json,
+      'render': self.render.json,
+      'mag': str(self.mag),
+      'n_frames': self.n_frames,
+      'duration': self.duration,
+      'loop': self.loop,
+    }
+
+  @staticmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> ZoomParameters:
+    """Create a ZoomParameters from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from ZoomParameters.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the ZoomParameters.
+          If the calculated hash does not match, an error is raised.
+
+    Returns:
+      ZoomParameters: A ZoomParameters object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      params = ZoomParameters(  # object creation will check the data is valid and consistent
+        tp=AnimationType(data['tp']),
+        img=frame.ComputationParameters.FromJson(cast('tbase.JSONDict', data['img'])),
+        render=RenderParameters.FromJson(cast('tbase.JSONDict', data['render'])),
+        mag=gmpy2.mpq(str(data['mag'])),
+        n_frames=int(str(data['n_frames'])),
+        duration=int(str(data['duration'])),
+        loop=int(str(data['loop'])),
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid ZoomParameters JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and params.sha != check_hash:
+      raise Error(f'ZoomParameters {params.sha!r} does not match expected {check_hash!r}')
+    return params
 
 
 class Image:

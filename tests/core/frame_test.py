@@ -136,9 +136,9 @@ def test_frame_hash_stability_and_serialization_consistency(
     point_im=gmpy2.mpq(p_im),
   )
   data: str = frm.binary.decode('utf-8')
-  assert data == json1
-  assert frm.sha == sha1
-  assert frame.Frame.FromJson(frm.json, check_hash=sha1) == frm
+  assert data == json1, 'BIG PROBLEM: breaking JSON! BUG!'
+  assert frm.sha == sha1, 'BIG PROBLEM: breaking JSON! BUG!'
+  assert frame.Frame.FromJson(frm.json, check_hash=sha1) == frm, 'BIG PROBLEM: breaking JSON! BUG!'
   # ComputationParameters
   cp: frame.ComputationParameters = frame.ComputationParameters(
     frm=frm,
@@ -148,7 +148,7 @@ def test_frame_hash_stability_and_serialization_consistency(
     set_points=frame.SetHighlightAlgorithm(s) if s else None,
   )
   data = cp.binary.decode('utf-8')
-  assert data == json2
-  assert cp.sha == sha2
-  assert frame.ComputationParameters.FromJson(cp.json, check_hash=sha2) == cp
-  assert json1 in json2  # ComputationParameters JSON should contain the Frame JSON
+  assert data == json2, 'BIG PROBLEM: breaking JSON! BUG!'
+  assert cp.sha == sha2, 'BIG PROBLEM: breaking JSON! BUG!'
+  assert frame.ComputationParameters.FromJson(cp.json, check_hash=sha2) == cp, 'BIG PROBLEM! BUG!'
+  assert json1 in data, 'BIG PROBLEM: breaking input JSON! BUG!'
