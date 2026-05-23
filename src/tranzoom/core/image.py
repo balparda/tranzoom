@@ -228,6 +228,20 @@ class FractalStats:
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class ImageOutputConfig:
+  """Groups all parameters that control how output images are named and saved on disk.
+
+  This is a runtime-only config object — not part of the mathematical/DB representation.
+  It is NOT a SerializingFractalObject: it carries no mathematical meaning and is never hashed.
+  """
+
+  path: pathlib.Path | None  # output directory; None means current working directory
+  use_date: bool  # if True, include YYYYMMDDhhmmss in the file name
+  use_hash: bool  # if True, include the content hash in the file name
+  prefix: str  # file name prefix, e.g., "mandel" or "julia"
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class RenderParameters(frame.SerializingFractalObject):
   """Defines a transformation from math to image."""
 

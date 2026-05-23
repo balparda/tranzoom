@@ -16,7 +16,7 @@ from transai.core import lms
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
-from tranzoom.core import fractal, frame, frdb, image, palette, queries
+from tranzoom.core import fractal, frame, frdb, image, queries
 
 DEFAULT_MEMORY_SIZE: int = 5  # default number of iterations the LLM will remember
 MAX_MEMORY_SIZE: int = 30  # maximum number of iterations the LLM will remember
@@ -40,12 +40,8 @@ class Error(queries.Error):
 def ZoomLoop(
   db: frdb.FractalDatabase,
   params: frame.ComputationParameters,
-  img_output_path: pathlib.Path | None,
-  img_use_date: bool,
-  img_use_hash: bool,
-  img_path_prefix: str,
-  pal: palette.Palette,
-  set_pal: palette.Palette,
+  render: image.RenderParameters,
+  out: image.ImageOutputConfig,
   max_threads: int | None,
   model: str,
   spec_tokens: int | None,
@@ -72,13 +68,9 @@ def ZoomLoop(
   Args:
     db (frdb.FractalDatabase): The fractal database to use.
     params (frame.ComputationParameters): The computation parameters for the fractal zoom search.
-    img_output_path (pathlib.Path | None): Optional path to save the rendered images; if None,
-        images will be saved to current working directory.
-    img_use_date (bool): Whether to include the current date in the image filename when saving.
-    img_use_hash (bool): Whether to include the image hash in the filename when saving.
-    img_path_prefix (str): A prefix to add to the image filename when saving.
-    pal (palette.Palette): The color palette to use for rendering the image.
-    set_pal (palette.Palette): The color palette to use for interior Set points.
+    render (image.RenderParameters): The render parameters for each zoom step, including color
+        palettes and the overlay type (should be OverlayType.GRID to enable AI navigation grid).
+    out (image.ImageOutputConfig): Output path configuration for file naming.
     max_threads (int | None): Optional maximum number of threads to use for rendering; if None,
         use all available CPU cores.
     model (str): The AI model identifier to use for the search.
@@ -110,17 +102,6 @@ def ZoomLoop(
     print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
 
   """
-  # create render object with the parameters needed for rendering and marking
-  render: image.RenderParameters = image.RenderParameters(
-    escaped_pal=pal,
-    set_pal=set_pal,
-    # mark_re=_MPQ_ZERO if mark_coords is None else mark_coords[0][0],
-    # mark_im=_MPQ_ZERO if mark_coords is None else mark_coords[0][1],
-    # mark_color=None if mark_coords is None else config.mark_color,
-    # mark_width=config.mark_width,
-    overlay=image.OverlayType.GRID,  # always show thirds info in AI zoom
-    # TODO: can AI zoom be migrated to ProduceFractalImage()?
-  )
   # capture the time and load model
   zoom_tm: int = timer.Now()
   print_comm(
@@ -167,18 +148,8 @@ def ZoomLoop(
       while True:
         count += 1
         # render the image for the current frame
-        img_data, full_path = _ComputeFractal(
-          params,
-          render,
-          count,
-          zoom_tm,
-          img_output_path,
-          img_use_date,
-          img_use_hash,
-          img_path_prefix,
-          max_threads,
-          iterm,
-          print_comm,
+        _img, img_data, _img_hash, full_path = CoreComputeImage(
+          db, params, render, out, count, zoom_tm, max_threads, iterm, print_comm
         )
         # wipe memory of iterations older than _MEMORY_SIZE
         if json_chat is not None:
@@ -236,12 +207,8 @@ def ZoomLoop(
 def ManualLoop(
   db: frdb.FractalDatabase,
   params: frame.ComputationParameters,
-  img_output_path: pathlib.Path | None,
-  img_use_date: bool,
-  img_use_hash: bool,
-  img_path_prefix: str,
-  pal: palette.Palette,
-  set_pal: palette.Palette,
+  render: image.RenderParameters,
+  out: image.ImageOutputConfig,
   max_threads: int | None,
   max_steps: int,
   iterm: bool,
@@ -252,13 +219,9 @@ def ManualLoop(
   Args:
     db (frdb.FractalDatabase): The fractal database to use.
     params (frame.ComputationParameters): The computation parameters for the fractal zoom search.
-    img_output_path (pathlib.Path | None): Optional path to save the rendered images; if None,
-        images will be saved to current working directory.
-    img_use_date (bool): Whether to include the current date in the image filename when saving.
-    img_use_hash (bool): Whether to include the image hash in the filename when saving.
-    img_path_prefix (str): A prefix to add to the image filename when saving.
-    pal (palette.Palette): The color palette to use for rendering the image.
-    set_pal (palette.Palette): The color palette to use for interior Set points.
+    render (image.RenderParameters): The render parameters for each zoom step, including color
+        palettes and the overlay type (should be OverlayType.GRID to enable AI navigation grid).
+    out (image.ImageOutputConfig): Output path configuration for file naming.
     max_threads (int | None): Optional maximum number of threads to use for rendering; if None,
         use all available CPU cores.
     max_steps (int): Maximum number of zoom steps to run; 0 means run until manually stopped
@@ -268,17 +231,6 @@ def ManualLoop(
     print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
 
   """
-  # create render object with the parameters needed for rendering and marking
-  render: image.RenderParameters = image.RenderParameters(
-    escaped_pal=pal,
-    set_pal=set_pal,
-    # mark_re=_MPQ_ZERO if mark_coords is None else mark_coords[0][0],
-    # mark_im=_MPQ_ZERO if mark_coords is None else mark_coords[0][1],
-    # mark_color=None if mark_coords is None else config.mark_color,
-    # mark_width=config.mark_width,
-    overlay=image.OverlayType.GRID,  # always show thirds info in AI zoom
-    # TODO: can AI zoom be migrated to ProduceFractalImage()?
-  )
   # capture the time and load model
   zoom_tm: int = timer.Now()
   print_comm(
@@ -297,18 +249,8 @@ def ManualLoop(
     while True:
       count += 1
       # render the image for the current frame
-      img_data, full_path = _ComputeFractal(
-        params,
-        render,
-        count,
-        zoom_tm,
-        img_output_path,
-        img_use_date,
-        img_use_hash,
-        img_path_prefix,
-        max_threads,
-        iterm,
-        print_comm,
+      _img, img_data, _img_hash, full_path = CoreComputeImage(
+        db, params, render, out, count, zoom_tm, max_threads, iterm, print_comm
       )
       # get AI verdict
       print_comm('')
@@ -367,77 +309,97 @@ def ManualLoop(
   print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {params}\n')
 
 
-def _ComputeFractal(
+def CoreComputeImage(
+  db: frdb.FractalDatabase,  # noqa: ARG001 (reserved for future DB-backed frame caching)
   params: frame.ComputationParameters,
   render: image.RenderParameters,
-  count: int,
-  zoom_tm: int,
-  img_output_path: pathlib.Path | None,
-  img_use_date: bool,
-  img_use_hash: bool,
-  img_path_prefix: str,
+  out: image.ImageOutputConfig,
+  count: int | None,
+  zoom_tm: int | None,
   max_threads: int | None,
   iterm: bool,
   print_comm: abc.Callable[[str], None],
-) -> tuple[bytes, pathlib.Path]:
-  """Compute the Mandelbrot or Julia image for the given frame.
+) -> tuple[image.Image, bytes, str, pathlib.Path]:
+  """Compute a fractal image and return the result unsaved; the shared rendering primitive.
+
+  This is the shared image computation primitive used by all rendering paths (static images,
+  AI-guided zoom, manual zoom, and animations). It does NOT save the image to disk — the
+  caller decides when and how to save, allowing callers to add evaluation metadata first.
+
+  Note: the content hash is computed from the raw PNG before any post-processing overlays
+  (crosshair mark, sector grid). The saved bytes contain all overlays; the hash is used for
+  deduplication and file naming.
 
   Args:
+    db (frdb.FractalDatabase): The fractal database
     params (frame.ComputationParameters): The computation parameters for the frame, including
         width, height, and other settings.
-    render (image.RenderParameters): The parameters to use for rendering the image, including
-        color palettes and marking coordinates.
-    count (int): The current zoom step count, used for logging and image naming.
-    zoom_tm (int): The timestamp when the zoom session started, used for logging and image naming.
-    img_output_path (pathlib.Path | None): Optional path to save the rendered image; if None,
-        the image will not be saved to disk.
-    img_use_date (bool): Whether to include the current date in the image filename when saving.
-    img_use_hash (bool): Whether to include the image hash in the filename when saving.
-    img_path_prefix (str): A prefix to add to the image filename when saving.
-    max_threads (int | None): Maximum number of threads to use for rendering.
-    iterm (bool): Whether to print the image inline in iTerm2 using the iTerm2 inline image
-        protocol.
+    render (image.RenderParameters): The render parameters, including color palettes, optional
+        crosshair mark (mark_color not None means draw a crosshair), and optional sector overlay
+        (overlay not None means draw the numbered sector grid).
+    out (image.ImageOutputConfig): Output path configuration for building the file name.
+    count (int | None): Optional serial number for the file name (zoom step numbering);
+        None means no serial number is added.
+    zoom_tm (int | None): Optional fixed timestamp for the file name (zoom session consistency);
+        None means the current wall-clock time is used.
+    max_threads (int | None): Maximum threads for parallel rendering; None means all CPUs.
+    iterm (bool): If True, print the image inline in iTerm2 after rendering.
     print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
 
   Returns:
-    tuple[bytes, pathlib.Path]: A tuple with the PNG image bytes (minus the evaluation) and the
-        intended save path (not yet saved!)
+    tuple[image.Image, bytes, str, pathlib.Path]: A 4-tuple of:
+        - image.Image: the computed fractal Image object
+        - bytes: the final PNG bytes (with crosshair mark and sector overlay applied, if any)
+        - str: the SHA-256 hash of the raw PNG before any post-processing overlays
+        - pathlib.Path: the intended save path (NOT yet written to disk; caller must save)
 
   """
   # render the image for the current frame
   img_data: bytes
   img_hash: str
+  img: image.Image
   with timer.Timer(emit_log=False) as tmr:
-    img: image.Image = fractal.ComputeFractal(
+    img = fractal.ComputeFractal(
       params,
       progress_bar=True,
       n_processes=max_threads,
       print_comm=print_comm,
     )
-    # get PNG and overlay info on top of it
+    # hash is computed from the raw PNG before any post-processing overlays
     img_data, img_hash = img.AsPNG(render)
-    img_data = image.DrawThirdsInfoOverlay(img_data)
-  # make path
+    # draw crosshair mark if specified in render parameters
+    if render.mark_color is not None:
+      _, mark_pixel = params.CoordToPixel(render.mark_re, render.mark_im)
+      img_data = image.DrawCrossOverlay(
+        img_data, *mark_pixel, col=render.mark_color, lw=render.mark_width
+      )
+    # draw the numbered sector grid overlay if requested (e.g., for AI/manual zoom navigation)
+    if render.overlay is not None:
+      if render.overlay == image.OverlayType.GRID:
+        img_data = image.DrawThirdsInfoOverlay(img_data)
+      else:
+        raise Error(f'Unsupported overlay type: {render.overlay!r}')
+  # build the intended output path (file is NOT written here; caller decides when to save)
   full_path: pathlib.Path = image.MakeImagePath(
-    img_output_path,
-    img_use_date,
-    img_use_hash,
-    img_path_prefix,
+    out.path,
+    out.use_date,
+    out.use_hash,
+    out.prefix,
     img_hash,
     tm=zoom_tm,
     add_serial=count,
   )
   # log
   print_comm(
-    f'\n{img.params} zoom, precision {img.params.precision} bits, '
+    f'\n{img.params}, precision {img.params.precision} bits, '
     f'10^{img.params.frm.magnification[1]:.2f} magnitude\n'
     f'{img_hash!r} in {tmr}, will save as "{full_path}"'
   )
-  # iterm
+  # print inline in iTerm2 if requested
   if iterm:
     print_comm('')
     image.PrintITerm2(img_data)
-  return (img_data, full_path)
+  return (img, img_data, img_hash, full_path)
 
 
 def _MoveCenter(  # noqa: C901

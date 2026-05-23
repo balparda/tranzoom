@@ -710,7 +710,7 @@ def ProduceFractalImage(
   including:
   - determining the image dimensions from the config
   - logging the rendering parameters
-  - rendering the image from the frame using the fractal module
+  - rendering the image from the frame using the fractal module via ai.CoreComputeImage
   - converting the rendered image to PNG and getting its hash
   - optionally adding a crosshair overlay if mark coordinates are given
   - saving the image to disk with a name based on the date and hash
@@ -734,11 +734,11 @@ def ProduceFractalImage(
       frm=frm, width=width, height=height, set_points=config.set_points
     )
   )
-  # add the mark? do this early to check the inputs ASAP
+  # add the mark? parse coordinates early to catch errors before expensive computation
   mark_coords: tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]] | None = (
     params.CoordsTupleToPixel(config.mark_coords) if config.mark_coords else None
   )
-  # create render object with the parameters needed for rendering and marking
+  # build render and output configuration objects
   render: image.RenderParameters = image.RenderParameters(
     escaped_pal=config.pal,
     set_pal=None if config.set_points is None else config.set_pal,
@@ -746,51 +746,39 @@ def ProduceFractalImage(
     mark_im=_MPQ_ZERO if mark_coords is None else mark_coords[0][1],
     mark_color=None if mark_coords is None else config.mark_color,
     mark_width=config.mark_width,
-    # TODO: overlay?
-    # TODO: can AI zoom be migrated to ProduceFractalImage()?
   )
-  # check the DB for a cached image with the same parameters
-  # log
+  out: image.ImageOutputConfig = image.ImageOutputConfig(
+    path=config.img_output_path,
+    use_date=config.img_use_date,
+    use_hash=config.img_use_hash,
+    prefix=config.img_path_prefix or DEFAULT_IMAGE_PREFIX[frm.fractal],
+  )
+  # log starting info
   config.console.print(
     f'\n{params}, precision ± {params.precision} bits, '  # approx: b/c depth is probably temporary
     f'10^{frm.magnification[1]:.2f} magnitude...'
   )
-  # render the image
+  # compute the image via the unified core primitive
+  img: image.Image
   raw_png: bytes
   raw_hash: str
-  with timer.Timer(emit_log=False) as tmr:
-    img: image.Image = fractal.ComputeFractal(
-      params,
-      n_processes=config.max_threads,
-      print_comm=config.console.print,
-    )
-    # fractal is ready, convert to PNG
-    raw_png, raw_hash = img.AsPNG(render)
-    if mark_coords:
-      # we were asked to mark a coordinate with a crosshair overlay: do it
-      raw_png = image.DrawCrossOverlay(
-        raw_png, *mark_coords[1], col=config.mark_color, lw=config.mark_width
-      )
-  # print stats
-  config.console.print(f'{frm.fractal.value.capitalize()} image {raw_hash!r} in {tmr}')
-  # save the image to a file named by its time/hash
+  full_path: pathlib.Path
+  img, raw_png, raw_hash, full_path = ai.CoreComputeImage(
+    db,
+    params,
+    render,
+    out,
+    count=add_serial,
+    zoom_tm=tm,
+    max_threads=config.max_threads,
+    iterm=config.iterm,
+    print_comm=config.console.print,
+  )
+  # save the image to disk if requested
   if save_image:
-    full_path: pathlib.Path = image.MakeImagePath(
-      config.img_output_path,
-      config.img_use_date,
-      config.img_use_hash,
-      config.img_path_prefix or DEFAULT_IMAGE_PREFIX[frm.fractal],
-      raw_hash,
-      tm=tm,
-      add_serial=add_serial,
-    )
     full_path.write_bytes(raw_png)
     config.console.print(f'Saved to "{full_path}"')
   config.console.print()
-  # iterm
-  if config.iterm:
-    image.PrintITerm2(raw_png)
-    config.console.print()
   return (img, raw_png, raw_hash, render)
 
 

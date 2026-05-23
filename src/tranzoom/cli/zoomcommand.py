@@ -146,16 +146,23 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
     frm=frm, width=width, height=height, set_points=config.set_points
   )
   # we have a valid frame, let's start the AI search loop
+  render: image.RenderParameters = image.RenderParameters(
+    escaped_pal=config.pal,
+    set_pal=None if config.set_points is None else config.set_pal,
+    overlay=image.OverlayType.GRID,  # always show numbered thirds grid for AI navigation
+  )
+  out: image.ImageOutputConfig = image.ImageOutputConfig(
+    path=config.img_output_path,
+    use_date=config.img_use_date,
+    use_hash=config.img_use_hash,
+    prefix=config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
+  )
   with config.OpenDB() as db:
     ai.ZoomLoop(
       db,
       params,
-      config.img_output_path,
-      config.img_use_date,
-      config.img_use_hash,
-      config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
-      config.pal,
-      config.set_pal,
+      render,
+      out,
       config.max_threads,
       config.model,
       config.spec_tokens,
@@ -237,17 +244,24 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   params: frame.ComputationParameters = frame.ComputationParameters(
     frm=frm, width=width, height=height, set_points=config.set_points
   )
-  # we have a valid frame, let's start the AI search loop
+  # we have a valid frame, let's start the manual search loop
+  render: image.RenderParameters = image.RenderParameters(
+    escaped_pal=config.pal,
+    set_pal=None if config.set_points is None else config.set_pal,
+    overlay=image.OverlayType.GRID,  # always show numbered thirds grid for manual navigation
+  )
+  out: image.ImageOutputConfig = image.ImageOutputConfig(
+    path=config.img_output_path,
+    use_date=config.img_use_date,
+    use_hash=config.img_use_hash,
+    prefix=config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
+  )
   with config.OpenDB() as db:
     ai.ManualLoop(
       db,
       params,
-      config.img_output_path,
-      config.img_use_date,
-      config.img_use_hash,
-      config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
-      config.pal,
-      config.set_pal,
+      render,
+      out,
       config.max_threads,
       config.max_steps,
       config.iterm,
