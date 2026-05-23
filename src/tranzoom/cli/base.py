@@ -763,7 +763,7 @@ def ProduceFractalImage(
   raw_png: bytes
   raw_hash: str
   full_path: pathlib.Path
-  img, raw_png, raw_hash, full_path = ai.CoreComputeImage(
+  img, raw_png, raw_hash, full_path = frdb.CoreComputeImage(
     db,
     params,
     render,

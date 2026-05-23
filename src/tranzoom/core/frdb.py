@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import pathlib
 import threading
 from collections import abc
 from pathlib import Path
@@ -17,7 +18,7 @@ from transcrypto.utils import config as app_config
 from transcrypto.utils import timer
 
 from tranzoom import __version__
-from tranzoom.core import fractal
+from tranzoom.core import fractal, frame, image
 
 # DB constants
 
@@ -428,3 +429,99 @@ def _DBLabel(db: _DBType) -> str:
 
   """
   return f'#{db["db_version"]}@{timer.TimeStr(db["last_save"])}'
+
+
+def CoreComputeImage(
+  db: FractalDatabase,
+  params: frame.ComputationParameters,
+  render: image.RenderParameters,
+  out: image.ImageOutputConfig,
+  count: int | None,
+  zoom_tm: int | None,
+  max_threads: int | None,
+  iterm: bool,
+  print_comm: abc.Callable[[str], None],
+) -> tuple[image.Image, bytes, str, pathlib.Path]:
+  """Compute a fractal image and return the result unsaved; the shared rendering primitive.
+
+  This is the shared image computation primitive used by all rendering paths (static images,
+  AI-guided zoom, manual zoom, and animations). It does NOT save the image to disk — the
+  caller decides when and how to save, allowing callers to add evaluation metadata first.
+
+  Note: the content hash is computed from the raw PNG before any post-processing overlays
+  (crosshair mark, sector grid). The saved bytes contain all overlays; the hash is used for
+  deduplication and file naming.
+
+  Args:
+    db (frdb.FractalDatabase): The fractal database
+    params (frame.ComputationParameters): The computation parameters for the frame, including
+        width, height, and other settings.
+    render (image.RenderParameters): The render parameters, including color palettes, optional
+        crosshair mark (mark_color not None means draw a crosshair), and optional sector overlay
+        (overlay not None means draw the numbered sector grid).
+    out (image.ImageOutputConfig): Output path configuration for building the file name.
+    count (int | None): Optional serial number for the file name (zoom step numbering);
+        None means no serial number is added.
+    zoom_tm (int | None): Optional fixed timestamp for the file name (zoom session consistency);
+        None means the current wall-clock time is used.
+    max_threads (int | None): Maximum threads for parallel rendering; None means all CPUs.
+    iterm (bool): If True, print the image inline in iTerm2 after rendering.
+    print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
+
+  Returns:
+    tuple[image.Image, bytes, str, pathlib.Path]: A 4-tuple of:
+        - image.Image: the computed fractal Image object
+        - bytes: the final PNG bytes (with crosshair mark and sector overlay applied, if any)
+        - str: the SHA-256 hash of the raw PNG before any post-processing overlays
+        - pathlib.Path: the intended save path (NOT yet written to disk; caller must save)
+
+  Raises:
+    Error: on error
+
+  """
+  # render the image for the current frame
+  img_data: bytes
+  img_hash: str
+  img: image.Image
+  with timer.Timer(emit_log=False) as tmr:
+    img = fractal.ComputeFractal(
+      params,
+      progress_bar=True,
+      n_processes=max_threads,
+      print_comm=print_comm,
+    )
+    # hash is computed from the raw PNG before any post-processing overlays
+    img_data, img_hash = img.AsPNG(render)
+    # draw crosshair mark if specified in render parameters
+    if render.mark_color is not None:
+      _, mark_pixel = params.CoordToPixel(render.mark_re, render.mark_im)
+      img_data = image.DrawCrossOverlay(
+        img_data, *mark_pixel, col=render.mark_color, lw=render.mark_width
+      )
+    # draw the numbered sector grid overlay if requested (e.g., for AI/manual zoom navigation)
+    if render.overlay is not None:
+      if render.overlay == image.OverlayType.GRID:
+        img_data = image.DrawThirdsInfoOverlay(img_data)
+      else:
+        raise Error(f'Unsupported overlay type: {render.overlay!r}')
+  # build the intended output path (file is NOT written here; caller decides when to save)
+  full_path: pathlib.Path = image.MakeImagePath(
+    out.path,
+    out.use_date,
+    out.use_hash,
+    out.prefix,
+    img_hash,
+    tm=zoom_tm,
+    add_serial=count,
+  )
+  # log
+  print_comm(
+    f'\n{img.params}, precision {img.params.precision} bits, '
+    f'10^{img.params.frm.magnification[1]:.2f} magnitude\n'
+    f'{img_hash!r} in {tmr}, will save as "{full_path}"'
+  )
+  # print inline in iTerm2 if requested
+  if iterm:
+    print_comm('')
+    image.PrintITerm2(img_data)
+  return (img, img_data, img_hash, full_path)
