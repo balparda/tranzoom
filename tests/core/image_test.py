@@ -41,11 +41,12 @@ from tranzoom.core import frame, image, palette
         '{"escaped_pal":"sunset","mark_color":null,"mark_im":"0","mark_re":"0",'
         '"mark_width":1,"overlay":null,"set_pal":"rgrayscale","tp":"png"}'
       ),
-      '3947b7a6bdc58fedce9420d70e58755216c7e109dd86a049499ee9389bc7b081',
+      '3947b7a6bdc58fedce9420d70e58755216c7e109dd86a049499ee9389bc7b081',  # DO NOT "JUST FIX"
+      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
     ),
     (
       'gif',
-      'electric-ocean',
+      'electric',
       None,
       '-11/17',
       '9/2',
@@ -54,10 +55,11 @@ from tranzoom.core import frame, image, palette
       'grid',
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
       (
-        '{"escaped_pal":"electric-ocean","mark_color":"red","mark_im":"9/2",'
+        '{"escaped_pal":"electric","mark_color":"red","mark_im":"9/2",'
         '"mark_re":"-11/17","mark_width":2,"overlay":"grid","set_pal":null,"tp":"gif"}'
       ),
-      'dd407595070636f3496391519681ea5b7b23860dec4b8316b90047d8348a0cc8',
+      '8a2a39998c509527d02357aaa14433bdead2f755f5e2fd26e702e150e9ded076',  # DO NOT "JUST FIX"
+      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
     ),
     (
       'mp4',
@@ -73,7 +75,8 @@ from tranzoom.core import frame, image, palette
         '{"escaped_pal":"grayscale","mark_color":"yellow","mark_im":"-7/11",'
         '"mark_re":"71/4","mark_width":3,"overlay":null,"set_pal":"sunset","tp":"mp4"}'
       ),
-      '2e2439bcdcfb0aaf0b2127880425478a9a1cdc804debe1ec57c0fd5697a44444',
+      '2e2439bcdcfb0aaf0b2127880425478a9a1cdc804debe1ec57c0fd5697a44444',  # DO NOT "JUST FIX"
+      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
     ),
   ],
 )
@@ -143,7 +146,8 @@ def test_render_hash_stability_and_serialization_consistency(
         '"render":{"escaped_pal":"sunset","mark_color":null,"mark_im":"0","mark_re":"0",'
         '"mark_width":1,"overlay":null,"set_pal":"rgrayscale","tp":"png"},"tp":"gif"}'
       ),
-      '4af30ffb71a5e60d39b92908e2946f0aeb3ad30ae90bc850fbd356d09707c08d',
+      '4af30ffb71a5e60d39b92908e2946f0aeb3ad30ae90bc850fbd356d09707c08d',  # DO NOT "JUST FIX"
+      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
     ),
     (
       'mp4',
@@ -153,7 +157,7 @@ def test_render_hash_stability_and_serialization_consistency(
         '"set_points":"imaginary","width":1024}'
       ),
       (
-        '{"escaped_pal":"electric-ocean","mark_color":"red","mark_im":"9/2",'
+        '{"escaped_pal":"electric","mark_color":"red","mark_im":"9/2",'
         '"mark_re":"-11/17","mark_width":2,"overlay":"grid","set_pal":"grayscale","tp":"gif"}'
       ),
       '3/7',
@@ -165,11 +169,12 @@ def test_render_hash_stability_and_serialization_consistency(
         '{"duration":300000,"img":{"depth":6666,"frm":{"bottom_im":"-1","bottom_re":"1",'
         '"fractal":"julia","point_im":"1","point_re":"1","top_im":"1","top_re":"-1"},'
         '"height":1024,"set_points":"imaginary","width":1024},"loop":0,"mag":"3/7",'
-        '"n_frames":1000,"render":{"escaped_pal":"electric-ocean","mark_color":"red",'
+        '"n_frames":1000,"render":{"escaped_pal":"electric","mark_color":"red",'
         '"mark_im":"9/2","mark_re":"-11/17","mark_width":2,"overlay":"grid",'
         '"set_pal":"grayscale","tp":"gif"},"tp":"mp4"}'
       ),
-      '86997a2c51538373e1f7872193518b02f929c51bbd46e24779e5221241fd01b8',
+      'e9205b7df0cf877a8254fd749571f18dcae29d8e871a9726eb2ed1980ce67d83',  # DO NOT "JUST FIX"
+      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
     ),
     (
       'gif',
@@ -194,7 +199,8 @@ def test_render_hash_stability_and_serialization_consistency(
         '"render":{"escaped_pal":"grayscale","mark_color":"yellow","mark_im":"-7/11",'
         '"mark_re":"71/4","mark_width":3,"overlay":null,"set_pal":"sunset","tp":"mp4"},"tp":"gif"}'
       ),
-      '014d14e6c61d06cfe0b80271d81d5cff8853fde0faf1359ba1806484f722c9d3',
+      '014d14e6c61d06cfe0b80271d81d5cff8853fde0faf1359ba1806484f722c9d3',  # DO NOT "JUST FIX"
+      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
     ),
   ],
 )
