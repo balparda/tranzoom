@@ -47,13 +47,15 @@ from tranzoom.core import frame
         '{"bottom_im":"-1","bottom_re":"1","fractal":"mandelbrot","point_im":"0","point_re":"0",'
         '"top_im":"1","top_re":"-1"}'
       ),
-      '22c8b5cfc5b0ce22051d1e20d4c27c280d989f0ba65b58243b1b8955a6cd3182',
+      '22c8b5cfc5b0ce22051d1e20d4c27c280d989f0ba65b58243b1b8955a6cd3182',  # DO NOT "JUST FIX"
+      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
       (
         '{"depth":9999,"frm":{"bottom_im":"-1","bottom_re":"1","fractal":"mandelbrot",'
         '"point_im":"0","point_re":"0","top_im":"1","top_re":"-1"},"height":512,'
         '"set_points":null,"width":512}'
       ),
-      '86f5d287f590adfeafb2878412a8a4bb7b9b56b8f250e797b0cf680e7a1f180e',
+      '86f5d287f590adfeafb2878412a8a4bb7b9b56b8f250e797b0cf680e7a1f180e',  # DO NOT "JUST FIX"
+      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
     ),
     (
       'julia',
@@ -72,13 +74,15 @@ from tranzoom.core import frame
         '{"bottom_im":"-1","bottom_re":"1","fractal":"julia","point_im":"1",'
         '"point_re":"1","top_im":"1","top_re":"-1"}'
       ),
-      '9e78d5b39bd5b12566406c5936d78075229149b38fce058a1cb86207d834ceca',
+      '9e78d5b39bd5b12566406c5936d78075229149b38fce058a1cb86207d834ceca',  # DO NOT "JUST FIX"
+      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
       (
         '{"depth":6666,"frm":{"bottom_im":"-1","bottom_re":"1","fractal":"julia"'
         ',"point_im":"1","point_re":"1","top_im":"1","top_re":"-1"},"height":1024,'
         '"set_points":"imaginary","width":1024}'
       ),
-      'ea7e24f96db025c8c3a5fe2a7df3bd008fc9ce1e645aa9bdc5751d964779b15b',
+      'ea7e24f96db025c8c3a5fe2a7df3bd008fc9ce1e645aa9bdc5751d964779b15b',  # DO NOT "JUST FIX"
+      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
     ),
     (
       'julia',
@@ -97,13 +101,15 @@ from tranzoom.core import frame
         '{"bottom_im":"-17/19","bottom_re":"1/31","fractal":"julia",'
         '"point_im":"-11/19","point_re":"3/2","top_im":"13/7","top_re":"-11/23"}'
       ),
-      'cbff4724b845e1bfbffcca0f4e83822231cc053705f76b987504d601270b67a9',
+      'cbff4724b845e1bfbffcca0f4e83822231cc053705f76b987504d601270b67a9',  # DO NOT "JUST FIX"
+      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
       (
         '{"depth":8888,"frm":{"bottom_im":"-17/19","bottom_re":"1/31","fractal":"julia",'
         '"point_im":"-11/19","point_re":"3/2","top_im":"13/7","top_re":"-11/23"},'
         '"height":2048,"set_points":"max","width":2048}'
       ),
-      '877b0d190c32be56d7ac6fc7e9daafc5fda739d2ec3550b67790cf261f3ef683',
+      '877b0d190c32be56d7ac6fc7e9daafc5fda739d2ec3550b67790cf261f3ef683',  # DO NOT "JUST FIX"
+      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
     ),
   ],
 )
