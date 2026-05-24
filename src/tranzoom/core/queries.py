@@ -11,10 +11,10 @@ from typing import Literal, Self, final
 import pydantic
 from transcrypto.utils import base as tbase
 
-from tranzoom.core import fractal, frame
+from tranzoom.core import frame, frdb
 
 
-class Error(fractal.Error):
+class Error(frdb.Error):
   """Base AI exception."""
 
 

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import logging
 import pathlib
@@ -16,7 +17,7 @@ from transai.core import lms
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
-from tranzoom.core import fractal, frame, image, palette, queries
+from tranzoom.core import frame, frdb, image, queries
 
 DEFAULT_MEMORY_SIZE: int = 5  # default number of iterations the LLM will remember
 MAX_MEMORY_SIZE: int = 30  # maximum number of iterations the LLM will remember
@@ -37,179 +38,221 @@ class Error(queries.Error):
   """Base AI exception."""
 
 
-def ZoomLoop(
+def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
+  db: frdb.FractalDatabase,
   params: frame.ComputationParameters,
-  img_output_path: pathlib.Path | None,
-  img_use_date: bool,
-  img_use_hash: bool,
-  img_path_prefix: str,
-  pal: palette.Palette,
-  set_pal: palette.Palette,
+  render: image.RenderParameters,
+  out: image.ImageOutputConfig,
   max_threads: int | None,
-  model: str,
-  spec_tokens: int | None,
-  seed: int | None,
-  context: int,
-  temperature: float,
-  gpu: float,
-  gpu_layers: int,
-  fp16: bool,
-  use_mmap: bool,
-  flash: bool,
-  kv_cache: int | None,
-  timeout: float,
-  query: str | None,
-  reason: bool,
-  memory: int,
-  max_steps: int,
-  iterm: bool,
-  target_weight: float,
+  model: str = '',
+  spec_tokens: int | None = None,
+  seed: int | None = None,
+  context: int = 0,
+  temperature: float = 0.0,
+  gpu: float = 0.0,
+  gpu_layers: int = 0,
+  fp16: bool = False,
+  use_mmap: bool = False,
+  flash: bool = False,
+  kv_cache: int | None = None,
+  timeout: float = 0.0,
+  query: str | None = None,
+  reason: bool = False,
+  memory: int = 0,
+  max_steps: int = 0,
+  iterm: bool = False,
+  target_weight: float = 0.0,
+  *,
   print_comm: abc.Callable[[str], None],
+  manual: bool = False,
 ) -> None:
-  """Execute main loop for AI-guided fractal zoom search.
+  """Execute main loop for AI-guided or manually-guided fractal zoom search.
+
+  When manual=False (default), an LLM vision model drives navigation; the AI-specific parameters
+  (model, context, temperature, etc.) are used and required.  When manual=True, the user types a
+  direction on the keyboard each step; all AI-specific parameters are ignored.
 
   Args:
+    db (frdb.FractalDatabase): The fractal database to use.
     params (frame.ComputationParameters): The computation parameters for the fractal zoom search.
-    img_output_path (pathlib.Path | None): Optional path to save the rendered images; if None,
-        images will be saved to current working directory.
-    img_use_date (bool): Whether to include the current date in the image filename when saving.
-    img_use_hash (bool): Whether to include the image hash in the filename when saving.
-    img_path_prefix (str): A prefix to add to the image filename when saving.
-    pal (palette.Palette): The color palette to use for rendering the image.
-    set_pal (palette.Palette): The color palette to use for interior Set points.
+    render (image.RenderParameters): The render parameters for each zoom step, including color
+        palettes and the overlay type (should be OverlayType.GRID to enable navigation grid).
+    out (image.ImageOutputConfig): Output path configuration for file naming.
     max_threads (int | None): Optional maximum number of threads to use for rendering; if None,
         use all available CPU cores.
-    model (str): The AI model identifier to use for the search.
-    spec_tokens (int | None): Optional number of tokens to use for the model's specification;
-        if None, use the model's default.
-    seed (int | None): Optional random seed for the model; if None, use a random seed.
-    context (int): The context window size (in tokens) for the model.
-    temperature (float): The sampling temperature for the model's responses.
-    gpu (float): The GPU usage ratio for the model (0.0 to 1.0).
-    gpu_layers (int): The number of layers of the model to offload to the GPU.
-    fp16 (bool): Whether to use FP16 precision for the model; default is False.
-    use_mmap (bool): Whether to use memory-mapped files for the model; default is False.
-    flash (bool): Whether to use flash attention for the model; default is False.
-    kv_cache (int | None): Optional size of the key-value cache for the model; if None, use
-        the model's default.
-    timeout (float): The timeout (in seconds) for model operations.
-    query (str | None): Optional query to be added to the default prompt; if None, no additional
-        query.
-    reason (bool): Whether to include the `reason` field in the AI output.
-    memory (int): The number of previous iterations the LLM will remember in its chat history;
-        0 means no memory.
-    max_steps (int): Maximum number of zoom steps to run; 0 means run until manually stopped
-        (Ctrl+C)
-    iterm (bool): Whether to print the image inline in iTerm2 using the iTerm2 inline image
-        protocol.
-    target_weight (float): The weight (0.0 to 1.0) to give to the target match score when
-        determining the best sector; if 0.0, only the fractal score is used; if 1.0, only the
-        target match score is used.
+    model (str): The AI model identifier to use for the search; ignored when manual=True.
+    spec_tokens (int | None): Optional number of tokens for the model specification; if None,
+        use the model's default; ignored when manual=True.
+    seed (int | None): Optional random seed for the model; if None, use a random seed; ignored
+        when manual=True.
+    context (int): The context window size (in tokens) for the model; ignored when manual=True.
+    temperature (float): The sampling temperature for the model's responses; ignored when
+        manual=True.
+    gpu (float): The GPU usage ratio for the model (0.0 to 1.0); ignored when manual=True.
+    gpu_layers (int): The number of model layers to offload to the GPU; ignored when manual=True.
+    fp16 (bool): Whether to use FP16 precision for the model; ignored when manual=True.
+    use_mmap (bool): Whether to use memory-mapped files for the model; ignored when manual=True.
+    flash (bool): Whether to use flash attention for the model; ignored when manual=True.
+    kv_cache (int | None): Optional size of the key-value cache; if None, use the model's
+        default; ignored when manual=True.
+    timeout (float): The timeout (in seconds) for model operations; ignored when manual=True.
+    query (str | None): Optional query appended to the default prompt; if None, no extra query;
+        ignored when manual=True.
+    reason (bool): Whether to include the `reason` field in the AI output; ignored when
+        manual=True.
+    memory (int): Number of previous iterations the LLM remembers in chat history; 0 means no
+        memory; ignored when manual=True.
+    max_steps (int): Maximum number of zoom steps; 0 means run until Ctrl+C.
+    iterm (bool): Whether to print the image inline in iTerm2 using the inline image protocol.
+    target_weight (float): Weight (0.0-1.0) for target match score vs fractal score when picking
+        the best sector; 0.0 = fractal only, 1.0 = target only; ignored when manual=True.
     print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
+    manual (bool): If True, skip the AI model entirely and prompt the user for a direction
+        each step (1-9, numpad layout); default is False (AI-guided mode).
 
   """
-  # capture the time and load model
+  # capture the time
   zoom_tm: int = timer.Now()
-  print_comm(
-    f'Run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
-    + ('include reason field. ' if reason else '[cyan]NOT[/] include reason field. ')
-    + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
+  if manual:
+    print_comm(
+      f'Run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
+      'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
+    )
+    print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})')
+  else:
+    print_comm(
+      f'Run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
+      + ('include reason field. ' if reason else '[cyan]NOT[/] include reason field. ')
+      + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
+    )
+    print_comm(
+      f'[yellow]Loading AI model [bold]{model}[/]...[/] / {timer.TimeStr(zoom_tm)} ({zoom_tm})'
+    )
+  # build AI prompts (skipped in manual mode)
+  setup_query: str = ''
+  image_query: str = ''
+  if not manual:
+    query = query.strip() if query else None
+    setup_query, image_query = queries.BuildImageThirdsPrompts(params.frm, reason, query)
+    logging.debug(f'AI setup query:\n{setup_query}\n')
+  # use LMStudioWorker for AI mode; nullcontext (no-op) for manual mode
+  ai_ctx: contextlib.AbstractContextManager[lms.LMStudioWorker | None] = (
+    lms.LMStudioWorker(timeout=timeout, free_resources=True)
+    if not manual
+    else contextlib.nullcontext()
   )
-  print_comm(
-    f'[yellow]Loading AI model [bold]{model}[/]...[/] / {timer.TimeStr(zoom_tm)} ({zoom_tm})\n'
-  )
-  # make queries
-  setup_query: str
-  image_query: str
-  query = query.strip() if query else None
-  setup_query, image_query = queries.BuildImageThirdsPrompts(params.frm, reason, query)
-  logging.debug(f'AI setup query:\n{setup_query}\n')
-  logging.debug(f'AI image query:\n{image_query}\n')
-  # start
   count: int = 1
-  try:
-    with lms.LMStudioWorker(timeout=timeout, free_resources=True) as worker:
-      model_config: transai_ai.AIModelConfig = worker.LoadModel(
-        transai_ai.MakeAIModelConfig(
-          vision=True,
-          model_id=model,
-          seed=seed,
-          context=context,
-          temperature=temperature,
-          gpu_ratio=gpu,
-          gpu_layers=gpu_layers,
-          use_mmap=use_mmap,
-          fp16=fp16,
-          flash=flash,
-          spec_tokens=spec_tokens,
-          kv_cache=kv_cache,
-        )
-      )[0]
+  try:  # noqa: PLR1702
+    with ai_ctx as worker:
+      # load model (skipped in manual mode; worker is None when manual=True)
+      model_config: transai_ai.AIModelConfig | None = None
+      if not manual:
+        assert worker is not None  # noqa: S101 (ai_ctx is LMStudioWorker when not manual)
+        model_config = worker.LoadModel(
+          transai_ai.MakeAIModelConfig(
+            vision=True,
+            model_id=model,
+            seed=seed,
+            context=context,
+            temperature=temperature,
+            gpu_ratio=gpu,
+            gpu_layers=gpu_layers,
+            use_mmap=use_mmap,
+            fp16=fp16,
+            flash=flash,
+            spec_tokens=spec_tokens,
+            kv_cache=kv_cache,
+          )
+        )[0]
       # main loop: runs until max_steps is reached, or Ctrl+C is pressed
       json_chat: tbase.JSONDict | None = None
       img_data: bytes
       response: queries.ZoomSectorScoring | queries.ZoomSectorCompleteScoring
       full_path: pathlib.Path
+      tmr: timer.Timer
       count = 0
       while True:
         count += 1
         # render the image for the current frame
-        img_data, full_path = _ComputeFractal(
-          params,
-          count,
-          zoom_tm,
-          img_output_path,
-          img_use_date,
-          img_use_hash,
-          img_path_prefix,
-          pal,
-          set_pal,
-          max_threads,
-          iterm,
-          print_comm,
+        _, img_data, _, full_path = frdb.CoreComputeImage(
+          db, params, render, out, count, zoom_tm, max_threads, iterm, print_comm
         )
-        # wipe memory of iterations older than _MEMORY_SIZE
-        if json_chat is not None:
-          messages: list[tbase.JSONDict] = cast('list[tbase.JSONDict]', json_chat['messages'])
-          if not memory:
-            json_chat = None  # no memory, start fresh every time
-          elif len(messages) > (2 * memory + 1):  # +1 for the system prompt
-            json_chat = {
-              # the pattern is: first message is the system prompt,
-              # then a 'user' message alternating with 'assistant' messages
-              'messages': [messages[0], *messages[-2 * memory :]]
-            }
-        # get AI verdict
-        print_comm('')
         print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
-        with timer.Timer(emit_log=False) as tmr:
-          response, json_chat = worker.ModelCall(
-            model,
-            setup_query,
-            image_query,
-            queries.ZoomSectorCompleteScoring if reason else queries.ZoomSectorScoring,
-            images=[img_data],
-            chat_history=json_chat,
+        if not manual:
+          assert worker is not None  # noqa: S101 (ai_ctx is LMStudioWorker when not manual)
+          # wipe memory of iterations older than memory
+          if json_chat is not None:
+            messages: list[tbase.JSONDict] = cast('list[tbase.JSONDict]', json_chat['messages'])
+            if not memory:
+              json_chat = None  # no memory, start fresh every time
+            elif len(messages) > (2 * memory + 1):  # +1 for the system prompt
+              json_chat = {
+                # the pattern is: first message is the system prompt,
+                # then 'user' messages alternating with 'assistant' messages
+                'messages': [messages[0], *messages[-2 * memory :]]
+              }
+          # get AI verdict
+          with timer.Timer(emit_log=False) as tmr:
+            response, json_chat = worker.ModelCall(
+              model,
+              setup_query,
+              image_query,
+              queries.ZoomSectorCompleteScoring if reason else queries.ZoomSectorScoring,
+              images=[img_data],
+              chat_history=json_chat,
+            )
+        else:
+          # get user direction input: accept 1-9 only (numpad layout)
+          direction: int = -1
+          user_input: str = ''
+          with timer.Timer(emit_log=False) as tmr:
+            while not (1 <= direction <= 9):  # noqa: PLR2004
+              try:
+                user_input = input(
+                  'Enter direction to zoom '
+                  '(1-9, like numpad, where 5 is center, 8 is up/North, 6 is right/East, etc.): '
+                ).strip()
+                direction = int(user_input)
+              except ValueError:
+                print_comm(f'[red]Invalid input[/] [bold][yellow]{user_input!r}[/][/]')
+          # build a fake response with the user direction as the "human LLM verdict"
+          response = queries.ZoomSectorScoring(
+            sectors=[
+              queries.SectorEvaluation(
+                sector=i,
+                fractal_score=(100 if i == direction else 0),
+                target_match_score=None,
+              )
+              for i in range(1, 10)
+            ],
           )
         # save the image, adding the response evaluation as metadata on top of the image
         full_path.write_bytes(
           image.AddEvaluationMetaToImage(
             img_data,
             response.JSON(),
-            model,
-            temperature,
-            model_config['seed'] or 0,
-            reason,
-            memory,
-            setup_query,
-            image_query,
-            query,
+            model if not manual else image.META_LLM_MODEL_VALUE_HUMAN,
+            temperature if not manual else 0.0,
+            (model_config['seed'] or 0) if model_config is not None else 0,
+            reason if not manual else False,
+            memory if not manual else 0,
+            setup_query if not manual else '',
+            image_query if not manual else '',
+            query if not manual else None,
             count,
           )
         )
         # implement the move command
         params = dataclasses.replace(
-          params, frm=_MoveCenter(params.frm, query, response, tmr, target_weight, print_comm)
+          params,
+          frm=_MoveCenter(
+            params.frm,
+            query if not manual else None,
+            response,
+            tmr,
+            target_weight if not manual else 0.0,
+            print_comm,
+          ),
         )
         # stop if we've reached the maximum number of steps
         if max_steps and count >= max_steps:
@@ -219,202 +262,6 @@ def ZoomLoop(
   except KeyboardInterrupt:
     print_comm(f'\n[yellow]Interrupted by user on step {count}.[/yellow]')
   print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {params}\n')
-
-
-def ManualLoop(
-  params: frame.ComputationParameters,
-  img_output_path: pathlib.Path | None,
-  img_use_date: bool,
-  img_use_hash: bool,
-  img_path_prefix: str,
-  pal: palette.Palette,
-  set_pal: palette.Palette,
-  max_threads: int | None,
-  max_steps: int,
-  iterm: bool,
-  print_comm: abc.Callable[[str], None],
-) -> None:
-  """Execute main loop for manually-guided fractal zoom search.
-
-  Args:
-    params (frame.ComputationParameters): The computation parameters for the fractal zoom search.
-    img_output_path (pathlib.Path | None): Optional path to save the rendered images; if None,
-        images will be saved to current working directory.
-    img_use_date (bool): Whether to include the current date in the image filename when saving.
-    img_use_hash (bool): Whether to include the image hash in the filename when saving.
-    img_path_prefix (str): A prefix to add to the image filename when saving.
-    pal (palette.Palette): The color palette to use for rendering the image.
-    set_pal (palette.Palette): The color palette to use for interior Set points.
-    max_threads (int | None): Optional maximum number of threads to use for rendering; if None,
-        use all available CPU cores.
-    max_steps (int): Maximum number of zoom steps to run; 0 means run until manually stopped
-        (Ctrl+C)
-    iterm (bool): Whether to print the image inline in iTerm2 using the iTerm2 inline image
-        protocol.
-    print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
-
-  """
-  # capture the time and load model
-  zoom_tm: int = timer.Now()
-  print_comm(
-    f'Will run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
-    'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
-  )
-  print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})\n')
-  # start
-  count: int = 1
-  try:
-    # main loop: runs until max_steps is reached, or Ctrl+C is pressed
-    img_data: bytes
-    full_path: pathlib.Path
-    response: queries.ZoomSectorScoring  # response here never needs the `reason` field b/c human!
-    count = 0
-    while True:
-      count += 1
-      # render the image for the current frame
-      img_data, full_path = _ComputeFractal(
-        params,
-        count,
-        zoom_tm,
-        img_output_path,
-        img_use_date,
-        img_use_hash,
-        img_path_prefix,
-        pal,
-        set_pal,
-        max_threads,
-        iterm,
-        print_comm,
-      )
-      # get AI verdict
-      print_comm('')
-      print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
-      # input direction from user: 1..9 only
-      direction: int = -1
-      user_input: str = ''
-      with timer.Timer(emit_log=False) as tmr:
-        while not (1 <= direction <= 9):  # noqa: PLR2004
-          try:
-            user_input = input(
-              'Enter direction to zoom '
-              '(1-9, like numpad, where 5 is center, 8 is up/North, 6 is right/East, etc.): '
-            ).strip()
-            direction = int(user_input)
-          except ValueError:
-            print_comm(f'[red]Invalid input[/] [bold][yellow]{user_input!r}[/][/]')
-      # build a fake response with the user direction as the "human LLM verdict"
-      response = queries.ZoomSectorScoring(
-        sectors=[
-          queries.SectorEvaluation(
-            sector=i,
-            fractal_score=(100 if i == direction else 0),
-            target_match_score=None,
-          )
-          for i in range(1, 10)
-        ],
-      )
-      # save the image, adding the response evaluation as metadata on top of the image
-      full_path.write_bytes(
-        image.AddEvaluationMetaToImage(
-          img_data,
-          response.JSON(),
-          image.META_LLM_MODEL_VALUE_HUMAN,
-          0.0,  # will be ignored
-          0,  # will be ignored
-          False,  # will be ignored
-          0,  # will be ignored
-          '',  # will be ignored
-          '',  # will be ignored
-          None,  # will be ignored
-          count,
-        )
-      )
-      # implement the move command
-      params = dataclasses.replace(
-        params, frm=_MoveCenter(params.frm, None, response, tmr, 0.0, print_comm)
-      )
-      # stop if we've reached the maximum number of steps
-      if max_steps and count >= max_steps:
-        print_comm('[yellow]Reached maximum zoom step(s), stopping.[/yellow]')
-        break
-  # we're out of the main loop
-  except KeyboardInterrupt:
-    print_comm(f'\n[yellow]Interrupted by user on step {count}.[/yellow]')
-  print_comm(f'\nZoom session ended: {count - 1} step(s) completed, last frame: {params}\n')
-
-
-def _ComputeFractal(
-  params: frame.ComputationParameters,
-  count: int,
-  zoom_tm: int,
-  img_output_path: pathlib.Path | None,
-  img_use_date: bool,
-  img_use_hash: bool,
-  img_path_prefix: str,
-  pal: palette.Palette,
-  set_pal: palette.Palette,
-  max_threads: int | None,
-  iterm: bool,
-  print_comm: abc.Callable[[str], None],
-) -> tuple[bytes, pathlib.Path]:
-  """Compute the Mandelbrot or Julia image for the given frame.
-
-  Args:
-    params (frame.ComputationParameters): The computation parameters for the frame, including
-        width, height, and other settings.
-    count (int): The current zoom step count, used for logging and image naming.
-    zoom_tm (int): The timestamp when the zoom session started, used for logging and image naming.
-    img_output_path (pathlib.Path | None): Optional path to save the rendered image; if None,
-        the image will not be saved to disk.
-    img_use_date (bool): Whether to include the current date in the image filename when saving.
-    img_use_hash (bool): Whether to include the image hash in the filename when saving.
-    img_path_prefix (str): A prefix to add to the image filename when saving.
-    pal (palette.Palette): The color palette to use for rendering the image.
-    set_pal (palette.Palette): The color palette to use for interior Set points.
-    max_threads (int | None): Maximum number of threads to use for rendering.
-    iterm (bool): Whether to print the image inline in iTerm2 using the iTerm2 inline image
-        protocol.
-    print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
-
-  Returns:
-    tuple[bytes, pathlib.Path]: A tuple with the PNG image bytes (minus the evaluation) and the
-        intended save path (not yet saved!)
-
-  """
-  # render the image for the current frame
-  img_data: bytes
-  img_hash: str
-  with timer.Timer(emit_log=False) as tmr:
-    img: image.Image = fractal.ComputeFractal(
-      params,
-      progress_bar=True,
-      n_processes=max_threads,
-      print_comm=print_comm,
-    )
-    # get PNG and overlay info on top of it
-    img_data, img_hash = img.AsPNG(pal=pal, set_pal=set_pal)
-    img_data = image.DrawThirdsInfoOverlay(img_data)
-  # make path
-  full_path: pathlib.Path = image.MakeImagePath(
-    img_output_path,
-    img_use_date,
-    img_use_hash,
-    img_path_prefix,
-    img_hash,
-    tm=zoom_tm,
-    add_serial=count,
-  )
-  # log
-  print_comm(
-    f'\n{img.params} zoom, precision {img.params.precision} bits, '
-    f'10^{img.params.frm.magnification[1]:.2f} magnitude\n'
-    f'{img_hash!r} in {tmr}, will save as "{full_path}"'
-  )
-  # iterm
-  if iterm:
-    print_comm('')
-    image.PrintITerm2(img_data)
-  return (img_data, full_path)
 
 
 def _MoveCenter(  # noqa: C901
@@ -501,7 +348,6 @@ def _MoveCenter(  # noqa: C901
       f'#{sector_eval.sector}/[green]{_DIRECTION_MAP[sector_eval.sector]}[/]: '
       f'{sector_eval.fractal_score}{target_score} - {reason}'
     )
-  print_comm('')
   # build the new frame
   return frame.Frame.FromCenter(
     frm.fractal,

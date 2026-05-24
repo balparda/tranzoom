@@ -47,10 +47,14 @@ META_ITER_DEPTH_MAX_KEY = 'tranzoom:image:iter_depth:max'  # int
 META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:image:iter_depth:search'  # int
 META_SET_POINT_MIN_KEY = 'tranzoom:image:set_point:min'  # int
 META_SET_POINT_MAX_KEY = 'tranzoom:image:set_point:max'  # int
-META_IMAGE_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
-META_IMAGE_SET_PALETTE_KEY = 'tranzoom:image:set_palette'  # str, interior Set palette name
 META_IMAGE_COLOR_SET_KEY = 'tranzoom:image:color_set'  # frame.SetHighlightAlgorithm or "none"
-META_IMAGE_OVERLAY_KEY = 'tranzoom:image:overlay'  # bool; stored as "true"/"false"
+META_RENDER_PALETTE_KEY = 'tranzoom:render:palette'  # str, like "sunset", one of palette.Palette
+META_RENDER_SET_PALETTE_KEY = 'tranzoom:render:set_palette'  # str, interior Set palette name
+META_RENDER_OVERLAY_KEY = 'tranzoom:render:overlay'  # image.OverlayType or "none"
+META_RENDER_MARK_RE_KEY = 'tranzoom:render:mark_re'  # gmpy2.mpq
+META_RENDER_MARK_IM_KEY = 'tranzoom:render:mark_im'  # gmpy2.mpq
+META_RENDER_MARK_COLOR_KEY = 'tranzoom:render:mark_color'  # Color.name.lower() or "none" (=no mark)
+META_RENDER_MARK_WIDTH_KEY = 'tranzoom:render:mark_width'  # int
 META_PIXEL_EXTERIOR_COUNT_KEY = 'tranzoom:image:exterior:pixel_count'  # int; count escaped
 META_PIXEL_INTERIOR_COUNT_KEY = 'tranzoom:image:interior:pixel_count'  # int; count set
 META_PIXEL_EXTERIOR_HISTOGRAM_KEY = 'tranzoom:image:exterior:histogram_summary'  # str
@@ -127,6 +131,9 @@ _MPFR_ZERO: gmpy2.mpfr = gmpy2.mpfr('0')
 _MPFR_ONE: gmpy2.mpfr = gmpy2.mpfr('1')
 _MPFR_FOUR: gmpy2.mpfr = gmpy2.mpfr('4')
 
+# gmpy2.mpq constants
+_MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
+
 
 class Error(frame.Error):
   """Base image exception."""
@@ -160,6 +167,13 @@ class AnimationType(enum.Enum):
   MP4 = 'mp4'
 
 
+class OverlayType(enum.Enum):
+  """Overlay type enum."""
+
+  GRID = 'grid'
+  CARDINAL = 'cardinal'
+
+
 DEFAULT_ANIMATION_TYPE: AnimationType = AnimationType.GIF
 
 
@@ -177,6 +191,7 @@ MIN_FRAMES: int = 3  # sanity limit for number of frames in an animation
 MAX_FRAMES: int = 100_000  # sanity limit for number of frames in an animation
 MIN_DURATION: float = 0.1  # minimum duration of an animation in seconds, for sanity checking
 MAX_DURATION: float = 45000.0  # maximum duration of an animation in seconds, for sanity checking
+VIDEO_DURATION_STORE_SCALE = 40_000  # MAX_DURATION * VIDEO_DURATION_STORE_SCALE < 2**31; HASH!
 MIN_FPS: float = 0.1  # minimum frames per second for an animation, for sanity checking
 MAX_FPS: float = 30.0  # maximum frames per second for an animation, for sanity checking
 MIN_LOOP: int = 0  # minimum number of loops for a GIF animation; 0 means infinite loop
@@ -214,6 +229,286 @@ class FractalStats:
 # TODO: more stable animations
 # instead of rendering each frame independently, we can have a class that knows about the
 # whole intended journey and can have a special AsPixels() that normalizes once against all images
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class ImageOutputConfig:
+  """Groups all parameters that control how output images are named and saved on disk.
+
+  This is a runtime-only config object — not part of the mathematical/DB representation.
+  It is NOT a SerializingFractalObject: it carries no mathematical meaning and is never hashed.
+  """
+
+  path: pathlib.Path | None  # output directory; None means current working directory
+  use_date: bool  # if True, include YYYYMMDDhhmmss in the file name
+  use_hash: bool  # if True, include the content hash in the file name
+  prefix: str  # file name prefix, e.g., "mandel" or "julia"
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class RenderParameters(frame.SerializingFractalObject):
+  """Defines a transformation from math to image."""
+
+  # ATTENTION: changing anything here changes the HASH!!
+  tp: FileType = FileType.PNG
+  escaped_pal: palette.Palette = palette.DEFAULT_PALETTE
+  set_pal: palette.Palette | None = None  # if None, this must be a non-Set-computation
+  mark_re: gmpy2.mpq = _MPQ_ZERO
+  mark_im: gmpy2.mpq = _MPQ_ZERO
+  mark_color: Color | None = None  # if None, no mark will be drawn
+  mark_width: int = DEFAULT_MARK_WIDTH
+  overlay: OverlayType | None = None  # overlay is independent of mark!
+
+  def __post_init__(self) -> None:
+    """Check parameters for validity.
+
+    Raises:
+      Error: if any parameter is invalid.
+
+    """
+    # check type is valid
+    if self.tp not in {FileType.PNG, FileType.GIF, FileType.MP4}:
+      raise Error(f'Unknown file type: {self.tp}')
+    # check overlay is valid: for now we only allow GRID overlay
+    if self.overlay and self.overlay != OverlayType.GRID:
+      raise Error(f'Unknown overlay: {self.overlay}')
+    # check palettes are valid
+    if self.escaped_pal not in palette.Palette:
+      raise Error(f'Unknown escaped palette: {self.escaped_pal}')
+    if self.set_pal is not None and self.set_pal not in palette.Palette:
+      raise Error(f'Unknown set palette: {self.set_pal}')
+    # check mark width is valid
+    if not (MIN_MARK_WIDTH <= self.mark_width <= MAX_MARK_WIDTH):
+      raise Error(
+        f'Mark width must be between {MIN_MARK_WIDTH} and {MAX_MARK_WIDTH}, got {self.mark_width}'
+      )
+    # check mark color is valid
+    if self.mark_color is None:
+      # we do not allow mark_re/im to be non-zero if no mark to be added to image
+      if self.mark_re != _MPQ_ZERO or self.mark_im != _MPQ_ZERO:
+        raise Error(
+          'Mark positions expected to be (0, 0) when no mark color is specified, '
+          f'got ({self.mark_re}, {self.mark_im})'
+        )
+    else:
+      if self.mark_color not in Color:
+        raise Error(f'Unknown mark color: {self.mark_color}')
+      r: int
+      g: int
+      b: int
+      r, g, b = self.mark_color.value
+      if not (0 <= r <= 255 and 0 <= g <= 255 and 0 <= b <= 255):  # noqa: PLR2004
+        raise Error(f'Mark color RGB values must be between 0 and 255, got {self.mark_color}')
+
+  def __str__(self) -> str:
+    """Get string representation of the RenderParameters.
+
+    Format is:
+    - "{[<FILE_TYPE>: <ESCAPED_PALETTE>, <SET_PALETTE>]<MARK_IF_ANY><OVERLAY_IF_ANY>}"
+    - `<FILE_TYPE>` is the file type in uppercase, like "PNG".
+    - `<ESCAPED_PALETTE>` is the name of the palette used for escaped points, in
+        lowercase, like "sunset".
+    - `<SET_PALETTE>` is the name of the palette used for interior Set points, in lowercase,
+        like "ocean", or "none" if not used.
+    - `<MARK_IF_ANY>` is " + [MARK: <MARK_COLOR>/<MARK_WIDTH> @ (<MARK_RE>, <MARK_IM>)]" if a
+        mark is specified, or "" if no mark is specified.
+    - `<OVERLAY_IF_ANY>` is " + [OVERLAY: <OVERLAY_TYPE>]" if an overlay is specified,
+        or "" if no overlay is specified.
+
+    Returns:
+      str: String representation of the RenderParameters.
+
+    """
+    mark: str = (
+      ''
+      if self.mark_color is None
+      else (
+        f' + [MARK: {self.mark_color.name.lower()}/{self.mark_width} '
+        f'@ ({self.mark_re}, {self.mark_im})]'
+      )
+    )
+    overlay: str = '' if self.overlay is None else f' + [OVERLAY: {self.overlay.name}]'
+    return (
+      '{'
+      f'[{self.tp.name.upper()}, {self.escaped_pal.name}, '
+      f'{self.set_pal.name if self.set_pal else "none"}]{mark}{overlay}'
+      '}'
+    )
+
+  @property
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the RenderParameters.
+
+    Keys: `tp`, `escaped_pal`, `set_pal`, `mark_re`, `mark_im`, `mark_color`,
+    `mark_width`, `overlay`.
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the RenderParameters.
+
+    """
+    return {
+      # ATTENTION: changing anything here changes the HASH!!
+      'tp': self.tp.value,
+      'escaped_pal': self.escaped_pal.value,
+      'set_pal': self.set_pal.value if self.set_pal else None,
+      'mark_re': str(self.mark_re),
+      'mark_im': str(self.mark_im),
+      # BEWARE: we store the mark color as lowercase name, not the RGB value
+      'mark_color': self.mark_color.name.lower() if self.mark_color else None,
+      'mark_width': self.mark_width,
+      'overlay': self.overlay.value if self.overlay else None,
+    }
+
+  @staticmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> RenderParameters:
+    """Create a RenderParameters from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from RenderParameters.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the RenderParameters.
+          If the calculated hash does not match, an error is raised.
+
+    Returns:
+      RenderParameters: A RenderParameters object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      params = RenderParameters(  # object creation will check the data is valid and consistent
+        tp=FileType(data['tp']),
+        escaped_pal=palette.Palette(data['escaped_pal']),
+        set_pal=palette.Palette(data['set_pal']) if data['set_pal'] is not None else None,
+        mark_re=gmpy2.mpq(str(data['mark_re'])),
+        mark_im=gmpy2.mpq(str(data['mark_im'])),
+        mark_color=(  # upper -> convert by name
+          Color[str(data['mark_color']).upper()] if data['mark_color'] is not None else None
+        ),
+        mark_width=int(str(data['mark_width'])),
+        overlay=OverlayType(data['overlay']) if data['overlay'] is not None else None,
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid RenderParameters JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and params.sha != check_hash:
+      raise Error(f'RenderParameters {params.sha!r} does not match expected {check_hash!r}')
+    return params
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class ZoomParameters(frame.SerializingFractalObject):
+  """Defines the zoom parameters for video planning and rendering."""
+
+  # ATTENTION: changing anything here changes the HASH!!
+  tp: AnimationType  # 'gif' or 'mp4'
+  img: frame.ComputationParameters  # initial frame and computation parameters for all images
+  render: RenderParameters  # render parameters for all images
+  mag: gmpy2.mpq  # destination magnification
+  n_frames: int  # number of frames in the animation
+  duration: int  # round(duration in seconds * VIDEO_DURATION_STORE_SCALE): no float precision snafu
+  loop: int = 0  # number of loops for GIFs; 0 means infinite loop; ignored for non-GIFs
+
+  def __post_init__(self) -> None:
+    """Check ZoomParameters for validity.
+
+    Raises:
+      Error: if any parameter is invalid.
+
+    """
+    # check type is valid
+    if self.tp not in {AnimationType.GIF, AnimationType.MP4}:
+      raise Error(f'Unknown animation type: {self.tp}')
+    # check magnification is valid
+    if not (-MAX_ZOOM_MAGNIFICATION_10 <= self.mag <= MAX_ZOOM_MAGNIFICATION_10):
+      raise Error(f'Magnification abs() must be <= {MAX_ZOOM_MAGNIFICATION_10}, got {self.mag}')
+    if self.mag == _MPQ_ZERO:
+      raise Error('Magnification cannot be zero')
+    # check number of frames is valid
+    if not (MIN_FRAMES <= self.n_frames <= MAX_FRAMES):
+      raise Error(
+        f'Number of frames must be between {MIN_FRAMES} and {MAX_FRAMES}, got {self.n_frames}'
+      )
+    # check duration is valid
+    if not (MIN_DURATION <= (dur := self.duration / VIDEO_DURATION_STORE_SCALE) <= MAX_DURATION):
+      raise Error(f'Duration must be between {MIN_DURATION} and {MAX_DURATION} seconds, got {dur}')
+    # check loop count is valid for GIFs
+    if self.tp == AnimationType.GIF and not (MIN_LOOP <= self.loop <= MAX_LOOP):
+      raise Error(f'Loop count for GIFs must be between {MIN_LOOP} and {MAX_LOOP}, got {self.loop}')
+    if self.tp != AnimationType.GIF and self.loop != 0:
+      raise Error(f'Loop count is only applicable for GIFs, got {self.loop} for {self.tp}')
+
+  def __str__(self) -> str:
+    """Get string representation of the ZoomParameters.
+
+    Format is:
+      "<[ANIMATION_TYPE]: [RENDER_PARAMETERS] -> [COMPUTATION_PARAMETERS] / "
+      "([MAGNIFICATION], [N_FRAMES], [DURATION], [LOOP])>"
+
+    Returns:
+      str: String representation of the ZoomParameters.
+
+    """
+    return (
+      f'<{self.tp.name.upper()}: {self.img} -> {self.render} / '
+      f'({self.mag}, {self.n_frames}, {self.duration}, {self.loop})>'
+    )
+
+  @property
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the ZoomParameters.
+
+    Keys: `tp`, `img`, `render`, `mag`, `n_frames`, `duration`, `loop`.
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the ZoomParameters.
+
+    """
+    return {
+      # ATTENTION: changing anything here changes the HASH!!
+      'tp': self.tp.value,
+      'img': self.img.json,
+      'render': self.render.json,
+      'mag': str(self.mag),
+      'n_frames': self.n_frames,
+      'duration': self.duration,
+      'loop': self.loop,
+    }
+
+  @staticmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> ZoomParameters:
+    """Create a ZoomParameters from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from ZoomParameters.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the ZoomParameters.
+          If the calculated hash does not match, an error is raised.
+
+    Returns:
+      ZoomParameters: A ZoomParameters object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      params = ZoomParameters(  # object creation will check the data is valid and consistent
+        tp=AnimationType(data['tp']),
+        img=frame.ComputationParameters.FromJson(cast('tbase.JSONDict', data['img'])),
+        render=RenderParameters.FromJson(cast('tbase.JSONDict', data['render'])),
+        mag=gmpy2.mpq(str(data['mag'])),
+        n_frames=int(str(data['n_frames'])),
+        duration=int(str(data['duration'])),
+        loop=int(str(data['loop'])),
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid ZoomParameters JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and params.sha != check_hash:
+      raise Error(f'ZoomParameters {params.sha!r} does not match expected {check_hash!r}')
+    return params
 
 
 class Image:
@@ -310,12 +605,7 @@ class Image:
       -min(interior_points) if interior_points else 0,
     )
 
-  def AsPixels(
-    self,
-    *,
-    pal: palette.Palette = palette.DEFAULT_PALETTE,
-    set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-  ) -> bytes:
+  def AsPixels(self, render: RenderParameters) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
     Exterior points (escaped) are colored by mapping their escape iteration through a cumulative
@@ -329,10 +619,7 @@ class Image:
     escape value), so the full `set_pal` range is used across the Set interior.
 
     Args:
-      pal (palette.Palette, optional): The color palette for exterior (escaped) pixels.
-          Defaults to DEFAULT_PALETTE.
-      set_pal (palette.Palette, optional): The color palette for interior Set points; only
-          used when `color_set_points=True`. Defaults to DEFAULT_SET_PALETTE.
+      render (RenderParameters): The render parameters to use for generating the PNG metadata.
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
@@ -362,42 +649,37 @@ class Image:
       if escaped_at >= 0 and total_exterior > 0:
         # exterior point: histogram-equalized position in pal
         t: float = (cumulative[escaped_at] - 1) / total_exterior
-        rgb: tuple[int, int, int] = PixelPalette(t, pal, palette.PALETTE_CYCLES)
+        rgb: tuple[int, int, int] = PixelPalette(t, render.escaped_pal, palette.PALETTE_CYCLES)
       elif self._params.set_points and total_set > 0 and escaped_at < 0:
         # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
         t_set: float = (set_cumulative[-escaped_at] - 1) / total_set
-        rgb = PixelPalette(t_set, set_pal, palette.SET_PALETTE_CYCLES)
+        if render.set_pal is None:
+          raise Error('set_pal must be specified in RenderParameters when set_points is True')
+        rgb = PixelPalette(t_set, render.set_pal, palette.SET_PALETTE_CYCLES)
       else:
         rgb = (0, 0, 0)  # black: interior point (default) or all-interior image
       pixels[i * 3], pixels[i * 3 + 1], pixels[i * 3 + 2] = rgb
     return bytes(pixels)
 
-  def AsPNG(
-    self,
-    *,
-    pal: palette.Palette = palette.DEFAULT_PALETTE,
-    set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-  ) -> tuple[bytes, str]:
+  def AsPNG(self, render: RenderParameters) -> tuple[bytes, str]:
     """Convert the image to PNG bytes and return it with its internal data hash.
 
     Args:
-      pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
-      set_pal (palette.Palette, optional): The color palette for interior Set points.
-          Defaults to DEFAULT_SET_PALETTE.
+      render (RenderParameters): The render parameters to use for generating the PNG metadata.
 
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
 
     """
     # convert the raw pixel data to a PNG using PIL
-    raw_img: bytes = self.AsPixels(pal=pal, set_pal=set_pal)
+    raw_img: bytes = self.AsPixels(render)
     img_data_hash: str = hashes.Hash256(raw_img).hex()
     img: PILImage.Image = PILImage.frombytes(
       'RGB', (self._params.width, self._params.height), raw_img
     )
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
     png_meta = PngImagePlugin.PngInfo()
-    for k, v in MakeImageMeta(self, img_data_hash, pal=pal, set_pal=set_pal).items():
+    for k, v in MakeImageMeta(self, render, img_data_hash).items():
       png_meta.add_text(k, v)
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
@@ -405,21 +687,13 @@ class Image:
     return (buf.getvalue(), img_data_hash)
 
 
-def MakeImageMeta(
-  img: Image,
-  data_hash: str,
-  *,
-  pal: palette.Palette = palette.DEFAULT_PALETTE,
-  set_pal: palette.Palette = palette.DEFAULT_SET_PALETTE,
-) -> dict[str, str]:
+def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[str, str]:
   """Create a metadata dictionary for the image.
 
   Args:
     img (Image): The image for which to create metadata.
+    render (RenderParameters): The render parameters used for the image.
     data_hash (str): The hash of the image data, to include in the metadata.
-    pal (palette.Palette, optional): The color palette to use. Defaults to DEFAULT_PALETTE.
-    set_pal (palette.Palette, optional): The color palette for interior Set points.
-        Defaults to DEFAULT_SET_PALETTE.
 
   Returns:
     dict[str, str]: A dictionary containing the metadata for the image, with keys as defined
@@ -446,10 +720,14 @@ def MakeImageMeta(
     META_IMAGE_WIDTH_KEY: str(img.size[0]),
     META_IMAGE_HEIGHT_KEY: str(img.size[1]),
     META_IMAGE_HASH_KEY: data_hash,
-    META_IMAGE_PALETTE_KEY: pal.value,
-    META_IMAGE_SET_PALETTE_KEY: set_pal.value,
     META_IMAGE_COLOR_SET_KEY: str(img.params.set_points.value) if img.params.set_points else 'none',
-    META_IMAGE_OVERLAY_KEY: 'false',  # if it comes from this, it has no overlay
+    META_RENDER_PALETTE_KEY: render.escaped_pal.value,
+    META_RENDER_SET_PALETTE_KEY: render.set_pal.value if render.set_pal else 'none',
+    META_RENDER_OVERLAY_KEY: render.overlay.value if render.overlay else 'none',
+    META_RENDER_MARK_RE_KEY: str(render.mark_re),
+    META_RENDER_MARK_IM_KEY: str(render.mark_im),
+    META_RENDER_MARK_COLOR_KEY: render.mark_color.name.lower() if render.mark_color else 'none',
+    META_RENDER_MARK_WIDTH_KEY: str(render.mark_width),  # int
     # frame
     META_FRACTAL_KEY: frm.fractal.value.lower(),
     # frame as corners
@@ -701,7 +979,7 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
         (x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=Color.GREEN.value, font=font
       )
     # done, save remembering to add metadata that this image has an overlay
-    return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
+    return SaveWithMeta(img)
 
 
 def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
@@ -750,7 +1028,7 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
           anchor='mm',  # center it exactly
         )
     # done, save remembering to add metadata that this image has an overlay
-    return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
+    return SaveWithMeta(img)
 
 
 def DrawCrossOverlay(
@@ -789,7 +1067,7 @@ def DrawCrossOverlay(
     draw.line((0, y, w, y), fill=col.value, width=lw)
     draw.line((x, 0, x, h), fill=col.value, width=lw)
     # done, save remembering to add metadata that this image has an overlay
-    return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
+    return SaveWithMeta(img)
 
 
 def SaveWithMeta(img: PILImage.Image, *, extra_meta: dict[str, str] | None = None) -> bytes:

@@ -4,12 +4,15 @@
 
 from __future__ import annotations
 
+import abc as abstract_abc
 import dataclasses
 import enum
+import json
 from collections import abc
-from typing import cast
+from typing import cast, final
 
 import gmpy2
+from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 
 # basic constants
@@ -107,7 +110,77 @@ class SetHighlightAlgorithm(enum.Enum):
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class Frame:
+class SerializingFractalObject(abstract_abc.ABC):
+  """Base class for useful fractal objects that can be serialized to JSON with a hash."""
+
+  @abstract_abc.abstractmethod
+  def __post_init__(self) -> None:
+    """Check object validity.
+
+    Raises:
+      Error: if the object is invalid.
+
+    """
+
+  @abstract_abc.abstractmethod
+  def __str__(self) -> str:
+    """Get string representation of the object.
+
+    Returns:
+      str: String representation of the object.
+
+    """
+
+  @staticmethod
+  @abstract_abc.abstractmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> SerializingFractalObject:
+    """Create a SerializingFractalObject from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from Frame.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the frame. If the
+          calculated hash does not match, an error is raised.
+
+    Returns:
+      SerializingFractalObject: A SerializingFractalObject object
+
+    Raises:
+      Error: on error
+
+    """
+
+  @property
+  @abstract_abc.abstractmethod
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the object.
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the object.
+
+    """
+
+  @final  # this affects the HASH, let's avoid trouble...
+  @property
+  def binary(self) -> bytes:
+    """Get a stable binary representation of the object, for hashing and storage."""
+    return json.dumps(self.json, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode(
+      'utf-8'
+    )
+
+  @final  # this affects the HASH, let's avoid trouble...
+  @property
+  def sha(self) -> str:
+    """SHA-256 hash of the object.
+
+    Returns:
+      str: The SHA-256 hash of the object, as a hex string.
+
+    """
+    return hashes.Hash256(self.binary).hex()
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class Frame(SerializingFractalObject):
   """Defines a rectangular region of the complex plane, with arbitrary precision. Exact.
 
   An optional point coordinate is included. This is used for Julia, and ignored for Mandelbrot.
@@ -116,6 +189,7 @@ class Frame:
   providing additional data like for the Julia fractal.
   """
 
+  # ATTENTION: changing anything here changes the HASH!!
   fractal: Fractal
   top_re: gmpy2.mpq  # the top-left corner of the rectangle
   top_im: gmpy2.mpq
@@ -139,9 +213,14 @@ class Frame:
       raise Error(f'top_re ({self.top_re}) must be < bottom_re ({self.bottom_re})')
     if self.top_im <= self.bottom_im:
       raise Error(f'top_im ({self.top_im}) must be > bottom_im ({self.bottom_im})')
+    # disallow non-zero points for Mandelbrot as a safety for now, no use for them
+    if self.fractal == Fractal.MANDELBROT and (
+      self.point_re != _MPQ_ZERO or self.point_im != _MPQ_ZERO
+    ):
+      raise Error('Mandelbrot frames should not have a non-zero point coordinate')
 
   def __str__(self) -> str:
-    """Get string representation of the frame.
+    """Get string representation of the Frame.
 
     Format is:
       - "[MANDELBROT: (c_re, c_im) ± (dx_re, dy_im)]" without the point for Mandelbrot; or
@@ -152,7 +231,7 @@ class Frame:
       - if `dx_re` and `dy_im` are the same, we can simplify to "± dx" instead of "± (dx, dy)".
 
     Returns:
-      str: String representation of the frame.
+      str: String representation of the Frame.
 
     Raises:
       Error: if the fractal type is unknown (should not happen b/c checked in __post_init__).
@@ -263,6 +342,7 @@ class Frame:
 
     """
     return {
+      # ATTENTION: changing anything here changes the HASH!!
       'fractal': self.fractal.value,
       'top_re': str(self.top_re),
       'top_im': str(self.top_im),
@@ -271,6 +351,40 @@ class Frame:
       'point_re': str(self.point_re),
       'point_im': str(self.point_im),
     }
+
+  @staticmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> Frame:
+    """Create a Frame from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from Frame.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the frame. If the
+          calculated hash does not match, an error is raised.
+
+    Returns:
+      Frame: A Frame object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      frm = Frame(  # object creation will check the data is valid and consistent, and raise if not
+        fractal=Fractal(data['fractal']),
+        top_re=gmpy2.mpq(str(data['top_re'])),
+        top_im=gmpy2.mpq(str(data['top_im'])),
+        bottom_re=gmpy2.mpq(str(data['bottom_re'])),
+        bottom_im=gmpy2.mpq(str(data['bottom_im'])),
+        point_re=gmpy2.mpq(str(data['point_re'])),
+        point_im=gmpy2.mpq(str(data['point_im'])),
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid Frame JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and frm.sha != check_hash:
+      raise Error(f'Frame {frm.sha!r} does not match expected {check_hash!r}')
+    return frm
 
   @staticmethod
   def FromCoords(
@@ -432,9 +546,10 @@ DEFAULT_FRAMES: dict[Fractal, Frame] = {
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class ComputationParameters:
+class ComputationParameters(SerializingFractalObject):
   """Arguments that determine a fractal computation completely (computation, not rendering)."""
 
+  # ATTENTION: changing anything here changes the HASH!!
   frm: Frame
   width: int
   height: int
@@ -442,10 +557,10 @@ class ComputationParameters:
   set_points: SetHighlightAlgorithm | None = None
 
   def __post_init__(self) -> None:
-    """Check rectangle has an area and top/bottom ordering.
+    """Check parameters for validity.
 
     Raises:
-      Error: if the rectangle is invalid.
+      Error: if any parameter is invalid.
 
     """
     # check width and height are valid
@@ -468,7 +583,7 @@ class ComputationParameters:
       raise Error(f'Unsupported set highlight algorithm: {self.set_points}')
 
   def __str__(self) -> str:
-    """Get string representation of the computation parameters.
+    """Get string representation of the ComputationParameters.
 
     Format is:
       - "{[MANDELBROT: (c_re, c_im) ± (dx_re, dy_im)] : [w, h, d]}" WITHOUT set points; or
@@ -484,7 +599,7 @@ class ComputationParameters:
       - `<sp>` is the set highlight algorithm, lowercase, if any.
 
     Returns:
-      str: String representation of the computation parameters.
+      str: String representation of the ComputationParameters.
 
     """
     return (
@@ -516,6 +631,7 @@ class ComputationParameters:
       tbase.JSONDict: A dictionary representation of the computation parameters.
 
     """
+    # ATTENTION: changing anything here changes the HASH!!
     return {
       'frm': self.frm.json,
       'width': self.width,
@@ -524,7 +640,41 @@ class ComputationParameters:
       'set_points': self.set_points.value if self.set_points else None,
     }
 
-  def CoordToPixel(self, re_inp: ExactInputType, im_inp: ExactInputType) -> tuple[int, int]:
+  @staticmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> ComputationParameters:
+    """Create a ComputationParameters from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from ComputationParameters.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the frame. If the
+          calculated hash does not match, an error is raised.
+
+    Returns:
+      ComputationParameters: A ComputationParameters object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      params = ComputationParameters(  # object creation will check the data is valid and consistent
+        frm=Frame.FromJson(cast('tbase.JSONDict', data['frm'])),  # also checks the data
+        width=int(str(data['width'])),
+        height=int(str(data['height'])),
+        depth=int(str(data['depth'])),
+        set_points=SetHighlightAlgorithm(data['set_points']) if data['set_points'] else None,
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid ComputationParameters JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and params.sha != check_hash:
+      raise Error(f'ComputationParameters {params.sha!r} does not match expected {check_hash!r}')
+    return params
+
+  def CoordToPixel(
+    self, re_inp: ExactInputType, im_inp: ExactInputType
+  ) -> tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]:
     """Convert complex-plane coordinates to pixel coordinates in the image.
 
     Calculate pixel coordinates, with (0, 0) at the top-left corner of the image and
@@ -541,7 +691,8 @@ class ComputationParameters:
       im_inp (ExactInputType): Imaginary part of the complex coordinate.
 
     Returns:
-      tuple[int, int]: The (x, y) pixel coordinates corresponding to the complex coordinate.
+      tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]: The (re, im) complex coordinates and
+          the (x, y) pixel coordinates corresponding to the complex coordinate
 
     Raises:
       Error: If the input coordinates are outside the frame or if the image dimensions are invalid.
@@ -565,9 +716,9 @@ class ComputationParameters:
         (self.frm.top_im - im) / (self.frm.top_im - self.frm.bottom_im) * gmpy2.mpq(self.height)
       )
     )
-    return (min(max(x, 0), self.width - 1), min(max(y, 0), self.height - 1))
+    return ((re, im), (min(max(x, 0), self.width - 1), min(max(y, 0), self.height - 1)))
 
-  def CoordsTupleToPixel(self, inp: str) -> tuple[int, int]:
+  def CoordsTupleToPixel(self, inp: str) -> tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]:
     """Parse a complex-plane tuple coordinates to pixel coordinates in the image.
 
     See CoordToPixel() for more details.
@@ -576,7 +727,8 @@ class ComputationParameters:
       inp (str): A string representing the complex coordinate in the format "(re, im)".
 
     Returns:
-      tuple[int, int]: The (x, y) pixel coordinates corresponding to the complex coordinate
+      tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]: The (re, im) complex coordinates and
+          the (x, y) pixel coordinates corresponding to the complex coordinate
 
     Raises:
       Error: If the input string is not in the correct format or if the coordinates are invalid
