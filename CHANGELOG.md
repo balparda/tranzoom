@@ -31,16 +31,31 @@ This project follows a pragmatic versioning approach:
 - Fixed
   - Placeholder for future changes.
 
-## 1.5.0 - 2026-05-TBD
+## 1.5.0 - 2026-05-24
 
 - Added
-  - TBD
+  - **`SerializingFractalObject` base class** (`frame.py`): new abstract base for fractal objects that serialize to a canonical JSON form with a stable SHA-256 hash (`.json`, `.binary`, `.sha` properties + `FromJson()` static method). `Frame` and `ComputationParameters` now extend it, gaining `.sha` and `.binary`.
+  - **`Frame.FromJson()` and `ComputationParameters.FromJson()`** static deserializers for round-trip JSON ↔ object conversion with optional hash verification.
+  - **`RenderParameters` class** (`image.py`): new `SerializingFractalObject` that encapsulates all rendering parameters — file type, exterior palette, interior (Set) palette, mark coordinates/color/width, and overlay type. Replaces scattered individual arguments in the rendering API.
+  - **`ZoomParameters` class** (`image.py`): new `SerializingFractalObject` for animation planning, encapsulating animation type, computation parameters, render parameters, magnification, frame count, duration, and loop count.
+  - **`ImageOutputConfig` dataclass** (`image.py`): groups output naming and save parameters (path, date flag, hash flag, prefix) into a single runtime-only config object (not part of the DB schema, not hashed).
+  - **`OverlayType` enum** (`image.py`): `GRID` and `CARDINAL` overlay types.
+  - **Fractal database fully implemented** (`frdb.py`): the `FractalDatabase` now stores frames, computation parameters, render parameters, and video/GIF entries, plus path and data-hash indexes for fast lookup. New typed dictionaries: `FrameData`, `ComputationData`, `ImageCoreKey`, `ImageData`, `ZoomData`.
+  - **`CoreComputeImage()` function** (`frdb.py`): new unified rendering primitive that integrates DB lookup/store, fractal computation, image rendering, overlay, and output into a single call.
+  - **Mark options on `tranz zoom`**: `--mark`, `--mark-color`, `--mark-width` moved from `tranz zoom auto` to the shared `tranz zoom` subgroup callback — they now apply to `tranz zoom ai`, `tranz zoom manual`, and `tranz zoom auto`.
+  - New PNG metadata keys for render parameters: `tranzoom:render:mark_re`, `tranzoom:render:mark_im`, `tranzoom:render:mark_color`, `tranzoom:render:mark_width`.
+  - Grid overlay is now always drawn during `tranz zoom ai` and `tranz zoom manual` sessions (no separate flag needed).
 
 - Changed
-  - TBD
+  - **Breaking**: Palette `blue-to-yellow-to-brown` renamed to `sahara`; default exterior palette changed to `sahara`.
+  - **Breaking**: Palette `electric-ocean` renamed to `electric`.
+  - **Breaking**: PNG metadata keys renamed: `tranzoom:image:palette` → `tranzoom:render:palette`; `tranzoom:image:set_palette` → `tranzoom:render:set_palette`; `tranzoom:image:overlay` (bool `"true"`/`"false"`) → `tranzoom:render:overlay` (`OverlayType` value or `"none"`). Images written by older versions will have stale metadata keys when read back by this version.
+  - `MakeImageMeta()` now takes a `RenderParameters` object instead of individual palette/mark/overlay arguments.
+  - Mandelbrot `Frame` objects now reject non-zero `point_re`/`point_im` values; that field is only meaningful for Julia Sets.
+  - All image-generating commands (`tranz image mandel`, `tranz image julia`, `tranz zoom ai`, `tranz zoom manual`, `tranz zoom auto`) now route rendering through `CoreComputeImage()` and the open `FractalDatabase` instance.
 
 - Fixed
-  - TBD
+  - Mark options (`--mark`, `--mark-color`, `--mark-width`) were only available for `tranz zoom auto`; they are now correctly exposed for all `tranz zoom` subcommands via the shared subgroup callback.
 
 ## 1.4.1 - 2026-05-21
 

@@ -180,17 +180,18 @@ Starting with version 1.4.0, tranZoom can render animated GIF and MP4 zoom anima
 
 - **[Frame](#frame-representation)**: A rectangular region of the complex plane, defined by a center + width. Stored as `gmpy2.mpq` (exact rationals) to avoid any accumulation of rounding error in coordinates.
 - **[ComputationParameters](#computation-parameters)**: The complete description of a fractal computation: a `Frame`, pixel image dimensions, iteration depth, and (optionally) an interior Set coloring algorithm. Used as the sole input to all rendering functions.
+- **RenderParameters**: Defines how a finished computation is transformed into an output image — file type, exterior palette, interior (Set) palette, optional crosshair mark (coordinate, color, width), and optional overlay type. Together with `ComputationParameters`, uniquely identifies a rendered PNG.
 - **[Precision](#precision)**: The number of bits of `mpfr` floating-point precision used for escape-time iteration. Computed automatically from the frame geometry, image dimensions, and iteration depth; never needs to be set manually.
 - **Magnification**: Ratio of the default full-set frame area to the current frame area. 1× = full set; 1G× = zoomed in one billion times.
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
 - **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
-- **Color palette**: Six built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette` (global flag). Positions in the palette are determined by histogram equalization of escape-iteration counts, cycling through the stops `3` times across the range, so the full color range is used regardless of zoom depth or iteration scale. Available palettes: `blue-to-yellow-to-brown` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric-ocean` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient), `rgrayscale` (8-stop white-to-black gradient, designed for interior coloring), `grayscale` (8-stop black-to-white gradient).
+- **Color palette**: Six built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette` (global flag). Positions in the palette are determined by histogram equalization of escape-iteration counts, cycling through the stops `3` times across the range, so the full color range is used regardless of zoom depth or iteration scale. Available palettes: `sahara` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient), `rgrayscale` (8-stop white-to-black gradient, designed for interior coloring), `grayscale` (8-stop black-to-white gradient).
 - **Interior (Set) coloring**: By default, interior points (those that never escape, i.e., inside the Mandelbrot/Julia Set) are rendered as pure black. Passing `--set ALGORITHM` enables smooth coloring of those points using a separate `--set-palette` (default `rgrayscale`); supported algorithms: `min` (minimum `|z|` at max depth), `max` (maximum `|z|`), `angle` (angle of `z`), `imaginary` (imaginary-weighted average of `z`). Histogram equalization is applied over the stored values, cycling through the set palette only **once** (no banding). The `rgrayscale` set palette goes white (deep interior, low `|z|`) → black (near boundary, high `|z|`), so the Set boundary is always dark for contrast with the exterior colors. Both flags are global and apply to all `image` and `zoom` commands.
 - **Zoom animation**: The `tranz zoom auto` command renders a straight zoom-in path from a starting frame down to a target magnification and saves it as an animated GIF or MP4 video. Specify any two of `--frames`, `--fps`, and `--duration` to constrain the third. Use `--anim gif` (default) or `--anim mp4` to select the output format.
 - **AI zoom session**: The `tranz zoom ai` command starts an iterative loop: render the current frame, draw a 3×3 thirds grid overlay with green sector labels, send the image to a local LLM vision model, parse the 9-sector scoring response, and move the frame center toward the highest-scoring sector. Supports both Mandelbrot (default) and Julia Set fractals via `-f/--fractal`. The optional `--query` flag enables targeted search, blending fractal-quality scores with target-match scores. The loop runs until Ctrl+C or `--max-steps` is reached.
 - **Manual zoom session**: The `tranz zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM. Supports both Mandelbrot and Julia Set fractals.
 - **Sector scoring**: Each sector is scored on a 0–100 scale for `fractal_score` (visual complexity / zoom promise). When targeted search is active, an additional `target_match_score` (also 0–100) is blended in with a configurable weight.
-- **Image metadata**: All tranZoom PNG images embed rich metadata (`tranzoom:*` PNG text chunks) including frame coordinates, magnification, palette, precision, and (for AI/manual sessions) the full LLM evaluation, model parameters, prompts, and zoom step count.
+- **Image metadata**: All tranZoom PNG images embed rich metadata (`tranzoom:*` PNG text chunks) including frame coordinates, magnification, palette (`tranzoom:render:palette`), precision, and (for AI/manual sessions) the full LLM evaluation, model parameters, prompts, and zoom step count.
 
 #### Frame Representation
 
@@ -334,9 +335,9 @@ With the `--palette` global flag you can pick your color scheme for exterior (es
 
 | Flag Value | Notes |
 | --- | --- |
-| **`"sahara"` (DEFAULT)** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-byb.png) |
+| **`"sahara"` (DEFAULT)** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-sahara.png) |
 | **`"lava"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-lava.png) |
-| **`"electric"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-ocean.png) |
+| **`"electric"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-electric.png) |
 | **`"sunset"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-sunset.png) |
 | **`"rgrayscale"` (DEFAULT for `--set-palette`)** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-rgrayscale.png) |
 | **`"grayscale"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-grayscale.png) |
@@ -371,7 +372,7 @@ Available subgroup / command combinations:
 | `--date`/`--no-date` | Include date-time (`YYYYMMDDhhmmss`) in filename | `--date` |
 | `--hash`/`--no-hash` | Include 20-char SHA256 hash in filename | `--hash` |
 | `--iterm`/`--no-iterm` | Print image inline in iTerm2 (macOS + iTerm2 only) | off |
-| `--palette` | Color palette for exterior (escaped) pixels; one of `blue-to-yellow-to-brown`, `lava`, `electric-ocean`, `sunset`, `rgrayscale`, `grayscale` | `blue-to-yellow-to-brown` |
+| `--palette` | Color palette for exterior (escaped) pixels; one of `sahara`, `lava`, `electric`, `sunset`, `rgrayscale`, `grayscale` | `sahara` |
 | `--set-palette` | Color palette for interior Set points (used only when `--set` is given) | `rgrayscale` |
 | `--set` | Algorithm for interior Set point coloring; one of `min`, `max`, `angle`, `imaginary`; omit to keep interior black | None |
 | `-m`/`--model` | LMStudio vision model identifier to load | `qwen3-vl-32b-instruct@q8_0` |
@@ -410,7 +411,7 @@ tranz [global flags] image [-w W] [-h H] [-s S] [--iter N] [--mark COORD] <mande
 These flags apply to all `tranz zoom` commands and must be placed **between `zoom` and the sub-command name**:
 
 ```sh
-tranz [global flags] zoom [-w W] [-h H] [-s S] [-f FRACTAL] [-n STEPS] [--julia-re RE] [--julia-im IM] <ai|manual|auto> [args]
+tranz [global flags] zoom [-w W] [-h H] [-s S] [-f FRACTAL] [-n STEPS] [--julia-re RE] [--julia-im IM] [--mark COORD] <ai|manual|auto> [args]
 ```
 
 | Flag | Description | Default |
@@ -422,6 +423,9 @@ tranz [global flags] zoom [-w W] [-h H] [-s S] [-f FRACTAL] [-n STEPS] [--julia-
 | `--julia-re` | Real part of the Julia Set constant `c` | `'0.27334'` |
 | `--julia-im` | Imaginary part of the Julia Set constant `c` | `'0.00742'` |
 | `-n`/`--max-steps` | Max zoom steps; `0` = unlimited (Ctrl+C to stop) | `0` |
+| `--mark` | Draw a crosshair at this complex coordinate on every frame, formatted as `"(re, im)"` | None |
+| `--mark-color` | Color of the crosshair; one of `black`, `white`, `red`, `green`, `blue`, `yellow`, `cyan`, `magenta` | `red` |
+| `--mark-width` | Line width of the crosshair (1–50) | `1` |
 
 Palette flags (`--palette`, `--set-palette`, `--set`) are **global flags** (placed before the subgroup name) and apply to all zoom commands as well as image commands.
 
@@ -625,9 +629,8 @@ Command-level options:
 | `--loop` | Number of GIF loops; `0` = infinite (ignored for MP4) | `0` |
 | `--save-frames/--no-save-frames` | Save each intermediate PNG frame to disk | off |
 | `--max-iter` | Override max iterations (depth) | automatic adaptive search |
-| `--mark` | Draw a crosshair at this complex coordinate on every frame | None |
-| `--mark-color` | Crosshair color | `red` |
-| `--mark-width` | Crosshair line width (1–50) | `1` |
+
+Mark options (`--mark`, `--mark-color`, `--mark-width`) are **`tranz zoom` subgroup flags** (see [above](#tranz-zoom-subgroup-flags)) and apply to all zoom commands, including `auto`.
 
 Image size and fractal type are set at the `tranz zoom` subgroup level (see [above](#tranz-zoom-subgroup-flags)); palette flags are global flags.
 
@@ -838,15 +841,16 @@ The CLI respects the `NO_COLOR` environment variable and the `--no-color` / `--c
 | Component | Responsibility |
 | --- | --- |
 | `tranz.py` | `tranz` CLI entry point — global options, `tranz markdown` |
-| `cli/base.py` | Shared CLI options, defaults, `DEFAULT_MANDELBROT_FRAME` |
+| `cli/base.py` | Shared CLI options, defaults, `DEFAULT_MANDELBROT_FRAME`, `ProduceFractalImage()` |
 | `cli/imagecommand.py` | `tranz image mandel`, `tranz image julia`, and `tranz image read` command implementations |
 | `cli/zoomcommand.py` | `tranz zoom ai`, `tranz zoom manual`, and `tranz zoom auto` command implementations |
 | `core/fractal.py` | `Mandelbrot()` and `Julia()` renderers — fractal math |
-| `core/frame.py` | `Frame` class, `ComputationParameters` class, `Fractal` enum, and base coordinate math |
-| `core/image.py` | `Image` class; image utilities, overlays, iTerm2 printing, metadata helpers |
+| `core/frame.py` | `SerializingFractalObject` base class; `Frame` class, `ComputationParameters` class, `Fractal` enum, and base coordinate math |
+| `core/image.py` | `Image` class; `RenderParameters`, `ZoomParameters`, `ImageOutputConfig`; image utilities, overlays, iTerm2 printing, metadata helpers |
 | `core/palette.py` | Palette definitions and color mapping |
 | `core/queries.py` | AI prompt templates and Pydantic models for structured LLM responses |
-| `core/ai.py` | `ZoomLoop()` and `ManualLoop()` — iterative AI and manual zoom session logic |
+| `core/ai.py` | `ZoomLoop()` — iterative AI and manual zoom session logic |
+| `core/frdb.py` | `FractalDatabase` — persistent storage for frames, computations, renders, and video entries; `CoreComputeImage()` unified rendering primitive |
 | `utils/template.py` | Template for new utility modules |
 
 ### Performance characteristics
