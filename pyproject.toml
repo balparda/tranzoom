@@ -118,7 +118,7 @@ pytest = "^9.0"
 pytest-cov = "^7.1"
 pytest-flakefinder = "^1.1"
 pre-commit = "^4.6"
-ruff = "^0.15"
+ruff = "=0.15.13"  # 15.14 has problems with PLW0717 and indentation to solve
 typeguard = "^4.5"
 
 # project-specific dev-only
@@ -199,6 +199,7 @@ ignore = [
   "FBT003",   # allows boolean positional value in function call
   "PLR0913",  # Too many arguments in function definition (N > 5)
   "PLR0917",  # Too many positional arguments (N/5)
+  # "PLW0717",  # Try clause contains too many statements (N>5)
 
   "TRY003",  # Avoid specifying long messages outside the exception class
   "TRY300",  # Consider moving this statement to an `else` block
