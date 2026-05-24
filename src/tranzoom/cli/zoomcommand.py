@@ -29,6 +29,9 @@ _MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the 
 _MAX_TOLERATED_FRAME_MAG_ERROR: float = 0.00002  # 0.002%
 _MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.02  # 2%
 
+# gmpy2.mpq constants
+_MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
+
 
 zoom_app = typer.Typer(
   no_args_is_help=True,
@@ -158,11 +161,19 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
   params: frame.ComputationParameters = frame.ComputationParameters(
     frm=frm, width=width, height=height, set_points=config.set_points
   )
+  # add the mark? parse coordinates early to catch errors before expensive computation
+  mark_coords: tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]] | None = (
+    params.CoordsTupleToPixel(config.mark_coords) if config.mark_coords else None
+  )
   # we have a valid frame, let's start the AI search loop
   render: image.RenderParameters = image.RenderParameters(
     escaped_pal=config.pal,
     set_pal=None if config.set_points is None else config.set_pal,
     overlay=image.OverlayType.GRID,  # always show numbered thirds grid for AI navigation
+    mark_re=_MPQ_ZERO if mark_coords is None else mark_coords[0][0],
+    mark_im=_MPQ_ZERO if mark_coords is None else mark_coords[0][1],
+    mark_color=None if mark_coords is None else config.mark_color,
+    mark_width=config.mark_width,
   )
   out: image.ImageOutputConfig = image.ImageOutputConfig(
     path=config.img_output_path,
@@ -257,11 +268,19 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   params: frame.ComputationParameters = frame.ComputationParameters(
     frm=frm, width=width, height=height, set_points=config.set_points
   )
+  # add the mark? parse coordinates early to catch errors before expensive computation
+  mark_coords: tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]] | None = (
+    params.CoordsTupleToPixel(config.mark_coords) if config.mark_coords else None
+  )
   # we have a valid frame, let's start the manual search loop
   render: image.RenderParameters = image.RenderParameters(
     escaped_pal=config.pal,
     set_pal=None if config.set_points is None else config.set_pal,
     overlay=image.OverlayType.GRID,  # always show numbered thirds grid for manual navigation
+    mark_re=_MPQ_ZERO if mark_coords is None else mark_coords[0][0],
+    mark_im=_MPQ_ZERO if mark_coords is None else mark_coords[0][1],
+    mark_color=None if mark_coords is None else config.mark_color,
+    mark_width=config.mark_width,
   )
   out: image.ImageOutputConfig = image.ImageOutputConfig(
     path=config.img_output_path,
