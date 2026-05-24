@@ -271,7 +271,7 @@ class RenderParameters(frame.SerializingFractalObject):
       raise Error(f'Unknown file type: {self.tp}')
     # check overlay is valid: for now we only allow GRID overlay
     if self.overlay and self.overlay != OverlayType.GRID:
-      raise Error(f'Unknown file type: {self.tp}')
+      raise Error(f'Unknown overlay: {self.overlay}')
     # check palettes are valid
     if self.escaped_pal not in palette.Palette:
       raise Error(f'Unknown escaped palette: {self.escaped_pal}')
