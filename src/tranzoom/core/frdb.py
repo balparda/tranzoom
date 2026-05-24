@@ -432,7 +432,7 @@ def _DBLabel(db: _DBType) -> str:
 
 
 def CoreComputeImage(
-  db: FractalDatabase,
+  db: FractalDatabase,  # noqa: ARG001 (reserved for future DB-backed frame caching)
   params: frame.ComputationParameters,
   render: image.RenderParameters,
   out: image.ImageOutputConfig,

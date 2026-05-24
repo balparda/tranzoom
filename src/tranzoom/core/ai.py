@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import logging
 import pathlib
@@ -127,19 +128,27 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
     print_comm(
       f'[yellow]Loading AI model [bold]{model}[/]...[/] / {timer.TimeStr(zoom_tm)} ({zoom_tm})\n'
     )
-  # start
+  # build AI prompts (skipped in manual mode)
+  setup_query: str = ''
+  image_query: str = ''
+  if not manual:
+    query = query.strip() if query else None
+    setup_query, image_query = queries.BuildImageThirdsPrompts(params.frm, reason, query)
+    logging.debug(f'AI setup query:\n{setup_query}\n')
+  # use LMStudioWorker for AI mode; nullcontext (no-op) for manual mode
+  ai_ctx: contextlib.AbstractContextManager[lms.LMStudioWorker | None] = (
+    lms.LMStudioWorker(timeout=timeout, free_resources=True)
+    if not manual
+    else contextlib.nullcontext()
+  )
   count: int = 1
   try:  # noqa: PLR1702
-    if not manual:
-      # AI-guided mode: build prompts, load model, and run the AI-driven loop
-      setup_query: str
-      image_query: str
-      query = query.strip() if query else None
-      setup_query, image_query = queries.BuildImageThirdsPrompts(params.frm, reason, query)
-      logging.debug(f'AI setup query:\n{setup_query}\n')
-      logging.debug(f'AI image query:\n{image_query}\n')
-      with lms.LMStudioWorker(timeout=timeout, free_resources=True) as worker:
-        model_config: transai_ai.AIModelConfig = worker.LoadModel(
+    with ai_ctx as worker:
+      # load model (skipped in manual mode; worker is None when manual=True)
+      model_config: transai_ai.AIModelConfig | None = None
+      if not manual:
+        assert worker is not None  # noqa: S101 (ai_ctx is LMStudioWorker when not manual)
+        model_config = worker.LoadModel(
           transai_ai.MakeAIModelConfig(
             vision=True,
             model_id=model,
@@ -155,18 +164,23 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
             kv_cache=kv_cache,
           )
         )[0]
-        # main loop: runs until max_steps is reached, or Ctrl+C is pressed
-        json_chat: tbase.JSONDict | None = None
-        img_data: bytes
-        response: queries.ZoomSectorScoring | queries.ZoomSectorCompleteScoring
-        full_path: pathlib.Path
-        count = 0
-        while True:
-          count += 1
-          # render the image for the current frame
-          _img, img_data, _img_hash, full_path = frdb.CoreComputeImage(
-            db, params, render, out, count, zoom_tm, max_threads, iterm, print_comm
-          )
+      # main loop: runs until max_steps is reached, or Ctrl+C is pressed
+      json_chat: tbase.JSONDict | None = None
+      img_data: bytes
+      response: queries.ZoomSectorScoring | queries.ZoomSectorCompleteScoring
+      full_path: pathlib.Path
+      tmr: timer.Timer
+      count = 0
+      while True:
+        count += 1
+        # render the image for the current frame
+        _img, img_data, _img_hash, full_path = frdb.CoreComputeImage(
+          db, params, render, out, count, zoom_tm, max_threads, iterm, print_comm
+        )
+        print_comm('')
+        print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
+        if not manual:
+          assert worker is not None  # noqa: S101 (ai_ctx is LMStudioWorker when not manual)
           # wipe memory of iterations older than memory
           if json_chat is not None:
             messages: list[tbase.JSONDict] = cast('list[tbase.JSONDict]', json_chat['messages'])
@@ -179,8 +193,6 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
                 'messages': [messages[0], *messages[-2 * memory :]]
               }
           # get AI verdict
-          print_comm('')
-          print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
           with timer.Timer(emit_log=False) as tmr:
             response, json_chat = worker.ModelCall(
               model,
@@ -190,89 +202,58 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
               images=[img_data],
               chat_history=json_chat,
             )
-          # save the image, adding the response evaluation as metadata on top of the image
-          full_path.write_bytes(
-            image.AddEvaluationMetaToImage(
-              img_data,
-              response.JSON(),
-              model,
-              temperature,
-              model_config['seed'] or 0,
-              reason,
-              memory,
-              setup_query,
-              image_query,
-              query,
-              count,
-            )
+        else:
+          # get user direction input: accept 1-9 only (numpad layout)
+          direction: int = -1
+          user_input: str = ''
+          with timer.Timer(emit_log=False) as tmr:
+            while not (1 <= direction <= 9):  # noqa: PLR2004
+              try:
+                user_input = input(
+                  'Enter direction to zoom '
+                  '(1-9, like numpad, where 5 is center, 8 is up/North, 6 is right/East, etc.): '
+                ).strip()
+                direction = int(user_input)
+              except ValueError:
+                print_comm(f'[red]Invalid input[/] [bold][yellow]{user_input!r}[/][/]')
+          # build a fake response with the user direction as the "human LLM verdict"
+          response = queries.ZoomSectorScoring(
+            sectors=[
+              queries.SectorEvaluation(
+                sector=i,
+                fractal_score=(100 if i == direction else 0),
+                target_match_score=None,
+              )
+              for i in range(1, 10)
+            ],
           )
-          # implement the move command
-          params = dataclasses.replace(
-            params,
-            frm=_MoveCenter(params.frm, query, response, tmr, target_weight, print_comm),
-          )
-          # stop if we've reached the maximum number of steps
-          if max_steps and count >= max_steps:
-            print_comm('[yellow]Reached maximum zoom step(s), stopping.[/yellow]')
-            break
-    else:
-      # manual mode: no AI model; the user provides direction via keyboard input each step
-      img_data_m: bytes
-      # response never needs the `reason` field because the human is directing
-      response_m: queries.ZoomSectorScoring
-      full_path_m: pathlib.Path
-      count = 0
-      while True:
-        count += 1
-        # render the image for the current frame
-        _img_m, img_data_m, _img_hash_m, full_path_m = frdb.CoreComputeImage(
-          db, params, render, out, count, zoom_tm, max_threads, iterm, print_comm
-        )
-        # get user direction input: accept 1-9 only (numpad layout)
-        print_comm('')
-        print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
-        direction: int = -1
-        user_input: str = ''
-        with timer.Timer(emit_log=False) as tmr_m:
-          while not (1 <= direction <= 9):  # noqa: PLR2004
-            try:
-              user_input = input(
-                'Enter direction to zoom '
-                '(1-9, like numpad, where 5 is center, 8 is up/North, 6 is right/East, etc.): '
-              ).strip()
-              direction = int(user_input)
-            except ValueError:
-              print_comm(f'[red]Invalid input[/] [bold][yellow]{user_input!r}[/][/]')
-        # build a fake response with the user direction as the "human LLM verdict"
-        response_m = queries.ZoomSectorScoring(
-          sectors=[
-            queries.SectorEvaluation(
-              sector=i,
-              fractal_score=(100 if i == direction else 0),
-              target_match_score=None,
-            )
-            for i in range(1, 10)
-          ],
-        )
         # save the image, adding the response evaluation as metadata on top of the image
-        full_path_m.write_bytes(
+        full_path.write_bytes(
           image.AddEvaluationMetaToImage(
-            img_data_m,
-            response_m.JSON(),
-            image.META_LLM_MODEL_VALUE_HUMAN,
-            0.0,  # will be ignored
-            0,  # will be ignored
-            False,  # will be ignored
-            0,  # will be ignored
-            '',  # will be ignored
-            '',  # will be ignored
-            None,  # will be ignored
+            img_data,
+            response.JSON(),
+            model if not manual else image.META_LLM_MODEL_VALUE_HUMAN,
+            temperature if not manual else 0.0,
+            (model_config['seed'] or 0) if model_config is not None else 0,
+            reason if not manual else False,
+            memory if not manual else 0,
+            setup_query if not manual else '',
+            image_query if not manual else '',
+            query if not manual else None,
             count,
           )
         )
         # implement the move command
         params = dataclasses.replace(
-          params, frm=_MoveCenter(params.frm, None, response_m, tmr_m, 0.0, print_comm)
+          params,
+          frm=_MoveCenter(
+            params.frm,
+            query if not manual else None,
+            response,
+            tmr,
+            target_weight if not manual else 0.0,
+            print_comm,
+          ),
         )
         # stop if we've reached the maximum number of steps
         if max_steps and count >= max_steps:
