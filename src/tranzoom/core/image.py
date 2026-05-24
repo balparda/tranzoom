@@ -47,10 +47,14 @@ META_ITER_DEPTH_MAX_KEY = 'tranzoom:image:iter_depth:max'  # int
 META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:image:iter_depth:search'  # int
 META_SET_POINT_MIN_KEY = 'tranzoom:image:set_point:min'  # int
 META_SET_POINT_MAX_KEY = 'tranzoom:image:set_point:max'  # int
-META_IMAGE_PALETTE_KEY = 'tranzoom:image:palette'  # str, like "sunset", one of palette.Palette
-META_IMAGE_SET_PALETTE_KEY = 'tranzoom:image:set_palette'  # str, interior Set palette name
 META_IMAGE_COLOR_SET_KEY = 'tranzoom:image:color_set'  # frame.SetHighlightAlgorithm or "none"
-META_IMAGE_OVERLAY_KEY = 'tranzoom:image:overlay'  # bool; stored as "true"/"false"
+META_RENDER_PALETTE_KEY = 'tranzoom:render:palette'  # str, like "sunset", one of palette.Palette
+META_RENDER_SET_PALETTE_KEY = 'tranzoom:render:set_palette'  # str, interior Set palette name
+META_RENDER_OVERLAY_KEY = 'tranzoom:render:overlay'  # image.OverlayType or "none"
+META_RENDER_MARK_RE_KEY = 'tranzoom:render:mark_re'  # gmpy2.mpq
+META_RENDER_MARK_IM_KEY = 'tranzoom:render:mark_im'  # gmpy2.mpq
+META_RENDER_MARK_COLOR_KEY = 'tranzoom:render:mark_color'  # Color.name.lower() or "none" (=no mark)
+META_RENDER_MARK_WIDTH_KEY = 'tranzoom:render:mark_width'  # int
 META_PIXEL_EXTERIOR_COUNT_KEY = 'tranzoom:image:exterior:pixel_count'  # int; count escaped
 META_PIXEL_INTERIOR_COUNT_KEY = 'tranzoom:image:interior:pixel_count'  # int; count set
 META_PIXEL_EXTERIOR_HISTOGRAM_KEY = 'tranzoom:image:exterior:histogram_summary'  # str
@@ -716,10 +720,14 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
     META_IMAGE_WIDTH_KEY: str(img.size[0]),
     META_IMAGE_HEIGHT_KEY: str(img.size[1]),
     META_IMAGE_HASH_KEY: data_hash,
-    META_IMAGE_PALETTE_KEY: render.escaped_pal.value,
-    META_IMAGE_SET_PALETTE_KEY: render.set_pal.value if render.set_pal else 'none',
     META_IMAGE_COLOR_SET_KEY: str(img.params.set_points.value) if img.params.set_points else 'none',
-    META_IMAGE_OVERLAY_KEY: 'false',  # if it comes from this, it has no overlay
+    META_RENDER_PALETTE_KEY: render.escaped_pal.value,
+    META_RENDER_SET_PALETTE_KEY: render.set_pal.value if render.set_pal else 'none',
+    META_RENDER_OVERLAY_KEY: render.overlay.value if render.overlay else 'none',
+    META_RENDER_MARK_RE_KEY: str(render.mark_re),
+    META_RENDER_MARK_IM_KEY: str(render.mark_im),
+    META_RENDER_MARK_COLOR_KEY: render.mark_color.name.lower() if render.mark_color else 'none',
+    META_RENDER_MARK_WIDTH_KEY: str(render.mark_width),  # int
     # frame
     META_FRACTAL_KEY: frm.fractal.value.lower(),
     # frame as corners
@@ -971,7 +979,7 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
         (x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=Color.GREEN.value, font=font
       )
     # done, save remembering to add metadata that this image has an overlay
-    return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
+    return SaveWithMeta(img)
 
 
 def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
@@ -1020,7 +1028,7 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
           anchor='mm',  # center it exactly
         )
     # done, save remembering to add metadata that this image has an overlay
-    return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
+    return SaveWithMeta(img)
 
 
 def DrawCrossOverlay(
@@ -1059,7 +1067,7 @@ def DrawCrossOverlay(
     draw.line((0, y, w, y), fill=col.value, width=lw)
     draw.line((x, 0, x, h), fill=col.value, width=lw)
     # done, save remembering to add metadata that this image has an overlay
-    return SaveWithMeta(img, extra_meta={META_IMAGE_OVERLAY_KEY: 'true'})
+    return SaveWithMeta(img)
 
 
 def SaveWithMeta(img: PILImage.Image, *, extra_meta: dict[str, str] | None = None) -> bytes:

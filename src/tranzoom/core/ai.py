@@ -115,10 +115,10 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
   zoom_tm: int = timer.Now()
   if manual:
     print_comm(
-      f'Will run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
+      f'Run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
       'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
     )
-    print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})\n')
+    print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})')
   else:
     print_comm(
       f'Run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
@@ -126,7 +126,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
       + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
     )
     print_comm(
-      f'[yellow]Loading AI model [bold]{model}[/]...[/] / {timer.TimeStr(zoom_tm)} ({zoom_tm})\n'
+      f'[yellow]Loading AI model [bold]{model}[/]...[/] / {timer.TimeStr(zoom_tm)} ({zoom_tm})'
     )
   # build AI prompts (skipped in manual mode)
   setup_query: str = ''
@@ -174,10 +174,9 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
       while True:
         count += 1
         # render the image for the current frame
-        _img, img_data, _img_hash, full_path = frdb.CoreComputeImage(
+        _, img_data, _, full_path = frdb.CoreComputeImage(
           db, params, render, out, count, zoom_tm, max_threads, iterm, print_comm
         )
-        print_comm('')
         print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
         if not manual:
           assert worker is not None  # noqa: S101 (ai_ctx is LMStudioWorker when not manual)
@@ -349,7 +348,6 @@ def _MoveCenter(  # noqa: C901
       f'#{sector_eval.sector}/[green]{_DIRECTION_MAP[sector_eval.sector]}[/]: '
       f'{sector_eval.fractal_score}{target_score} - {reason}'
     )
-  print_comm('')
   # build the new frame
   return frame.Frame.FromCenter(
     frm.fractal,

@@ -730,7 +730,7 @@ def ProduceFractalImage(
       frm=frm, width=width, height=height, set_points=config.set_points, depth=config.max_iter
     )
     if config.max_iter
-    else frame.ComputationParameters(
+    else frame.ComputationParameters(  # depth=default, not None
       frm=frm, width=width, height=height, set_points=config.set_points
     )
   )
@@ -753,11 +753,6 @@ def ProduceFractalImage(
     use_hash=config.img_use_hash,
     prefix=config.img_path_prefix or DEFAULT_IMAGE_PREFIX[frm.fractal],
   )
-  # log starting info
-  config.console.print(
-    f'\n{params}, precision ± {params.precision} bits, '  # approx: b/c depth is probably temporary
-    f'10^{frm.magnification[1]:.2f} magnitude...'
-  )
   # compute the image via the unified core primitive
   img: image.Image
   raw_png: bytes
@@ -768,8 +763,8 @@ def ProduceFractalImage(
     params,
     render,
     out,
-    count=add_serial,
-    zoom_tm=tm,
+    add_serial=add_serial,
+    tm=tm,
     max_threads=config.max_threads,
     iterm=config.iterm,
     print_comm=config.console.print,
@@ -777,8 +772,7 @@ def ProduceFractalImage(
   # save the image to disk if requested
   if save_image:
     full_path.write_bytes(raw_png)
-    config.console.print(f'Saved to "{full_path}"')
-  config.console.print()
+    config.console.print(f'Saved to "{full_path}"\n')
   return (img, raw_png, raw_hash, render)
 
 

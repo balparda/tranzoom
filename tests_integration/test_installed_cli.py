@@ -63,6 +63,8 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pa
           '--no-date',  # --no-date makes the filename deterministic (hash-only)
           '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
           tmp_dir,
+          '--db-path',  # make sure DB will be in temp too!
+          tmp_dir,
           '--set',
           'imaginary',
           'image',
@@ -100,8 +102,6 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pa
         'tranzoom:image:animation': 'none',
         'tranzoom:image:width': '1024',
         'tranzoom:image:height': '1024',
-        'tranzoom:image:palette': 'sahara',
-        'tranzoom:image:set_palette': 'rgrayscale',
         'tranzoom:image:color_set': 'imaginary',
         'tranzoom:image:hash': base.SEAHORSE_TAIL_HASH,
         'tranzoom:image:iter_depth:min': '36',
@@ -109,7 +109,6 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pa
         'tranzoom:image:iter_depth:search': '1000',
         'tranzoom:image:set_point:min': '2773383',
         'tranzoom:image:set_point:max': '14144995',
-        'tranzoom:image:overlay': 'false',
         'tranzoom:image:exterior:histogram_summary': (
           "[(36, 10978), (37, 33945), (38, 54459), ('...', 948989), (996, 2), (997, 1), (999, 2)]"
         ),
@@ -129,9 +128,17 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pa
         'tranzoom:image:interior:pixel_count': '200',
         'tranzoom:image:stats:imag_lo': '0.027733821348360696858581004102225914175833148',
         'tranzoom:image:stats:imag_hi': '0.14144994797569664128062592939633699605100723',
+        'tranzoom:render:overlay': 'none',
+        'tranzoom:render:palette': 'sahara',
+        'tranzoom:render:set_palette': 'rgrayscale',
+        'tranzoom:render:mark_color': 'none',
+        'tranzoom:render:mark_re': '0',
+        'tranzoom:render:mark_im': '0',
+        'tranzoom:render:mark_width': '1',
       }
   finally:
-    shutil.rmtree(data_dir)  # remove created data to isolate the next CLI's read step
+    if data_dir.exists():
+      shutil.rmtree(data_dir)  # remove created data to isolate the next CLI's read step
 
 
 def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path) -> None:
@@ -149,9 +156,13 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: path
           '--no-date',  # --no-date makes the filename deterministic (hash-only)
           '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
           tmp_dir,
+          '--db-path',  # make sure DB will be in temp too!
+          tmp_dir,
           'zoom',
           '-s',
           '220',
+          '--mark',
+          '(-5578776469/7500000000,8244620127/62500000000)',
           'auto',
           ' -5578776469/7500000000',
           '8244620127/62500000000',
@@ -192,8 +203,6 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: path
         'tranzoom:image:animation': 'gif',
         'tranzoom:image:width': '220',
         'tranzoom:image:height': '220',
-        'tranzoom:image:palette': 'sahara',
-        'tranzoom:image:set_palette': 'none',
         'tranzoom:image:color_set': 'none',
         'tranzoom:image:hash': base.SEAHORSE_ANIMATED_HASH,
         'tranzoom:image:iter_depth:min': '98',
@@ -201,7 +210,6 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: path
         'tranzoom:image:iter_depth:search': '1423',
         'tranzoom:image:set_point:min': '100000000',
         'tranzoom:image:set_point:max': '100000000',
-        'tranzoom:image:overlay': 'false',
         'tranzoom:image:exterior:histogram_summary': (
           "[(98, 8), (99, 2), (100, 8), ('...', 48376), (1276, 1), (1278, 1), (1336, 1)]"
         ),
@@ -213,6 +221,13 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: path
         'tranzoom:image:interior:histogram_summary': '',
         'tranzoom:image:interior:cumulative_histogram_summary': '',
         'tranzoom:image:interior:pixel_count': '3',
+        'tranzoom:render:overlay': 'none',
+        'tranzoom:render:palette': 'sahara',
+        'tranzoom:render:set_palette': 'none',
+        'tranzoom:render:mark_color': 'red',
+        'tranzoom:render:mark_re': '-5578776469/7500000000',
+        'tranzoom:render:mark_im': '8244620127/62500000000',
+        'tranzoom:render:mark_width': '1',
         'tranzoom:animation:frame:initial_width_re': '73801/100000000',
         'tranzoom:animation:frame:initial_height_im': '73801/100000000',
         'tranzoom:animation:duration': '4.0',
@@ -225,7 +240,8 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path], data_dir: path
         'tranzoom:animation:loop': '0',
       }
   finally:
-    shutil.rmtree(data_dir)  # remove created data to isolate the next CLI's read step
+    if data_dir.exists():
+      shutil.rmtree(data_dir)  # remove created data to isolate the next CLI's read step
 
 
 def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.Path) -> None:
@@ -242,6 +258,8 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.P
           str(cli_paths['tranz']),
           '--no-date',  # --no-date makes the filename deterministic (hash-only)
           '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
+          tmp_dir,
+          '--db-path',  # make sure DB will be in temp too!
           tmp_dir,
           '--set',
           'max',
@@ -290,8 +308,6 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.P
         'tranzoom:image:animation': 'none',
         'tranzoom:image:width': '512',
         'tranzoom:image:height': '377',
-        'tranzoom:image:palette': 'electric',
-        'tranzoom:image:set_palette': 'sunset',
         'tranzoom:image:color_set': 'max',
         'tranzoom:image:hash': base.SUZANA_WAVE_HASH,
         'tranzoom:image:iter_depth:min': '43',
@@ -299,7 +315,6 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.P
         'tranzoom:image:iter_depth:search': '1819',
         'tranzoom:image:set_point:min': '1',
         'tranzoom:image:set_point:max': '100000000',
-        'tranzoom:image:overlay': 'false',
         'tranzoom:image:exterior:histogram_summary': (
           "[(43, 4194), (44, 11633), (45, 10003), ('...', 80877), (1792, 1), (1798, 1), (1813, 1)]"
         ),
@@ -319,6 +334,14 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path], data_dir: pathlib.P
         'tranzoom:image:interior:pixel_count': '86314',
         'tranzoom:image:stats:max_lo': '1.0303269913803812829799720484633954828318221',
         'tranzoom:image:stats:max_hi': '1.274341960143743658549164107217164534985235',
+        'tranzoom:render:overlay': 'none',
+        'tranzoom:render:palette': 'electric',
+        'tranzoom:render:set_palette': 'sunset',
+        'tranzoom:render:mark_color': 'none',
+        'tranzoom:render:mark_re': '0',
+        'tranzoom:render:mark_im': '0',
+        'tranzoom:render:mark_width': '1',
       }
   finally:
-    shutil.rmtree(data_dir)  # remove created data to isolate the next CLI's read step
+    if data_dir.exists():
+      shutil.rmtree(data_dir)  # remove created data to isolate the next CLI's read step

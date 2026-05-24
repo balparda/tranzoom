@@ -66,9 +66,19 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
   max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
   julia_re: str = base.JULIA_RE_OPTION,  # type: ignore[assignment]
   julia_im: str = base.JULIA_IM_OPTION,  # type: ignore[assignment]
+  mark_coords: str | None = base.MARK_COORDINATES_OPTION,  # type: ignore[assignment]
+  mark_color: str = base.MARK_COLOR_OPTION,  # type: ignore[assignment]
+  mark_width: int = base.MARK_WIDTH_OPTION,  # type: ignore[assignment]
 ) -> None:
   # store this command's options in the shared config so all sub-commands can read it
   if ctx.invoked_subcommand is not None and ctx.obj is not None:
+    # check color so it won't raise plain KeyError
+    col: str = mark_color.strip().upper()
+    if col not in image.Color.__members__:
+      raise base.UsageError(
+        f'Invalid mark color {mark_color!r}; available colors: '
+        + ', '.join(sorted(repr(c.name.lower()) for c in image.Color))
+      )
     ctx.obj = dataclasses.replace(
       ctx.obj,
       fractal_type=fractal_type,
@@ -78,6 +88,9 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
       max_steps=max_steps,
       julia_re=julia_re,
       julia_im=julia_im,
+      mark_coords=mark_coords,
+      mark_color=image.Color[col],
+      mark_width=mark_width,
     )
 
 
@@ -299,26 +312,10 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   fps: float | None = base.ANIM_FPS_OPTION,  # type: ignore[assignment]
   loop: int = base.ANIM_LOOP_OPTION,  # type: ignore[assignment]
   max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
-  mark_coords: str | None = base.MARK_COORDINATES_OPTION,  # type: ignore[assignment]
-  mark_color: str = base.MARK_COLOR_OPTION,  # type: ignore[assignment]
-  mark_width: int = base.MARK_WIDTH_OPTION,  # type: ignore[assignment]
   save_frames: bool = base.ANIM_SAVE_FRAMES_OPTION,  # type: ignore[assignment]
 ) -> None:
   # we intend passing config, so we add the options here...
-  # check color so it won't raise plain KeyError
-  col: str = mark_color.strip().upper()
-  if col not in image.Color.__members__:
-    raise base.UsageError(
-      f'Invalid mark color {mark_color!r}; available colors: '
-      + ', '.join(sorted(repr(c.name.lower()) for c in image.Color))
-    )
-  ctx.obj = dataclasses.replace(
-    ctx.obj,
-    max_iter=max_iter,
-    mark_coords=mark_coords,
-    mark_color=image.Color[col],
-    mark_width=mark_width,
-  )
+  ctx.obj = dataclasses.replace(ctx.obj, max_iter=max_iter)
   config: base.TranZoomConfig = ctx.obj
   timestamp: int = timer.Now()
   # check sanity, create frame, and print info about the image we're going to generate
@@ -390,10 +387,9 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   with config.OpenDB() as db:
     # log; log errors
     config.console.print(
-      f'\nProducing {width}x{height} 10^{dest_magnification_10:.2f} magnification zoom animation, '
+      f'\nZOOM: {width}x{height} 10^{dest_magnification_10:.2f} magnitude animation, '
       f'{human.HumanizedSeconds(duration)} long, at {fps:.2f} FPS, '
-      f'with {frames} frames, {100.0 * scalar_magnification_per_step:.2f}% per step, '
-      f'final magnification error {float(gmpy2.mpfr(100.0) * mag_error):.4f}%...\n'
+      f'with {frames} frames, {100.0 * scalar_magnification_per_step:.2f}% per step...\n'
     )
     if scalar_magnification_per_step >= image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
       config.console.print(
@@ -472,7 +468,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     else:
       raise base.UsageError(f'Unsupported animation type: {anim_type}')
     # done
-    config.console.print(f'\nSuccess: {anim_type.value.upper()} {video_hash!r} in {tmr}')
+    config.console.print(f'Success: {anim_type.value.upper()} {video_hash!r} in {tmr}')
     config.console.print(f'Saved {anim_type.value.upper()} to "{video_path}"\n')
     # iterm
     if config.iterm and anim_type != image.AnimationType.MP4:  # iTerm2 does not support MP4

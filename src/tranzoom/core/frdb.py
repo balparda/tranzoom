@@ -131,7 +131,7 @@ class ImageData(TypedDict):
   core: ImageCoreKey  # we nest the core data
 
   # CACHE
-  data_hash: str  # hash of the image PNG data
+  data_hash: str  # hash of the image PNG data - BEWARE: this hash is POST-render but PRE-overlay!!
   tm: int | None  # timestamp of rendered image creation; None if not saved
   rendered_path: str | None  # path to image PNG file; None if not saved
 
@@ -191,11 +191,13 @@ class _DBType(TypedDict):
   renders: dict[str, tbase.JSONDict]  # {render_hash: image.RenderParameters.json}
   videos: dict[str, ZoomData]  # {video_hash: ZoomData}, video_hash is the ZoomData.sha hash!
 
-  # suggested indexes:
-  images_idx: dict[str, ImageCoreKey]  # {data_hash: ImageCoreKey}
-  videos_idx: dict[str, str]  # {data_hash: video_hash}
-  img_paths_idx: dict[str, str]  # {img_path: data_hash} for easy lookup of PNG image paths
+  # path indexes: from known image/video on-disk paths -> core data key entries
+  img_paths_idx: dict[str, ImageCoreKey]  # {img_path: ImageCoreKey} for easy lookup of PNG paths
   video_paths_idx: dict[str, str]  # {video_path: video_hash} for easy lookup of GIF/video paths
+
+  # data_hash indexes: since the hash is PRE-overlay, we might have multiple obj with the same hash
+  images_idx: dict[str, list[ImageCoreKey]]  # {data_hash: [im1, im2, ...]}
+  videos_idx: dict[str, list[str]]  # {data_hash: [video_hash1, video_hash2, ...]}
 
 
 def _DBTypeFactory(overrides: dict[str, object] | None = None) -> _DBType:
@@ -436,8 +438,8 @@ def CoreComputeImage(
   params: frame.ComputationParameters,
   render: image.RenderParameters,
   out: image.ImageOutputConfig,
-  count: int | None,
-  zoom_tm: int | None,
+  add_serial: int | None,
+  tm: int | None,
   max_threads: int | None,
   iterm: bool,
   print_comm: abc.Callable[[str], None],
@@ -460,9 +462,9 @@ def CoreComputeImage(
         crosshair mark (mark_color not None means draw a crosshair), and optional sector overlay
         (overlay not None means draw the numbered sector grid).
     out (image.ImageOutputConfig): Output path configuration for building the file name.
-    count (int | None): Optional serial number for the file name (zoom step numbering);
+    add_serial (int | None): Optional serial number for the file name (zoom step numbering);
         None means no serial number is added.
-    zoom_tm (int | None): Optional fixed timestamp for the file name (zoom session consistency);
+    tm (int | None): Optional fixed timestamp for the file name (zoom session consistency);
         None means the current wall-clock time is used.
     max_threads (int | None): Maximum threads for parallel rendering; None means all CPUs.
     iterm (bool): If True, print the image inline in iTerm2 after rendering.
@@ -479,13 +481,26 @@ def CoreComputeImage(
     Error: on error
 
   """
+  if (render.set_pal is not None and params.set_points is None) or (
+    render.set_pal is None and params.set_points is not None
+  ):
+    raise Error('Cannot specify set_pal without set_points; set_points is required to use set_pal')
   # render the image for the current frame
   img_data: bytes
   img_hash: str
   img: image.Image
+  # log
+  set_param: str = '' if params.set_points is None else f' w/ SET {params.set_points.value!r}'
+  print_comm(
+    f'\n{params.width}x{params.height} {render.escaped_pal.value!r} '
+    f'{params.frm.fractal.value.capitalize()}{set_param}, '
+    f'10^{params.frm.magnification[1]:.3f} magnitude...'
+  )
+  print_comm(str(params))
+  print_comm('')
   with timer.Timer(emit_log=False) as tmr:
-    img = fractal.ComputeFractal(
-      params,
+    params, img = fractal.ComputeFractal(
+      params,  # remember that this params will be updated with the actual depth now!
       progress_bar=True,
       n_processes=max_threads,
       print_comm=print_comm,
@@ -495,11 +510,16 @@ def CoreComputeImage(
     # draw crosshair mark if specified in render parameters
     if render.mark_color is not None:
       _, mark_pixel = params.CoordToPixel(render.mark_re, render.mark_im)
+      print_comm(
+        f'Marking coordinate ({render.mark_re}, {render.mark_im}) with '
+        f'{render.mark_color.name.lower()!r} crosshair @{mark_pixel}/{render.mark_width}px'
+      )
       img_data = image.DrawCrossOverlay(
         img_data, *mark_pixel, col=render.mark_color, lw=render.mark_width
       )
     # draw the numbered sector grid overlay if requested (e.g., for AI/manual zoom navigation)
     if render.overlay is not None:
+      print_comm(f'Adding {render.overlay.value!r} overlay')
       if render.overlay == image.OverlayType.GRID:
         img_data = image.DrawThirdsInfoOverlay(img_data)
       else:
@@ -511,17 +531,16 @@ def CoreComputeImage(
     out.use_hash,
     out.prefix,
     img_hash,
-    tm=zoom_tm,
-    add_serial=count,
+    tm=tm,
+    add_serial=add_serial,
   )
   # log
   print_comm(
-    f'\n{img.params}, precision {img.params.precision} bits, '
-    f'10^{img.params.frm.magnification[1]:.2f} magnitude\n'
-    f'{img_hash!r} in {tmr}, will save as "{full_path}"'
+    f'{render.tp.value.upper()}: {img_hash!r}, precision {params.precision} bits, in {tmr}'
   )
   # print inline in iTerm2 if requested
   if iterm:
     print_comm('')
     image.PrintITerm2(img_data)
+  print_comm('')
   return (img, img_data, img_hash, full_path)

@@ -49,7 +49,7 @@ def ComputeFractal(
   progress_bar: bool = True,
   n_processes: int | None = None,
   print_comm: abc.Callable[[str], None] = print,
-) -> image.Image:
+) -> tuple[frame.ComputationParameters, image.Image]:
   """Render the Mandelbrot frame rectangle to an Image.
 
   Args:
@@ -60,7 +60,8 @@ def ComputeFractal(
     print_comm (Callable[[str], None], optional): A callable to print messages. Defaults to print.
 
   Returns:
-    image.Image: The rendered fractal image.
+    tuple[frame.ComputationParameters, image.Image]: A tuple containing the updated
+        computation parameters and the rendered fractal image.
 
   Raises:
     Error: on error
@@ -142,7 +143,7 @@ def ComputeFractal(
   if img.stats is None and stats is not None:
     img.stats = stats
   # all copied, so we can return the final image
-  return img
+  return (params, img)
 
 
 def _FractalAdaptiveIterations(
@@ -195,7 +196,7 @@ def _FractalAdaptiveIterations(
       progress_bar=progress_bar,
       n_processes=n_processes,
       print_comm=print_comm,
-    )
+    )[1]  # we only need the image, not the updated params, from this test render
     # estimate the needed iterations for the full image based on the smallest image;
     # make the histogram of escape iterations for the smallest image, and find the highest escape
     escape_histogram: dict[int, int] = {}
