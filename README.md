@@ -334,12 +334,12 @@ With the `--palette` global flag you can pick your color scheme for exterior (es
 
 | Flag Value | Notes |
 | --- | --- |
-| **`"blue-to-yellow-to-brown"` (DEFAULT)** | Classic 16-stop gradient |
-| **`"lava"`** | 16-stop volcanic gradient |
-| **`"electric-ocean"`** | 32-stop abyss-to-magenta-to-lavender gradient |
-| **`"sunset"`** | 32-stop indigo-to-amber-to-wine gradient |
-| **`"rgrayscale"` (DEFAULT for `--set-palette`)** | 8-stop white-to-black gradient; white=deep interior, black=near boundary; designed for interior Set-point coloring; cycles once |
-| **`"grayscale"`** | 8-stop black-to-white gradient; black=deep interior, white=near boundary; reverse of `rgrayscale`; cycles once |
+| **`"sahara"` (DEFAULT)** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-byb.png) |
+| **`"lava"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-lava.png) |
+| **`"electric"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-ocean.png) |
+| **`"sunset"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-sunset.png) |
+| **`"rgrayscale"` (DEFAULT for `--set-palette`)** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-rgrayscale.png) |
+| **`"grayscale"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-grayscale.png) |
 
 ### Command structure
 

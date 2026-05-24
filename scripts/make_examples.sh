@@ -28,10 +28,12 @@ poetry run tranz --set imaginary --palette "rgrayscale" --set-palette "lava" --n
 poetry run tranz --no-date --no-hash --prefix "demo-mandel-seahorse" -o tests/data/images image mandel " -0.74303" "0.126433" "0.01611"
 
 # Render Seahorse Tail all palettes (but original is above, already done)
-poetry run tranz --set imaginary --no-date --no-hash --prefix "demo-mandel-seahorse-tail-byb" -o tests/data/images --palette "blue-to-yellow-to-brown" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
-poetry run tranz --set imaginary --no-date --no-hash --prefix "demo-mandel-seahorse-tail-lava" -o tests/data/images --palette "lava" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
-poetry run tranz --set imaginary --no-date --no-hash --prefix "demo-mandel-seahorse-tail-ocean" -o tests/data/images --palette "electric-ocean" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
-poetry run tranz --set imaginary --no-date --no-hash --prefix "demo-mandel-seahorse-tail-sunset" -o tests/data/images --palette "sunset" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
+poetry run tranz --no-date --no-hash --prefix "demo-mandel-seahorse-tail-sahara" -o tests/data/images --palette "sahara" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
+poetry run tranz --no-date --no-hash --prefix "demo-mandel-seahorse-tail-lava" -o tests/data/images --palette "lava" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
+poetry run tranz --no-date --no-hash --prefix "demo-mandel-seahorse-tail-electric" -o tests/data/images --palette "electric" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
+poetry run tranz --no-date --no-hash --prefix "demo-mandel-seahorse-tail-sunset" -o tests/data/images --palette "sunset" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
+poetry run tranz --no-date --no-hash --prefix "demo-mandel-seahorse-tail-rgrayscale" -o tests/data/images --palette "rgrayscale" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
+poetry run tranz --no-date --no-hash --prefix "demo-mandel-seahorse-tail-grayscale" -o tests/data/images --palette "grayscale" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
 
 # Render Animated Seahorse Tail video
 poetry run tranz --no-date --no-hash --prefix "demo-mandel-seahorse-tail-video" -o tests/data/images zoom -s 512 auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4 --anim mp4

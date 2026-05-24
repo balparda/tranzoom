@@ -10,15 +10,15 @@ import enum
 class Palette(enum.Enum):
   """Palette enum."""
 
-  BYB = 'blue-to-yellow-to-brown'
+  SAHARA = 'sahara'
   LAVA = 'lava'
-  OCEAN = 'electric-ocean'
+  ELECTRIC = 'electric'
   SUNSET = 'sunset'
   GRAYSCALE = 'grayscale'
   GRAYSCALE_REVERSE = 'rgrayscale'
 
 
-DEFAULT_PALETTE: Palette = Palette.BYB
+DEFAULT_PALETTE: Palette = Palette.SAHARA
 DEFAULT_SET_PALETTE: Palette = Palette.GRAYSCALE_REVERSE  # used for interior (set) points coloring
 
 # how many times to cycle through the palette across the histogram-equalized range;
@@ -33,7 +33,7 @@ SET_PALETTE_CYCLES: int = 1
 # escape-iteration range. Any number of stops is supported.
 PALETTES: dict[Palette, tuple[tuple[int, int, int], ...]] = {
   # Classic 16-stop blue-to-yellow-to-brown gradient (original Mandelbrot color scheme)
-  Palette.BYB: (
+  Palette.SAHARA: (
     (66, 30, 15),  # dark reddish-brown
     (25, 7, 26),  # dark violet
     (9, 1, 47),  # dark blue
@@ -71,7 +71,7 @@ PALETTES: dict[Palette, tuple[tuple[int, int, int], ...]] = {
     (100, 25, 5),  # dark ember (cycling back)
   ),
   # 32-stop electric ocean: abyss → cyan → seafoam → deep violet → magenta → lavender
-  Palette.OCEAN: (
+  Palette.ELECTRIC: (
     (0, 5, 30),  # abyss (nearly black navy)
     (0, 15, 65),  # deep navy
     (0, 35, 105),  # dark ocean blue
