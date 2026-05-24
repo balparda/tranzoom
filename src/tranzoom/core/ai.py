@@ -174,8 +174,8 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
       while True:
         count += 1
         # render the image for the current frame
-        _, img_data, _, full_path = frdb.CoreComputeImage(
-          db, params, render, out, count, zoom_tm, max_threads, iterm, print_comm
+        _, img_data, _, full_path = db.CoreComputeImage(
+          params, render, out, count, zoom_tm, max_threads, iterm, print_comm
         )
         print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
         if not manual:
