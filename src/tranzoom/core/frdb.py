@@ -26,6 +26,10 @@ _DB_COMPRESS_LEVEL = 5  # default compression level for DB saving
 _IMG_DATA_COMPRESS_LEVEL = 13  # default compression level for image data saving
 _DB_DISK_LOCK: threading.Lock = threading.Lock()  # lock for thread-safe DB operations
 
+ExistingPathsFilter: abc.Callable[[list[str]], list[str]] = lambda lp: [
+  p for p in lp if pathlib.Path(p).exists()
+]
+
 _PicklePrettyJSON: abc.Callable[[tbase.JSONDict], bytes] = lambda d: json.dumps(
   d, indent=2, separators=(',', ': ')
 ).encode('utf-8')
@@ -124,7 +128,7 @@ class ImageData(TypedDict):
     data_hash (str): (CACHE) hash of the image PNG data; if we have this entry,
         we must have the hash!
     tm (int): (CACHE) timestamp of rendered image last creation
-    rendered_path (str | None): (CACHE) path to image PNG file; None if not saved
+    rendered_paths (list[str]): (CACHE) paths to renders of this image PNG; presumably identical
 
   Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
   Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
@@ -137,7 +141,7 @@ class ImageData(TypedDict):
   # CACHE
   data_hash: str  # hash of the image PNG data - BEWARE: this hash is POST-render but PRE-overlay!!
   tm: int  # timestamp of last time this image was rendered; if we have data_hash, we must have tm
-  rendered_path: str | None  # path to image PNG file; None if not saved (actual path on disk)
+  rendered_paths: list[str]  # paths to image PNG files; empty if not saved (actual path on disk)
 
 
 class ZoomData(TypedDict):
@@ -586,7 +590,7 @@ class FractalDatabase:
       raise Error(f'Inconsistent DB: frame_hash {frm_hash!r} not found in DB frames; Report bug!')
     frm: FrameData = self._db['frames'][frm_hash]
     cp_hash: str = params.sha
-    if cp_hash not in self._db['cps']:
+    if cp_hash not in self._db['cps'] or cp_hash not in frm['cps']:
       raise Error(f'Inconsistent DB: cp_hash {cp_hash!r} not found in DB cps; Report bug!')
     cp: ComputationData = frm['cps'][cp_hash]
     # add render
@@ -596,20 +600,24 @@ class FractalDatabase:
     img: ImageData
     if render_hash in cp['renders']:
       img = cp['renders'][render_hash]
-      cp['tm'] = timer.Now()  # always update timestamp
-      cp['raw_data_path'] = path  # always update path to latest render data
+      img['tm'] = timer.Now()  # always update timestamp
+      existing: list[str] = ExistingPathsFilter(img['rendered_paths'])
+      # BEWARE: path not saved yet! (so not existing) but we could be re-rendering to the same path
+      img['rendered_paths'] = existing if path in existing else [*existing, path]
     else:
       img = ImageData(
         core=ck,
         data_hash=img_hash,
         tm=timer.Now(),
-        rendered_path=path,
+        rendered_paths=[path],
       )
       cp['renders'][render_hash] = img
     # add path index
     self._db['img_paths_idx'][path] = ck
     # add hash index
-    self._db['images_idx'].setdefault(img_hash, []).append(ck)
+    idx_list: list[ImageCoreKey] = self._db['images_idx'].setdefault(img_hash, [])
+    if ck not in idx_list:
+      idx_list.append(ck)
     # return the new ImageData
     return img
 
@@ -716,11 +724,9 @@ class FractalDatabase:
     if render_data is not None:
       # we have done a render with these parameters before
       path: pathlib.Path
-      if (
-        render_data['rendered_path'] is not None
-        and (path := pathlib.Path(render_data['rendered_path'])).exists()
-      ):
+      if paths := ExistingPathsFilter(render_data['rendered_paths']):
         # best case: we have the image PNG on disk already
+        path = pathlib.Path(paths[0])  # take the first existing path, we know we have at least one
         print_comm(
           f'[red]DB render[/], {render_data["data_hash"]!r}@{timer.TimeStr(render_data["tm"])} '
           f'-> "{path}"'
@@ -731,8 +737,8 @@ class FractalDatabase:
           if not require_img_obj or (require_img_obj and img is not None):
             # we can end this: we have the image PNG on disk and img is as good as necessary
             return (img, img_data, img_hash, full_path(img_hash))
-      # if we got here, we have the render parameters but not the image on disk
-      if render_data['rendered_path'] is None:
+      else:
+        # if we got here, we have the render parameters but no existing image on disk
         print_comm(
           f'[red]DB render[/], {render_data["data_hash"]!r}@{timer.TimeStr(render_data["tm"])} '
           f'-> [red]no disk[/]'
