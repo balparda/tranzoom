@@ -58,14 +58,6 @@ META_RENDER_MARK_COLOR_KEY = 'tranzoom:render:mark_color'  # Color.name.lower() 
 META_RENDER_MARK_WIDTH_KEY = 'tranzoom:render:mark_width'  # int
 META_PIXEL_EXTERIOR_COUNT_KEY = 'tranzoom:image:exterior:pixel_count'  # int; count escaped
 META_PIXEL_INTERIOR_COUNT_KEY = 'tranzoom:image:interior:pixel_count'  # int; count set
-META_PIXEL_EXTERIOR_HISTOGRAM_KEY = 'tranzoom:image:exterior:histogram_summary'  # str
-META_PIXEL_INTERIOR_HISTOGRAM_KEY = 'tranzoom:image:interior:histogram_summary'  # str; can be ""!
-META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
-  'tranzoom:image:exterior:cumulative_histogram_summary'  # str
-)
-META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
-  'tranzoom:image:interior:cumulative_histogram_summary'  # str; can be ""!
-)
 META_IMAGE_STATS_MAX_LO_KEY = 'tranzoom:image:stats:max_lo'  # gmpy2.mpfr
 META_IMAGE_STATS_MAX_HI_KEY = 'tranzoom:image:stats:max_hi'  # gmpy2.mpfr
 META_IMAGE_STATS_MIN_LO_KEY = 'tranzoom:image:stats:min_lo'  # gmpy2.mpfr
@@ -86,6 +78,16 @@ META_HEIGHT_IM_KEY = 'tranzoom:frame:height_im'  # gmpy2.mpq
 META_PRECISION_KEY = 'tranzoom:frame:precision'  # int, in bits
 META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'  # float
 # extra keys added to some images only
+# images with exterior points (almost all!)
+META_PIXEL_EXTERIOR_HISTOGRAM_KEY = 'tranzoom:image:exterior:histogram_summary'  # str
+META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
+  'tranzoom:image:exterior:cumulative_histogram_summary'  # str
+)
+# images with interior points and a Set palette (so we have interior histograms)
+META_PIXEL_INTERIOR_HISTOGRAM_KEY = 'tranzoom:image:interior:histogram_summary'  # str; can be ""!
+META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
+  'tranzoom:image:interior:cumulative_histogram_summary'  # str; can be ""!
+)
 # Julia extra keys
 META_JULIA_RE_KEY = 'tranzoom:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
 META_JULIA_IM_KEY = 'tranzoom:frame:julia_im'  # gmpy2.mpq, only added for Julia Set frames
@@ -520,18 +522,38 @@ class Image:
   """A fractal image. Encapsulates the image operations.
 
   Attributes:
-    escape (ImageInt32Array): An array storing the escape iteration for each pixel;
+    escape (ImageInt32Array): An array storing the escape data for each pixel;
         this is not the color, but the raw data that will be converted to color later;
-        the length of this array is equal to the total number of pixels in the image.
-        You are encouraged to use the SetEscape() method to set the escape iterations,
-        but for hot paths you can also set the escape iterations directly in the array,
-        remembering that the pixel at coordinates (x, y) is stored at index (y * width + x)
-        in the array.
+        the length of this array is equal to the total number of pixels in the image;
+        the pixel at coordinates (x, y) is stored at index (y * width + x) in the array.
     stats (FractalStats | None): Optional stats about the fractal, collected during rendering;
         DO NOT COUNT on this being present unless this was a sample 16.16 render
         (see fractal._FractalAdaptiveIterations) where the stats are collected
 
   """
+
+  @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+  class Histogram:
+    """Stores a histogram for a part of an image (usually set points and escaped points).
+
+    Attributes:
+      count (int): The total count of pixels in this histogram
+      min_value (int): The minimum int value in this histogram
+      max_value (int): The maximum int value in this histogram
+      linear (list[tuple[int, int]]): A sorted list of (value, count) pairs representing the
+          histogram of int values in this category, sorted by value.
+      cumulative (list[tuple[int, int]]): A sorted list of (value, cumulative_count) pairs
+          representing the cumulative int histogram, sorted by value.
+
+    """
+
+    count: int
+    min_value: int
+    max_value: int
+    linear: list[tuple[int, int]]  # sorted!
+    d_linear: dict[int, int]  # {value: count}, for O(1) lookups
+    cumulative: list[tuple[int, int]]  # sorted!
+    d_cumulative: dict[int, int]  # {value: cumulative_count}, for O(1) lookups
 
   def __init__(self, params: frame.ComputationParameters) -> None:
     """Construct image.
@@ -547,39 +569,33 @@ class Image:
     self._params: frame.ComputationParameters = params
     # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
     self.escape: ImageInt32Array = array.array(  # signed32
-      'i', (0 for _ in range(self._params.width * self._params.height))
+      'L', (0 for _ in range(self._params.width * self._params.height))
     )
-    if self.escape.itemsize != frame.N_BYTES_UINT:
+    if self.escape.itemsize != 8:  # frame.N_BYTES_UINT:
       raise Error(f'unsupported platform: array of unsigned ints is not {frame.N_BYTES_UINT} bytes')
     self.stats: FractalStats | None = None  # may be set later by the fractal rendering function
+    # histogram of escaped points
+    self.ext_hist: Image.Histogram | None = None  # set later by calling RebuildHistograms
+    # histogram of interior (Set) points; flipped, i.e., positive values
+    self.int_hist: Image.Histogram | None = None  # set later by calling RebuildHistograms
 
-  def SetEscape(self, x: int, y: int, escaped_at: int) -> None:
-    """Set the escape iteration for a given pixel.
+  # def SetEscape(self, x: int, y: int, escaped_at: int) -> None:
+  #   """Set the escape iteration for a given pixel.
 
-    Args:
-      x (int): The x coordinate of the pixel.
-      y (int): The y coordinate of the pixel.
-      escaped_at (int): The escape iteration to set for the pixel.
+  #   Args:
+  #     x (int): The x coordinate of the pixel.
+  #     y (int): The y coordinate of the pixel.
+  #     escaped_at (int): The escape iteration to set for the pixel.
 
-    Raises:
-      Error: if the pixel coordinates are out of bounds
+  #   Raises:
+  #     Error: if the pixel coordinates are out of bounds
 
-    """
-    if not (0 <= x < self._params.width) or not (0 <= y < self._params.height):
-      raise Error(
-        f'Coordinates out of bounds: {x=}, {y=}, {self._params.width=}, {self._params.height=}'
-      )
-    self.escape[y * self._params.width + x] = escaped_at
-
-  @property
-  def size(self) -> tuple[int, int]:
-    """Get the size of the image as (width, height).
-
-    Returns:
-      tuple[int, int]: The size of the image.
-
-    """
-    return (self._params.width, self._params.height)
+  #   """
+  #   if not (0 <= x < self._params.width) or not (0 <= y < self._params.height):
+  #     raise Error(
+  #       f'Coordinates out of bounds: {x=}, {y=}, {self._params.width=}, {self._params.height=}'
+  #     )
+  #   self.escape[y * self._params.width + x] = escaped_at
 
   @property
   def params(self) -> frame.ComputationParameters:
@@ -591,24 +607,38 @@ class Image:
     """
     return self._params
 
-  @property
-  def escape_range(self) -> tuple[int, int, int, int]:
-    """Get the range of escape iterations and the range of the internal stored values.
+  # @property
+  # def escape_range(self) -> tuple[int, int, int, int]:
+  #   """Get the range of escape iterations and the range of the internal stored values.
 
-    The internal values map to different things depending on how they were computed.
+  #   The internal values map to different things depending on how they were computed.
 
-    Returns:
-      tuple[int, int, int, int]: (min_escape, max_escape, min_internal, max_internal)
+  #   Returns:
+  #     tuple[int, int, int, int]: (min_escape, max_escape, min_internal, max_internal)
 
-    """
-    exterior_points: list[int] = [e for e in self.escape if e >= 0]
-    interior_points: list[int] = [e for e in self.escape if e < 0]
-    return (
-      min(exterior_points) if exterior_points else 0,
-      self._params.depth if interior_points else (max(exterior_points) if exterior_points else 0),
-      -max(interior_points) if interior_points else 0,
-      -min(interior_points) if interior_points else 0,
-    )
+  #   """
+  #   exterior_points: list[int] = [e for e in self.escape if e >= 0]
+  #   interior_points: list[int] = [e for e in self.escape if e < 0]
+  #   return (
+  #     min(exterior_points) if exterior_points else 0,
+  #     self._params.depth if interior_points else (max(exterior_points) if exterior_points else 0),
+  #     -max(interior_points) if interior_points else 0,
+  #     -min(interior_points) if interior_points else 0,
+  #   )
+
+  def RebuildHistograms(self) -> None:
+    # for efficiency, try to go over only once
+    exterior_points: list[int] = []
+    interior_points: list[int] = []
+    for enc_px in self.escape:
+      px: int = Decode64ToIntFloat(enc_px)[0]
+      if px >= 0:
+        exterior_points.append(px)
+      else:
+        interior_points.append(-px)  # we flip the sign for interior points!
+    # have 2 groups of pixels
+    self.ext_hist = BuildCumulative(exterior_points)  # ext generator
+    self.int_hist = BuildCumulative(interior_points)  # int generator
 
   def AsPixels(self, render: RenderParameters) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
@@ -633,31 +663,28 @@ class Image:
       Error: on error
 
     """
-    # step 1: build cumulative histogram for exterior pixels (escaped, 0 <= e < depth)
-    min_escape: int
-    max_escape: int
-    total_exterior: int
-    cumulative: dict[int, int]
-    min_escape, max_escape, _, _ = self.escape_range
-    if min_escape < 0 or self._params.depth < max_escape:
-      raise Error(f'Invalid/Inconsistent {min_escape=} or {self._params.depth=} < {max_escape=}')
-    _, cumulative, total_exterior = BuildCumulative([e for e in self.escape if e >= 0])
-    # step 2: optionally build cumulative histogram for interior/Set pixels (escaped_at < 0);
-    # interior points store -|z| magnitude, so we flip the sign for the histogram key
-    set_cumulative: dict[int, int] = {}
-    total_set: int = 0
-    if self._params.set_points:
-      _, set_cumulative, total_set = BuildCumulative([-e for e in self.escape if e < 0])
+    # populate histograms if not done yet
+    if not self.ext_hist or not self.int_hist:
+      self.RebuildHistograms()  # this will populate self.ext_hist and self.int_hist
+    if not self.ext_hist or not self.int_hist:
+      raise Error('Failed to build histograms for image')
+    # check basic consistency
+    if self.ext_hist.min_value < 0 or self._params.depth < self.ext_hist.max_value:
+      raise Error(
+        f'Invalid/Inconsistent {self.ext_hist.min_value=} or '
+        f'{self._params.depth=} < {self.ext_hist.max_value=}'
+      )
     # step 3: map each pixel to an RGB color
     pixels = bytearray(self._params.width * self._params.height * 3)
-    for i, escaped_at in enumerate(self.escape):
-      if escaped_at >= 0 and total_exterior > 0:
+    for i, enc_escaped_at in enumerate(self.escape):
+      escaped_at: int = Decode64ToIntFloat(enc_escaped_at)[0]
+      if escaped_at >= 0 and self.ext_hist.count > 0:
         # exterior point: histogram-equalized position in pal
-        t: float = (cumulative[escaped_at] - 1) / total_exterior
+        t: float = (self.ext_hist.d_cumulative[escaped_at] - 1) / self.ext_hist.count
         rgb: tuple[int, int, int] = PixelPalette(t, render.escaped_pal, palette.PALETTE_CYCLES)
-      elif self._params.set_points and total_set > 0 and escaped_at < 0:
+      elif self._params.set_points and self.int_hist.count > 0 and escaped_at < 0:
         # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
-        t_set: float = (set_cumulative[-escaped_at] - 1) / total_set
+        t_set: float = (self.int_hist.d_cumulative[-escaped_at] - 1) / self.int_hist.count
         if render.set_pal is None:
           raise Error('set_pal must be specified in RenderParameters when set_points is True')
         rgb = PixelPalette(t_set, render.set_pal, palette.SET_PALETTE_CYCLES)
@@ -692,7 +719,7 @@ class Image:
     return (buf.getvalue(), img_data_hash)
 
 
-def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[str, str]:
+def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[str, str]:  # noqa: C901
   """Create a metadata dictionary for the image.
 
   Args:
@@ -703,27 +730,25 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
   Returns:
     dict[str, str]: A dictionary containing the metadata for the image, with keys as defined
 
+  Raises:
+    Error: on error
+
   """
+  # populate histograms if not done yet
+  if not img.ext_hist or not img.int_hist:
+    img.RebuildHistograms()  # this will populate img.ext_hist and img.int_hist
+  if not img.ext_hist or not img.int_hist:
+    raise Error('Failed to build histograms for image')
   # prepare some data that will be needed
   frm: frame.Frame = img.params.frm
   center: tuple[gmpy2.mpq, gmpy2.mpq] = frm.center
   sz: tuple[gmpy2.mpq, gmpy2.mpq] = frm.size
-  min_escape: int
-  max_escape: int
-  min_set: int
-  max_set: int
-  min_escape, max_escape, min_set, max_set = img.escape_range
-  # pixel counts and histograms; exterior pixels have escape >= 0, interior (Set) have escape < 0
-  hist: dict[int, int]
-  cumulative: dict[int, int]
-  total: int
-  hist, cumulative, total = BuildCumulative([e for e in img.escape if e >= 0])
   # first create a dict with all the ones that are always present, then add the optional ones
   img_meta: dict[str, str] = {
     # image parameters
     META_IMAGE_ANIMATION_KEY: 'none',  # this is a static image for now, not an animation
-    META_IMAGE_WIDTH_KEY: str(img.size[0]),
-    META_IMAGE_HEIGHT_KEY: str(img.size[1]),
+    META_IMAGE_WIDTH_KEY: str(img.params.size[0]),
+    META_IMAGE_HEIGHT_KEY: str(img.params.size[1]),
     META_IMAGE_HASH_KEY: data_hash,
     META_IMAGE_COLOR_SET_KEY: str(img.params.set_points.value) if img.params.set_points else 'none',
     META_RENDER_PALETTE_KEY: render.escaped_pal.value,
@@ -749,16 +774,26 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
     META_PRECISION_KEY: str(img.params.precision),
     META_MAGNIFICATION_ORDER_KEY: str(frm.magnification[1]),
     # escape iteration range in the image
-    META_ITER_DEPTH_MIN_KEY: str(min_escape),
-    META_ITER_DEPTH_MAX_KEY: str(max_escape),
-    META_SET_POINT_MIN_KEY: str(min_set),
-    META_SET_POINT_MAX_KEY: str(max_set),
+    META_ITER_DEPTH_MIN_KEY: str(img.ext_hist.min_value),
+    META_ITER_DEPTH_MAX_KEY: str(img.ext_hist.max_value),
+    META_SET_POINT_MIN_KEY: str(img.int_hist.min_value),
+    META_SET_POINT_MAX_KEY: str(img.int_hist.max_value),
     META_ITER_SEARCH_DEPTH_KEY: str(img.params.depth),
     # histogram
-    META_PIXEL_EXTERIOR_HISTOGRAM_KEY: SummaryHistogram(sorted(hist.items())),
-    META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY: SummaryHistogram(sorted(cumulative.items())),
-    META_PIXEL_EXTERIOR_COUNT_KEY: str(total),
+    META_PIXEL_EXTERIOR_COUNT_KEY: str(img.ext_hist.count),
+    META_PIXEL_INTERIOR_COUNT_KEY: str(img.int_hist.count),
   }
+  # histograms
+  if img.ext_hist.count > 0:
+    img_meta[META_PIXEL_EXTERIOR_HISTOGRAM_KEY] = SummaryHistogram(img.ext_hist.linear)
+    img_meta[META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY] = SummaryHistogram(
+      img.ext_hist.cumulative
+    )
+  if img.params.set_points and img.int_hist.count > 0:
+    img_meta[META_PIXEL_INTERIOR_HISTOGRAM_KEY] = SummaryHistogram(img.int_hist.linear)
+    img_meta[META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY] = SummaryHistogram(
+      img.int_hist.cumulative
+    )
   # add any stats that aren't just noise
   if img.stats:
     if img.stats.max_lo != _MPFR_FOUR or img.stats.max_hi != _MPFR_ZERO:
@@ -777,18 +812,6 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
   if frm.fractal == frame.Fractal.JULIA:
     img_meta[META_JULIA_RE_KEY] = str(frm.point_re)
     img_meta[META_JULIA_IM_KEY] = str(frm.point_im)
-  # histogram for interior (Set) points
-  if img.params.set_points:
-    hist, cumulative, total = BuildCumulative([-e for e in img.escape if e < 0])
-    img_meta[META_PIXEL_INTERIOR_HISTOGRAM_KEY] = SummaryHistogram(sorted(hist.items()))
-    img_meta[META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY] = SummaryHistogram(
-      sorted(cumulative.items())
-    )
-    img_meta[META_PIXEL_INTERIOR_COUNT_KEY] = str(total)
-  else:
-    img_meta[META_PIXEL_INTERIOR_HISTOGRAM_KEY] = ''
-    img_meta[META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY] = ''
-    img_meta[META_PIXEL_INTERIOR_COUNT_KEY] = str(len([1 for e in img.escape if e < 0]))
   # save to PNG bytes, hash and return
   return img_meta
 
@@ -1225,30 +1248,45 @@ def PixelPalette(
   )
 
 
-def BuildCumulative(values: list[int]) -> tuple[dict[int, int], dict[int, int], int]:
+def BuildCumulative(values: abc.Iterable[int]) -> Image.Histogram:
   """Build a raw histogram and cumulative histogram from a pre-filtered list of integer values.
 
   Args:
-    values (list[int]): The list of integer values to histogram.
+    values (abc.Iterable[int]): The iterable of integer values to histogram.
 
   Returns:
-    tuple[dict[int, int], dict[int, int], int]: (histogram, cumulative, total) where
-        histogram[v] = count of occurrences of value v, cumulative[v] = count of values ≤ v,
-        and total = len(values).
+    Image.Histogram: The histogram object containing the raw and cumulative histograms and
+        the total count.
 
   """
   # build the raw histogram
   histogram: dict[int, int] = {}
+  total: int = 0
   for v in values:
     histogram[v] = histogram.get(v, 0) + 1
+    total += 1
+  # return trivial case (that would cause issues with min() and max())
+  if not histogram:
+    return Image.Histogram(
+      count=0, min_value=0, max_value=0, linear=[], cumulative=[], d_linear={}, d_cumulative={}
+    )
   # build the cumulative histogram by iterating over the sorted keys of the raw histogram
-  total: int = len(values)
-  cumulative: dict[int, int] = {}
   cum: int = 0
-  for v in sorted(histogram):
-    cum += histogram[v]
-    cumulative[v] = cum
-  return (histogram, cumulative, total)
+  s_histogram: list[tuple[int, int]] = sorted(histogram.items())
+  s_cum: list[tuple[int, int]] = []
+  for v, c in s_histogram:
+    cum += c
+    s_cum.append((v, cum))
+  # build object and return
+  return Image.Histogram(
+    count=total,
+    min_value=min(histogram),
+    max_value=max(histogram),
+    linear=s_histogram,
+    cumulative=s_cum,
+    d_linear=histogram,
+    d_cumulative=dict(s_cum),
+  )
 
 
 def _ImageNormalizeAndValidate(img_bytes: bytes, width: int, height: int) -> PILImage.Image:

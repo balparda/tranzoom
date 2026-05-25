@@ -200,7 +200,8 @@ def _FractalAdaptiveIterations(
     # estimate the needed iterations for the full image based on the smallest image;
     # make the histogram of escape iterations for the smallest image, and find the highest escape
     escape_histogram: dict[int, int] = {}
-    for escaped_at in img16.escape:
+    for enc_escaped_at in img16.escape:
+      escaped_at: int = image.Decode64ToIntFloat(enc_escaped_at)[0]
       esc: int = escaped_at if escaped_at >= 0 else high_iter  # interior point == high_iter
       escape_histogram[esc] = escape_histogram.get(esc, 0) + 1
     # check stats
@@ -385,16 +386,18 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
           q: gmpy2.mpfr = x_minus_quarter * x_minus_quarter + cy * cy
           if q * (q + x_minus_quarter) <= _MPFR_FOURTH * cy * cy:
             # point is in the main cardioid, so it's an interior point, no escape
+            # mark negative so as to mark it as interior
             n_interior += 1
-            img.escape[px_count] = -frame.SET_INTERIOR_RESOLUTION  # negative to mark it as interior
+            img.escape[px_count] = image.EncodeIntFloatTo64(-frame.SET_INTERIOR_RESOLUTION, 0.0)
             p_bar.update(1)  # we touched a pixel, so update the progress bar
             continue
           # period-2 bulb test
           x_plus_one: gmpy2.mpfr = cx + _MPFR_ONE
           if x_plus_one * x_plus_one + cy * cy <= _MPFR_SIXTEENTH:
             # point is in the period-2 bulb, so it's an interior point, no escape
+            # mark negative so as to mark it as interior
             n_interior += 1
-            img.escape[px_count] = -frame.SET_INTERIOR_RESOLUTION  # negative to mark it as interior
+            img.escape[px_count] = image.EncodeIntFloatTo64(-frame.SET_INTERIOR_RESOLUTION, 0.0)
             p_bar.update(1)  # we touched a pixel, so update the progress bar
             continue
         # not in the main cardioid or period-2 bulb, do the full escape-time test in mpfr
@@ -485,7 +488,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
             raise Error(f'Unknown fractal type {inp.params.set_points=}; should never happen')
         # either in or out of the set, we now should always have a value for escaped_at;
         # this is setting the pixel escape (not the coloring! that is done later in image.Image)
-        img.escape[px_count] = escaped_at  # carefully set this directly in the array
+        img.escape[px_count] = image.EncodeIntFloatTo64(escaped_at, 0.0)  # carefully set
         p_bar.update(1)  # we touched a pixel, so update the progress bar
     # done; return the stats we collected with the task output
     p_bar.close()
@@ -632,7 +635,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
         # sets have NO universal fast interior test: the filled Julia set's shape depends entirely
         # on c and has no simple global algebraic boundary description
         if zx * zx + img_y2 > _MPFR_FOUR:
-          img.escape[px_count] = 0  # orbit escapes at the starting point, before any iteration
+          img.escape[px_count] = image.EncodeIntFloatTo64(0, 0.0)  # orbit escapes at the start
           p_bar.update(1)
           continue
         # did not escape at fast check, do the whole thing
@@ -717,7 +720,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
             raise Error(f'Unknown fractal type {inp.params.set_points=}; should never happen')
         # either in or out of the set, we now should always have a value for escaped_at;
         # this is setting the pixel escape (not the coloring! that is done later in image.Image)
-        img.escape[px_count] = escaped_at  # carefully set this directly in the array
+        img.escape[px_count] = image.EncodeIntFloatTo64(escaped_at, 0.0)  # carefully set
         p_bar.update(1)  # we touched a pixel, so update the progress bar
     # done; return the stats we collected with the task output
     p_bar.close()
