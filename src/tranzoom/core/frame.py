@@ -73,13 +73,10 @@ DEFAULT_JULIA_WIDTH: str = '1.8'
 DEFAULT_JULIA_HEIGHT: str = '2.2'
 
 
-# TODO: create (optional) DB of stored frames
 # TODO: video/gif to save check the frames for existence, thus recovering from a crash
 # TODO: image to store: on non-set/escaped the iteration plus a float(?) to compute "nu"
 # TODO: image to store: on set/non-escaped the actual final value of the tracked constant;
 #     and if we store the mpfr on a dict for example, we will have space for more info in the array
-# TODO: make a way for images to be saved too, raw, so we can revisit computations;
-#     what parameters REALLY determine an image pre-render?
 # TODO: with all the frames in place (DB) and richer images and "nu" we can start video smoothing;
 #     a class for video objects with all the frames
 # TODO: before rendering video, decide on marker frames every X magnitude, make them first,

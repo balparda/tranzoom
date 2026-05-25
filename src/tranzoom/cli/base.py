@@ -161,6 +161,16 @@ USE_DB_COMPRESSION_OPTION: typer.models.OptionInfo = typer.Option(
     'this option can also be loaded from the disk config, but if given should override the config'
   ),
 )
+IMAGE_FORCE_REDO_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--force/--no-force',
+  help=(
+    'If True, forces re-computation and re-saving of the image(s)/computation(s) even if an '
+    'image/computation with the same parameters already exists; if False will use existing (DB) '
+    'entries to avoid redundant computations/rendering as much as possible/reasonable; '
+    'default is False, so we will try to avoid redundant computations/rendering'
+  ),
+)
 IMAGE_PREFIX_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '--prefix',
@@ -604,6 +614,7 @@ class TranZoomConfig(clibase.CLIConfig):
   img_use_date: bool
   img_use_hash: bool
   img_path_prefix: str | None
+  img_force_redo: bool
   db_read_only: bool
   db_compress: bool
   pal: palette.Palette
@@ -685,7 +696,8 @@ def ProduceFractalImage(
   tm: int | None = None,
   add_serial: int | None = None,
   save_image: bool = True,
-) -> tuple[image.Image, bytes, str, image.RenderParameters]:
+  require_img_obj: bool = True,
+) -> tuple[image.Image | None, bytes, str, image.RenderParameters]:
   """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
 
   Args:
@@ -701,6 +713,8 @@ def ProduceFractalImage(
         5-digit number between the date and hash.
     save_image (bool): If True, will save the final image to disk; if False, the image will
         not be saved; default is True.
+    require_img_obj (bool): If True, will require the image.Image object to be returned by the
+        method; if False, the image.Image object may be None; default is True
 
   Returns:
     tuple[image.Image, bytes, str, image.RenderParameters]: A tuple of
@@ -710,7 +724,7 @@ def ProduceFractalImage(
   including:
   - determining the image dimensions from the config
   - logging the rendering parameters
-  - rendering the image from the frame using the fractal module via ai.CoreComputeImage
+  - rendering the image from the frame using the fractal module
   - converting the rendered image to PNG and getting its hash
   - optionally adding a crosshair overlay if mark coordinates are given
   - saving the image to disk with a name based on the date and hash
@@ -754,7 +768,7 @@ def ProduceFractalImage(
     prefix=config.img_path_prefix or DEFAULT_IMAGE_PREFIX[frm.fractal],
   )
   # compute the image via the unified core primitive
-  img: image.Image
+  img: image.Image | None
   raw_png: bytes
   raw_hash: str
   full_path: pathlib.Path
@@ -767,6 +781,8 @@ def ProduceFractalImage(
     max_threads=config.max_threads,
     iterm=config.iterm,
     print_comm=config.console.print,
+    require_img_obj=require_img_obj,
+    force=config.img_force_redo,
   )
   # save the image to disk if requested
   if save_image:

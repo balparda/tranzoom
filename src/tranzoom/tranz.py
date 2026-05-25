@@ -103,6 +103,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   img_path_prefix: str | None = base.IMAGE_PREFIX_OPTION,  # type: ignore[assignment]
   img_use_date: bool = base.IMAGE_INCLUDE_DATE_OPTION,  # type: ignore[assignment]
   img_use_hash: bool = base.IMAGE_INCLUDE_HASH_OPTION,  # type: ignore[assignment]
+  img_force_redo: bool = base.IMAGE_FORCE_REDO_OPTION,  # type: ignore[assignment]
   pal: palette.Palette = base.PALETTE_OPTION,  # type: ignore[assignment]
   set_pal: palette.Palette = base.SET_PALETTE_OPTION,  # type: ignore[assignment]
   set_points: frame.SetHighlightAlgorithm | None = base.COLOR_SET_POINTS_OPTION,  # type: ignore[assignment]
@@ -146,6 +147,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     img_path_prefix=img_path_prefix,
     img_use_date=img_use_date,
     img_use_hash=img_use_hash,
+    img_force_redo=img_force_redo,
     db_read_only=False,  # sentinel only: will load from config below!
     db_compress=False,  # sentinel only: will load from config below!
     pal=pal,

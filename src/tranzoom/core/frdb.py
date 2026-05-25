@@ -9,7 +9,6 @@ import logging
 import pathlib
 import threading
 from collections import abc
-from pathlib import Path
 from typing import Self, TypedDict, cast
 
 from transcrypto.core import aes, key
@@ -24,6 +23,7 @@ from tranzoom.core import fractal, frame, image
 
 _DB_FILE_NAME = 'tranZ_DB.json'  # default DB file name
 _DB_COMPRESS_LEVEL = 5  # default compression level for DB saving
+_IMG_DATA_COMPRESS_LEVEL = 13  # default compression level for image data saving
 _DB_DISK_LOCK: threading.Lock = threading.Lock()  # lock for thread-safe DB operations
 
 _PicklePrettyJSON: abc.Callable[[tbase.JSONDict], bytes] = lambda d: json.dumps(
@@ -67,9 +67,8 @@ class ComputationData(TypedDict):
     frm (str): (CORE DATA) Frame hash (frame_hash) -> points back to father Frame
     cp (str): (CORE DATA) ComputationParameters hash (cp_hash) - we don't store here,
         look in _DBType.cps
-    tm (int): (CACHE) timestamp of computation (raw data) creation
-    raw_data_path (str): (CACHE) path to raw data file (if not on disk, this computation
-        entry becomes moot!) so we must have it here or remove the entry
+    tm (int): (CACHE) timestamp of computation creation
+    raw_data_path (str | None): (CACHE) path to raw data file, if any
     renders (dict[str, ImageData]): (CHILDREN) one computation can have multiple renders;
         dict of {render_hash: ImageData}
 
@@ -83,8 +82,8 @@ class ComputationData(TypedDict):
   cp: str  # ComputationParameters hash (cp_hash) - look in _DBType.cps
 
   # CACHE: the raw data is the most expensive to compute, so we store it
-  tm: int  # timestamp of computation
-  raw_data_path: str  # path to raw data file
+  tm: int  # timestamp of last time this image was rendered; if we have the entry, we must have tm
+  raw_data_path: str | None  # path to raw data file; BEWARE: relative path, managed by DB!
 
   # CHILDREN: one computation can have multiple renders
   renders: dict[str, ImageData]  # {render_hash: ImageData}
@@ -111,6 +110,11 @@ class ImageCoreKey(TypedDict):
   render: str  # RenderParameters hash (render_hash) - look in _DBType.renders
 
 
+CoreKeyFromData: abc.Callable[
+  [frame.ComputationParameters, image.RenderParameters], ImageCoreKey
+] = lambda c, r: ImageCoreKey(frm=c.frm.sha, cp=c.sha, render=r.sha)
+
+
 class ImageData(TypedDict):
   """Image data type, for storing PNG image/frame metadata and parameters. CANNOT be a video/GIF.
 
@@ -119,7 +123,7 @@ class ImageData(TypedDict):
         cp_hash, and render_hash
     data_hash (str): (CACHE) hash of the image PNG data; if we have this entry,
         we must have the hash!
-    tm (int | None): (CACHE) timestamp of rendered image creation; None if not saved
+    tm (int): (CACHE) timestamp of rendered image last creation
     rendered_path (str | None): (CACHE) path to image PNG file; None if not saved
 
   Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
@@ -132,8 +136,8 @@ class ImageData(TypedDict):
 
   # CACHE
   data_hash: str  # hash of the image PNG data - BEWARE: this hash is POST-render but PRE-overlay!!
-  tm: int | None  # timestamp of rendered image creation; None if not saved
-  rendered_path: str | None  # path to image PNG file; None if not saved
+  tm: int  # timestamp of last time this image was rendered; if we have data_hash, we must have tm
+  rendered_path: str | None  # path to image PNG file; None if not saved (actual path on disk)
 
 
 class ZoomData(TypedDict):
@@ -267,7 +271,7 @@ class FractalDatabase:
 
     """
     self._config: app_config.AppConfig = appconfig
-    self._path: Path = self._config.dir / _DB_FILE_NAME
+    self._path: pathlib.Path = self._config.dir / _DB_FILE_NAME
     self._read_only: bool = read_only
     self._key: aes.AESKey | None = aes_key
     self._safe_save: bool = safe_save
@@ -419,7 +423,197 @@ class FractalDatabase:
       )
       logging.info(f'DB saved to "{self._path}": {prev_label} -> {self.label}')
 
-  def CoreComputeImage(
+  def SaveImageData(self, params: frame.ComputationParameters, img: image.Image) -> tuple[int, str]:
+    """Save image data to disk.
+
+    Args:
+      params (frame.ComputationParameters): the computation parameters associated with the image
+      img (image.Image): the image data to save
+
+    Returns:
+      tuple[int, str]: a tuple containing the timestamp and the path where the image data was saved
+
+    """
+    tm: int = timer.Now()
+    path: str = f'img_{params.sha}.Data'
+    if self._read_only:
+      logging.warning(f'Read-only mode: will *NOT* save {params} to "{path}"')
+    else:
+      self._config.Serialize(
+        img,
+        config_name=path,
+        encryption_key=self._key,
+        compress=_IMG_DATA_COMPRESS_LEVEL,
+        silent=True,
+      )
+      logging.info(f'Saved image data {params} to "{path}"')
+    return (tm, path)
+
+  def LoadImageData(self, path: str) -> image.Image:
+    """Load image data from disk.
+
+    Args:
+      path (str): relative path to the image data file, as stored in the DB; this is a relative path
+        managed by the DB, not an arbitrary path; the actual path on disk is self._config.dir / path
+
+    Returns:
+      image.Image: the loaded image data
+
+    """
+    return self._config.DeSerialize(config_name=path, decryption_key=self._key, silent=True)
+
+  def FindImage(
+    self, params: frame.ComputationParameters, render: image.RenderParameters
+  ) -> tuple[ImageCoreKey, FrameData | None, ComputationData | None, ImageData | None]:
+    """Find an image in the database given its computation parameters and render parameters.
+
+    Args:
+      params (frame.ComputationParameters): the computation parameters associated with the image
+      render (image.RenderParameters): the render parameters associated with the image
+
+    Returns:
+      tuple[ImageCoreKey, FrameData | None, ComputationData | None, ImageData | None]: a tuple
+          containing the ImageCoreKey and the corresponding FrameData, ComputationData,
+          and ImageData if found; if not found, the missing entries will be None
+
+    Raises:
+      Error: on error, mostly inconsistent DB, not missing data
+
+    """
+    # build the core key for this image
+    ck: ImageCoreKey = CoreKeyFromData(params, render)
+    # first check: do we know this computation?
+    if ck['cp'] not in self._db['cps']:
+      # we don't even know the computation parameters, so we definitely don't have the image
+      return (ck, None, None, None)
+    # we know the computation parameters: get it
+    if ck['frm'] not in self._db['frames']:
+      raise Error(
+        f'Inconsistent DB: found cp_hash {ck["cp"]!r} but not frame_hash {ck["frm"]!r}; Report bug!'
+      )
+    frm_data: FrameData = self._db['frames'][ck['frm']]
+    if ck['cp'] not in frm_data['cps']:
+      raise Error(
+        f'Inconsistent DB: found cp_hash {ck["cp"]!r} in DB but not in frame data; Report bug!'
+      )
+    cp_data: ComputationData = frm_data['cps'][ck['cp']]
+    # check if we know this render
+    if ck['render'] not in cp_data['renders']:
+      # we don't know this render, so we don't have the image, but we do have the computation
+      return (ck, frm_data, cp_data, None)
+    # we know the render parameters: get it
+    if ck['render'] not in self._db['renders']:
+      raise Error(
+        f'Inconsistent DB: found render_hash {ck["render"]!r} in DB but not in renders; Report bug!'
+      )
+    render_data: ImageData = cp_data['renders'][ck['render']]
+    return (ck, frm_data, cp_data, render_data)
+
+  def AddComputationToDB(
+    self, params: frame.ComputationParameters, img_tm: int, img_path: str
+  ) -> tuple[FrameData, ComputationData]:
+    """Add a computation to the database, along with its associated frame if not already present.
+
+    Args:
+      params (frame.ComputationParameters): the computation parameters to add
+      img_tm (int): the timestamp of the associated image data creation
+      img_path (str): the path to the associated image data file, as stored in the DB;
+          this is a relative path managed by the DB, not an arbitrary
+
+    Returns:
+      tuple[FrameData, ComputationData]: the FrameData and ComputationData objects corresponding
+
+    """
+    # add frame
+    frm_hash: str = params.frm.sha
+    frm: FrameData
+    if frm_hash in self._db['frames']:
+      frm = self._db['frames'][frm_hash]
+    else:
+      frm = FrameData(
+        frm=params.frm.json,
+        mag=params.frm.magnification[1],
+        cps={},
+      )
+      self._db['frames'][frm_hash] = frm
+    # add computation
+    cp_hash: str = params.sha
+    if cp_hash not in self._db['cps']:
+      self._db['cps'][cp_hash] = params.json
+    cp: ComputationData
+    if cp_hash in frm['cps']:
+      cp = frm['cps'][cp_hash]
+      cp['tm'] = img_tm  # always update timestamp
+    else:
+      cp = ComputationData(
+        frm=frm_hash,
+        cp=cp_hash,
+        tm=img_tm,
+        raw_data_path=img_path,
+        renders={},
+      )
+      frm['cps'][cp_hash] = cp
+    # return the FrameData / ComputationData
+    return (frm, cp)
+
+  def AddRenderToDB(
+    self,
+    params: frame.ComputationParameters,
+    render: image.RenderParameters,
+    ck: ImageCoreKey,
+    img_hash: str,
+    path: str,
+  ) -> ImageData:
+    """Add a render to the DB, along with associated frame, computation, indexes if not present.
+
+    Args:
+      params (frame.ComputationParameters): the computation parameters associated with the render
+      render (image.RenderParameters): the render parameters to add
+      ck (ImageCoreKey): the core key for the image, containing the frame_hash, cp_hash, render_hash
+      img_hash (str): the hash of the image PNG data, used for indexing and deduplication
+      path (str): the path to the image PNG file, as stored in the DB; this is absolute disk path
+
+    Returns:
+      ImageData: the ImageData object corresponding to the added render
+
+    Raises:
+      Error: on error, mostly inconsistent DB, not missing data
+
+    """
+    # get frame and computation
+    frm_hash: str = params.frm.sha
+    if frm_hash not in self._db['frames']:
+      raise Error(f'Inconsistent DB: frame_hash {frm_hash!r} not found in DB frames; Report bug!')
+    frm: FrameData = self._db['frames'][frm_hash]
+    cp_hash: str = params.sha
+    if cp_hash not in self._db['cps']:
+      raise Error(f'Inconsistent DB: cp_hash {cp_hash!r} not found in DB cps; Report bug!')
+    cp: ComputationData = frm['cps'][cp_hash]
+    # add render
+    render_hash: str = render.sha
+    if render_hash not in self._db['renders']:
+      self._db['renders'][render_hash] = render.json
+    img: ImageData
+    if render_hash in cp['renders']:
+      img = cp['renders'][render_hash]
+      cp['tm'] = timer.Now()  # always update timestamp
+      cp['raw_data_path'] = path  # always update path to latest render data
+    else:
+      img = ImageData(
+        core=ck,
+        data_hash=img_hash,
+        tm=timer.Now(),
+        rendered_path=path,
+      )
+      cp['renders'][render_hash] = img
+    # add path index
+    self._db['img_paths_idx'][path] = ck
+    # add hash index
+    self._db['images_idx'].setdefault(img_hash, []).append(ck)
+    # return the new ImageData
+    return img
+
+  def CoreComputeImage(  # noqa: C901, PLR0912, PLR0915
     self,
     params: frame.ComputationParameters,
     render: image.RenderParameters,
@@ -429,7 +623,10 @@ class FractalDatabase:
     max_threads: int | None,
     iterm: bool,
     print_comm: abc.Callable[[str], None],
-  ) -> tuple[image.Image, bytes, str, pathlib.Path]:
+    *,
+    require_img_obj: bool = True,
+    force: bool = False,
+  ) -> tuple[image.Image | None, bytes, str, pathlib.Path]:
     """Compute a fractal image and return the result unsaved; the shared rendering primitive.
 
     This is the shared image computation primitive used by all rendering paths (static images,
@@ -454,6 +651,9 @@ class FractalDatabase:
       max_threads (int | None): Maximum threads for parallel rendering; None means all CPUs.
       iterm (bool): If True, print the image inline in iTerm2 after rendering.
       print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
+      require_img_obj (bool): If True, will require the image.Image object to be returned by the
+        method; if False, the image.Image object may be None; default is True
+      force (bool): If True, will force re-computation of the image even if it is found in the DB
 
     Returns:
       tuple[image.Image, bytes, str, pathlib.Path]: A 4-tuple of:
@@ -473,10 +673,6 @@ class FractalDatabase:
       raise Error(
         'Cannot specify set_pal without set_points; set_points is required to use set_pal'
       )
-    # render the image for the current frame
-    img_data: bytes
-    img_hash: str
-    img: image.Image
     # log
     set_param: str = '' if params.set_points is None else f' w/ SET {params.set_points.value!r}'
     print_comm(
@@ -485,21 +681,89 @@ class FractalDatabase:
       f'10^{params.frm.magnification[1]:.3f} magnitude...'
     )
     print_comm(str(params))
+    # create path callback missing only the hash
+    full_path: abc.Callable[[str], pathlib.Path] = lambda h: image.MakeImagePath(
+      out.path,
+      out.use_date,
+      out.use_hash,
+      out.prefix,
+      h,
+      tm=tm,
+      add_serial=add_serial,
+    )
+    # do we know about this render?
+    img: image.Image | None = None
+    img_hash: str | None = None
+    img_path: str | None = None
+    img_tm: int | None = None
+    img_data: bytes | None = None
+    ck: ImageCoreKey
+    cp_data: ComputationData | None
+    render_data: ImageData | None
+    ck, _, cp_data, render_data = self.FindImage(params, render)
+    # do we know about this computation?
+    if cp_data is not None:
+      # we have done a render with these parameters before
+      img_tm = cp_data['tm']
+      if (img_path := cp_data['raw_data_path']) is not None:
+        # second best case: we have the image computation on disk already
+        print_comm(f'[red]DB computation[/] LOAD @{timer.TimeStr(img_tm)} -> "{img_path}"')
+        img = None if force else self.LoadImageData(img_path)
+      else:
+        # we have done the computation but do not have the data on disk
+        print_comm(f'[red]DB computation[/] @{timer.TimeStr(img_tm)} -> [red]no render[/]')
+    # look at the actual render
+    if render_data is not None:
+      # we have done a render with these parameters before
+      path: pathlib.Path
+      if (
+        render_data['rendered_path'] is not None
+        and (path := pathlib.Path(render_data['rendered_path'])).exists()
+      ):
+        # best case: we have the image PNG on disk already
+        print_comm(
+          f'[red]DB render[/], {render_data["data_hash"]!r}@{timer.TimeStr(render_data["tm"])} '
+          f'-> "{path}"'
+        )
+        if not force:
+          img_hash = render_data['data_hash']
+          img_data = path.read_bytes()
+          if not require_img_obj or (require_img_obj and img is not None):
+            # we can end this: we have the image PNG on disk and img is as good as necessary
+            return (img, img_data, img_hash, full_path(img_hash))
+      # if we got here, we have the render parameters but not the image on disk
+      if render_data['rendered_path'] is None:
+        print_comm(
+          f'[red]DB render[/], {render_data["data_hash"]!r}@{timer.TimeStr(render_data["tm"])} '
+          f'-> [red]no disk[/]'
+        )
+    # render the image for the current frame
     print_comm('')
-    with timer.Timer(emit_log=False) as tmr:
-      params, img = fractal.ComputeFractal(
-        params,  # remember that this params will be updated with the actual depth now!
-        progress_bar=True,
-        n_processes=max_threads,
-        print_comm=print_comm,
-      )
-      # hash is computed from the raw PNG before any post-processing overlays
+    comp_tmr: timer.Timer | None = None
+    if img is None:
+      with timer.Timer(emit_log=False) as comp_tmr:
+        params, img = fractal.ComputeFractal(
+          params,  # remember that this params will be updated with the actual depth now!
+          progress_bar=True,
+          n_processes=max_threads,
+          print_comm=print_comm,
+        )
+        # save img in DB & disk
+        img_tm, img_path = self.SaveImageData(params, img)  # disk only
+        _, cp_data = self.AddComputationToDB(params, img_tm, img_path)  # DB only
+    # we could possibly already have the data from the disk?...
+    if img_data and img_hash and not force:
+      print_comm('[red]DB render[/]: Using image data from disk, skipping PNG render')
+      return (img, img_data, img_hash, full_path(img_hash))
+    # we got to here, so we have to render the PNG data from the image object and add overlay/mark;
+    # hash is computed from the raw PNG before any post-processing overlays
+    with timer.Timer(emit_log=False) as render_tmr:
       img_data, img_hash = img.AsPNG(render)
       # draw crosshair mark if specified in render parameters
       if render.mark_color is not None:
         _, mark_pixel = params.CoordToPixel(render.mark_re, render.mark_im)
         print_comm(
-          f'Marking coordinate ({render.mark_re}, {render.mark_im}) with '
+          f'[cyan]Marking[/] coordinate ({render.mark_re}, {render.mark_im}) with '
           f'{render.mark_color.name.lower()!r} crosshair @{mark_pixel}/{render.mark_width}px'
         )
         img_data = image.DrawCrossOverlay(
@@ -507,31 +771,24 @@ class FractalDatabase:
         )
       # draw the numbered sector grid overlay if requested (e.g., for AI/manual zoom navigation)
       if render.overlay is not None:
-        print_comm(f'Adding {render.overlay.value!r} overlay')
+        print_comm(f'[cyan]Adding[/] {render.overlay.value!r} overlay')
         if render.overlay == image.OverlayType.GRID:
           img_data = image.DrawThirdsInfoOverlay(img_data)
         else:
           raise Error(f'Unsupported overlay type: {render.overlay!r}')
-    # build the intended output path (file is NOT written here; caller decides when to save)
-    full_path: pathlib.Path = image.MakeImagePath(
-      out.path,
-      out.use_date,
-      out.use_hash,
-      out.prefix,
-      img_hash,
-      tm=tm,
-      add_serial=add_serial,
-    )
+      # add to DB
+      render_data = self.AddRenderToDB(params, render, ck, img_hash, str(full_path(img_hash)))
     # log
     print_comm(
-      f'{render.tp.value.upper()}: {img_hash!r}, precision {params.precision} bits, in {tmr}'
+      f'{render.tp.value.upper()}: {img_hash!r}, precision {params.precision} bits, '
+      f'in {str(comp_tmr) if comp_tmr else "0"} + {render_tmr}'
     )
     # print inline in iTerm2 if requested
     if iterm:
       print_comm('')
       image.PrintITerm2(img_data)
     print_comm('')
-    return (img, img_data, img_hash, full_path)
+    return (img, img_data, img_hash, full_path(img_hash))
 
 
 def _DBLabel(db: _DBType) -> str:

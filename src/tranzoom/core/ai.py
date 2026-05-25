@@ -65,6 +65,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
   *,
   print_comm: abc.Callable[[str], None],
   manual: bool = False,
+  force: bool = False,
 ) -> None:
   """Execute main loop for AI-guided or manually-guided fractal zoom search.
 
@@ -109,6 +110,8 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
     print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
     manual (bool): If True, skip the AI model entirely and prompt the user for a direction
         each step (1-9, numpad layout); default is False (AI-guided mode).
+    force (bool): If True, force re-computation and re-rendering of images even if they are found
+        in the database; default is False (will use cached images when available).
 
   """
   # capture the time
@@ -175,7 +178,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
         count += 1
         # render the image for the current frame
         _, img_data, _, full_path = db.CoreComputeImage(
-          params, render, out, count, zoom_tm, max_threads, iterm, print_comm
+          params, render, out, count, zoom_tm, max_threads, iterm, print_comm, force=force
         )
         print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
         if not manual:

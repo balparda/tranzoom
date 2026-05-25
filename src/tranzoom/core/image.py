@@ -865,7 +865,11 @@ def MakeImagePath(
     filename += f'-{raw_hash[:20]}'
   # add .png extension, make full path, and save the file
   filename += '.' + suffix.strip().lower()
-  return pathlib.Path(filename) if img_output_path is None else img_output_path / filename
+  return (
+    (pathlib.Path(filename) if img_output_path is None else img_output_path / filename)
+    .expanduser()
+    .resolve()
+  )
 
 
 def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:
