@@ -820,18 +820,20 @@ def SummaryHistogram(sorted_histogram: list[tuple[int, float]]) -> str:
         with the middle values summarized as a total count.
 
   """
-  if len(sorted_histogram) <= 7:  # noqa: PLR2004
-    # small histogram, no need to summarize
-    return str(sorted_histogram)
-  # this is usually the case: many escape values, so summarize the middle ones
-  return str(
+
+  def _SmallHistogram() -> list[tuple[int | str, float]]:
+    if len(sorted_histogram) <= 7:  # noqa: PLR2004
+      # small histogram, no need to summarize
+      return sorted_histogram  # type: ignore[return-value]
+    # this is usually the case: many escape values, so summarize the middle ones
     # make a new list with the first 3 and last 3 values, and a summary of the middle values "..."
-    [
+    return [
       *sorted_histogram[:3],
-      ('...', sum(count for _, count in sorted_histogram[3:-3])),
+      ('...', float(sum(count for _, count in sorted_histogram[3:-3]))),
       *sorted_histogram[-3:],
     ]
-  )
+
+  return '{' + (', '.join(f'{n}: {f:.4f}' for n, f in _SmallHistogram())) + '}'
 
 
 def MakeImagePath(
