@@ -571,31 +571,13 @@ class Image:
     self.escape: ImageInt32Array = array.array(  # signed32
       'L', (0 for _ in range(self._params.width * self._params.height))
     )
-    if self.escape.itemsize != 8:  # frame.N_BYTES_UINT:
+    if self.escape.itemsize != frame.N_BYTES_UINT:
       raise Error(f'unsupported platform: array of unsigned ints is not {frame.N_BYTES_UINT} bytes')
     self.stats: FractalStats | None = None  # may be set later by the fractal rendering function
     # histogram of escaped points
     self.ext_hist: Image.Histogram | None = None  # set later by calling RebuildHistograms
     # histogram of interior (Set) points; flipped, i.e., positive values
     self.int_hist: Image.Histogram | None = None  # set later by calling RebuildHistograms
-
-  # def SetEscape(self, x: int, y: int, escaped_at: int) -> None:
-  #   """Set the escape iteration for a given pixel.
-
-  #   Args:
-  #     x (int): The x coordinate of the pixel.
-  #     y (int): The y coordinate of the pixel.
-  #     escaped_at (int): The escape iteration to set for the pixel.
-
-  #   Raises:
-  #     Error: if the pixel coordinates are out of bounds
-
-  #   """
-  #   if not (0 <= x < self._params.width) or not (0 <= y < self._params.height):
-  #     raise Error(
-  #       f'Coordinates out of bounds: {x=}, {y=}, {self._params.width=}, {self._params.height=}'
-  #     )
-  #   self.escape[y * self._params.width + x] = escaped_at
 
   @property
   def params(self) -> frame.ComputationParameters:
@@ -607,26 +589,14 @@ class Image:
     """
     return self._params
 
-  # @property
-  # def escape_range(self) -> tuple[int, int, int, int]:
-  #   """Get the range of escape iterations and the range of the internal stored values.
-
-  #   The internal values map to different things depending on how they were computed.
-
-  #   Returns:
-  #     tuple[int, int, int, int]: (min_escape, max_escape, min_internal, max_internal)
-
-  #   """
-  #   exterior_points: list[int] = [e for e in self.escape if e >= 0]
-  #   interior_points: list[int] = [e for e in self.escape if e < 0]
-  #   return (
-  #     min(exterior_points) if exterior_points else 0,
-  #     self._params.depth if interior_points else (max(exterior_points) if exterior_points else 0),
-  #     -max(interior_points) if interior_points else 0,
-  #     -min(interior_points) if interior_points else 0,
-  #   )
-
   def RebuildHistograms(self) -> None:
+    """Rebuild the histograms for the image based on the current escape data.
+
+    This method processes the escape data of the image and constructs histograms
+    for both exterior (escaped) and interior (set) points. The histograms are
+    used for color mapping during rendering.
+
+    """
     # for efficiency, try to go over only once
     exterior_points: list[int] = []
     interior_points: list[int] = []

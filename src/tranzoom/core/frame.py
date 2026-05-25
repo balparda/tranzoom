@@ -31,7 +31,7 @@ MAX_UINT32: int = 0xFFFFFFFF
 
 # iteration constants
 
-N_BYTES_UINT: int = 4  # we use array of int32 to store pixel data / array.array('i') / signed 32
+N_BYTES_UINT: int = 8  # we use array of uint64 to store pixel data / array.array('L') / unsigned 64
 MIN_ITER: int = 1000  # minimum, but also a mark that we want to automatically calculate the depth
 DEFAULT_ITER: int = 1000
 HIGH_ITERS: list[int] = [100_000, 1_000_000, 10_000_000]  # these are very high iteration counts
