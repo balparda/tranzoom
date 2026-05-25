@@ -1049,7 +1049,7 @@ poetry run pytest -vvv -m slow
 Find slow tests:
 
 ```sh
-poetry run pytest -vvv -q --durations=20
+poetry run pytest -vvv -q --durations=20 tests/
 ```
 
 Find flaky tests:
