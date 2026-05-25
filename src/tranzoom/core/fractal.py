@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import math
 import os
 from collections import abc
 from concurrent import futures
@@ -142,7 +143,8 @@ def ComputeFractal(
   # if the final image doesn't have stats, we can add them from the pre-process stats we collected
   if img.stats is None and stats is not None:
     img.stats = stats
-  # all copied, so we can return the final image
+  # all copied, so we can return the final image; first trigger the histogram calculation
+  img.RebuildHistograms()
   return (params, img)
 
 
@@ -197,28 +199,21 @@ def _FractalAdaptiveIterations(
       n_processes=n_processes,
       print_comm=print_comm,
     )[1]  # we only need the image, not the updated params, from this test render
-    # estimate the needed iterations for the full image based on the smallest image;
-    # make the histogram of escape iterations for the smallest image, and find the highest escape
-    escape_histogram: dict[int, int] = {}
-    for enc_escaped_at in img16.escape:
-      escaped_at: int = image.Decode64ToIntFloat(enc_escaped_at)[0]
-      esc: int = escaped_at if escaped_at >= 0 else high_iter  # interior point == high_iter
-      escape_histogram[esc] = escape_histogram.get(esc, 0) + 1
-    # check stats
-    if img16.stats is None:
+    # estimate the needed iterations for the full image based on the smallest image; check stats
+    if img16.stats is None or img16.ext_hist is None or img16.int_hist is None:
       raise Error('Fractal stats should have been collected during rendering, but are missing')
-    # sort the histogram by escape iteration; find the highest escape iteration that < high limit
-    # if all pixels hit high_iter then max_iter will be high_iter, and we WANT it to FAIL
-    histogram: list[tuple[int, int]] = sorted(escape_histogram.items())
-    max_iter = (
-      histogram[-1][0] if histogram[-1][0] != high_iter or len(histogram) == 1 else histogram[-2][0]
-    )
+    # do we have any exterior points that escaped? if not, we can't estimate
+    if img16.ext_hist.count == 0:
+      continue  # no exterior points
+    # we have exterior points, so we can look at the histogram sorted by escape iteration;
+    # find the highest escape iteration that is less than high limit
+    max_iter = img16.ext_hist.linear[-1][0]
     # apply safety factor and clamp
     max_iter = min(frame.MAX_ITER, max(frame.MIN_ITER, int(max_iter * _ITER_SAFETY_FACTOR)))
     if max_iter < high_iter:
       # we found a winner! print and stop
       print_comm(
-        f'Picked depth {max_iter}, histogram {image.SummaryHistogram(histogram)}, '
+        f'Picked depth {max_iter}, histogram {image.SummaryHistogram(img16.ext_hist.linear)}, '
         f'{img16.stats.n_interior}/{img16.stats.n_px} set points'
       )
       return (max_iter, img16.stats)
@@ -407,13 +402,20 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
         max_z2: gmpy2.mpfr = _MPFR_ZERO  # track max |z|^2 for potential use in coloring
         mag_z2: gmpy2.mpfr
         escaped_at: int = 0
+        smooth_escape: float = 0.0
         imag_acc: gmpy2.mpfr = _MPFR_ZERO  # accumulate sin(arg(z)) over orbit for smooth SAC
         # escape-time loop, implemented with explicit zx/zy variables
-        for escaped_at in range(inp.params.depth):  # noqa: B007
+        for escaped_at in range(inp.params.depth):
           zx2: gmpy2.mpfr = zx * zx
           zy2: gmpy2.mpfr = zy * zy
           # avoid sqrt(abs(z)); compare squared magnitude to 2^2
           if (mag_z2 := zx2 + zy2) > _MPFR_FOUR:
+            # the smooth_escape part is a fractional value that represents how far the orbit went
+            # beyond the escape radius at the escape iteration; we want to ensure that the final
+            # escape value is "n + nu", where n is an integer and nu is in [0,1), and we store
+            # them separately for better precision
+            smooth_escape = 1.0 - math.log2(0.5 * math.log(float(mag_z2)))
+            escaped_at, smooth_escape = NormalizeSmoothEscape(escaped_at, smooth_escape)  # noqa: PLW2901
             break
           # Imaginary Weight Average: accumulate sin(arg(z))**2 = zy**2/|z|**2 BEFORE the update
           if inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY and mag_z2 > _MPFR_ZERO:
@@ -488,7 +490,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
             raise Error(f'Unknown fractal type {inp.params.set_points=}; should never happen')
         # either in or out of the set, we now should always have a value for escaped_at;
         # this is setting the pixel escape (not the coloring! that is done later in image.Image)
-        img.escape[px_count] = image.EncodeIntFloatTo64(escaped_at, 0.0)  # carefully set
+        img.escape[px_count] = image.EncodeIntFloatTo64(escaped_at, smooth_escape)  # carefully set
         p_bar.update(1)  # we touched a pixel, so update the progress bar
     # done; return the stats we collected with the task output
     p_bar.close()
@@ -640,12 +642,19 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
           continue
         # did not escape at fast check, do the whole thing
         escaped_at: int = 0
+        smooth_escape: float = 0.0
         # escape-time loop, implemented with explicit zx/zy variables
-        for escaped_at in range(inp.params.depth):  # noqa: B007
+        for escaped_at in range(inp.params.depth):
           zx2: gmpy2.mpfr = zx * zx
           zy2: gmpy2.mpfr = zy * zy
           # avoid sqrt(abs(z)); compare squared magnitude to 2^2
           if (mag_z2 := zx2 + zy2) > _MPFR_FOUR:
+            # the smooth_escape part is a fractional value that represents how far the orbit went
+            # beyond the escape radius at the escape iteration; we want to ensure that the final
+            # escape value is "n + nu", where n is an integer and nu is in [0,1), and we store
+            # them separately for better precision
+            smooth_escape = 1.0 - math.log2(0.5 * math.log(float(mag_z2)))
+            escaped_at, smooth_escape = NormalizeSmoothEscape(escaped_at, smooth_escape)  # noqa: PLW2901
             break
           # Imaginary Weight Average: accumulate sin(arg(z))**2 = zy**2/|z|**2 BEFORE the update
           if inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY and mag_z2 > _MPFR_ZERO:
@@ -720,7 +729,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
             raise Error(f'Unknown fractal type {inp.params.set_points=}; should never happen')
         # either in or out of the set, we now should always have a value for escaped_at;
         # this is setting the pixel escape (not the coloring! that is done later in image.Image)
-        img.escape[px_count] = image.EncodeIntFloatTo64(escaped_at, 0.0)  # carefully set
+        img.escape[px_count] = image.EncodeIntFloatTo64(escaped_at, smooth_escape)  # carefully set
         p_bar.update(1)  # we touched a pixel, so update the progress bar
     # done; return the stats we collected with the task output
     p_bar.close()
@@ -737,3 +746,35 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
       imag_hi=imag_hi,
     )
     return _FractalTaskOutput(img=img, n_task=inp.n_task, total_tasks=inp.total_tasks)
+
+
+def NormalizeSmoothEscape(n: int, nu: float) -> tuple[int, float]:
+  """Normalize the smooth escape part to be in [0,1) and adjust n accordingly.
+
+  The smooth escape part is a fractional value that represents how far the orbit went beyond
+  the escape radius at the escape iteration. We want to ensure that the final escape value
+  is n + nu, where n is an integer and nu is in [0,1). This allows for smooth coloring
+  of the escape time.
+
+  Args:
+    n (int): The integer escape iteration count.
+    nu (float): The smooth escape part, which can be any real number.
+
+  Returns:
+    tuple[int, float]: A tuple of the adjusted integer escape iteration and the normalized
+        smooth escape part.
+
+  """
+  # if nu is not finite, just return n and 0.0 for the smooth part
+  if not math.isfinite(nu):
+    return (n, 0.0)
+  # get the integer shift to apply to n, and the new nu in [0,1)
+  shift: int = math.floor(nu)
+  n += shift
+  nu -= shift
+  # if nu is negative, we need to shift back the other way, to ensure nu is in [0,1)
+  if nu < 0.0:
+    n -= 1
+    nu += 1.0
+  # ensure n is not negative, in case the shift made it negative
+  return (max(0, n), nu)

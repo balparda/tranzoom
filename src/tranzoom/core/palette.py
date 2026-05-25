@@ -22,8 +22,8 @@ DEFAULT_PALETTE: Palette = Palette.SAHARA
 DEFAULT_SET_PALETTE: Palette = Palette.GRAYSCALE_REVERSE  # used for interior (set) points coloring
 
 # how many times to cycle through the palette across the histogram-equalized range;
-# more cycles = tighter, more frequent color banding; 3 is a visually balanced default
-PALETTE_CYCLES: int = 3
+# more cycles = tighter, more frequent color banding
+PALETTE_CYCLES: int = 1
 # for the interior (Set) palette we cycle only once: the full gradient runs exactly once across
 # the histogram-equalized |z| range, keeping the gradient predictable and avoiding extra banding
 SET_PALETTE_CYCLES: int = 1

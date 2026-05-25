@@ -126,6 +126,7 @@ type ImageInt32Array = array.array[int]  # type alias for the type of our pixel 
 
 # constants for drawing
 
+_ALMOST_ONE: float = math.nextafter(1.0, 0.0)
 _SQRT_TWO: float = math.sqrt(2)
 _LINE_WIDTH_RATIO: int = 150  # line width will be max(1, sz//_LINE_WIDTH_RATIO) of the image width
 _CIRCLE_RADIUS: int = 20
@@ -550,10 +551,12 @@ class Image:
     count: int
     min_value: int
     max_value: int
-    linear: list[tuple[int, int]]  # sorted!
-    d_linear: dict[int, int]  # {value: count}, for O(1) lookups
-    cumulative: list[tuple[int, int]]  # sorted!
-    d_cumulative: dict[int, int]  # {value: cumulative_count}, for O(1) lookups
+    min_nu: float
+    max_nu: float
+    linear: list[tuple[int, float]]  # sorted!
+    d_linear: dict[int, float]  # {value: count}, for O(1) lookups
+    cumulative: list[tuple[int, float]]  # sorted!
+    d_cumulative: dict[int, float]  # {value: cumulative_count}, for O(1) lookups
 
   def __init__(self, params: frame.ComputationParameters) -> None:
     """Construct image.
@@ -598,19 +601,21 @@ class Image:
 
     """
     # for efficiency, try to go over only once
-    exterior_points: list[int] = []
-    interior_points: list[int] = []
+    exterior_points: list[tuple[int, float]] = []
+    interior_points: list[tuple[int, float]] = []
+    n: int
+    f: float
     for enc_px in self.escape:
-      px: int = Decode64ToIntFloat(enc_px)[0]
-      if px >= 0:
-        exterior_points.append(px)
+      n, f = Decode64ToIntFloat(enc_px)
+      if n >= 0:
+        exterior_points.append((n, f))
       else:
-        interior_points.append(-px)  # we flip the sign for interior points!
+        interior_points.append((-n, f))  # we flip the sign for interior points!
     # have 2 groups of pixels
     self.ext_hist = BuildCumulative(exterior_points)  # ext generator
     self.int_hist = BuildCumulative(interior_points)  # int generator
 
-  def AsPixels(self, render: RenderParameters) -> bytes:
+  def AsPixels(self, render: RenderParameters) -> bytes:  # noqa: C901
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
     Exterior points (escaped) are colored by mapping their escape iteration through a cumulative
@@ -644,14 +649,31 @@ class Image:
         f'Invalid/Inconsistent {self.ext_hist.min_value=} or '
         f'{self._params.depth=} < {self.ext_hist.max_value=}'
       )
-    # step 3: map each pixel to an RGB color
+
+    def _Interpolate(h: Image.Histogram, n: int, nu: float) -> float:
+      lo: int = max(h.min_value, min(n, h.max_value))
+      hi: int = max(h.min_value, min(n + 1, h.max_value))
+      c0: float = h.d_cumulative.get(lo, 0.0)
+      c1: float = h.d_cumulative.get(hi, c0)
+      c: float = c0 + nu * (c1 - c0)
+      t: float = c / h.count
+      if t < 0.0:
+        return 0.0
+      if t >= 1.0:
+        return _ALMOST_ONE
+      return t
+
+    # map each pixel to an RGB color
+    escaped_at: int
+    nu: float
     pixels = bytearray(self._params.width * self._params.height * 3)
     for i, enc_escaped_at in enumerate(self.escape):
-      escaped_at: int = Decode64ToIntFloat(enc_escaped_at)[0]
+      escaped_at, nu = Decode64ToIntFloat(enc_escaped_at)
       if escaped_at >= 0 and self.ext_hist.count > 0:
         # exterior point: histogram-equalized position in pal
-        t: float = (self.ext_hist.d_cumulative[escaped_at] - 1) / self.ext_hist.count
-        rgb: tuple[int, int, int] = PixelPalette(t, render.escaped_pal, palette.PALETTE_CYCLES)
+        rgb: tuple[int, int, int] = PixelPalette(
+          _Interpolate(self.ext_hist, escaped_at, nu), render.escaped_pal, palette.PALETTE_CYCLES
+        )
       elif self._params.set_points and self.int_hist.count > 0 and escaped_at < 0:
         # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
         t_set: float = (self.int_hist.d_cumulative[-escaped_at] - 1) / self.int_hist.count
@@ -786,11 +808,11 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
   return img_meta
 
 
-def SummaryHistogram(sorted_histogram: list[tuple[int, int]]) -> str:
+def SummaryHistogram(sorted_histogram: list[tuple[int, float]]) -> str:
   """Summarize a histogram as a string, showing the first 3, last 3 values, summarizing the middle.
 
   Args:
-    sorted_histogram (list[tuple[int, int]]): A list of (key, count) tuples representing
+    sorted_histogram (list[tuple[int, float]]): A list of (key, count) tuples representing
         the histogram, SORTED by key.
 
   Returns:
@@ -1218,11 +1240,13 @@ def PixelPalette(
   )
 
 
-def BuildCumulative(values: abc.Iterable[int]) -> Image.Histogram:
+def BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram:
   """Build a raw histogram and cumulative histogram from a pre-filtered list of integer values.
 
+  This is a smooth float histogram.
+
   Args:
-    values (abc.Iterable[int]): The iterable of integer values to histogram.
+    values (abc.Iterable[tuple[int, float]]): The iterable of escaped values (n, nu) to histogram.
 
   Returns:
     Image.Histogram: The histogram object containing the raw and cumulative histograms and
@@ -1230,20 +1254,33 @@ def BuildCumulative(values: abc.Iterable[int]) -> Image.Histogram:
 
   """
   # build the raw histogram
-  histogram: dict[int, int] = {}
+  histogram: dict[int, float] = {}
   total: int = 0
-  for v in values:
-    histogram[v] = histogram.get(v, 0) + 1
+  min_nu: float = 1000.0
+  max_nu: float = -1000.0
+  for v, nu in values:
+    histogram[v] = histogram.get(v, 0.0) + 1.0 - nu
+    histogram[v + 1] = histogram.get(v + 1, 0.0) + nu
     total += 1
+    min_nu = min(min_nu, nu)
+    max_nu = max(max_nu, nu)
   # return trivial case (that would cause issues with min() and max())
   if not histogram:
     return Image.Histogram(
-      count=0, min_value=0, max_value=0, linear=[], cumulative=[], d_linear={}, d_cumulative={}
+      count=0,
+      min_value=0,
+      max_value=0,
+      min_nu=0.0,
+      max_nu=0.0,
+      linear=[],
+      cumulative=[],
+      d_linear={},
+      d_cumulative={},
     )
   # build the cumulative histogram by iterating over the sorted keys of the raw histogram
-  cum: int = 0
-  s_histogram: list[tuple[int, int]] = sorted(histogram.items())
-  s_cum: list[tuple[int, int]] = []
+  cum: float = 0.0
+  s_histogram: list[tuple[int, float]] = sorted(histogram.items())
+  s_cum: list[tuple[int, float]] = []
   for v, c in s_histogram:
     cum += c
     s_cum.append((v, cum))
@@ -1252,6 +1289,8 @@ def BuildCumulative(values: abc.Iterable[int]) -> Image.Histogram:
     count=total,
     min_value=min(histogram),
     max_value=max(histogram),
+    min_nu=min_nu,
+    max_nu=max_nu,
     linear=s_histogram,
     cumulative=s_cum,
     d_linear=histogram,
