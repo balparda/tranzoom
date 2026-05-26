@@ -26,7 +26,6 @@ import tranzoom
 from tranzoom.cli import base
 from tranzoom.core import image
 
-_APP_NAME: str = 'tranzoom'  # this is the directory name, the package name
 _APP_NAMES: set[str] = {'tranz'}  # this is the console scripts names
 
 
@@ -41,9 +40,9 @@ def test_installed_cli_smoke(tmp_path: pathlib.Path) -> None:
     vpy, bin_dir, expected_version, _APP_NAMES
   )
   # basic command smoke tests
-  # _MandelbrotSeahorseTailCall(cli_paths)
+  _MandelbrotSeahorseTailCall(cli_paths)
   _AnimatedSeahorseTailCall(cli_paths)
-  # _JuliaSuzanaWaveCall(cli_paths)
+  _JuliaSuzanaWaveCall(cli_paths)
 
 
 def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
@@ -130,6 +129,13 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:image:set:nu:max': '0.0',
       'tranZoom:image:set:bucket:min': '5679888384',
       'tranZoom:image:set:bucket:max': '28968949760',
+      'tranZoom:image:set:hist:linear': (
+        '{2773383: 1, 3024301: 1, 3110372: 1, ...: 194, 14071028: 1, 14132599: 1, 14144995: 1}'
+      ),
+      'tranZoom:image:set:hist:linear:cumulative': (
+        '{2773383: 1, 3024301: 2, 3110372: 3, ...: 19497, 14071028: 198, 14132599: 199, '
+        '14144995: 200}'
+      ),
       'tranZoom:image:set:hist:bucket': (
         '{5679888384: 1, 6193768448: 1, 6370041856: 1, ...: 194, 28817465344: 1, '
         '28943562752: 1, 28968949760: 1}'
@@ -137,13 +143,6 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:image:set:hist:bucket:cumulative': (
         '{5679888384: 1, 6193768448: 2, 6370041856: 3, ...: 19497, 28817465344: 198, '
         '28943562752: 199, 28968949760: 200}'
-      ),
-      'tranZoom:image:set:hist:linear': (
-        '{2773383: 1, 3024301: 1, 3110372: 1, ...: 194, 14071028: 1, 14132599: 1, 14144995: 1}'
-      ),
-      'tranZoom:image:set:hist:linear:cumulative': (
-        '{2773383: 1, 3024301: 2, 3110372: 3, ...: 19497, 14071028: 198, 14132599: 199, '
-        '14144995: 200}'
       ),
       'tranZoom:image:stats:imag_lo': '0.027733821348360696858581004102225914175833148',
       'tranZoom:image:stats:imag_hi': '0.14144994797569664128062592939633699605100723',
@@ -220,20 +219,34 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:image:height': '220',
       'tranZoom:image:color_set': 'none',
       'tranZoom:image:hash': base.SEAHORSE_ANIMATED_HASH,
-      'tranZoom:image:iter_depth:min': '98',
-      'tranZoom:image:iter_depth:max': '1336',
-      'tranZoom:image:iter_depth:search': '1423',
-      'tranZoom:image:set_point:min': '100000000',
-      'tranZoom:image:set_point:max': '100000000',
-      'tranZoom:image:exterior:histogram_summary': (
-        "[(98, 8), (99, 2), (100, 8), ('...', 48376), (1276, 1), (1278, 1), (1336, 1)]"
+      'tranZoom:image:depth': '1423',
+      'tranZoom:image:exterior:count': '48397',
+      'tranZoom:image:exterior:n:min': '98',
+      'tranZoom:image:exterior:n:max': '1336',
+      'tranZoom:image:exterior:nu:min': '4.646779416361824e-06',
+      'tranZoom:image:exterior:nu:max': '0.9999839663505554',
+      'tranZoom:image:exterior:bucket:min': '202433',
+      'tranZoom:image:exterior:bucket:max': '2737985',
+      'tranZoom:image:exterior:hist:linear': (
+        '{98: 2, 99: 6, 100: 5, ...: 48381, 1276: 1, 1278: 1, 1336: 1}'
       ),
-      'tranZoom:image:exterior:cumulative_histogram_summary': (
-        "[(98, 8), (99, 10), (100, 18), ('...', 31624747), (1276, 48395), "
-        '(1278, 48396), (1336, 48397)]'
+      'tranZoom:image:exterior:hist:linear:cumulative': (
+        '{98: 2, 99: 8, 100: 13, ...: 32226103, 1276: 48395, 1278: 48396, 1336: 48397}'
       ),
-      'tranZoom:image:exterior:pixel_count': '48397',
-      'tranZoom:image:interior:pixel_count': '3',
+      'tranZoom:image:exterior:hist:bucket': (
+        '{202433: 1, 202682: 1, 202820: 1, ...: 48391, 2614704: 1, 2619173: 1, 2737985: 1}'
+      ),
+      'tranZoom:image:exterior:hist:bucket:cumulative': (
+        '{202433: 1, 202682: 2, 202820: 3, ...: 1137706770, 2614704: 48395, '
+        '2619173: 48396, 2737985: 48397}'
+      ),
+      'tranZoom:image:set:count': '3',
+      'tranZoom:image:set:n:min': '100000000',
+      'tranZoom:image:set:n:max': '100000000',
+      'tranZoom:image:set:nu:min': '0.0',
+      'tranZoom:image:set:nu:max': '0.0',
+      'tranZoom:image:set:bucket:min': '204800000000',
+      'tranZoom:image:set:bucket:max': '204800000000',
       'tranZoom:render:overlay': 'none',
       'tranZoom:render:palette': 'sahara',
       'tranZoom:render:set_palette': 'none',
@@ -319,28 +332,49 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:image:height': '377',
       'tranZoom:image:color_set': 'max',
       'tranZoom:image:hash': base.SUZANA_WAVE_HASH,
-      'tranZoom:image:iter_depth:min': '43',
-      'tranZoom:image:iter_depth:max': '1813',
-      'tranZoom:image:iter_depth:search': '1819',
-      'tranZoom:image:set_point:min': '1',
-      'tranZoom:image:set_point:max': '100000000',
-      'tranZoom:image:exterior:histogram_summary': (
-        "[(43, 4194), (44, 11633), (45, 10003), ('...', 80877), (1792, 1), (1798, 1), (1813, 1)]"
+      'tranZoom:image:depth': '1819',
+      'tranZoom:image:exterior:count': '106710',
+      'tranZoom:image:exterior:n:min': '43',
+      'tranZoom:image:exterior:n:max': '1813',
+      'tranZoom:image:exterior:nu:min': '5.752321158070117e-06',
+      'tranZoom:image:exterior:nu:max': '0.9999896883964539',
+      'tranZoom:image:exterior:bucket:min': '89879',
+      'tranZoom:image:exterior:bucket:max': '3715024',
+      'tranZoom:image:exterior:hist:linear': (
+        '{43: 379, 44: 9212, 45: 11219, ...: 85897, 1792: 1, 1798: 1, 1813: 1}'
       ),
-      'tranZoom:image:exterior:cumulative_histogram_summary': (
-        "[(43, 4194), (44, 15827), (45, 25830), ('...', 86502348), (1792, 106708), "
-        '(1798, 106709), (1813, 106710)]'
+      'tranZoom:image:exterior:hist:linear:cumulative': (
+        '{43: 379, 44: 9591, 45: 20810, ...: 87208500, 1792: 106708, 1798: 106709, 1813: 106710}'
       ),
-      'tranZoom:image:exterior:pixel_count': '106710',
-      'tranZoom:image:interior:histogram_summary': (
-        "[(1, 1), (9349, 1), (18697, 1), ('...', 86021), (99957787, 1), (99960423, 1), "
-        '(100000000, 288)]'
+      'tranZoom:image:exterior:hist:bucket': (
+        '{89879: 5, 89880: 2, 89881: 2, ...: 106698, 3671955: 1, 3684029: 1, 3715024: 1}'
       ),
-      'tranZoom:image:interior:cumulative_histogram_summary': (
-        "[(1, 1), (9349, 2), (18697, 3), ('...', 3679815476), (99957787, 86025), "
-        '(99960423, 86026), (100000000, 86314)]'
+      'tranZoom:image:exterior:hist:bucket:cumulative': (
+        '{89879: 5, 89880: 7, 89881: 9, ...: 3348600053, 3671955: 106708, 3684029: 106709, '
+        '3715024: 106710}'
       ),
-      'tranZoom:image:interior:pixel_count': '86314',
+      'tranZoom:image:set:count': '86314',
+      'tranZoom:image:set:n:min': '1',
+      'tranZoom:image:set:n:max': '100000000',
+      'tranZoom:image:set:nu:min': '0.0',
+      'tranZoom:image:set:nu:max': '0.0',
+      'tranZoom:image:set:bucket:min': '2048',
+      'tranZoom:image:set:bucket:max': '204800000000',
+      'tranZoom:image:set:hist:linear': (
+        '{1: 1, 9349: 1, 18697: 1, ...: 86021, 99957787: 1, 99960423: 1, 100000000: 288}'
+      ),
+      'tranZoom:image:set:hist:linear:cumulative': (
+        '{1: 1, 9349: 2, 18697: 3, ...: 3679815476, 99957787: 86025, 99960423: 86026, '
+        '100000000: 86314}'
+      ),
+      'tranZoom:image:set:hist:bucket': (
+        '{2048: 1, 19146752: 1, 38291456: 1, ...: 86021, 204713547776: 1, '
+        '204718946304: 1, 204800000000: 288}'
+      ),
+      'tranZoom:image:set:hist:bucket:cumulative': (
+        '{2048: 1, 19146752: 2, 38291456: 3, ...: 3679815476, 204713547776: 86025, '
+        '204718946304: 86026, 204800000000: 86314}'
+      ),
       'tranZoom:image:stats:max_lo': '1.0303269913803812829799720484633954828318221',
       'tranZoom:image:stats:max_hi': '1.274341960143743658549164107217164534985235',
       'tranZoom:render:overlay': 'none',
