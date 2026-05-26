@@ -56,6 +56,7 @@ This project follows a pragmatic versioning approach:
   - **Mark options on `tranz zoom`**: `--mark`, `--mark-color`, `--mark-width` moved from `tranz zoom auto` to the shared `tranz zoom` subgroup callback — they now apply to `tranz zoom ai`, `tranz zoom manual`, and `tranz zoom auto`.
   - New PNG metadata keys for render parameters: `tranzoom:render:mark_re`, `tranzoom:render:mark_im`, `tranzoom:render:mark_color`, `tranzoom:render:mark_width`.
   - Grid overlay is now always drawn during `tranz zoom ai` and `tranz zoom manual` sessions (no separate flag needed).
+  - Command `tranz config deletedatabase` for easy DB wipe.
 
 - Changed
   - **Breaking: PNG metadata key prefix changed** from hardcoded `'tranzoom:'` to `f'{__app__}:'` (= `'tranZoom:'`); all PNG images written by this version use `tranZoom:*` keys; images written by older versions (`tranzoom:*`) are not readable by this version.

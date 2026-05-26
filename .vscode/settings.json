@@ -127,6 +127,7 @@
     "dataclasses",
     "davidanson",
     "debugpy",
+    "deletedatabase",
     "distlib",
     "dmypy",
     "docstrings",

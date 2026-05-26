@@ -427,7 +427,9 @@ class FractalDatabase:
       )
       logging.info(f'DB saved to "{self._path}": {prev_label} -> {self.label}')
 
-  def SaveImageData(self, params: frame.ComputationParameters, img: image.Image) -> tuple[int, str]:
+  def SaveImageData(
+    self, params: frame.ComputationParameters, img: image.Image
+  ) -> tuple[int, str | None]:
     """Save image data to disk.
 
     Args:
@@ -435,23 +437,25 @@ class FractalDatabase:
       img (image.Image): the image data to save
 
     Returns:
-      tuple[int, str]: a tuple containing the timestamp and the path where the image data was saved
+      tuple[int, str | None]: a tuple containing the timestamp and the path where the image
+          data was saved, or None if in read-only mode
 
     """
-    tm: int = timer.Now()
     path: str = f'img_{params.sha}.Data'
+    # trivial case first
     if self._read_only:
       logging.warning(f'Read-only mode: will *NOT* save {params} to "{path}"')
-    else:
-      self._config.Serialize(
-        img,
-        config_name=path,
-        encryption_key=self._key,
-        compress=_IMG_DATA_COMPRESS_LEVEL,
-        silent=True,
-      )
-      logging.info(f'Saved image data {params} to "{path}"')
-    return (tm, path)
+      return (timer.Now(), None)
+    # we will actually save
+    self._config.Serialize(
+      img,
+      config_name=path,
+      encryption_key=self._key,
+      compress=_IMG_DATA_COMPRESS_LEVEL,
+      silent=True,
+    )
+    logging.info(f'Saved image data {params} to "{path}"')
+    return (timer.Now(), path)
 
   def LoadImageData(self, path: str) -> image.Image:
     """Load image data from disk.
@@ -514,14 +518,14 @@ class FractalDatabase:
     return (ck, frm_data, cp_data, render_data)
 
   def AddComputationToDB(
-    self, params: frame.ComputationParameters, img_tm: int, img_path: str
+    self, params: frame.ComputationParameters, img_tm: int, img_path: str | None
   ) -> tuple[FrameData, ComputationData]:
     """Add a computation to the database, along with its associated frame if not already present.
 
     Args:
       params (frame.ComputationParameters): the computation parameters to add
       img_tm (int): the timestamp of the associated image data creation
-      img_path (str): the path to the associated image data file, as stored in the DB;
+      img_path (str | None): the path to the associated image data file, as stored in the DB;
           this is a relative path managed by the DB, not an arbitrary
 
     Returns:
@@ -547,7 +551,9 @@ class FractalDatabase:
     cp: ComputationData
     if cp_hash in frm['cps']:
       cp = frm['cps'][cp_hash]
-      cp['tm'] = img_tm  # always update timestamp
+      if img_path is not None:
+        cp['tm'] = img_tm  # update timestamp if we saved a file only, in case of update
+        cp['raw_data_path'] = img_path  # if given, update path (in case it changed: unlikely)
     else:
       cp = ComputationData(
         frm=frm_hash,
@@ -716,10 +722,13 @@ class FractalDatabase:
       if (img_path := cp_data['raw_data_path']) is not None:
         # second best case: we have the image computation on disk already
         print_comm(f'[red]DB computation[/] LOAD @{timer.TimeStr(img_tm)} -> "{img_path}"')
-        img = None if force else self.LoadImageData(img_path)
+        try:
+          img = None if force else self.LoadImageData(img_path)
+        except tbase.InputError as err:
+          print_comm(f'[red]DB computation MISSING[/]: {err}')
       else:
         # we have done the computation but do not have the data on disk
-        print_comm(f'[red]DB computation[/] @{timer.TimeStr(img_tm)} -> [red]no render[/]')
+        print_comm(f'[red]DB computation[/] @{timer.TimeStr(img_tm)} -> [red]no cache on disk[/]')
     # look at the actual render
     if render_data is not None:
       # we have done a render with these parameters before
@@ -741,7 +750,7 @@ class FractalDatabase:
         # if we got here, we have the render parameters but no existing image on disk
         print_comm(
           f'[red]DB render[/], {render_data["data_hash"]!r}@{timer.TimeStr(render_data["tm"])} '
-          f'-> [red]no disk[/]'
+          f'-> [red]no render on disk[/]'
         )
     # render the image for the current frame
     print_comm('')

@@ -50,15 +50,15 @@ META_IMAGE_COLOR_SET_KEY: str = f'{_app}:image:color_set'  # frame.SetHighlightA
 META_IMAGE_EXT_COUNT_KEY: str = f'{_app}:image:exterior:count'  # int; count escaped
 META_IMAGE_EXT_N_MIN_KEY: str = f'{_app}:image:exterior:n:min'  # int; min iter
 META_IMAGE_EXT_N_MAX_KEY: str = f'{_app}:image:exterior:n:max'  # int; max iter
-META_IMAGE_EXT_NU_MIN_KEY: str = f'{_app}:image:exterior:nu:min'  # int
-META_IMAGE_EXT_NU_MAX_KEY: str = f'{_app}:image:exterior:nu:max'  # int
+META_IMAGE_EXT_NU_MIN_KEY: str = f'{_app}:image:exterior:nu:min'  # float
+META_IMAGE_EXT_NU_MAX_KEY: str = f'{_app}:image:exterior:nu:max'  # float
 META_IMAGE_EXT_BUCKET_MIN_KEY: str = f'{_app}:image:exterior:bucket:min'  # int
 META_IMAGE_EXT_BUCKET_MAX_KEY: str = f'{_app}:image:exterior:bucket:max'  # int
 META_IMAGE_SET_COUNT_KEY: str = f'{_app}:image:set:count'  # int; count interior
 META_IMAGE_SET_N_MIN_KEY: str = f'{_app}:image:set:n:min'  # int; min iter
 META_IMAGE_SET_N_MAX_KEY: str = f'{_app}:image:set:n:max'  # int; max iter
-META_IMAGE_SET_NU_MIN_KEY: str = f'{_app}:image:set:nu:min'  # int
-META_IMAGE_SET_NU_MAX_KEY: str = f'{_app}:image:set:nu:max'  # int
+META_IMAGE_SET_NU_MIN_KEY: str = f'{_app}:image:set:nu:min'  # float
+META_IMAGE_SET_NU_MAX_KEY: str = f'{_app}:image:set:nu:max'  # float
 META_IMAGE_SET_BUCKET_MIN_KEY: str = f'{_app}:image:set:bucket:min'  # int
 META_IMAGE_SET_BUCKET_MAX_KEY: str = f'{_app}:image:set:bucket:max'  # int
 META_RENDER_PALETTE_KEY: str = f'{_app}:render:palette'  # str, ex "sunset", one of palette.Palette
@@ -132,7 +132,7 @@ _PACK_Q = struct.Struct('>Q')  # uint64
 
 # image constants
 
-type ImageInt32Array = array.array[int]  # type alias for the type of our pixel data array
+type ImageUInt64Array = array.array[int]  # type alias for the type of our pixel data array
 _HIST_SUB_BINS: int = 2048  # number of sub-bins to use for the smooth histogram keys
 
 # constants for drawing
@@ -627,8 +627,12 @@ class Image:
     # save objects
     self._params: frame.ComputationParameters = params
     # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
-    self.escape: ImageInt32Array = array.array(  # signed32
-      'L', (0 for _ in range(self._params.width * self._params.height))
+    self.escape: ImageUInt64Array = array.array(  # unsigned int64
+      # 'L' = unsigned long: 8 bytes on Linux/macOS 64-bit, but 4 bytes on Windows 64-bit!
+      # using 'Q' (always 8 bytes, guaranteed by the C standard to be uint64_t) is
+      # cleaner and more portable than 'L' and works on all platforms; we double-check the size
+      'Q',
+      (0 for _ in range(self._params.width * self._params.height)),
     )
     if self.escape.itemsize != frame.N_BYTES_UINT:
       raise Error(f'unsupported platform: array of unsigned ints is not {frame.N_BYTES_UINT} bytes')
@@ -1313,17 +1317,16 @@ def _BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram
         the total count.
 
   """
-  # build the raw histograms
-  k: int
-  f: float
+  # build the raw histogram
   histogram: dict[int, int] = {}
   bucket_histogram: dict[int, int] = {}
   total: int = 0
   min_nu: float = 1000.0
   max_nu: float = -1000.0
-  for v, nu in values:
-    histogram[v] = histogram.get(v, 0) + 1
-    k, _ = _SmoothHistKey(v, nu)
+  k: int
+  for esc, nu in values:
+    histogram[esc] = histogram.get(esc, 0) + 1
+    k = _SmoothHistKey(esc, nu)[0]
     bucket_histogram[k] = bucket_histogram.get(k, 0) + 1
     total += 1
     min_nu = min(min_nu, nu)
@@ -1351,14 +1354,15 @@ def _BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram
   cum: int = 0
   s_histogram: list[tuple[int, int]] = sorted(histogram.items())
   s_cum: list[tuple[int, int]] = []
-  for k, f in s_histogram:
-    cum += f
+  v: int
+  for k, v in s_histogram:
+    cum += v
     s_cum.append((k, cum))
   cum = 0
   s_bucket_histogram: list[tuple[int, int]] = sorted(bucket_histogram.items())
   s_bucket_cum: list[tuple[int, int]] = []
-  for k, f in s_bucket_histogram:
-    cum += f
+  for k, v in s_bucket_histogram:
+    cum += v
     s_bucket_cum.append((k, cum))
   # build object and return
   return Image.Histogram(

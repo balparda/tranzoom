@@ -218,7 +218,9 @@ def _FractalAdaptiveIterations(
         f'{img16.stats.n_interior}/{img16.stats.n_px} set points'
       )
       return (max_iter, img16.stats)
-    print_comm(f'[red]Iteration limit of {high_iter} was too low:[/] will try again 10x deeper...')
+    print_comm(
+      f'[red]Iteration limit of {high_iter} was too low:[/] will try again [red]10x[/] deeper...'
+    )
     # here we didn't find, so we loop to the next higher limit...
   # if we exhausted all the high_iters without finding a suitable max_iter, we have to give up
   raise Error(
@@ -793,7 +795,7 @@ def NormalizeSmoothEscape(n: int, nu: float) -> tuple[int, float]:
     Error: if the normalized smooth escape part is not in [0,1) after normalization
 
   """
-  # if nu is not finite, just return n and 0.0 for the smooth part
+  # if nu is not finite consider it an error
   if not math.isfinite(nu):
     raise Error(f'nu is not a valid number {nu=}, bug! report')
   # get the integer shift to apply to n, and the new nu in [0,1)

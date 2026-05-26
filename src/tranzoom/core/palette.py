@@ -22,7 +22,7 @@ DEFAULT_PALETTE: Palette = Palette.SAHARA
 DEFAULT_SET_PALETTE: Palette = Palette.GRAYSCALE_REVERSE  # used for interior (set) points coloring
 
 # Color palettes for exterior points. Each is a tuple of RGB color stops that are
-# linearly interpolated and cycled PALETTE_CYCLES times across the histogram-equalized
+# linearly interpolated and may be cycled on across the histogram-equalized
 # escape-iteration range. Any number of stops is supported.
 PALETTES: dict[Palette, tuple[tuple[int, int, int], ...]] = {
   # Classic 16-stop blue-to-yellow-to-brown gradient (original Mandelbrot color scheme)
@@ -134,7 +134,6 @@ PALETTES: dict[Palette, tuple[tuple[int, int, int], ...]] = {
     (13, 3, 50),  # almost black indigo (wraps back to start)
   ),
   # 8-stop smooth grayscale: white (deep interior, low |z|) → black (near boundary, high |z|);
-  # cycles only once (SET_PALETTE_CYCLES=1) so the full gradient runs across the Set interior;
   # black near the boundary provides contrast with exterior colors; this is the DEFAULT_SET_PALETTE
   Palette.GRAYSCALE_REVERSE: (
     (255, 255, 255),  # white (deepest interior; far from boundary, low |z| magnitude)

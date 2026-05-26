@@ -57,6 +57,8 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       [
         str(cli_paths['tranz']),
         '--no-date',  # --no-date makes the filename deterministic (hash-only)
+        '--no-db',
+        '--force',
         '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
         tmp_dir,
         '--db-path',  # make sure DB will be in temp too!
@@ -168,6 +170,8 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       [
         str(cli_paths['tranz']),
         '--no-date',  # --no-date makes the filename deterministic (hash-only)
+        '--no-db',
+        '--force',
         '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
         tmp_dir,
         '--db-path',  # make sure DB will be in temp too!
@@ -279,6 +283,8 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path]) -> None:
       [
         str(cli_paths['tranz']),
         '--no-date',  # --no-date makes the filename deterministic (hash-only)
+        '--no-db',
+        '--force',
         '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
         tmp_dir,
         '--db-path',  # make sure DB will be in temp too!

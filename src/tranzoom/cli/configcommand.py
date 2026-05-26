@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import json
+import pathlib
+import shutil
 
 import click
 import typer
@@ -20,7 +22,8 @@ config_app = typer.Typer(
     'Examples:\n\n\n\n'
     'poetry run tranz config get\n'
     'poetry run tranz config set use_db true\n'
-    'poetry run tranz config set foo bar  # (example made up key)'
+    'poetry run tranz config set foo bar  # (example made up key)\n'
+    'poetry run tranz config deletedatabase'
   ),
 )
 tranz.app.add_typer(config_app, name='config')
@@ -109,4 +112,48 @@ def Set(  # documentation is help/epilog/args  # noqa: D103
   config.console.print(f'Config saved to [yellow]"{config.appconfig.path}"[/]')
   config.console.print()
   config.console.print_json(json.dumps(cnf), indent=2)
+  config.console.print()
+
+
+@config_app.command(
+  'deletedatabase',
+  help=(
+    'Delete the database and all its contents and computed data. '
+    'This does not touch anything outside the directory where the DB stores its files, '
+    'but it will delete the entire DB and data files, irreversibly. Use with caution.'
+  ),
+  epilog=(
+    'Examples:\n\n\n\n$ poetry run tranz config deletedatabase\n\n<DELETES EVERYTHING! BEWARE!>'
+  ),
+)
+@clibase.CLIErrorGuard
+def DeleteDatabase(  # documentation is help/epilog/args  # noqa: D103
+  *,
+  ctx: click.Context,
+) -> None:
+  # read
+  config: base.TranZoomConfig = ctx.obj
+  db_path: pathlib.Path = config.appconfig.dir
+  if not db_path.exists() or not db_path.is_dir():
+    raise base.UsageError(f'Config dir does not exist at "{db_path}": nothing to delete')
+  # caution the user!
+  config.console.print()
+  config.console.print(
+    '[yellow]>>>[/] '
+    '[red]WARNING: This will delete the entire database and all its contents![/] '
+    '[yellow]<<<[/]'
+  )
+  config.console.print()
+  config.console.print(f'Path: [yellow][bold]"{db_path}"[/][/]')
+  config.console.print()
+  inp: str = config.console.input(
+    'Type "[yellow]DELETE ALL[/]" to confirm, exactly like this, IN ALL CAPS: '
+  )
+  if inp != 'DELETE ALL':
+    config.console.print('[red]Aborting: confirmation not received.[/]')
+    return
+  # delete the database directory (which contains the DB file and all data files)
+  shutil.rmtree(db_path)
+  config.console.print()
+  config.console.print('[magenta]Deleted[/]')
   config.console.print()
