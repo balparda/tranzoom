@@ -38,9 +38,9 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 # if `tests/data/images/demo-mandel-seahorse-tail.png` internal data changes this will change!
 # this indicates that the mathematical computation or the setting of colors has changed;
 # this should NOT change over metadata changes, as it is computed from raw pixel data
-SEAHORSE_TAIL_HASH: str = 'bc8befe1492f4d296cf93994ba201ef06c3fa4858a47a657bb7f136f42bceb5d'
-SEAHORSE_ANIMATED_HASH: str = '4cc2c56c0d6363bcb4bf63d7221843cf668f12e8582490ed3fac7100b413b2c9'
-SUZANA_WAVE_HASH: str = '4be1409a9c55b4f9cbe21f45fa29d0bfc11622bffc248a5639fbffdea0cd80fe'
+SEAHORSE_TAIL_HASH: str = 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9'
+SEAHORSE_ANIMATED_HASH: str = 'ba053970ecbd96a3d9f77caac43af8ffc1c8a0f4d22fe9150744308471898281'
+SUZANA_WAVE_HASH: str = '8f06e7bcd0ea14dff1b6fc3c829cdc295367695fea882e2cf9e25bb1a6dfb5fc'
 # this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 
 # CLI options that can be re-used
@@ -159,6 +159,16 @@ USE_DB_COMPRESSION_OPTION: typer.models.OptionInfo = typer.Option(
     'False means do not use it and file will be readable; '
     'default is False, a larger, readable file; '
     'this option can also be loaded from the disk config, but if given should override the config'
+  ),
+)
+IMAGE_FORCE_REDO_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--force/--no-force',
+  help=(
+    'If True, forces re-computation and re-saving of the image(s)/computation(s) even if an '
+    'image/computation with the same parameters already exists; if False will use existing (DB) '
+    'entries to avoid redundant computations/rendering as much as possible/reasonable; '
+    'default is False, so we will try to avoid redundant computations/rendering'
   ),
 )
 IMAGE_PREFIX_OPTION: typer.models.OptionInfo = typer.Option(
@@ -604,6 +614,7 @@ class TranZoomConfig(clibase.CLIConfig):
   img_use_date: bool
   img_use_hash: bool
   img_path_prefix: str | None
+  img_force_redo: bool
   db_read_only: bool
   db_compress: bool
   pal: palette.Palette
@@ -685,7 +696,8 @@ def ProduceFractalImage(
   tm: int | None = None,
   add_serial: int | None = None,
   save_image: bool = True,
-) -> tuple[image.Image, bytes, str, image.RenderParameters]:
+  require_img_obj: bool = True,
+) -> tuple[image.Image | None, bytes, str, image.RenderParameters]:
   """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
 
   Args:
@@ -701,6 +713,8 @@ def ProduceFractalImage(
         5-digit number between the date and hash.
     save_image (bool): If True, will save the final image to disk; if False, the image will
         not be saved; default is True.
+    require_img_obj (bool): If True, will require the image.Image object to be returned by the
+        method; if False, the image.Image object may be None; default is True
 
   Returns:
     tuple[image.Image, bytes, str, image.RenderParameters]: A tuple of
@@ -710,7 +724,7 @@ def ProduceFractalImage(
   including:
   - determining the image dimensions from the config
   - logging the rendering parameters
-  - rendering the image from the frame using the fractal module via ai.CoreComputeImage
+  - rendering the image from the frame using the fractal module
   - converting the rendered image to PNG and getting its hash
   - optionally adding a crosshair overlay if mark coordinates are given
   - saving the image to disk with a name based on the date and hash
@@ -754,12 +768,11 @@ def ProduceFractalImage(
     prefix=config.img_path_prefix or DEFAULT_IMAGE_PREFIX[frm.fractal],
   )
   # compute the image via the unified core primitive
-  img: image.Image
+  img: image.Image | None
   raw_png: bytes
   raw_hash: str
   full_path: pathlib.Path
-  img, raw_png, raw_hash, full_path = frdb.CoreComputeImage(
-    db,
+  img, raw_png, raw_hash, full_path = db.CoreComputeImage(
     params,
     render,
     out,
@@ -768,6 +781,8 @@ def ProduceFractalImage(
     max_threads=config.max_threads,
     iterm=config.iterm,
     print_comm=config.console.print,
+    require_img_obj=require_img_obj,
+    force=config.img_force_redo,
   )
   # save the image to disk if requested
   if save_image:

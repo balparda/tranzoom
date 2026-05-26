@@ -207,6 +207,7 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
       config.iterm,
       _MANUAL_QUERY_WEIGHT,
       print_comm=config.console.print,
+      force=config.img_force_redo,
     )
 
 
@@ -299,6 +300,7 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
       iterm=config.iterm,
       print_comm=config.console.print,
       manual=True,
+      force=config.img_force_redo,
     )
 
 
@@ -438,7 +440,13 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
         config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
         # we have the frame, now feed it to the producer
         img, img_data, data_hash, render = base.ProduceFractalImage(
-          db, frm, config, tm=timestamp, add_serial=i + 1, save_image=save_frames
+          db,
+          frm,
+          config,
+          tm=timestamp,
+          add_serial=i + 1,
+          save_image=save_frames,
+          require_img_obj=True,
         )
         all_frames.append(img_data)
         all_hash.append(data_hash)

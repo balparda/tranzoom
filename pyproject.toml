@@ -58,7 +58,10 @@ dependencies = [
   "tqdm>=4.67",
   "transai>=1.3.0",
   "transcrypto>=2.6.1",
-  "typer>=0.25",   # if this changes, also change: [tool.poetry.dependencies]
+
+  # TODO: pinned version because 0.26 is a mess, inline click and tests give a message that
+  #    can only be fixed by disabling typeguard; probably have to fix clibase/transcrypto up
+  "typer==0.25.0",   # if this changes, also change: [tool.poetry.dependencies]
 
 ]
 
@@ -105,7 +108,7 @@ include = [
 # prefer to add dependencies inside the [project.dependencies] section
 
 python = "^3.12"  # if version changes, remember to change README.md
-typer = { version = "^0.25", extras = ["all"] }
+typer = { version = "0.25.0", extras = ["all"] }
 
 [tool.poetry.group.dev.dependencies]
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import array
 import base64
+import bisect
 import dataclasses
 import enum
 import io
@@ -17,6 +18,7 @@ import json
 import logging
 import math
 import pathlib
+import struct
 import sys
 import time
 from collections import abc
@@ -31,94 +33,111 @@ from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
+from tranzoom import __app__ as _app
 from tranzoom.core import frame, palette
 
 # metadata keys for PNG tEXt chunks; used to store the frame parameters and other info in the PNG;
 # don't add "version", or "date", or other metadata that can change without changing the
 # actual image/mathematical data;
-# keys use a "tranzoom:" namespace to avoid collisions with other metadata
+# keys use a "tranZoom:" (_app) namespace to avoid collisions with other metadata
 # all are converted to str for storage in PNG metadata, but the original types are indicated below
-META_IMAGE_ANIMATION_KEY = 'tranzoom:image:animation'  # AnimationType or "none" if static image
-META_IMAGE_WIDTH_KEY = 'tranzoom:image:width'  # int, in pixels
-META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
-META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
-META_ITER_DEPTH_MIN_KEY = 'tranzoom:image:iter_depth:min'  # int
-META_ITER_DEPTH_MAX_KEY = 'tranzoom:image:iter_depth:max'  # int
-META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:image:iter_depth:search'  # int
-META_SET_POINT_MIN_KEY = 'tranzoom:image:set_point:min'  # int
-META_SET_POINT_MAX_KEY = 'tranzoom:image:set_point:max'  # int
-META_IMAGE_COLOR_SET_KEY = 'tranzoom:image:color_set'  # frame.SetHighlightAlgorithm or "none"
-META_RENDER_PALETTE_KEY = 'tranzoom:render:palette'  # str, like "sunset", one of palette.Palette
-META_RENDER_SET_PALETTE_KEY = 'tranzoom:render:set_palette'  # str, interior Set palette name
-META_RENDER_OVERLAY_KEY = 'tranzoom:render:overlay'  # image.OverlayType or "none"
-META_RENDER_MARK_RE_KEY = 'tranzoom:render:mark_re'  # gmpy2.mpq
-META_RENDER_MARK_IM_KEY = 'tranzoom:render:mark_im'  # gmpy2.mpq
-META_RENDER_MARK_COLOR_KEY = 'tranzoom:render:mark_color'  # Color.name.lower() or "none" (=no mark)
-META_RENDER_MARK_WIDTH_KEY = 'tranzoom:render:mark_width'  # int
-META_PIXEL_EXTERIOR_COUNT_KEY = 'tranzoom:image:exterior:pixel_count'  # int; count escaped
-META_PIXEL_INTERIOR_COUNT_KEY = 'tranzoom:image:interior:pixel_count'  # int; count set
-META_PIXEL_EXTERIOR_HISTOGRAM_KEY = 'tranzoom:image:exterior:histogram_summary'  # str
-META_PIXEL_INTERIOR_HISTOGRAM_KEY = 'tranzoom:image:interior:histogram_summary'  # str; can be ""!
-META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
-  'tranzoom:image:exterior:cumulative_histogram_summary'  # str
-)
-META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
-  'tranzoom:image:interior:cumulative_histogram_summary'  # str; can be ""!
-)
-META_IMAGE_STATS_MAX_LO_KEY = 'tranzoom:image:stats:max_lo'  # gmpy2.mpfr
-META_IMAGE_STATS_MAX_HI_KEY = 'tranzoom:image:stats:max_hi'  # gmpy2.mpfr
-META_IMAGE_STATS_MIN_LO_KEY = 'tranzoom:image:stats:min_lo'  # gmpy2.mpfr
-META_IMAGE_STATS_MIN_HI_KEY = 'tranzoom:image:stats:min_hi'  # gmpy2.mpfr
-META_IMAGE_STATS_ANG_LO_KEY = 'tranzoom:image:stats:ang_lo'  # gmpy2.mpfr
-META_IMAGE_STATS_ANG_HI_KEY = 'tranzoom:image:stats:ang_hi'  # gmpy2.mpfr
-META_IMAGE_STATS_IMAG_LO_KEY = 'tranzoom:image:stats:imag_lo'  # gmpy2.mpfr
-META_IMAGE_STATS_IMAG_HI_KEY = 'tranzoom:image:stats:imag_hi'  # gmpy2.mpfr
-META_FRACTAL_KEY = 'tranzoom:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal, lowercase
-META_TOP_RE_KEY = 'tranzoom:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
-META_TOP_IM_KEY = 'tranzoom:frame:top_im'  # gmpy2.mpq
-META_BOTTOM_RE_KEY = 'tranzoom:frame:bottom_re'  # gmpy2.mpq
-META_BOTTOM_IM_KEY = 'tranzoom:frame:bottom_im'  # gmpy2.mpq
-META_CENTER_RE_KEY = 'tranzoom:frame:center_re'  # gmpy2.mpq
-META_CENTER_IM_KEY = 'tranzoom:frame:center_im'  # gmpy2.mpq
-META_WIDTH_RE_KEY = 'tranzoom:frame:width_re'  # gmpy2.mpq
-META_HEIGHT_IM_KEY = 'tranzoom:frame:height_im'  # gmpy2.mpq
-META_PRECISION_KEY = 'tranzoom:frame:precision'  # int, in bits
-META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'  # float
+META_IMAGE_ANIMATION_KEY: str = f'{_app}:image:animation'  # AnimationType or "none" if static image
+META_IMAGE_WIDTH_KEY: str = f'{_app}:image:width'  # int, in pixels
+META_IMAGE_HEIGHT_KEY: str = f'{_app}:image:height'  # int, in pixels
+META_IMAGE_HASH_KEY: str = f'{_app}:image:hash'  # str, like "abcdef1234567890", a SHA256
+META_ITER_SEARCH_DEPTH_KEY: str = f'{_app}:image:depth'  # int
+META_IMAGE_COLOR_SET_KEY: str = f'{_app}:image:color_set'  # frame.SetHighlightAlgorithm or "none"
+META_IMAGE_EXT_COUNT_KEY: str = f'{_app}:image:exterior:count'  # int; count escaped
+META_IMAGE_EXT_N_MIN_KEY: str = f'{_app}:image:exterior:n:min'  # int; min iter
+META_IMAGE_EXT_N_MAX_KEY: str = f'{_app}:image:exterior:n:max'  # int; max iter
+META_IMAGE_EXT_NU_MIN_KEY: str = f'{_app}:image:exterior:nu:min'  # float
+META_IMAGE_EXT_NU_MAX_KEY: str = f'{_app}:image:exterior:nu:max'  # float
+META_IMAGE_EXT_BUCKET_MIN_KEY: str = f'{_app}:image:exterior:bucket:min'  # int
+META_IMAGE_EXT_BUCKET_MAX_KEY: str = f'{_app}:image:exterior:bucket:max'  # int
+META_IMAGE_SET_COUNT_KEY: str = f'{_app}:image:set:count'  # int; count interior
+META_IMAGE_SET_N_MIN_KEY: str = f'{_app}:image:set:n:min'  # int; min iter
+META_IMAGE_SET_N_MAX_KEY: str = f'{_app}:image:set:n:max'  # int; max iter
+META_IMAGE_SET_NU_MIN_KEY: str = f'{_app}:image:set:nu:min'  # float
+META_IMAGE_SET_NU_MAX_KEY: str = f'{_app}:image:set:nu:max'  # float
+META_IMAGE_SET_BUCKET_MIN_KEY: str = f'{_app}:image:set:bucket:min'  # int
+META_IMAGE_SET_BUCKET_MAX_KEY: str = f'{_app}:image:set:bucket:max'  # int
+META_RENDER_PALETTE_KEY: str = f'{_app}:render:palette'  # str, ex "sunset", one of palette.Palette
+META_RENDER_SET_PALETTE_KEY: str = f'{_app}:render:set_palette'  # str, interior Set palette name
+META_RENDER_OVERLAY_KEY: str = f'{_app}:render:overlay'  # image.OverlayType or "none"
+META_RENDER_MARK_RE_KEY: str = f'{_app}:render:mark_re'  # gmpy2.mpq
+META_RENDER_MARK_IM_KEY: str = f'{_app}:render:mark_im'  # gmpy2.mpq
+META_RENDER_MARK_COLOR_KEY: str = f'{_app}:render:mark_color'  # Color.name.lower() / "none"=no mark
+META_RENDER_MARK_WIDTH_KEY: str = f'{_app}:render:mark_width'  # int
+META_IMAGE_STATS_MAX_LO_KEY: str = f'{_app}:image:stats:max_lo'  # gmpy2.mpfr
+META_IMAGE_STATS_MAX_HI_KEY: str = f'{_app}:image:stats:max_hi'  # gmpy2.mpfr
+META_IMAGE_STATS_MIN_LO_KEY: str = f'{_app}:image:stats:min_lo'  # gmpy2.mpfr
+META_IMAGE_STATS_MIN_HI_KEY: str = f'{_app}:image:stats:min_hi'  # gmpy2.mpfr
+META_IMAGE_STATS_ANG_LO_KEY: str = f'{_app}:image:stats:ang_lo'  # gmpy2.mpfr
+META_IMAGE_STATS_ANG_HI_KEY: str = f'{_app}:image:stats:ang_hi'  # gmpy2.mpfr
+META_IMAGE_STATS_IMAG_LO_KEY: str = f'{_app}:image:stats:imag_lo'  # gmpy2.mpfr
+META_IMAGE_STATS_IMAG_HI_KEY: str = f'{_app}:image:stats:imag_hi'  # gmpy2.mpfr
+META_FRACTAL_KEY: str = f'{_app}:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal
+META_TOP_RE_KEY: str = f'{_app}:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
+META_TOP_IM_KEY: str = f'{_app}:frame:top_im'  # gmpy2.mpq
+META_BOTTOM_RE_KEY: str = f'{_app}:frame:bottom_re'  # gmpy2.mpq
+META_BOTTOM_IM_KEY: str = f'{_app}:frame:bottom_im'  # gmpy2.mpq
+META_CENTER_RE_KEY: str = f'{_app}:frame:center_re'  # gmpy2.mpq
+META_CENTER_IM_KEY: str = f'{_app}:frame:center_im'  # gmpy2.mpq
+META_WIDTH_RE_KEY: str = f'{_app}:frame:width_re'  # gmpy2.mpq
+META_HEIGHT_IM_KEY: str = f'{_app}:frame:height_im'  # gmpy2.mpq
+META_PRECISION_KEY: str = f'{_app}:frame:precision'  # int, in bits
+META_MAGNIFICATION_ORDER_KEY: str = f'{_app}:frame:magnification_order'  # float
 # extra keys added to some images only
+# images with exterior points (almost all!)
+META_IMAGE_EXT_HISTOGRAM_LINEAR_KEY: str = f'{_app}:image:exterior:hist:linear'  # str
+META_IMAGE_EXT_HISTOGRAM_LINEAR_CUM_KEY: str = f'{_app}:image:exterior:hist:linear:cumulative'
+META_IMAGE_EXT_HISTOGRAM_BUCKET_KEY: str = f'{_app}:image:exterior:hist:bucket'  # str
+META_IMAGE_EXT_HISTOGRAM_BUCKET_CUM_KEY: str = f'{_app}:image:exterior:hist:bucket:cumulative'
+# images with interior points and a Set palette (so we have interior histograms)
+META_IMAGE_SET_HISTOGRAM_LINEAR_KEY: str = f'{_app}:image:set:hist:linear'  # str
+META_IMAGE_SET_HISTOGRAM_LINEAR_CUM_KEY: str = f'{_app}:image:set:hist:linear:cumulative'  # str
+META_IMAGE_SET_HISTOGRAM_BUCKET_KEY: str = f'{_app}:image:set:hist:bucket'  # str
+META_IMAGE_SET_HISTOGRAM_BUCKET_CUM_KEY: str = f'{_app}:image:set:hist:bucket:cumulative'  # str
 # Julia extra keys
-META_JULIA_RE_KEY = 'tranzoom:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
-META_JULIA_IM_KEY = 'tranzoom:frame:julia_im'  # gmpy2.mpq, only added for Julia Set frames
+META_JULIA_RE_KEY: str = f'{_app}:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
+META_JULIA_IM_KEY: str = f'{_app}:frame:julia_im'  # gmpy2.mpq, only added for Julia Set frames
 # Animation extra keys
-META_ANIM_INITIAL_WIDTH_RE_KEY = 'tranzoom:animation:frame:initial_width_re'  # gmpy2.mpq
-META_ANIM_INITIAL_HEIGHT_IM_KEY = 'tranzoom:animation:frame:initial_height_im'  # gmpy2.mpq
-META_ANIM_MAGNITUDE_KEY = 'tranzoom:animation:zoom:magnitude'  # float
-META_ANIM_MAGNITUDE_PER_STEP_KEY = 'tranzoom:animation:zoom:magnitude_per_step'  # float
-META_ANIM_MAGNIFICATION_PER_STEP_KEY = 'tranzoom:animation:zoom:magnification_per_step'  # float
-META_ANIM_DURATION_KEY = 'tranzoom:animation:duration'  # float
-META_ANIM_FRAMES_KEY = 'tranzoom:animation:frames'  # int
-META_ANIM_STEPS_KEY = 'tranzoom:animation:steps'  # int
-META_ANIM_FPS_KEY = 'tranzoom:animation:fps'  # float
-META_ANIM_LOOP_KEY = 'tranzoom:animation:loop'  # int; 0 means infinite loop; meaningless for MP4
+META_ANIM_INITIAL_WIDTH_RE_KEY: str = f'{_app}:animation:frame:initial_width_re'  # gmpy2.mpq
+META_ANIM_INITIAL_HEIGHT_IM_KEY: str = f'{_app}:animation:frame:initial_height_im'  # gmpy2.mpq
+META_ANIM_MAGNITUDE_KEY: str = f'{_app}:animation:zoom:magnitude'  # float
+META_ANIM_MAGNITUDE_PER_STEP_KEY: str = f'{_app}:animation:zoom:magnitude_per_step'  # float
+META_ANIM_MAGNIFICATION_PER_STEP_KEY: str = f'{_app}:animation:zoom:magnification_per_step'  # float
+META_ANIM_DURATION_KEY: str = f'{_app}:animation:duration'  # float
+META_ANIM_FRAMES_KEY: str = f'{_app}:animation:frames'  # int
+META_ANIM_STEPS_KEY: str = f'{_app}:animation:steps'  # int
+META_ANIM_FPS_KEY: str = f'{_app}:animation:fps'  # float
+META_ANIM_LOOP_KEY: str = f'{_app}:animation:loop'  # int; 0 means inf loop; meaningless for MP4
 # LLM extra keys
-META_LLM_MODEL_KEY = 'tranzoom:llm:model'  # str (or "HUMAN"/META_LLM_MODEL_VALUE_HUMAN for human)
-META_LLM_TEMPERATURE_KEY = 'tranzoom:llm:temperature'  # float
-META_LLM_SEED_KEY = 'tranzoom:llm:seed'  # int (0 if not set)
-META_LLM_QUERY_MEMORY_KEY = 'tranzoom:llm:query:memory'  # int; number of previous steps chat
-META_LLM_QUERY_REASONING_KEY = 'tranzoom:llm:query:reasoning'  # bool; stored as "true"/"false"
-META_LLM_QUERY_SETUP_KEY = 'tranzoom:llm:query:setup'  # str
-META_LLM_QUERY_IMAGE_KEY = 'tranzoom:llm:query:image'  # str
-META_LLM_QUERY_EXTRA_KEY = 'tranzoom:llm:query:extra'  # str
-META_LLM_RESULT_JSON_KEY = 'tranzoom:llm:result:json'  # JSON with evaluation info from LLM or HUMAN
-META_LLM_ZOOM_COUNT_KEY = 'tranzoom:llm:zoom:count'  # int; zoom iteration depth
+META_LLM_MODEL_KEY: str = f'{_app}:llm:model'  # str (META_LLM_MODEL_VALUE_HUMAN or "HUMAN")
+META_LLM_TEMPERATURE_KEY: str = f'{_app}:llm:temperature'  # float
+META_LLM_SEED_KEY: str = f'{_app}:llm:seed'  # int (0 if not set)
+META_LLM_QUERY_MEMORY_KEY: str = f'{_app}:llm:query:memory'  # int; number of previous steps chat
+META_LLM_QUERY_REASONING_KEY: str = f'{_app}:llm:query:reasoning'  # bool; stored as "true"/"false"
+META_LLM_QUERY_SETUP_KEY: str = f'{_app}:llm:query:setup'  # str
+META_LLM_QUERY_IMAGE_KEY: str = f'{_app}:llm:query:image'  # str
+META_LLM_QUERY_EXTRA_KEY: str = f'{_app}:llm:query:extra'  # str
+META_LLM_RESULT_JSON_KEY: str = f'{_app}:llm:result:json'  # JSON with evaluation inf from LLM/HUMAN
+META_LLM_ZOOM_COUNT_KEY: str = f'{_app}:llm:zoom:count'  # int; zoom iteration depth
 # special values
-META_LLM_MODEL_VALUE_HUMAN = 'HUMAN'  # used when the evaluation is done by a flesh-and-blood human
+META_LLM_MODEL_VALUE_HUMAN: str = 'HUMAN'  # used if evaluation is done by flesh-and-blood human
+
+# pre-compiled constants for encoding/decoding
+_PACK_IF = struct.Struct('>if')  # signed int32 + float32
+_PACK_Q = struct.Struct('>Q')  # uint64
 
 # image constants
 
-type ImageInt32Array = array.array[int]  # type alias for the type of our pixel data array
+type ImageUInt64Array = array.array[int]  # type alias for the type of our pixel data array
+_HIST_SUB_BINS: int = 2048  # number of sub-bins to use for the smooth histogram keys
 
 # constants for drawing
 
+_ALMOST_ONE: float = math.nextafter(1.0, 0.0)
 _SQRT_TWO: float = math.sqrt(2)
 _LINE_WIDTH_RATIO: int = 150  # line width will be max(1, sz//_LINE_WIDTH_RATIO) of the image width
 _CIRCLE_RADIUS: int = 20
@@ -515,18 +534,85 @@ class Image:
   """A fractal image. Encapsulates the image operations.
 
   Attributes:
-    escape (ImageInt32Array): An array storing the escape iteration for each pixel;
+    escape (ImageInt32Array): An array storing the escape data for each pixel;
         this is not the color, but the raw data that will be converted to color later;
-        the length of this array is equal to the total number of pixels in the image.
-        You are encouraged to use the SetEscape() method to set the escape iterations,
-        but for hot paths you can also set the escape iterations directly in the array,
-        remembering that the pixel at coordinates (x, y) is stored at index (y * width + x)
-        in the array.
+        the length of this array is equal to the total number of pixels in the image;
+        the pixel at coordinates (x, y) is stored at index (y * width + x) in the array.
     stats (FractalStats | None): Optional stats about the fractal, collected during rendering;
         DO NOT COUNT on this being present unless this was a sample 16.16 render
         (see fractal._FractalAdaptiveIterations) where the stats are collected
 
   """
+
+  @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+  class Histogram:
+    """Stores a histogram for a part of an image (usually set points and escaped points).
+
+    Attributes:
+      count (int): The total count of pixels in this histogram
+      min_value (int): The minimum int value in this histogram
+      max_value (int): The maximum int value in this histogram
+      linear (list[tuple[int, int]]): A sorted list of (value, count) pairs representing the
+          histogram of int values in this category, sorted by value.
+      cumulative (list[tuple[int, int]]): A sorted list of (value, cumulative_count) pairs
+          representing the cumulative int histogram, sorted by value.
+
+    """
+
+    count: int
+    min_value: int
+    max_value: int
+    bucket_min: int
+    bucket_max: int
+    min_nu: float
+    max_nu: float
+    linear: list[tuple[int, int]]  # sorted!
+    d_linear: dict[int, int]  # {value: count}, for O(1) lookups
+    cumulative: list[tuple[int, int]]  # sorted!
+    d_cumulative: dict[int, int]  # {value: cumulative_count}, for O(1) lookups
+    bucket_linear: list[tuple[int, int]]  # sorted!
+    d_bucket_linear: dict[int, int]  # {value: count}, for O(1) lookups
+    bucket_cumulative: list[tuple[int, int]]  # sorted!
+    d_bucket_cumulative: dict[int, int]  # {value: cumulative_count}, for O(1) lookups
+
+    def BucketCumulativeBefore(self, key: int) -> float:
+      """Get the cumulative count before the given key, using binary search.
+
+      Args:
+        key (int): The key to find the cumulative count before.
+
+      Returns:
+        float: The cumulative count before the given key.
+
+      """
+      idx: int = bisect.bisect_left(self.bucket_cumulative, (key, -math.inf)) - 1
+      return 0.0 if idx < 0 else self.bucket_cumulative[idx][1]
+
+    def InterpolateBucket(self, n: int, nu: float) -> float:
+      """Interpolate the cumulative count for a given (n, nu) using the bucket histograms.
+
+      Args:
+        n (int): The escape iteration count (or interior iteration count) for the pixel.
+        nu (float): The fractional part of the escape iteration, used for smooth coloring.
+
+      Returns:
+        float: The interpolated cumulative count for the given (n, nu), normalized to [0, 1].
+
+      """
+      # the image is ALSO banding with this version
+      n, nu = _SmoothHistKey(n, nu)
+      if n < self.bucket_min:
+        return 0.0
+      if n > self.bucket_max:
+        return _ALMOST_ONE
+      c_before: float = self.BucketCumulativeBefore(n)
+      bucket: int = self.d_bucket_linear.get(n, 0)
+      t: float = (c_before + nu * bucket) / self.count
+      if t < 0.0:
+        return 0.0
+      if t >= 1.0:
+        return _ALMOST_ONE
+      return t
 
   def __init__(self, params: frame.ComputationParameters) -> None:
     """Construct image.
@@ -541,40 +627,20 @@ class Image:
     # save objects
     self._params: frame.ComputationParameters = params
     # initialize image data array; self._escape stores the ESCAPE ITERATION data, not the color
-    self.escape: ImageInt32Array = array.array(  # signed32
-      'i', (0 for _ in range(self._params.width * self._params.height))
+    self.escape: ImageUInt64Array = array.array(  # unsigned int64
+      # 'L' = unsigned long: 8 bytes on Linux/macOS 64-bit, but 4 bytes on Windows 64-bit!
+      # using 'Q' (always 8 bytes, guaranteed by the C standard to be uint64_t) is
+      # cleaner and more portable than 'L' and works on all platforms; we double-check the size
+      'Q',
+      (0 for _ in range(self._params.width * self._params.height)),
     )
     if self.escape.itemsize != frame.N_BYTES_UINT:
       raise Error(f'unsupported platform: array of unsigned ints is not {frame.N_BYTES_UINT} bytes')
     self.stats: FractalStats | None = None  # may be set later by the fractal rendering function
-
-  def SetEscape(self, x: int, y: int, escaped_at: int) -> None:
-    """Set the escape iteration for a given pixel.
-
-    Args:
-      x (int): The x coordinate of the pixel.
-      y (int): The y coordinate of the pixel.
-      escaped_at (int): The escape iteration to set for the pixel.
-
-    Raises:
-      Error: if the pixel coordinates are out of bounds
-
-    """
-    if not (0 <= x < self._params.width) or not (0 <= y < self._params.height):
-      raise Error(
-        f'Coordinates out of bounds: {x=}, {y=}, {self._params.width=}, {self._params.height=}'
-      )
-    self.escape[y * self._params.width + x] = escaped_at
-
-  @property
-  def size(self) -> tuple[int, int]:
-    """Get the size of the image as (width, height).
-
-    Returns:
-      tuple[int, int]: The size of the image.
-
-    """
-    return (self._params.width, self._params.height)
+    # histogram of escaped points
+    self.ext_hist: Image.Histogram | None = None  # set later by calling RebuildHistograms
+    # histogram of interior (Set) points; flipped, i.e., positive values
+    self.int_hist: Image.Histogram | None = None  # set later by calling RebuildHistograms
 
   @property
   def params(self) -> frame.ComputationParameters:
@@ -586,24 +652,28 @@ class Image:
     """
     return self._params
 
-  @property
-  def escape_range(self) -> tuple[int, int, int, int]:
-    """Get the range of escape iterations and the range of the internal stored values.
+  def RebuildHistograms(self) -> None:
+    """Rebuild the histograms for the image based on the current escape data.
 
-    The internal values map to different things depending on how they were computed.
-
-    Returns:
-      tuple[int, int, int, int]: (min_escape, max_escape, min_internal, max_internal)
+    This method processes the escape data of the image and constructs histograms
+    for both exterior (escaped) and interior (set) points. The histograms are
+    used for color mapping during rendering.
 
     """
-    exterior_points: list[int] = [e for e in self.escape if e >= 0]
-    interior_points: list[int] = [e for e in self.escape if e < 0]
-    return (
-      min(exterior_points) if exterior_points else 0,
-      self._params.depth if interior_points else (max(exterior_points) if exterior_points else 0),
-      -max(interior_points) if interior_points else 0,
-      -min(interior_points) if interior_points else 0,
-    )
+    # for efficiency, try to go over only once
+    exterior_points: list[tuple[int, float]] = []
+    interior_points: list[tuple[int, float]] = []
+    n: int
+    f: float
+    for enc_px in self.escape:
+      n, f = Decode64ToIntFloat(enc_px)
+      if n >= 0:
+        exterior_points.append((n, f))
+      else:
+        interior_points.append((-n, f))  # we flip the sign for interior points!
+    # have 2 groups of pixels
+    self.ext_hist = _BuildCumulative(exterior_points)  # ext generator
+    self.int_hist = _BuildCumulative(interior_points)  # int generator
 
   def AsPixels(self, render: RenderParameters) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
@@ -628,34 +698,37 @@ class Image:
       Error: on error
 
     """
-    # step 1: build cumulative histogram for exterior pixels (escaped, 0 <= e < depth)
-    min_escape: int
-    max_escape: int
-    total_exterior: int
-    cumulative: dict[int, int]
-    min_escape, max_escape, _, _ = self.escape_range
-    if min_escape < 0 or self._params.depth < max_escape:
-      raise Error(f'Invalid/Inconsistent {min_escape=} or {self._params.depth=} < {max_escape=}')
-    _, cumulative, total_exterior = BuildCumulative([e for e in self.escape if e >= 0])
-    # step 2: optionally build cumulative histogram for interior/Set pixels (escaped_at < 0);
-    # interior points store -|z| magnitude, so we flip the sign for the histogram key
-    set_cumulative: dict[int, int] = {}
-    total_set: int = 0
-    if self._params.set_points:
-      _, set_cumulative, total_set = BuildCumulative([-e for e in self.escape if e < 0])
-    # step 3: map each pixel to an RGB color
+    # populate histograms if not done yet
+    if not self.ext_hist or not self.int_hist:
+      self.RebuildHistograms()  # this will populate self.ext_hist and self.int_hist
+    if not self.ext_hist or not self.int_hist:
+      raise Error('Failed to build histograms for image')
+    # check basic consistency
+    if (
+      self.ext_hist.min_value < 0
+      or (self._params.depth + frame.SMOOTH_EXTRA_ITERS) < self.ext_hist.max_value
+    ):
+      raise Error(
+        f'Invalid/Inconsistent {self.ext_hist.min_value=} or '
+        f'{self._params.depth=}+{frame.SMOOTH_EXTRA_ITERS} < {self.ext_hist.max_value=}'
+      )
+    # map each pixel to an RGB color
+    escaped_at: int
+    f_nu: float
     pixels = bytearray(self._params.width * self._params.height * 3)
-    for i, escaped_at in enumerate(self.escape):
-      if escaped_at >= 0 and total_exterior > 0:
+    for i, enc_escaped_at in enumerate(self.escape):
+      escaped_at, f_nu = Decode64ToIntFloat(enc_escaped_at)
+      if escaped_at >= 0 and self.ext_hist.count > 0:
         # exterior point: histogram-equalized position in pal
-        t: float = (cumulative[escaped_at] - 1) / total_exterior
-        rgb: tuple[int, int, int] = PixelPalette(t, render.escaped_pal, palette.PALETTE_CYCLES)
-      elif self._params.set_points and total_set > 0 and escaped_at < 0:
+        rgb: tuple[int, int, int] = _PixelPalette(
+          self.ext_hist.InterpolateBucket(escaped_at, f_nu), render.escaped_pal
+        )
+      elif self._params.set_points and self.int_hist.count > 0 and escaped_at < 0:
         # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
-        t_set: float = (set_cumulative[-escaped_at] - 1) / total_set
+        t_set: float = (self.int_hist.d_cumulative[-escaped_at] - 1) / self.int_hist.count
         if render.set_pal is None:
           raise Error('set_pal must be specified in RenderParameters when set_points is True')
-        rgb = PixelPalette(t_set, render.set_pal, palette.SET_PALETTE_CYCLES)
+        rgb = _PixelPalette(t_set, render.set_pal)
       else:
         rgb = (0, 0, 0)  # black: interior point (default) or all-interior image
       pixels[i * 3], pixels[i * 3 + 1], pixels[i * 3 + 2] = rgb
@@ -677,7 +750,7 @@ class Image:
     img: PILImage.Image = PILImage.frombytes(
       'RGB', (self._params.width, self._params.height), raw_img
     )
-    # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
+    # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranZoom:" (_app) namespace
     png_meta = PngImagePlugin.PngInfo()
     for k, v in MakeImageMeta(self, render, img_data_hash).items():
       png_meta.add_text(k, v)
@@ -687,7 +760,7 @@ class Image:
     return (buf.getvalue(), img_data_hash)
 
 
-def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[str, str]:
+def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[str, str]:  # noqa: C901
   """Create a metadata dictionary for the image.
 
   Args:
@@ -698,27 +771,25 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
   Returns:
     dict[str, str]: A dictionary containing the metadata for the image, with keys as defined
 
+  Raises:
+    Error: on error
+
   """
+  # populate histograms if not done yet
+  if not img.ext_hist or not img.int_hist:
+    img.RebuildHistograms()  # this will populate img.ext_hist and img.int_hist
+  if not img.ext_hist or not img.int_hist:
+    raise Error('Failed to build histograms for image')
   # prepare some data that will be needed
   frm: frame.Frame = img.params.frm
   center: tuple[gmpy2.mpq, gmpy2.mpq] = frm.center
   sz: tuple[gmpy2.mpq, gmpy2.mpq] = frm.size
-  min_escape: int
-  max_escape: int
-  min_set: int
-  max_set: int
-  min_escape, max_escape, min_set, max_set = img.escape_range
-  # pixel counts and histograms; exterior pixels have escape >= 0, interior (Set) have escape < 0
-  hist: dict[int, int]
-  cumulative: dict[int, int]
-  total: int
-  hist, cumulative, total = BuildCumulative([e for e in img.escape if e >= 0])
   # first create a dict with all the ones that are always present, then add the optional ones
   img_meta: dict[str, str] = {
     # image parameters
     META_IMAGE_ANIMATION_KEY: 'none',  # this is a static image for now, not an animation
-    META_IMAGE_WIDTH_KEY: str(img.size[0]),
-    META_IMAGE_HEIGHT_KEY: str(img.size[1]),
+    META_IMAGE_WIDTH_KEY: str(img.params.size[0]),
+    META_IMAGE_HEIGHT_KEY: str(img.params.size[1]),
     META_IMAGE_HASH_KEY: data_hash,
     META_IMAGE_COLOR_SET_KEY: str(img.params.set_points.value) if img.params.set_points else 'none',
     META_RENDER_PALETTE_KEY: render.escaped_pal.value,
@@ -729,7 +800,7 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
     META_RENDER_MARK_COLOR_KEY: render.mark_color.name.lower() if render.mark_color else 'none',
     META_RENDER_MARK_WIDTH_KEY: str(render.mark_width),  # int
     # frame
-    META_FRACTAL_KEY: frm.fractal.value.lower(),
+    META_FRACTAL_KEY: frm.fractal.value,
     # frame as corners
     META_TOP_RE_KEY: str(frm.top_re),
     META_TOP_IM_KEY: str(frm.top_im),
@@ -743,17 +814,39 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
     # precision and magnification
     META_PRECISION_KEY: str(img.params.precision),
     META_MAGNIFICATION_ORDER_KEY: str(frm.magnification[1]),
-    # escape iteration range in the image
-    META_ITER_DEPTH_MIN_KEY: str(min_escape),
-    META_ITER_DEPTH_MAX_KEY: str(max_escape),
-    META_SET_POINT_MIN_KEY: str(min_set),
-    META_SET_POINT_MAX_KEY: str(max_set),
+    # escape iteration in the image
     META_ITER_SEARCH_DEPTH_KEY: str(img.params.depth),
-    # histogram
-    META_PIXEL_EXTERIOR_HISTOGRAM_KEY: SummaryHistogram(sorted(hist.items())),
-    META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY: SummaryHistogram(sorted(cumulative.items())),
-    META_PIXEL_EXTERIOR_COUNT_KEY: str(total),
+    # histogram / min-max counts
+    META_IMAGE_EXT_COUNT_KEY: str(img.ext_hist.count),
+    META_IMAGE_EXT_N_MIN_KEY: str(img.ext_hist.min_value),
+    META_IMAGE_EXT_N_MAX_KEY: str(img.ext_hist.max_value),
+    META_IMAGE_EXT_NU_MIN_KEY: str(img.ext_hist.min_nu),
+    META_IMAGE_EXT_NU_MAX_KEY: str(img.ext_hist.max_nu),
+    META_IMAGE_EXT_BUCKET_MIN_KEY: str(img.ext_hist.bucket_min),
+    META_IMAGE_EXT_BUCKET_MAX_KEY: str(img.ext_hist.bucket_max),
+    META_IMAGE_SET_COUNT_KEY: str(img.int_hist.count),
+    META_IMAGE_SET_N_MIN_KEY: str(img.int_hist.min_value),
+    META_IMAGE_SET_N_MAX_KEY: str(img.int_hist.max_value),
+    META_IMAGE_SET_NU_MIN_KEY: str(img.int_hist.min_nu),
+    META_IMAGE_SET_NU_MAX_KEY: str(img.int_hist.max_nu),
+    META_IMAGE_SET_BUCKET_MIN_KEY: str(img.int_hist.bucket_min),
+    META_IMAGE_SET_BUCKET_MAX_KEY: str(img.int_hist.bucket_max),
   }
+  # histograms
+  if img.ext_hist.count > 0:
+    img_meta[META_IMAGE_EXT_HISTOGRAM_LINEAR_KEY] = SummaryHistogram(img.ext_hist.linear)
+    img_meta[META_IMAGE_EXT_HISTOGRAM_LINEAR_CUM_KEY] = SummaryHistogram(img.ext_hist.cumulative)
+    img_meta[META_IMAGE_EXT_HISTOGRAM_BUCKET_KEY] = SummaryHistogram(img.ext_hist.bucket_linear)
+    img_meta[META_IMAGE_EXT_HISTOGRAM_BUCKET_CUM_KEY] = SummaryHistogram(
+      img.ext_hist.bucket_cumulative
+    )
+  if img.params.set_points and img.int_hist.count > 0:
+    img_meta[META_IMAGE_SET_HISTOGRAM_LINEAR_KEY] = SummaryHistogram(img.int_hist.linear)
+    img_meta[META_IMAGE_SET_HISTOGRAM_LINEAR_CUM_KEY] = SummaryHistogram(img.int_hist.cumulative)
+    img_meta[META_IMAGE_SET_HISTOGRAM_BUCKET_KEY] = SummaryHistogram(img.int_hist.bucket_linear)
+    img_meta[META_IMAGE_SET_HISTOGRAM_BUCKET_CUM_KEY] = SummaryHistogram(
+      img.int_hist.bucket_cumulative
+    )
   # add any stats that aren't just noise
   if img.stats:
     if img.stats.max_lo != _MPFR_FOUR or img.stats.max_hi != _MPFR_ZERO:
@@ -772,18 +865,6 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
   if frm.fractal == frame.Fractal.JULIA:
     img_meta[META_JULIA_RE_KEY] = str(frm.point_re)
     img_meta[META_JULIA_IM_KEY] = str(frm.point_im)
-  # histogram for interior (Set) points
-  if img.params.set_points:
-    hist, cumulative, total = BuildCumulative([-e for e in img.escape if e < 0])
-    img_meta[META_PIXEL_INTERIOR_HISTOGRAM_KEY] = SummaryHistogram(sorted(hist.items()))
-    img_meta[META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY] = SummaryHistogram(
-      sorted(cumulative.items())
-    )
-    img_meta[META_PIXEL_INTERIOR_COUNT_KEY] = str(total)
-  else:
-    img_meta[META_PIXEL_INTERIOR_HISTOGRAM_KEY] = ''
-    img_meta[META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY] = ''
-    img_meta[META_PIXEL_INTERIOR_COUNT_KEY] = str(len([1 for e in img.escape if e < 0]))
   # save to PNG bytes, hash and return
   return img_meta
 
@@ -800,18 +881,20 @@ def SummaryHistogram(sorted_histogram: list[tuple[int, int]]) -> str:
         with the middle values summarized as a total count.
 
   """
-  if len(sorted_histogram) <= 7:  # noqa: PLR2004
-    # small histogram, no need to summarize
-    return str(sorted_histogram)
-  # this is usually the case: many escape values, so summarize the middle ones
-  return str(
+
+  def _SmallHistogram() -> list[tuple[int | str, int]]:
+    if len(sorted_histogram) <= 7:  # noqa: PLR2004
+      # small histogram, no need to summarize
+      return sorted_histogram  # type: ignore[return-value]
+    # this is usually the case: many escape values, so summarize the middle ones
     # make a new list with the first 3 and last 3 values, and a summary of the middle values "..."
-    [
+    return [
       *sorted_histogram[:3],
       ('...', sum(count for _, count in sorted_histogram[3:-3])),
       *sorted_histogram[-3:],
     ]
-  )
+
+  return '{' + (', '.join(f'{n}: {f}' for n, f in _SmallHistogram())) + '}'
 
 
 def MakeImagePath(
@@ -865,7 +948,11 @@ def MakeImagePath(
     filename += f'-{raw_hash[:20]}'
   # add .png extension, make full path, and save the file
   filename += '.' + suffix.strip().lower()
-  return pathlib.Path(filename) if img_output_path is None else img_output_path / filename
+  return (
+    (pathlib.Path(filename) if img_output_path is None else img_output_path / filename)
+    .expanduser()
+    .resolve()
+  )
 
 
 def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:
@@ -1171,10 +1258,11 @@ def PrintITerm2(img_data: bytes) -> None:
   sys.stdout.flush()
 
 
-def PixelPalette(
+def _PixelPalette(
   t: float,
   pal: palette.Palette,
-  cycles: int,
+  *,
+  cycles: int = 1,
 ) -> tuple[int, int, int]:
   """Get the RGB color for a histogram-equalized normalized palette position.
 
@@ -1200,7 +1288,7 @@ def PixelPalette(
     raise Error(f'Unknown palette {pal!r}, available: {list(palette.PALETTES.keys())}')
   palette_stops: tuple[tuple[int, int, int], ...] = palette.PALETTES[pal]
   # cycle through the palette the requested number of times for visual banding
-  t_cycled: float = (t * cycles) % 1.0
+  t_cycled: float = t if cycles == 1 else (t * cycles) % 1.0
   n: int = len(palette_stops)
   # fractional index into the palette
   idx: float = t_cycled * n
@@ -1216,33 +1304,118 @@ def PixelPalette(
   )
 
 
-def BuildCumulative(values: list[int]) -> tuple[dict[int, int], dict[int, int], int]:
+def _BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram:
   """Build a raw histogram and cumulative histogram from a pre-filtered list of integer values.
 
+  This is a smooth float histogram.
+
   Args:
-    values (list[int]): The list of integer values to histogram.
+    values (abc.Iterable[tuple[int, float]]): The iterable of escaped values (n, nu) to histogram.
 
   Returns:
-    tuple[dict[int, int], dict[int, int], int]: (histogram, cumulative, total) where
-        histogram[v] = count of occurrences of value v, cumulative[v] = count of values ≤ v,
-        and total = len(values).
+    Image.Histogram: The histogram object containing the raw and cumulative histograms and
+        the total count.
 
   """
   # build the raw histogram
   histogram: dict[int, int] = {}
-  for v in values:
-    histogram[v] = histogram.get(v, 0) + 1
+  bucket_histogram: dict[int, int] = {}
+  total: int = 0
+  min_nu: float = 1000.0
+  max_nu: float = -1000.0
+  k: int
+  for esc, nu in values:
+    histogram[esc] = histogram.get(esc, 0) + 1
+    k = _SmoothHistKey(esc, nu)[0]
+    bucket_histogram[k] = bucket_histogram.get(k, 0) + 1
+    total += 1
+    min_nu = min(min_nu, nu)
+    max_nu = max(max_nu, nu)
+  # return trivial case (that would cause issues with min() and max())
+  if not histogram:
+    return Image.Histogram(
+      count=0,
+      min_value=0,
+      max_value=0,
+      bucket_min=0,
+      bucket_max=0,
+      min_nu=0.0,
+      max_nu=0.0,
+      linear=[],
+      cumulative=[],
+      d_linear={},
+      d_cumulative={},
+      bucket_linear=[],
+      bucket_cumulative=[],
+      d_bucket_linear={},
+      d_bucket_cumulative={},
+    )
   # build the cumulative histogram by iterating over the sorted keys of the raw histogram
-  total: int = len(values)
-  cumulative: dict[int, int] = {}
   cum: int = 0
-  for v in sorted(histogram):
-    cum += histogram[v]
-    cumulative[v] = cum
-  return (histogram, cumulative, total)
+  s_histogram: list[tuple[int, int]] = sorted(histogram.items())
+  s_cum: list[tuple[int, int]] = []
+  v: int
+  for k, v in s_histogram:
+    cum += v
+    s_cum.append((k, cum))
+  cum = 0
+  s_bucket_histogram: list[tuple[int, int]] = sorted(bucket_histogram.items())
+  s_bucket_cum: list[tuple[int, int]] = []
+  for k, v in s_bucket_histogram:
+    cum += v
+    s_bucket_cum.append((k, cum))
+  # build object and return
+  return Image.Histogram(
+    count=total,
+    min_value=min(histogram),
+    max_value=max(histogram),
+    bucket_min=min(bucket_histogram),
+    bucket_max=max(bucket_histogram),
+    min_nu=min_nu,
+    max_nu=max_nu,
+    linear=s_histogram,
+    cumulative=s_cum,
+    d_linear=histogram,
+    d_cumulative=dict(s_cum),
+    bucket_linear=s_bucket_histogram,
+    bucket_cumulative=s_bucket_cum,
+    d_bucket_linear=bucket_histogram,
+    d_bucket_cumulative=dict(s_bucket_cum),
+  )
+
+
+def _SmoothHistKey(n: int, nu: float) -> tuple[int, float]:
+  """Get a smoothed histogram key for an escaped value (n, nu).
+
+  Args:
+    n (int): The integer escape value.
+    nu (float): The fractional part of the escape value.
+
+  Returns:
+    tuple[int, float]: A tuple containing the smoothed histogram key (int) and the
+        fractional part (float) for interpolation
+
+  """
+  x: float = (n + nu) * _HIST_SUB_BINS
+  k: int = math.floor(x)
+  return (k, x - k)
 
 
 def _ImageNormalizeAndValidate(img_bytes: bytes, width: int, height: int) -> PILImage.Image:
+  """Normalize the image bytes to a PIL Image in RGB mode, and validate its size.
+
+  Args:
+    img_bytes (bytes): The image data as bytes.
+    width (int): The expected width of the image.
+    height (int): The expected height of the image.
+
+  Returns:
+    PILImage.Image: The normalized PIL Image in RGB mode.
+
+  Raises:
+    Error: on error
+
+  """
   with PILImage.open(io.BytesIO(img_bytes)) as img:
     if img.size != (width, height):
       raise Error(f'frame size {img.size} != {(width, height)}')
@@ -1383,3 +1556,52 @@ def WriteVideoMP4(
   # done, check that the frame count matches n_frames
   if frame_count != n_frames:
     raise Error(f'frames generator produced {frame_count} frames, expected {n_frames}')
+
+
+def EncodeIntFloatTo64(i: int, f: float) -> int:
+  """Encode a signed int32 and a float32 into a single uint64, by concatenating their bits.
+
+  This is benchmarked at ~1.6ns per call, ~160ms for a 1024x1024 image to encode all pixels.
+  struct.pack()/unpack() does range checks already, so we DO NOT check inputs, as that degrades
+  performance by a lot. We also use pre-compiled struct formats to speed this up.
+
+  Args:
+    i (int): The signed int32 to encode.
+    f (float): The float32 to encode; garbage in, garbage out: if the float is not
+        valid/finite (NaN or Inf), you will get the same garbage float back on Decode64ToIntFloat().
+
+  Returns:
+    int: The encoded uint64 containing both the int and float.
+
+  Raises:
+    Error: inputs out of range or other encoding issues
+
+  """
+  try:
+    return cast('int', _PACK_Q.unpack(_PACK_IF.pack(i, f))[0])
+  except (struct.error, OverflowError) as err:
+    raise Error(f'Error encoding {i=} and {f=} to uint64: {err}') from err
+
+
+def Decode64ToIntFloat(x: int) -> tuple[int, float]:
+  """Decode a uint64 containing a signed int32 and a float32 back into its components.
+
+  This is benchmarked at ~1.1ns per call, ~120ms for a 1024x1024 image to encode all pixels.
+  struct.pack()/unpack() does range checks already, so we DO NOT check inputs, as that degrades
+  performance by a lot. We also use pre-compiled struct formats to speed this up.
+
+  Args:
+    x (int): The uint64 to decode, where the high 32 bits represent a signed int32 and the
+        low 32 bits represent a float32.
+
+  Returns:
+    tuple[int, float]: A tuple containing the decoded signed int32 and float32.
+
+  Raises:
+    Error: inputs out of range or other encoding issues
+
+  """
+  try:
+    return _PACK_IF.unpack(_PACK_Q.pack(x))
+  except (struct.error, OverflowError) as e:
+    raise Error(f'Error decoding uint64 to int and float: {e}') from e

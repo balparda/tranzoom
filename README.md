@@ -170,6 +170,8 @@ Starting with version 1.1.0, tranZoom can use local LLM vision models to autonom
 
 Starting with version 1.4.0, tranZoom can render animated GIF and MP4 zoom animations with the `tranz zoom auto` command — a straight zoom-in path toward any target frame, with configurable frame count, FPS, and duration.
 
+Starting with version 1.5.0, the fractal renderer uses **smooth coloring**: each exterior pixel stores both an integer escape count `n` and a fractional value `nu ∈ [0, 1)` derived from the normalized iteration count formula, packed into 8 bytes per pixel. This eliminates discrete color bands and produces smooth gradients at all zoom depths. The database now caches both the raw computed pixel data and the rendered PNGs, so revisiting a frame or re-rendering with a new palette is fast — the expensive fractal computation is only performed once.
+
 ### What this tool is not
 
 - Not a real-time / interactive fractal explorer (rendering is intentionally CPU-intensive for correctness at depth)
@@ -185,13 +187,15 @@ Starting with version 1.4.0, tranZoom can render animated GIF and MP4 zoom anima
 - **Magnification**: Ratio of the default full-set frame area to the current frame area. 1× = full set; 1G× = zoomed in one billion times.
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
 - **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
-- **Color palette**: Six built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette` (global flag). Positions in the palette are determined by histogram equalization of escape-iteration counts, cycling through the stops `3` times across the range, so the full color range is used regardless of zoom depth or iteration scale. Available palettes: `sahara` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient), `rgrayscale` (8-stop white-to-black gradient, designed for interior coloring), `grayscale` (8-stop black-to-white gradient).
-- **Interior (Set) coloring**: By default, interior points (those that never escape, i.e., inside the Mandelbrot/Julia Set) are rendered as pure black. Passing `--set ALGORITHM` enables smooth coloring of those points using a separate `--set-palette` (default `rgrayscale`); supported algorithms: `min` (minimum `|z|` at max depth), `max` (maximum `|z|`), `angle` (angle of `z`), `imaginary` (imaginary-weighted average of `z`). Histogram equalization is applied over the stored values, cycling through the set palette only **once** (no banding). The `rgrayscale` set palette goes white (deep interior, low `|z|`) → black (near boundary, high `|z|`), so the Set boundary is always dark for contrast with the exterior colors. Both flags are global and apply to all `image` and `zoom` commands.
+- **Smooth coloring**: Each exterior pixel stores both an integer escape count `n` and a fractional smooth-escape value `nu ∈ [0, 1)` using the normalized iteration count formula. The two values are packed into a single `uint64` (8 bytes per pixel) using `EncodeIntFloatTo64`. Palette mapping uses `(n, nu)` interpolation over the cumulative histogram for smooth, band-free color gradients at all zoom depths.
+- **Color palette**: Six built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette` (global flag). Positions in the palette are determined by smooth histogram equalization of `(n, nu)` escape values, so the full color range is used regardless of zoom depth or iteration scale. Available palettes: `sahara` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient), `rgrayscale` (8-stop white-to-black gradient, designed for interior coloring), `grayscale` (8-stop black-to-white gradient).
+- **DB computation and render caching**: The `FractalDatabase` persists the raw computed `Image` data to disk after each fractal render. On subsequent calls with the same frame and computation parameters, the expensive fractal computation is skipped and the cached data is loaded instead. Rendered PNGs are also cached; if a matching PNG file exists on disk, it is returned immediately. Use `--force` to bypass the cache and always recompute.
+- **Interior (Set) coloring**: By default, interior points (those that never escape, i.e., inside the Mandelbrot/Julia Set) are rendered as pure black. Passing `--set ALGORITHM` enables smooth coloring of those points using a separate `--set-palette` (default `rgrayscale`); supported algorithms: `min` (minimum `|z|` at max depth), `max` (maximum `|z|`), `angle` (angle of `z`), `imaginary` (imaginary-weighted average of `z`). Histogram equalization is applied over the stored values. The `rgrayscale` set palette goes white (deep interior, low `|z|`) → black (near boundary, high `|z|`), so the Set boundary is always dark for contrast with the exterior colors. Both flags are global and apply to all `image` and `zoom` commands.
 - **Zoom animation**: The `tranz zoom auto` command renders a straight zoom-in path from a starting frame down to a target magnification and saves it as an animated GIF or MP4 video. Specify any two of `--frames`, `--fps`, and `--duration` to constrain the third. Use `--anim gif` (default) or `--anim mp4` to select the output format.
 - **AI zoom session**: The `tranz zoom ai` command starts an iterative loop: render the current frame, draw a 3×3 thirds grid overlay with green sector labels, send the image to a local LLM vision model, parse the 9-sector scoring response, and move the frame center toward the highest-scoring sector. Supports both Mandelbrot (default) and Julia Set fractals via `-f/--fractal`. The optional `--query` flag enables targeted search, blending fractal-quality scores with target-match scores. The loop runs until Ctrl+C or `--max-steps` is reached.
 - **Manual zoom session**: The `tranz zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM. Supports both Mandelbrot and Julia Set fractals.
 - **Sector scoring**: Each sector is scored on a 0–100 scale for `fractal_score` (visual complexity / zoom promise). When targeted search is active, an additional `target_match_score` (also 0–100) is blended in with a configurable weight.
-- **Image metadata**: All tranZoom PNG images embed rich metadata (`tranzoom:*` PNG text chunks) including frame coordinates, magnification, palette (`tranzoom:render:palette`), precision, and (for AI/manual sessions) the full LLM evaluation, model parameters, prompts, and zoom step count.
+- **Image metadata**: All tranZoom PNG images embed rich metadata (`tranZoom:*` PNG text chunks) including frame coordinates, magnification, palette (`tranZoom:render:palette`), precision, per-pixel statistics (`n:min`, `n:max`, `nu:min`, `nu:max`, histogram summaries), and (for AI/manual sessions) the full LLM evaluation, model parameters, prompts, and zoom step count.
 
 #### Frame Representation
 
@@ -292,6 +296,14 @@ The computed precision is exposed as:
 
 ## CLI Interface
 
+TranZoom can manage its own DB of computations. It can use it to find images it has already done, for example. If you want to save time on repeated computations either start using the `--db` flag or turn the DB on permanently:
+
+```sh
+poetry run tranz config set use_db true
+```
+
+You can always easily wipe the DB and storage later to save space with `config deletedatabase`.
+
 ### Quick start
 
 ![Full / Default](tests/data/images/demo-mandel-whole-set.png)
@@ -371,6 +383,7 @@ Available subgroup / command combinations:
 | `--prefix` | Filename prefix | None = `mandel`/`julia` |
 | `--date`/`--no-date` | Include date-time (`YYYYMMDDhhmmss`) in filename | `--date` |
 | `--hash`/`--no-hash` | Include 20-char SHA256 hash in filename | `--hash` |
+| `--force`/`--no-force` | Force re-computation and re-rendering even when matching DB cache entries exist | `--no-force` |
 | `--iterm`/`--no-iterm` | Print image inline in iTerm2 (macOS + iTerm2 only) | off |
 | `--palette` | Color palette for exterior (escaped) pixels; one of `sahara`, `lava`, `electric`, `sunset`, `rgrayscale`, `grayscale` | `sahara` |
 | `--set-palette` | Color palette for interior Set points (used only when `--set` is given) | `rgrayscale` |
@@ -731,7 +744,7 @@ This image is relatively fast to generate (despite the zoom level, it has very l
 You can easily make animations!
 
 ```sh
-$ poetry run tranz --no-date zoom -s 220 auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4
+$ poetry run tranz --no-date zoom -s 220 --mark "(-5578776469/7500000000,8244620127/62500000000)" auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4
 
 Producing 220x220 10^1.00 magnification zoom animation, 4.000 s long, at 10.00 FPS, with 40 frames, 106.08% per step (48455/45677), final magnification error 0.0000%...
 
@@ -850,7 +863,7 @@ The CLI respects the `NO_COLOR` environment variable and the `--no-color` / `--c
 | `core/palette.py` | Palette definitions and color mapping |
 | `core/queries.py` | AI prompt templates and Pydantic models for structured LLM responses |
 | `core/ai.py` | `ZoomLoop()` — iterative AI and manual zoom session logic |
-| `core/frdb.py` | `FractalDatabase` — persistent storage for frames, computations, renders, and video entries; `CoreComputeImage()` unified rendering primitive |
+| `core/frdb.py` | `FractalDatabase` — persistent storage for frames, computations, renders, and video entries; `CoreComputeImage()` method is the unified rendering primitive with computation and render caching; `SaveImageData`/`LoadImageData` for raw pixel cache I/O |
 | `utils/template.py` | Template for new utility modules |
 
 ### Performance characteristics
@@ -887,8 +900,9 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 │   ├── extensions.json
 │   └── settings.json
 ├── scripts/
+│   ├── benchmarks.py             ⟸ quick benchmarks for encoding/decoding
 │   ├── make_examples.sh          ⟸ renders example images at all zoom levels to test/data/images
-│   └── template.py               ⟸ template for standalone executable scripts
+│   └── _template.py              ⟸ template for standalone executable scripts
 ├── src/
 │   └── tranzoom/
 │       ├── __init__.py           ⟸ version lives here
@@ -904,6 +918,7 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 │       │   ├── ai.py             ⟸ ZoomLoop() and ManualLoop() — zoom session logic
 │       │   ├── fractal.py        ⟸ Mandelbrot() renderer
 │       │   ├── frame.py          ⟸ Frame class, Fractal enum; base for computation
+|       |   ├── frdb.py           ⟸ Fractal DB/persistence objects
 │       │   ├── image.py          ⟸ Image class, overlays, iTerm2, metadata helpers
 │       │   ├── palette.py        ⟸ Palette definitions
 │       │   └── queries.py        ⟸ AI prompt templates and Pydantic response models
@@ -913,12 +928,14 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 ├── tests/
 │   ├── tranz_test.py
 │   ├── cli/
-│   │   ├── base_test.py          ⟸ seahorse tail hash regression test
-│   │   └── imagecommand_test.py
+│   │   ├── base_test.py          ⟸ CLI base.py tests
+│   │   └── *command_test.py      ⟸ each command's tests
+│   ├── core/
+│   │   └── *_test.py             ⟸ each core module's tests
 │   └── data/
-│       └── images/               ⟸ example renders at 7 zoom levels and powers of 1000
+│       └── images/               ⟸ images used in tests; demo images; README images
 └── tests_integration/
-    └── test_installed_cli.py
+    └── test_installed_cli.py     ⟸ whole app (integration) tests
 ```
 
 ### Development Setup
@@ -1049,7 +1066,7 @@ poetry run pytest -vvv -m slow
 Find slow tests:
 
 ```sh
-poetry run pytest -vvv -q --durations=20
+poetry run pytest -vvv -q --durations=20 tests/
 ```
 
 Find flaky tests:

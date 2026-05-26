@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import math
 import os
 from collections import abc
 from concurrent import futures
@@ -34,6 +35,7 @@ MAX_CONCURRENCE: int = 16  # for the main rendering step, we limit the concurren
 _MPFR_ZERO: gmpy2.mpfr = gmpy2.mpfr('0')
 _MPFR_SIXTEENTH: gmpy2.mpfr = gmpy2.mpfr('0.0625')
 _MPFR_FOURTH: gmpy2.mpfr = gmpy2.mpfr('0.25')
+_MPFR_HALF: gmpy2.mpfr = gmpy2.mpfr('0.5')
 _MPFR_ONE: gmpy2.mpfr = gmpy2.mpfr('1')
 _MPFR_TWO: gmpy2.mpfr = gmpy2.mpfr('2')
 _MPFR_FOUR: gmpy2.mpfr = gmpy2.mpfr('4')
@@ -142,7 +144,8 @@ def ComputeFractal(
   # if the final image doesn't have stats, we can add them from the pre-process stats we collected
   if img.stats is None and stats is not None:
     img.stats = stats
-  # all copied, so we can return the final image
+  # all copied, so we can return the final image; first trigger the histogram calculation
+  img.RebuildHistograms()
   return (params, img)
 
 
@@ -197,31 +200,27 @@ def _FractalAdaptiveIterations(
       n_processes=n_processes,
       print_comm=print_comm,
     )[1]  # we only need the image, not the updated params, from this test render
-    # estimate the needed iterations for the full image based on the smallest image;
-    # make the histogram of escape iterations for the smallest image, and find the highest escape
-    escape_histogram: dict[int, int] = {}
-    for escaped_at in img16.escape:
-      esc: int = escaped_at if escaped_at >= 0 else high_iter  # interior point == high_iter
-      escape_histogram[esc] = escape_histogram.get(esc, 0) + 1
-    # check stats
-    if img16.stats is None:
+    # estimate the needed iterations for the full image based on the smallest image; check stats
+    if img16.stats is None or img16.ext_hist is None or img16.int_hist is None:
       raise Error('Fractal stats should have been collected during rendering, but are missing')
-    # sort the histogram by escape iteration; find the highest escape iteration that < high limit
-    # if all pixels hit high_iter then max_iter will be high_iter, and we WANT it to FAIL
-    histogram: list[tuple[int, int]] = sorted(escape_histogram.items())
-    max_iter = (
-      histogram[-1][0] if histogram[-1][0] != high_iter or len(histogram) == 1 else histogram[-2][0]
-    )
+    # do we have any exterior points that escaped? if not, we can't estimate
+    if img16.ext_hist.count == 0:
+      continue  # no exterior points
+    # we have exterior points, so we can look at the histogram sorted by escape iteration;
+    # find the highest escape iteration that is less than high limit
+    max_iter = img16.ext_hist.linear[-1][0]
     # apply safety factor and clamp
     max_iter = min(frame.MAX_ITER, max(frame.MIN_ITER, int(max_iter * _ITER_SAFETY_FACTOR)))
     if max_iter < high_iter:
       # we found a winner! print and stop
       print_comm(
-        f'Picked depth {max_iter}, histogram {image.SummaryHistogram(histogram)}, '
+        f'Picked depth {max_iter}, histogram {image.SummaryHistogram(img16.ext_hist.linear)}, '
         f'{img16.stats.n_interior}/{img16.stats.n_px} set points'
       )
       return (max_iter, img16.stats)
-    print_comm(f'[red]Iteration limit of {high_iter} was too low:[/] will try again 10x deeper...')
+    print_comm(
+      f'[red]Iteration limit of {high_iter} was too low:[/] will try again [red]10x[/] deeper...'
+    )
     # here we didn't find, so we loop to the next higher limit...
   # if we exhausted all the high_iters without finding a suitable max_iter, we have to give up
   raise Error(
@@ -290,7 +289,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
   if dx <= 0 or dy <= 0:
     raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
   # start the mpfr context for floating-point computations with the precision needed
-  with inp.params.context:
+  with inp.params.context:  # noqa: PLR1702
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
     # are relatively expensive and we can reuse the x values across rows ("inner for loop");
     # also, this is where the "X" (real) coordinates are converted mpq->mpfr
@@ -385,16 +384,18 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
           q: gmpy2.mpfr = x_minus_quarter * x_minus_quarter + cy * cy
           if q * (q + x_minus_quarter) <= _MPFR_FOURTH * cy * cy:
             # point is in the main cardioid, so it's an interior point, no escape
+            # mark negative so as to mark it as interior
             n_interior += 1
-            img.escape[px_count] = -frame.SET_INTERIOR_RESOLUTION  # negative to mark it as interior
+            img.escape[px_count] = image.EncodeIntFloatTo64(-frame.SET_INTERIOR_RESOLUTION, 0.0)
             p_bar.update(1)  # we touched a pixel, so update the progress bar
             continue
           # period-2 bulb test
           x_plus_one: gmpy2.mpfr = cx + _MPFR_ONE
           if x_plus_one * x_plus_one + cy * cy <= _MPFR_SIXTEENTH:
             # point is in the period-2 bulb, so it's an interior point, no escape
+            # mark negative so as to mark it as interior
             n_interior += 1
-            img.escape[px_count] = -frame.SET_INTERIOR_RESOLUTION  # negative to mark it as interior
+            img.escape[px_count] = image.EncodeIntFloatTo64(-frame.SET_INTERIOR_RESOLUTION, 0.0)
             p_bar.update(1)  # we touched a pixel, so update the progress bar
             continue
         # not in the main cardioid or period-2 bulb, do the full escape-time test in mpfr
@@ -404,13 +405,32 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
         max_z2: gmpy2.mpfr = _MPFR_ZERO  # track max |z|^2 for potential use in coloring
         mag_z2: gmpy2.mpfr
         escaped_at: int = 0
+        smooth_escape: float = 0.0
         imag_acc: gmpy2.mpfr = _MPFR_ZERO  # accumulate sin(arg(z)) over orbit for smooth SAC
         # escape-time loop, implemented with explicit zx/zy variables
-        for escaped_at in range(inp.params.depth):  # noqa: B007
+        for escaped_at in range(inp.params.depth):
           zx2: gmpy2.mpfr = zx * zx
           zy2: gmpy2.mpfr = zy * zy
           # avoid sqrt(abs(z)); compare squared magnitude to 2^2
           if (mag_z2 := zx2 + zy2) > _MPFR_FOUR:
+            # the smooth escape formula is asymptotic: computing it immediately at |z| > 2
+            # leaves visible iteration-correlated contour error, so we iterate a few more times
+            # after escape before evaluating the potential
+            for _ in range(frame.SMOOTH_EXTRA_ITERS):
+              escaped_at += 1  # noqa: PLW2901
+              zy = _MPFR_TWO * zx * zy + cy
+              zx = zx2 - zy2 + cx
+              zx2 = zx * zx
+              zy2 = zy * zy
+            mag_z2 = zx2 + zy2
+            # the smooth_escape part is a fractional value that represents how far the orbit went
+            # beyond the escape radius at the escape iteration; we want to ensure that the final
+            # escape value is "n + nu", where n is an integer and nu is in [0,1), and we store
+            # them separately for better precision
+            smooth_escape = 1.0 - float(
+              gmpy2.log2(_MPFR_HALF * cast('gmpy2.mpfr', gmpy2.log(mag_z2)))
+            )
+            escaped_at, smooth_escape = NormalizeSmoothEscape(escaped_at, smooth_escape)  # noqa: PLW2901
             break
           # Imaginary Weight Average: accumulate sin(arg(z))**2 = zy**2/|z|**2 BEFORE the update
           if inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY and mag_z2 > _MPFR_ZERO:
@@ -485,7 +505,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
             raise Error(f'Unknown fractal type {inp.params.set_points=}; should never happen')
         # either in or out of the set, we now should always have a value for escaped_at;
         # this is setting the pixel escape (not the coloring! that is done later in image.Image)
-        img.escape[px_count] = escaped_at  # carefully set this directly in the array
+        img.escape[px_count] = image.EncodeIntFloatTo64(escaped_at, smooth_escape)  # carefully set
         p_bar.update(1)  # we touched a pixel, so update the progress bar
     # done; return the stats we collected with the task output
     p_bar.close()
@@ -532,7 +552,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
   if dx <= 0 or dy <= 0:
     raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
   # start the mpfr context for floating-point computations with the precision needed
-  with inp.params.context:
+  with inp.params.context:  # noqa: PLR1702
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
     # are relatively expensive and we can reuse the x values across rows ("inner for loop");
     # also, this is where the "X" (real) coordinates are converted mpq->mpfr
@@ -632,17 +652,36 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
         # sets have NO universal fast interior test: the filled Julia set's shape depends entirely
         # on c and has no simple global algebraic boundary description
         if zx * zx + img_y2 > _MPFR_FOUR:
-          img.escape[px_count] = 0  # orbit escapes at the starting point, before any iteration
+          img.escape[px_count] = image.EncodeIntFloatTo64(0, 0.0)  # orbit escapes at the start
           p_bar.update(1)
           continue
         # did not escape at fast check, do the whole thing
         escaped_at: int = 0
+        smooth_escape: float = 0.0
         # escape-time loop, implemented with explicit zx/zy variables
-        for escaped_at in range(inp.params.depth):  # noqa: B007
+        for escaped_at in range(inp.params.depth):
           zx2: gmpy2.mpfr = zx * zx
           zy2: gmpy2.mpfr = zy * zy
           # avoid sqrt(abs(z)); compare squared magnitude to 2^2
           if (mag_z2 := zx2 + zy2) > _MPFR_FOUR:
+            # the smooth escape formula is asymptotic: computing it immediately at |z| > 2
+            # leaves visible iteration-correlated contour error, so we iterate a few more times
+            # after escape before evaluating the potential
+            for _ in range(frame.SMOOTH_EXTRA_ITERS):
+              escaped_at += 1  # noqa: PLW2901
+              zy = _MPFR_TWO * zx * zy + cy
+              zx = zx2 - zy2 + cx
+              zx2 = zx * zx
+              zy2 = zy * zy
+            mag_z2 = zx2 + zy2
+            # the smooth_escape part is a fractional value that represents how far the orbit went
+            # beyond the escape radius at the escape iteration; we want to ensure that the final
+            # escape value is "n + nu", where n is an integer and nu is in [0,1), and we store
+            # them separately for better precision
+            smooth_escape = 1.0 - float(
+              gmpy2.log2(_MPFR_HALF * cast('gmpy2.mpfr', gmpy2.log(mag_z2)))
+            )
+            escaped_at, smooth_escape = NormalizeSmoothEscape(escaped_at, smooth_escape)  # noqa: PLW2901
             break
           # Imaginary Weight Average: accumulate sin(arg(z))**2 = zy**2/|z|**2 BEFORE the update
           if inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY and mag_z2 > _MPFR_ZERO:
@@ -717,7 +756,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
             raise Error(f'Unknown fractal type {inp.params.set_points=}; should never happen')
         # either in or out of the set, we now should always have a value for escaped_at;
         # this is setting the pixel escape (not the coloring! that is done later in image.Image)
-        img.escape[px_count] = escaped_at  # carefully set this directly in the array
+        img.escape[px_count] = image.EncodeIntFloatTo64(escaped_at, smooth_escape)  # carefully set
         p_bar.update(1)  # we touched a pixel, so update the progress bar
     # done; return the stats we collected with the task output
     p_bar.close()
@@ -734,3 +773,41 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
       imag_hi=imag_hi,
     )
     return _FractalTaskOutput(img=img, n_task=inp.n_task, total_tasks=inp.total_tasks)
+
+
+def NormalizeSmoothEscape(n: int, nu: float) -> tuple[int, float]:
+  """Normalize the smooth escape part to be in [0,1) and adjust n accordingly.
+
+  The smooth escape part is a fractional value that represents how far the orbit went beyond
+  the escape radius at the escape iteration. We want to ensure that the final escape value
+  is n + nu, where n is an integer and nu is in [0,1). This allows for smooth coloring
+  of the escape time.
+
+  Args:
+    n (int): The integer escape iteration count.
+    nu (float): The smooth escape part, which can be any real number.
+
+  Returns:
+    tuple[int, float]: A tuple of the adjusted integer escape iteration and the normalized
+        smooth escape part.
+
+  Raises:
+    Error: if the normalized smooth escape part is not in [0,1) after normalization
+
+  """
+  # if nu is not finite consider it an error
+  if not math.isfinite(nu):
+    raise Error(f'nu is not a valid number {nu=}, bug! report')
+  # get the integer shift to apply to n, and the new nu in [0,1)
+  shift: int = math.floor(nu)
+  n += shift
+  nu -= shift
+  # if nu is negative, we need to shift back the other way, to ensure nu is in [0,1)
+  if nu < 0.0:
+    n -= 1
+    nu += 1.0
+  # ensure n is not negative, in case the shift made it negative
+  n = max(0, n)
+  if not (0.0 <= nu < 1.0):
+    raise Error(f'Normalized smooth escape range should be 0 <= {nu=} < 1, {n=}, bug! report')
+  return (n, nu)

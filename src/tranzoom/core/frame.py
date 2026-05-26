@@ -18,19 +18,26 @@ from transcrypto.utils import base as tbase
 # basic constants
 
 type ExactInputType = str | float | gmpy2.mpq
+
 MIN_IMAGE_SIZE: int = 16  # BEWARE: we use this for the "auto" depth calculation, so not too small!
 MAX_IMAGE_SIZE: int = 16 * 1024  # huge image, 16k x 16k, 256Mpx, tens or hundreds of Mb per image
 DEFAULT_IMAGE_SIZE: int = 1024  # good all-around default, 1Mpx, ~1Mb per image (compressed)
 DEFAULT_ZOOM_SIZE: int = 512  # smaller default for zoom, since it can be more expensive
 
+BIT_31: int = 0x80000000
+BIT_32: int = 0x100000000
+BIT_64: int = 2**64
+MAX_UINT32: int = 0xFFFFFFFF
+
 # iteration constants
 
-N_BYTES_UINT: int = 4  # we use array of int32 to store pixel data / array.array('i') / signed 32
+N_BYTES_UINT: int = 8  # we use array of uint64 to store pixel data / array.array('Q') / unsigned 64
 MIN_ITER: int = 1000  # minimum, but also a mark that we want to automatically calculate the depth
 DEFAULT_ITER: int = 1000
 HIGH_ITERS: list[int] = [100_000, 1_000_000, 10_000_000]  # these are very high iteration counts
 SET_INTERIOR_RESOLUTION: int = 100_000_000  # interior points max val [0..SET_INTERIOR_RESOLUTION]
-MAX_ITER: int = 2 ** (N_BYTES_UINT * 8 - 1) - 1  # ± 2_147_483_647, max value for array('i'), int32
+MAX_ITER: int = BIT_31 - 1  # ± 2_147_483_647, max for signed array('i'), sint32
+SMOOTH_EXTRA_ITERS: int = 5  # iterations AFTER |z| > 2 to compute: eliminates color banding errors
 
 # gmpy2.mpfr constants
 _MPFR_MIN_PRECISION: int = 140  # about 42 decimal digits
@@ -73,13 +80,9 @@ DEFAULT_JULIA_WIDTH: str = '1.8'
 DEFAULT_JULIA_HEIGHT: str = '2.2'
 
 
-# TODO: create (optional) DB of stored frames
 # TODO: video/gif to save check the frames for existence, thus recovering from a crash
-# TODO: image to store: on non-set/escaped the iteration plus a float(?) to compute "nu"
 # TODO: image to store: on set/non-escaped the actual final value of the tracked constant;
 #     and if we store the mpfr on a dict for example, we will have space for more info in the array
-# TODO: make a way for images to be saved too, raw, so we can revisit computations;
-#     what parameters REALLY determine an image pre-render?
 # TODO: with all the frames in place (DB) and richer images and "nu" we can start video smoothing;
 #     a class for video objects with all the frames
 # TODO: before rendering video, decide on marker frames every X magnitude, make them first,

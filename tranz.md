@@ -51,6 +51,14 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                      False, file names will not include the hash;       │
 │                                                                                                      default is True                                    │
 │                                                                                                                                          │
+│ --force                   --no-force                                                                 If True, forces re-computation and re-saving of    │
+│                                                                                                      the image(s)/computation(s) even if an             │
+│                                                                                                      image/computation with the same parameters already │
+│                                                                                                      exists; if False will use existing (DB) entries to │
+│                                                                                                      avoid redundant computations/rendering as much as  │
+│                                                                                                      possible/reasonable; default is False, so we will  │
+│                                                                                                      try to avoid redundant computations/rendering      │
+│                                                                                                                                      │
 │ --palette                                          Color palette to use for rendering; default is     │
 │                                                                                                      'sahara'; available palettes: ['electric',         │
 │                                                                                                      'grayscale', 'lava', 'rgrayscale', 'sahara',       │
@@ -181,6 +189,7 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
  poetry run tranz config get                                                                                                                               
  poetry run tranz config set use_db true                                                                                                                   
  poetry run tranz config set foo bar  # (example made up key)                                                                                              
+ poetry run tranz config deletedatabase                                                                                                                    
                                                                                                                                                            
  # --- Markdown Help ---                                                                                                                                   
  poetry run tranz markdown > tranz.md
@@ -196,14 +205,35 @@ Usage: tranz config [OPTIONS] COMMAND [ARGS]...
  poetry run tranz config get                                                                                                                               
  poetry run tranz config set use_db true                                                                                                                   
  poetry run tranz config set foo bar  # (example made up key)                                                                                              
+ poetry run tranz config deletedatabase                                                                                                                    
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ get  Read a configuration file from disk.                                                                                                               │
-│ set  Set values in a configuration file (saves to disk).                                                                                                │
+│ get             Read a configuration file from disk.                                                                                                    │
+│ set             Set values in a configuration file (saves to disk).                                                                                     │
+│ deletedatabase  Delete the database and all its contents and computed data. This does not touch anything outside the directory where the DB stores its  │
+│                 files, but it will delete the entire DB and data files, irreversibly. Use with caution.                                                 │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+### `tranz config deletedatabase` Sub-Command
+
+```text
+Usage: tranz config deletedatabase [OPTIONS]                                                                                                              
+                                                                                                                                                           
+ Delete the database and all its contents and computed data. This does not touch anything outside the directory where the DB stores its files, but it will 
+ delete the entire DB and data files, irreversibly. Use with caution.                                                                                      
+                                                                                                                                                           
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Examples:                                                                                                                                                 
+                                                                                                                                                           
+ $ poetry run tranz config deletedatabase                                                                                                                  
+ <DELETES EVERYTHING! BEWARE!>
 ```
 
 ### `tranz config get` Sub-Command

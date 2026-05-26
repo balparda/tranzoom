@@ -111,7 +111,7 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
   )
   # we have the frame, now feed it to the producer
   with config.OpenDB() as db:
-    base.ProduceFractalImage(db, frm, config)
+    base.ProduceFractalImage(db, frm, config, require_img_obj=False)
 
 
 @image_app.command(
@@ -163,7 +163,7 @@ def Julia(  # documentation is help/epilog/args  # noqa: D103
   )
   # we have the frame, now feed it to the producer
   with config.OpenDB() as db:
-    base.ProduceFractalImage(db, frm, config)
+    base.ProduceFractalImage(db, frm, config, require_img_obj=False)
 
 
 @image_app.command(
