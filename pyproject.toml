@@ -121,7 +121,7 @@ pytest = "^9.0"
 pytest-cov = "^7.1"
 pytest-flakefinder = "^1.1"
 pre-commit = "^4.6"
-ruff = "=0.15.13"  # 15.14 has problems with PLW0717 and indentation to solve
+ruff = "=0.15.14"  # 15.14 has problems with PLW0717 and indentation to solve
 typeguard = "^4.5"
 
 # project-specific dev-only
