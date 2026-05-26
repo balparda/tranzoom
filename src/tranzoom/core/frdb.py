@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import pathlib
@@ -184,8 +185,27 @@ class ZoomData(TypedDict):
 class _DBType(TypedDict):
   """DB object type.
 
+  Attributes:
+    db_version (int): DB version; increment on save
+    app_version (str): package version (tranzoom.__version__) at time of last save
+    last_save (int): timestamp of last save
+    frames (dict[str, FrameData]): {frame_hash: FrameData}
+    cps (dict[str, tbase.JSONDict]): {cp_hash: frame.ComputationParameters.json}
+    renders (dict[str, tbase.JSONDict]): {render_hash: image.RenderParameters.json}
+    videos (dict[str, ZoomData]): {video_hash: ZoomData}, video_hash is the ZoomData.sha hash!
+    sentinel_cps_idx (dict[str, str]): {cp_hash: cp_hash} depth lookup, maps sentinel cp_hash,
+        that has fixed depth=1000, to the final cp_hash with actual depth; this allows us to
+        quickly find the actual computation parameters for a given sentinel, which is what we use
+    img_paths_idx (dict[str, ImageCoreKey]): {img_path: ImageCoreKey} for easy lookup of PNG paths
+    video_paths_idx (dict[str, str]): {video_path: video_hash} for easy lookup of GIF/video paths
+    images_idx (dict[str, list[ImageCoreKey]]): {data_hash: [im1, im2, ...]} for lookup of images by
+        their data hash; since the hash is PRE-overlay, we might have multiple obj with same hash
+    videos_idx (dict[str, list[str]]): {data_hash: [video_hash1, video_hash2, ...]} for lookup by
+        their data hash; since the hash is PRE-overlay, we might have multiple obj with same hash
+
   Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
   Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
+
   """
 
   # DB internal data and metadata
@@ -198,6 +218,9 @@ class _DBType(TypedDict):
   cps: dict[str, tbase.JSONDict]  # {cp_hash: frame.ComputationParameters.json}
   renders: dict[str, tbase.JSONDict]  # {render_hash: image.RenderParameters.json}
   videos: dict[str, ZoomData]  # {video_hash: ZoomData}, video_hash is the ZoomData.sha hash!
+
+  # internal indexes: for fast lookup of data based on known keys
+  sentinel_cps_idx: dict[str, str]  # {cp_hash: cp_hash} depth lookup, from sentinel 1000 to actual
 
   # path indexes: from known image/video on-disk paths -> core data key entries
   img_paths_idx: dict[str, ImageCoreKey]  # {img_path: ImageCoreKey} for easy lookup of PNG paths
@@ -227,6 +250,7 @@ def _DBTypeFactory(overrides: dict[str, object] | None = None) -> _DBType:
     'cps': {},
     'renders': {},
     'videos': {},
+    'sentinel_cps_idx': {},
     'images_idx': {},
     'videos_idx': {},
     'img_paths_idx': {},
@@ -472,7 +496,13 @@ class FractalDatabase:
 
   def FindImage(
     self, params: frame.ComputationParameters, render: image.RenderParameters
-  ) -> tuple[ImageCoreKey, FrameData | None, ComputationData | None, ImageData | None]:
+  ) -> tuple[
+    frame.ComputationParameters,
+    ImageCoreKey,
+    FrameData | None,
+    ComputationData | None,
+    ImageData | None,
+  ]:
     """Find an image in the database given its computation parameters and render parameters.
 
     Args:
@@ -480,9 +510,12 @@ class FractalDatabase:
       render (image.RenderParameters): the render parameters associated with the image
 
     Returns:
-      tuple[ImageCoreKey, FrameData | None, ComputationData | None, ImageData | None]: a tuple
-          containing the ImageCoreKey and the corresponding FrameData, ComputationData,
-          and ImageData if found; if not found, the missing entries will be None
+      tuple[
+          frame.ComputationParameters, ImageCoreKey, FrameData | None, ComputationData | None,
+          ImageData | None]: a tuple containing the ComputationParameters, ImageCoreKey,
+          and the corresponding FrameData, ComputationData, and ImageData if found;
+          if not found, the missing entries will be None; we have to return params because
+          it could have been replaced with one with the "real" depth
 
     Raises:
       Error: on error, mostly inconsistent DB, not missing data
@@ -490,10 +523,27 @@ class FractalDatabase:
     """
     # build the core key for this image
     ck: ImageCoreKey = CoreKeyFromData(params, render)
-    # first check: do we know this computation?
+    # first check: do we know this computation? it could be a sentinel with depth=1000
+    if params.depth == frame.MIN_ITER and ck['cp'] in self._db['sentinel_cps_idx']:
+      # this is a sentinel
+      cp_hash: str = self._db['sentinel_cps_idx'][ck['cp']]
+      if cp_hash not in self._db['cps']:
+        raise Error(
+          f'Inconsistent DB: found sentinel cp_hash {ck["cp"]!r} but not in cps; Report bug!'
+        )
+      # update depth; remember to re-compute ck too
+      params = dataclasses.replace(params, depth=cast('int', self._db['cps'][cp_hash]['depth']))
+      ck = CoreKeyFromData(params, render)
+      # sanity check: the new core key with updated depth should be consistent with the DB
+      if ck['cp'] != cp_hash:
+        raise Error(
+          f'Inconsistent DB: sentinel cp_hash {ck["cp"]!r} maps to cp_hash {cp_hash!r} with '
+          f'different hash than expected {params.sha!r}; Report bug!'
+        )
+    # now we can check if we have the computation parameters
     if ck['cp'] not in self._db['cps']:
       # we don't even know the computation parameters, so we definitely don't have the image
-      return (ck, None, None, None)
+      return (params, ck, None, None, None)
     # we know the computation parameters: get it
     if ck['frm'] not in self._db['frames']:
       raise Error(
@@ -508,14 +558,14 @@ class FractalDatabase:
     # check if we know this render
     if ck['render'] not in cp_data['renders']:
       # we don't know this render, so we don't have the image, but we do have the computation
-      return (ck, frm_data, cp_data, None)
+      return (params, ck, frm_data, cp_data, None)
     # we know the render parameters: get it
     if ck['render'] not in self._db['renders']:
       raise Error(
         f'Inconsistent DB: found render_hash {ck["render"]!r} in DB but not in renders; Report bug!'
       )
     render_data: ImageData = cp_data['renders'][ck['render']]
-    return (ck, frm_data, cp_data, render_data)
+    return (params, ck, frm_data, cp_data, render_data)
 
   def AddComputationToDB(
     self, params: frame.ComputationParameters, img_tm: int, img_path: str | None
@@ -563,6 +613,11 @@ class FractalDatabase:
         renders={},
       )
       frm['cps'][cp_hash] = cp
+    # add sentinel index, if needed
+    if params.depth > frame.MIN_ITER:
+      # depth > 1000 means we should add to the index, so we can find this later
+      sentinel_cp: frame.ComputationParameters = dataclasses.replace(params, depth=frame.MIN_ITER)
+      self._db['sentinel_cps_idx'][sentinel_cp.sha] = cp_hash
     # return the FrameData / ComputationData
     return (frm, cp)
 
@@ -714,7 +769,7 @@ class FractalDatabase:
     ck: ImageCoreKey
     cp_data: ComputationData | None
     render_data: ImageData | None
-    ck, _, cp_data, render_data = self.FindImage(params, render)
+    params, ck, _, cp_data, render_data = self.FindImage(params, render)
     # do we know about this computation?
     if cp_data is not None:
       # we have done a render with these parameters before
@@ -729,6 +784,8 @@ class FractalDatabase:
       else:
         # we have done the computation but do not have the data on disk
         print_comm(f'[red]DB computation[/] @{timer.TimeStr(img_tm)} -> [red]no cache on disk[/]')
+    else:
+      logging.info('DB miss: no computation data')
     # look at the actual render
     if render_data is not None:
       # we have done a render with these parameters before
@@ -752,6 +809,8 @@ class FractalDatabase:
           f'[red]DB render[/], {render_data["data_hash"]!r}@{timer.TimeStr(render_data["tm"])} '
           f'-> [red]no render on disk[/]'
         )
+    else:
+      logging.info('DB miss: no render data')
     # render the image for the current frame
     print_comm('')
     comp_tmr: timer.Timer | None = None
