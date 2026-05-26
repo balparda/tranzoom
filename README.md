@@ -728,7 +728,7 @@ PNG: 'a08eaf11d2fdcd542bf4e1f22ba8f981b42a6f62f96d443d4e1bb027c9653033', precisi
 Saved to "mandel-a08eaf11d2fdcd542bf4.png"
 ```
 
-This one also is time consuming, and definitively demands more time than even much deeper zooms. It has the features that make an image demand computation: a lot of set points (half the image is black, i.e., set points) and a much larger iteration depth (than the previous examples).
+This one also is time consuming, and definitely demands more time than even much deeper zooms. It has the features that make an image demand computation: a lot of set points (half the image is black, i.e., set points) and a much larger iteration depth (than the previous examples).
 
 #### Seahorse Tail (×3k)
 

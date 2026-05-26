@@ -12,7 +12,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 
 name = "tranzoom"
-version = "1.6.0"  # also update src/tranzoom/__init__.py
+version = "1.5.1"  # also update src/tranzoom/__init__.py
 
 description = "Fractal manipulation with LLMs"
 license = "Apache-2.0"
@@ -61,7 +61,7 @@ dependencies = [
 
   # TODO: pinned version because 0.26 is a mess, inline click and tests give a message that
   #    can only be fixed by disabling typeguard; probably have to fix clibase/transcrypto up
-  "typer==0.25.0",   # if this changes, also change: [tool.poetry.dependencies]
+  "typer==0.25.1",   # if this changes, also change: [tool.poetry.dependencies]
 
 ]
 
@@ -108,7 +108,7 @@ include = [
 # prefer to add dependencies inside the [project.dependencies] section
 
 python = "^3.12"  # if version changes, remember to change README.md
-typer = { version = "0.25.0", extras = ["all"] }
+typer = { version = "0.25.1", extras = ["all"] }
 
 [tool.poetry.group.dev.dependencies]
 
