@@ -5,8 +5,8 @@
 All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
-  - [V.V.V - 2026-05-DD - Placeholder](#vvv---2026-05-dd---placeholder)
-  - [1.5.0 - 2026-05-TBD](#150---2026-05-tbd)
+  - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
+  - [1.5.0 - 2026-05-26](#150---2026-05-26)
   - [1.4.1 - 2026-05-21](#141---2026-05-21)
   - [1.4.0 - 2026-05-20](#140---2026-05-20)
   - [1.3.0 - 2026-05-16](#130---2026-05-16)
@@ -20,20 +20,31 @@ This project follows a pragmatic versioning approach:
 - **Minor**: new features or non-breaking changes.
 - **Major**: breaking changes (command renames, incompatible output formats).
 
-## V.V.V - 2026-05-DD - Placeholder
+## V.V.V - 2026-06-DD - Placeholder
 
 - Added
-  - Placeholder for future changes.
+  - Placeholder for future additions.
 
 - Changed
   - Placeholder for future changes.
 
 - Fixed
-  - Placeholder for future changes.
+  - Placeholder for future fixes.
 
-## 1.5.0 - 2026-05-24
+## 1.5.0 - 2026-05-26
 
 - Added
+  - **Smooth coloring** (`fractal.py`, `image.py`): the escape-time renderer now computes a fractional smooth-escape value `nu ∈ [0, 1)` for each exterior pixel using the standard normalized iteration count formula, alongside the integer iteration count `n`. Pixel data is now 8 bytes (packed `int32` + `float32` via `EncodeIntFloatTo64`/`Decode64ToIntFloat`), replacing the previous 4-byte `int32`. `NormalizeSmoothEscape()` ensures `nu` is always well-formed. Result: smooth, band-free color gradients at all zoom depths.
+  - **`Image.Histogram` inner class** (`image.py`): new nested class storing a complete histogram for a pixel category (exterior or interior), with raw linear counts, raw bucket counts, cumulative variants, total count, and min/max values. `BucketCumulativeBefore()` and `InterpolateBucket()` methods enable smooth histogram-equalized color mapping using `(n, nu)` values.
+  - **`Image.RebuildHistograms()`** (`image.py`): new method that rebuilds exterior and interior histograms from the current escape data, called automatically during PNG rendering.
+  - **DB computation caching** (`frdb.py`): `FractalDatabase` now persists raw `Image` objects to disk (via `SaveImageData`/`LoadImageData`, using very high compression) so that re-renders of the same frame with the same computation parameters skip the expensive fractal computation entirely and go straight to PNG rendering. Cache lookup is performed at the start of every `CoreComputeImage()` call.
+  - **DB render caching** (`frdb.py`): `FractalDatabase` also caches rendered PNG files; if the same frame + render parameters were already rendered and the PNG file still exists on disk, `CoreComputeImage()` returns the cached PNG immediately without re-rendering.
+  - **`FractalDatabase.FindImage()`** (`frdb.py`): new method that looks up all DB records for a given `(ComputationParameters, RenderParameters)` pair, returning `(ImageCoreKey, FrameData | None, ComputationData | None, ImageData | None)`.
+  - **`FractalDatabase.AddComputationToDB()`** and **`FractalDatabase.AddRenderToDB()`** (`frdb.py`): new methods for inserting computation and render records into the DB, updating timestamps on repeated renders and maintaining the path/hash indexes.
+  - **`--force`/`--no-force` global flag** (`tranz.py`): new option that bypasses both computation and render caches, forcing full re-computation and re-rendering even when matching DB entries exist; default is `--no-force`.
+  - **`ExistingPathsFilter` and `CoreKeyFromData`** module-level callables (`frdb.py`): `ExistingPathsFilter` filters a list of paths to those that actually exist on disk; `CoreKeyFromData` builds an `ImageCoreKey` from a `(ComputationParameters, RenderParameters)` pair.
+  - New constants `BIT_31`, `BIT_32`, `BIT_64`, `MAX_UINT32` in `frame.py` for low-level bit manipulation shared with encoding/decoding helpers.
+  - `scripts/benchmark.py`: new standalone script for benchmarking pixel encode/decode throughput.
   - **`SerializingFractalObject` base class** (`frame.py`): new abstract base for fractal objects that serialize to a canonical JSON form with a stable SHA-256 hash (`.json`, `.binary`, `.sha` properties + `FromJson()` static method). `Frame` and `ComputationParameters` now extend it, gaining `.sha` and `.binary`.
   - **`Frame.FromJson()` and `ComputationParameters.FromJson()`** static deserializers for round-trip JSON ↔ object conversion with optional hash verification.
   - **`RenderParameters` class** (`image.py`): new `SerializingFractalObject` that encapsulates all rendering parameters — file type, exterior palette, interior (Set) palette, mark coordinates/color/width, and overlay type. Replaces scattered individual arguments in the rendering API.
@@ -47,6 +58,14 @@ This project follows a pragmatic versioning approach:
   - Grid overlay is now always drawn during `tranz zoom ai` and `tranz zoom manual` sessions (no separate flag needed).
 
 - Changed
+  - **Breaking: PNG metadata key prefix changed** from hardcoded `'tranzoom:'` to `f'{__app__}:'` (= `'tranZoom:'`); all PNG images written by this version use `tranZoom:*` keys; images written by older versions (`tranzoom:*`) are not readable by this version.
+  - **Breaking: PNG metadata keys reorganized**: `tranzoom:image:iter_depth:min` and `tranzoom:image:iter_depth:max` removed; `tranzoom:image:iter_depth:search` renamed to `tranZoom:image:depth`; pixel count keys consolidated to `tranZoom:image:exterior:count` and `tranZoom:image:set:count`; added per-category `n:min`, `n:max`, `nu:min`, `nu:max`, `bucket:min`, `bucket:max` keys; histogram summary keys restructured to `exterior:hist:linear`, `exterior:hist:linear:cumulative`, `exterior:hist:bucket`, `exterior:hist:bucket:cumulative` (and matching `set:hist:*` variants).
+  - **Breaking: `ImageData.rendered_path` → `rendered_paths`** (TypedDict field): now a `list[str]` of all known on-disk paths for a render, instead of a single `str | None`; `tm` is now always required.
+  - **`CoreComputeImage()` moved from module-level function to `FractalDatabase.CoreComputeImage()` method** (`frdb.py`): the DB instance is now the dispatch point for all rendering, enabling seamless cache lookup/store; callers updated throughout (`cli/base.py`, `core/ai.py`).
+  - **`require_img_obj` parameter** added to `FractalDatabase.CoreComputeImage()` and `ProduceFractalImage()`: when `False`, the returned `image.Image` may be `None` (used by static image commands that do not need the `Image` object after saving); `tranz image mandel` and `tranz image julia` pass `require_img_obj=False`.
+  - **`_BuildCumulative` and `_PixelPalette` made private** (`image.py`): `BuildCumulative` renamed to `_BuildCumulative` (signature changed to accept `Iterable[tuple[int, float]]` instead of `list[int]`); `PixelPalette` renamed to `_PixelPalette`.
+  - `ComputationData.raw_data_path` is now `str | None` (path is relative, managed by the DB; `None` means no raw data saved to disk for this entry).
+  - `scripts/template.py` renamed to `scripts/_template.py`.
   - **Breaking**: Palette `blue-to-yellow-to-brown` renamed to `sahara`; default exterior palette changed to `sahara`.
   - **Breaking**: Palette `electric-ocean` renamed to `electric`.
   - **Breaking**: PNG metadata keys renamed: `tranzoom:image:palette` → `tranzoom:render:palette`; `tranzoom:image:set_palette` → `tranzoom:render:set_palette`; `tranzoom:image:overlay` (bool `"true"`/`"false"`) → `tranzoom:render:overlay` (`OverlayType` value or `"none"`). Images written by older versions will have stale metadata keys when read back by this version.

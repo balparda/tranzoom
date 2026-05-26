@@ -51,6 +51,14 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                      False, file names will not include the hash;       │
 │                                                                                                      default is True                                    │
 │                                                                                                                                          │
+│ --force                   --no-force                                                                 If True, forces re-computation and re-saving of    │
+│                                                                                                      the image(s)/computation(s) even if an             │
+│                                                                                                      image/computation with the same parameters already │
+│                                                                                                      exists; if False will use existing (DB) entries to │
+│                                                                                                      avoid redundant computations/rendering as much as  │
+│                                                                                                      possible/reasonable; default is False, so we will  │
+│                                                                                                      try to avoid redundant computations/rendering      │
+│                                                                                                                                      │
 │ --palette                                          Color palette to use for rendering; default is     │
 │                                                                                                      'sahara'; available palettes: ['electric',         │
 │                                                                                                      'grayscale', 'lava', 'rgrayscale', 'sahara',       │
