@@ -37,6 +37,7 @@ DEFAULT_ITER: int = 1000
 HIGH_ITERS: list[int] = [100_000, 1_000_000, 10_000_000]  # these are very high iteration counts
 SET_INTERIOR_RESOLUTION: int = 100_000_000  # interior points max val [0..SET_INTERIOR_RESOLUTION]
 MAX_ITER: int = BIT_31 - 1  # ± 2_147_483_647, max for signed array('i'), sint32
+SMOOTH_EXTRA_ITERS: int = 5  # iterations AFTER |z| > 2 to compute: eliminates color banding errors
 
 # gmpy2.mpfr constants
 _MPFR_MIN_PRECISION: int = 140  # about 42 decimal digits
@@ -80,7 +81,6 @@ DEFAULT_JULIA_HEIGHT: str = '2.2'
 
 
 # TODO: video/gif to save check the frames for existence, thus recovering from a crash
-# TODO: image to store: on non-set/escaped the iteration plus a float(?) to compute "nu"
 # TODO: image to store: on set/non-escaped the actual final value of the tracked constant;
 #     and if we store the mpfr on a dict for example, we will have space for more info in the array
 # TODO: with all the frames in place (DB) and richer images and "nu" we can start video smoothing;

@@ -21,13 +21,6 @@ class Palette(enum.Enum):
 DEFAULT_PALETTE: Palette = Palette.SAHARA
 DEFAULT_SET_PALETTE: Palette = Palette.GRAYSCALE_REVERSE  # used for interior (set) points coloring
 
-# how many times to cycle through the palette across the histogram-equalized range;
-# more cycles = tighter, more frequent color banding
-PALETTE_CYCLES: int = 1
-# for the interior (Set) palette we cycle only once: the full gradient runs exactly once across
-# the histogram-equalized |z| range, keeping the gradient predictable and avoiding extra banding
-SET_PALETTE_CYCLES: int = 1
-
 # Color palettes for exterior points. Each is a tuple of RGB color stops that are
 # linearly interpolated and cycled PALETTE_CYCLES times across the histogram-equalized
 # escape-iteration range. Any number of stops is supported.

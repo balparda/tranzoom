@@ -35,6 +35,7 @@ MAX_CONCURRENCE: int = 16  # for the main rendering step, we limit the concurren
 _MPFR_ZERO: gmpy2.mpfr = gmpy2.mpfr('0')
 _MPFR_SIXTEENTH: gmpy2.mpfr = gmpy2.mpfr('0.0625')
 _MPFR_FOURTH: gmpy2.mpfr = gmpy2.mpfr('0.25')
+_MPFR_HALF: gmpy2.mpfr = gmpy2.mpfr('0.5')
 _MPFR_ONE: gmpy2.mpfr = gmpy2.mpfr('1')
 _MPFR_TWO: gmpy2.mpfr = gmpy2.mpfr('2')
 _MPFR_FOUR: gmpy2.mpfr = gmpy2.mpfr('4')
@@ -286,7 +287,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
   if dx <= 0 or dy <= 0:
     raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
   # start the mpfr context for floating-point computations with the precision needed
-  with inp.params.context:
+  with inp.params.context:  # noqa: PLR1702
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
     # are relatively expensive and we can reuse the x values across rows ("inner for loop");
     # also, this is where the "X" (real) coordinates are converted mpq->mpfr
@@ -410,11 +411,23 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
           zy2: gmpy2.mpfr = zy * zy
           # avoid sqrt(abs(z)); compare squared magnitude to 2^2
           if (mag_z2 := zx2 + zy2) > _MPFR_FOUR:
+            # the smooth escape formula is asymptotic: computing it immediately at |z| > 2
+            # leaves visible iteration-correlated contour error, so we iterate a few more times
+            # after escape before evaluating the potential
+            for _ in range(frame.SMOOTH_EXTRA_ITERS):
+              escaped_at += 1  # noqa: PLW2901
+              zy = _MPFR_TWO * zx * zy + cy
+              zx = zx2 - zy2 + cx
+              zx2 = zx * zx
+              zy2 = zy * zy
+            mag_z2 = zx2 + zy2
             # the smooth_escape part is a fractional value that represents how far the orbit went
             # beyond the escape radius at the escape iteration; we want to ensure that the final
             # escape value is "n + nu", where n is an integer and nu is in [0,1), and we store
             # them separately for better precision
-            smooth_escape = 1.0 - math.log2(0.5 * math.log(float(mag_z2)))
+            smooth_escape = 1.0 - float(
+              gmpy2.log2(_MPFR_HALF * cast('gmpy2.mpfr', gmpy2.log(mag_z2)))
+            )
             escaped_at, smooth_escape = NormalizeSmoothEscape(escaped_at, smooth_escape)  # noqa: PLW2901
             break
           # Imaginary Weight Average: accumulate sin(arg(z))**2 = zy**2/|z|**2 BEFORE the update
@@ -537,7 +550,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
   if dx <= 0 or dy <= 0:
     raise Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
   # start the mpfr context for floating-point computations with the precision needed
-  with inp.params.context:
+  with inp.params.context:  # noqa: PLR1702
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
     # are relatively expensive and we can reuse the x values across rows ("inner for loop");
     # also, this is where the "X" (real) coordinates are converted mpq->mpfr
@@ -649,11 +662,23 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
           zy2: gmpy2.mpfr = zy * zy
           # avoid sqrt(abs(z)); compare squared magnitude to 2^2
           if (mag_z2 := zx2 + zy2) > _MPFR_FOUR:
+            # the smooth escape formula is asymptotic: computing it immediately at |z| > 2
+            # leaves visible iteration-correlated contour error, so we iterate a few more times
+            # after escape before evaluating the potential
+            for _ in range(frame.SMOOTH_EXTRA_ITERS):
+              escaped_at += 1  # noqa: PLW2901
+              zy = _MPFR_TWO * zx * zy + cy
+              zx = zx2 - zy2 + cx
+              zx2 = zx * zx
+              zy2 = zy * zy
+            mag_z2 = zx2 + zy2
             # the smooth_escape part is a fractional value that represents how far the orbit went
             # beyond the escape radius at the escape iteration; we want to ensure that the final
             # escape value is "n + nu", where n is an integer and nu is in [0,1), and we store
             # them separately for better precision
-            smooth_escape = 1.0 - math.log2(0.5 * math.log(float(mag_z2)))
+            smooth_escape = 1.0 - float(
+              gmpy2.log2(_MPFR_HALF * cast('gmpy2.mpfr', gmpy2.log(mag_z2)))
+            )
             escaped_at, smooth_escape = NormalizeSmoothEscape(escaped_at, smooth_escape)  # noqa: PLW2901
             break
           # Imaginary Weight Average: accumulate sin(arg(z))**2 = zy**2/|z|**2 BEFORE the update
@@ -764,10 +789,13 @@ def NormalizeSmoothEscape(n: int, nu: float) -> tuple[int, float]:
     tuple[int, float]: A tuple of the adjusted integer escape iteration and the normalized
         smooth escape part.
 
+  Raises:
+    Error: if the normalized smooth escape part is not in [0,1) after normalization
+
   """
   # if nu is not finite, just return n and 0.0 for the smooth part
   if not math.isfinite(nu):
-    return (n, 0.0)
+    raise Error(f'nu is not a valid number {nu=}, bug! report')
   # get the integer shift to apply to n, and the new nu in [0,1)
   shift: int = math.floor(nu)
   n += shift
@@ -777,4 +805,7 @@ def NormalizeSmoothEscape(n: int, nu: float) -> tuple[int, float]:
     n -= 1
     nu += 1.0
   # ensure n is not negative, in case the shift made it negative
-  return (max(0, n), nu)
+  n = max(0, n)
+  if not (0.0 <= nu < 1.0):
+    raise Error(f'Normalized smooth escape range should be 0 <= {nu=} < 1, {n=}, bug! report')
+  return (n, nu)

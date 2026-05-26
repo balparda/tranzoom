@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import array
 import base64
+import bisect
 import dataclasses
 import enum
 import io
@@ -43,12 +44,22 @@ META_IMAGE_ANIMATION_KEY = 'tranzoom:image:animation'  # AnimationType or "none"
 META_IMAGE_WIDTH_KEY = 'tranzoom:image:width'  # int, in pixels
 META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
 META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
-META_ITER_DEPTH_MIN_KEY = 'tranzoom:image:iter_depth:min'  # int
-META_ITER_DEPTH_MAX_KEY = 'tranzoom:image:iter_depth:max'  # int
 META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:image:iter_depth:search'  # int
-META_SET_POINT_MIN_KEY = 'tranzoom:image:set_point:min'  # int
-META_SET_POINT_MAX_KEY = 'tranzoom:image:set_point:max'  # int
 META_IMAGE_COLOR_SET_KEY = 'tranzoom:image:color_set'  # frame.SetHighlightAlgorithm or "none"
+META_IMAGE_EXT_COUNT_KEY = 'tranzoom:image:exterior:count'  # int; count escaped
+META_IMAGE_EXT_N_MIN_KEY = 'tranzoom:image:exterior:n:min'  # int; min iter
+META_IMAGE_EXT_N_MAX_KEY = 'tranzoom:image:exterior:n:max'  # int; max iter
+META_IMAGE_EXT_NU_MIN_KEY = 'tranzoom:image:exterior:nu:min'  # int
+META_IMAGE_EXT_NU_MAX_KEY = 'tranzoom:image:exterior:nu:max'  # int
+META_IMAGE_EXT_BUCKET_MIN_KEY = 'tranzoom:image:exterior:bucket:min'  # int
+META_IMAGE_EXT_BUCKET_MAX_KEY = 'tranzoom:image:exterior:bucket:max'  # int
+META_IMAGE_SET_COUNT_KEY = 'tranzoom:image:set:count'  # int; count interior
+META_IMAGE_SET_N_MIN_KEY = 'tranzoom:image:set:n:min'  # int; min iter
+META_IMAGE_SET_N_MAX_KEY = 'tranzoom:image:set:n:max'  # int; max iter
+META_IMAGE_SET_NU_MIN_KEY = 'tranzoom:image:set:nu:min'  # int
+META_IMAGE_SET_NU_MAX_KEY = 'tranzoom:image:set:nu:max'  # int
+META_IMAGE_SET_BUCKET_MIN_KEY = 'tranzoom:image:set:bucket:min'  # int
+META_IMAGE_SET_BUCKET_MAX_KEY = 'tranzoom:image:set:bucket:max'  # int
 META_RENDER_PALETTE_KEY = 'tranzoom:render:palette'  # str, like "sunset", one of palette.Palette
 META_RENDER_SET_PALETTE_KEY = 'tranzoom:render:set_palette'  # str, interior Set palette name
 META_RENDER_OVERLAY_KEY = 'tranzoom:render:overlay'  # image.OverlayType or "none"
@@ -56,8 +67,6 @@ META_RENDER_MARK_RE_KEY = 'tranzoom:render:mark_re'  # gmpy2.mpq
 META_RENDER_MARK_IM_KEY = 'tranzoom:render:mark_im'  # gmpy2.mpq
 META_RENDER_MARK_COLOR_KEY = 'tranzoom:render:mark_color'  # Color.name.lower() or "none" (=no mark)
 META_RENDER_MARK_WIDTH_KEY = 'tranzoom:render:mark_width'  # int
-META_PIXEL_EXTERIOR_COUNT_KEY = 'tranzoom:image:exterior:pixel_count'  # int; count escaped
-META_PIXEL_INTERIOR_COUNT_KEY = 'tranzoom:image:interior:pixel_count'  # int; count set
 META_IMAGE_STATS_MAX_LO_KEY = 'tranzoom:image:stats:max_lo'  # gmpy2.mpfr
 META_IMAGE_STATS_MAX_HI_KEY = 'tranzoom:image:stats:max_hi'  # gmpy2.mpfr
 META_IMAGE_STATS_MIN_LO_KEY = 'tranzoom:image:stats:min_lo'  # gmpy2.mpfr
@@ -79,15 +88,15 @@ META_PRECISION_KEY = 'tranzoom:frame:precision'  # int, in bits
 META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'  # float
 # extra keys added to some images only
 # images with exterior points (almost all!)
-META_PIXEL_EXTERIOR_HISTOGRAM_KEY = 'tranzoom:image:exterior:histogram_summary'  # str
-META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
-  'tranzoom:image:exterior:cumulative_histogram_summary'  # str
-)
+META_IMAGE_EXT_HISTOGRAM_LINEAR_KEY = 'tranzoom:image:exterior:hist:linear'  # str
+META_IMAGE_EXT_HISTOGRAM_LINEAR_CUM_KEY = 'tranzoom:image:exterior:hist:linear:cumulative'  # str
+META_IMAGE_EXT_HISTOGRAM_BUCKET_KEY = 'tranzoom:image:exterior:hist:bucket'  # str
+META_IMAGE_EXT_HISTOGRAM_BUCKET_CUM_KEY = 'tranzoom:image:exterior:hist:bucket:cumulative'  # str
 # images with interior points and a Set palette (so we have interior histograms)
-META_PIXEL_INTERIOR_HISTOGRAM_KEY = 'tranzoom:image:interior:histogram_summary'  # str; can be ""!
-META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY = (
-  'tranzoom:image:interior:cumulative_histogram_summary'  # str; can be ""!
-)
+META_IMAGE_SET_HISTOGRAM_LINEAR_KEY = 'tranzoom:image:set:hist:linear'  # str
+META_IMAGE_SET_HISTOGRAM_LINEAR_CUM_KEY = 'tranzoom:image:set:hist:linear:cumulative'  # str
+META_IMAGE_SET_HISTOGRAM_BUCKET_KEY = 'tranzoom:image:set:hist:bucket'  # str
+META_IMAGE_SET_HISTOGRAM_BUCKET_CUM_KEY = 'tranzoom:image:set:hist:bucket:cumulative'  # str
 # Julia extra keys
 META_JULIA_RE_KEY = 'tranzoom:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
 META_JULIA_IM_KEY = 'tranzoom:frame:julia_im'  # gmpy2.mpq, only added for Julia Set frames
@@ -123,6 +132,7 @@ _PACK_Q = struct.Struct('>Q')  # uint64
 # image constants
 
 type ImageInt32Array = array.array[int]  # type alias for the type of our pixel data array
+_HIST_SUB_BINS: int = 2048  # number of sub-bins to use for the smooth histogram keys
 
 # constants for drawing
 
@@ -551,12 +561,57 @@ class Image:
     count: int
     min_value: int
     max_value: int
+    bucket_min: int
+    bucket_max: int
     min_nu: float
     max_nu: float
     linear: list[tuple[int, float]]  # sorted!
     d_linear: dict[int, float]  # {value: count}, for O(1) lookups
     cumulative: list[tuple[int, float]]  # sorted!
     d_cumulative: dict[int, float]  # {value: cumulative_count}, for O(1) lookups
+    bucket_linear: list[tuple[int, float]]  # sorted!
+    d_bucket_linear: dict[int, float]  # {value: count}, for O(1) lookups
+    bucket_cumulative: list[tuple[int, float]]  # sorted!
+    d_bucket_cumulative: dict[int, float]  # {value: cumulative_count}, for O(1) lookups
+
+    def BucketCumulativeBefore(self, key: int) -> float:
+      """Get the cumulative count before the given key, using binary search.
+
+      Args:
+        key (int): The key to find the cumulative count before.
+
+      Returns:
+        float: The cumulative count before the given key.
+
+      """
+      idx: int = bisect.bisect_left(self.bucket_cumulative, (key, -math.inf)) - 1
+      return 0.0 if idx < 0 else self.bucket_cumulative[idx][1]
+
+    def InterpolateBucket(self, n: int, nu: float) -> float:
+      """Interpolate the cumulative count for a given (n, nu) using the bucket histograms.
+
+      Args:
+        n (int): The escape iteration count (or interior iteration count) for the pixel.
+        nu (float): The fractional part of the escape iteration, used for smooth coloring.
+
+      Returns:
+        float: The interpolated cumulative count for the given (n, nu), normalized to [0, 1].
+
+      """
+      # the image is ALSO banding with this version
+      n, nu = _SmoothHistKey(n, nu)
+      if n < self.bucket_min:
+        return 0.0
+      if n > self.bucket_max:
+        return _ALMOST_ONE
+      c_before: float = self.BucketCumulativeBefore(n)
+      bucket: float = self.d_bucket_linear.get(n, 0.0)
+      t: float = (c_before + nu * bucket) / self.count
+      if t < 0.0:
+        return 0.0
+      if t >= 1.0:
+        return _ALMOST_ONE
+      return t
 
   def __init__(self, params: frame.ComputationParameters) -> None:
     """Construct image.
@@ -612,10 +667,10 @@ class Image:
       else:
         interior_points.append((-n, f))  # we flip the sign for interior points!
     # have 2 groups of pixels
-    self.ext_hist = BuildCumulative(exterior_points)  # ext generator
-    self.int_hist = BuildCumulative(interior_points)  # int generator
+    self.ext_hist = _BuildCumulative(exterior_points)  # ext generator
+    self.int_hist = _BuildCumulative(interior_points)  # int generator
 
-  def AsPixels(self, render: RenderParameters) -> bytes:  # noqa: C901
+  def AsPixels(self, render: RenderParameters) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
     Exterior points (escaped) are colored by mapping their escape iteration through a cumulative
@@ -644,42 +699,31 @@ class Image:
     if not self.ext_hist or not self.int_hist:
       raise Error('Failed to build histograms for image')
     # check basic consistency
-    if self.ext_hist.min_value < 0 or self._params.depth < self.ext_hist.max_value:
+    if (
+      self.ext_hist.min_value < 0
+      or (self._params.depth + frame.SMOOTH_EXTRA_ITERS) < self.ext_hist.max_value
+    ):
       raise Error(
         f'Invalid/Inconsistent {self.ext_hist.min_value=} or '
-        f'{self._params.depth=} < {self.ext_hist.max_value=}'
+        f'{self._params.depth=}+{frame.SMOOTH_EXTRA_ITERS} < {self.ext_hist.max_value=}'
       )
-
-    def _Interpolate(h: Image.Histogram, n: int, nu: float) -> float:
-      lo: int = max(h.min_value, min(n, h.max_value))
-      hi: int = max(h.min_value, min(n + 1, h.max_value))
-      c0: float = h.d_cumulative.get(lo, 0.0)
-      c1: float = h.d_cumulative.get(hi, c0)
-      c: float = c0 + nu * (c1 - c0)
-      t: float = c / h.count
-      if t < 0.0:
-        return 0.0
-      if t >= 1.0:
-        return _ALMOST_ONE
-      return t
-
     # map each pixel to an RGB color
     escaped_at: int
-    nu: float
+    f_nu: float
     pixels = bytearray(self._params.width * self._params.height * 3)
     for i, enc_escaped_at in enumerate(self.escape):
-      escaped_at, nu = Decode64ToIntFloat(enc_escaped_at)
+      escaped_at, f_nu = Decode64ToIntFloat(enc_escaped_at)
       if escaped_at >= 0 and self.ext_hist.count > 0:
         # exterior point: histogram-equalized position in pal
-        rgb: tuple[int, int, int] = PixelPalette(
-          _Interpolate(self.ext_hist, escaped_at, nu), render.escaped_pal, palette.PALETTE_CYCLES
+        rgb: tuple[int, int, int] = _PixelPalette(
+          self.ext_hist.InterpolateBucket(escaped_at, f_nu), render.escaped_pal
         )
       elif self._params.set_points and self.int_hist.count > 0 and escaped_at < 0:
         # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
         t_set: float = (self.int_hist.d_cumulative[-escaped_at] - 1) / self.int_hist.count
         if render.set_pal is None:
           raise Error('set_pal must be specified in RenderParameters when set_points is True')
-        rgb = PixelPalette(t_set, render.set_pal, palette.SET_PALETTE_CYCLES)
+        rgb = _PixelPalette(t_set, render.set_pal)
       else:
         rgb = (0, 0, 0)  # black: interior point (default) or all-interior image
       pixels[i * 3], pixels[i * 3 + 1], pixels[i * 3 + 2] = rgb
@@ -765,26 +809,38 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
     # precision and magnification
     META_PRECISION_KEY: str(img.params.precision),
     META_MAGNIFICATION_ORDER_KEY: str(frm.magnification[1]),
-    # escape iteration range in the image
-    META_ITER_DEPTH_MIN_KEY: str(img.ext_hist.min_value),
-    META_ITER_DEPTH_MAX_KEY: str(img.ext_hist.max_value),
-    META_SET_POINT_MIN_KEY: str(img.int_hist.min_value),
-    META_SET_POINT_MAX_KEY: str(img.int_hist.max_value),
+    # escape iteration in the image
     META_ITER_SEARCH_DEPTH_KEY: str(img.params.depth),
-    # histogram
-    META_PIXEL_EXTERIOR_COUNT_KEY: str(img.ext_hist.count),
-    META_PIXEL_INTERIOR_COUNT_KEY: str(img.int_hist.count),
+    # histogram / min-max counts
+    META_IMAGE_EXT_COUNT_KEY: str(img.ext_hist.count),
+    META_IMAGE_EXT_N_MIN_KEY: str(img.ext_hist.min_value),
+    META_IMAGE_EXT_N_MAX_KEY: str(img.ext_hist.max_value),
+    META_IMAGE_EXT_NU_MIN_KEY: str(img.ext_hist.min_nu),
+    META_IMAGE_EXT_NU_MAX_KEY: str(img.ext_hist.max_nu),
+    META_IMAGE_EXT_BUCKET_MIN_KEY: str(img.ext_hist.bucket_min),
+    META_IMAGE_EXT_BUCKET_MAX_KEY: str(img.ext_hist.bucket_max),
+    META_IMAGE_SET_COUNT_KEY: str(img.int_hist.count),
+    META_IMAGE_SET_N_MIN_KEY: str(img.int_hist.min_value),
+    META_IMAGE_SET_N_MAX_KEY: str(img.int_hist.max_value),
+    META_IMAGE_SET_NU_MIN_KEY: str(img.int_hist.min_nu),
+    META_IMAGE_SET_NU_MAX_KEY: str(img.int_hist.max_nu),
+    META_IMAGE_SET_BUCKET_MIN_KEY: str(img.int_hist.bucket_min),
+    META_IMAGE_SET_BUCKET_MAX_KEY: str(img.int_hist.bucket_max),
   }
   # histograms
   if img.ext_hist.count > 0:
-    img_meta[META_PIXEL_EXTERIOR_HISTOGRAM_KEY] = SummaryHistogram(img.ext_hist.linear)
-    img_meta[META_PIXEL_EXTERIOR_CUMULATIVE_HISTOGRAM_KEY] = SummaryHistogram(
-      img.ext_hist.cumulative
+    img_meta[META_IMAGE_EXT_HISTOGRAM_LINEAR_KEY] = SummaryHistogram(img.ext_hist.linear)
+    img_meta[META_IMAGE_EXT_HISTOGRAM_LINEAR_CUM_KEY] = SummaryHistogram(img.ext_hist.cumulative)
+    img_meta[META_IMAGE_EXT_HISTOGRAM_BUCKET_KEY] = SummaryHistogram(img.ext_hist.bucket_linear)
+    img_meta[META_IMAGE_EXT_HISTOGRAM_BUCKET_CUM_KEY] = SummaryHistogram(
+      img.ext_hist.bucket_cumulative
     )
   if img.params.set_points and img.int_hist.count > 0:
-    img_meta[META_PIXEL_INTERIOR_HISTOGRAM_KEY] = SummaryHistogram(img.int_hist.linear)
-    img_meta[META_PIXEL_INTERIOR_CUMULATIVE_HISTOGRAM_KEY] = SummaryHistogram(
-      img.int_hist.cumulative
+    img_meta[META_IMAGE_SET_HISTOGRAM_LINEAR_KEY] = SummaryHistogram(img.int_hist.linear)
+    img_meta[META_IMAGE_SET_HISTOGRAM_LINEAR_CUM_KEY] = SummaryHistogram(img.int_hist.cumulative)
+    img_meta[META_IMAGE_SET_HISTOGRAM_BUCKET_KEY] = SummaryHistogram(img.int_hist.bucket_linear)
+    img_meta[META_IMAGE_SET_HISTOGRAM_BUCKET_CUM_KEY] = SummaryHistogram(
+      img.int_hist.bucket_cumulative
     )
   # add any stats that aren't just noise
   if img.stats:
@@ -1197,10 +1253,11 @@ def PrintITerm2(img_data: bytes) -> None:
   sys.stdout.flush()
 
 
-def PixelPalette(
+def _PixelPalette(
   t: float,
   pal: palette.Palette,
-  cycles: int,
+  *,
+  cycles: int = 1,
 ) -> tuple[int, int, int]:
   """Get the RGB color for a histogram-equalized normalized palette position.
 
@@ -1226,7 +1283,7 @@ def PixelPalette(
     raise Error(f'Unknown palette {pal!r}, available: {list(palette.PALETTES.keys())}')
   palette_stops: tuple[tuple[int, int, int], ...] = palette.PALETTES[pal]
   # cycle through the palette the requested number of times for visual banding
-  t_cycled: float = (t * cycles) % 1.0
+  t_cycled: float = t if cycles == 1 else (t * cycles) % 1.0
   n: int = len(palette_stops)
   # fractional index into the palette
   idx: float = t_cycled * n
@@ -1242,7 +1299,7 @@ def PixelPalette(
   )
 
 
-def BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram:
+def _BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram:
   """Build a raw histogram and cumulative histogram from a pre-filtered list of integer values.
 
   This is a smooth float histogram.
@@ -1255,14 +1312,18 @@ def BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram:
         the total count.
 
   """
-  # build the raw histogram
+  # build the raw histograms
+  k: int
+  f: float
   histogram: dict[int, float] = {}
+  bucket_histogram: dict[int, float] = {}
   total: int = 0
   min_nu: float = 1000.0
   max_nu: float = -1000.0
   for v, nu in values:
-    histogram[v] = histogram.get(v, 0.0) + 1.0 - nu
-    histogram[v + 1] = histogram.get(v + 1, 0.0) + nu
+    histogram[v] = histogram.get(v, 0.0) + 1.0
+    k, _ = _SmoothHistKey(v, nu)
+    bucket_histogram[k] = bucket_histogram.get(k, 0.0) + 1.0
     total += 1
     min_nu = min(min_nu, nu)
     max_nu = max(max_nu, nu)
@@ -1272,35 +1333,84 @@ def BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram:
       count=0,
       min_value=0,
       max_value=0,
+      bucket_min=0,
+      bucket_max=0,
       min_nu=0.0,
       max_nu=0.0,
       linear=[],
       cumulative=[],
       d_linear={},
       d_cumulative={},
+      bucket_linear=[],
+      bucket_cumulative=[],
+      d_bucket_linear={},
+      d_bucket_cumulative={},
     )
   # build the cumulative histogram by iterating over the sorted keys of the raw histogram
   cum: float = 0.0
   s_histogram: list[tuple[int, float]] = sorted(histogram.items())
   s_cum: list[tuple[int, float]] = []
-  for v, c in s_histogram:
-    cum += c
-    s_cum.append((v, cum))
+  for k, f in s_histogram:
+    cum += f
+    s_cum.append((k, cum))
+  cum = 0.0
+  s_bucket_histogram: list[tuple[int, float]] = sorted(bucket_histogram.items())
+  s_bucket_cum: list[tuple[int, float]] = []
+  for k, f in s_bucket_histogram:
+    cum += f
+    s_bucket_cum.append((k, cum))
   # build object and return
   return Image.Histogram(
     count=total,
     min_value=min(histogram),
     max_value=max(histogram),
+    bucket_min=min(bucket_histogram),
+    bucket_max=max(bucket_histogram),
     min_nu=min_nu,
     max_nu=max_nu,
     linear=s_histogram,
     cumulative=s_cum,
     d_linear=histogram,
     d_cumulative=dict(s_cum),
+    bucket_linear=s_bucket_histogram,
+    bucket_cumulative=s_bucket_cum,
+    d_bucket_linear=bucket_histogram,
+    d_bucket_cumulative=dict(s_bucket_cum),
   )
 
 
+def _SmoothHistKey(n: int, nu: float) -> tuple[int, float]:
+  """Get a smoothed histogram key for an escaped value (n, nu).
+
+  Args:
+    n (int): The integer escape value.
+    nu (float): The fractional part of the escape value.
+
+  Returns:
+    tuple[int, float]: A tuple containing the smoothed histogram key (int) and the
+        fractional part (float) for interpolation
+
+  """
+  x: float = (n + nu) * _HIST_SUB_BINS
+  k: int = math.floor(x)
+  return (k, x - k)
+
+
 def _ImageNormalizeAndValidate(img_bytes: bytes, width: int, height: int) -> PILImage.Image:
+  """Normalize the image bytes to a PIL Image in RGB mode, and validate its size.
+
+  Args:
+    img_bytes (bytes): The image data as bytes.
+    width (int): The expected width of the image.
+    height (int): The expected height of the image.
+
+  Returns:
+    PILImage.Image: The normalized PIL Image in RGB mode.
+
+  Raises:
+    Error: on error
+
+  """
   with PILImage.open(io.BytesIO(img_bytes)) as img:
     if img.size != (width, height):
       raise Error(f'frame size {img.size} != {(width, height)}')
