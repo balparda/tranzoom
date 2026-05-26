@@ -22,8 +22,8 @@ from tranzoom.core import fractal, frame, image
 # DB constants
 
 _DB_FILE_NAME = 'tranZ_DB.json'  # default DB file name
-_DB_COMPRESS_LEVEL = 5  # default compression level for DB saving
-_IMG_DATA_COMPRESS_LEVEL = 13  # default compression level for image data saving
+_DB_COMPRESS_LEVEL = 5  # default compression level for DB saving: fast
+_IMG_DATA_COMPRESS_LEVEL = 20  # default compression level for image data saving: VERY high
 _DB_DISK_LOCK: threading.Lock = threading.Lock()  # lock for thread-safe DB operations
 
 ExistingPathsFilter: abc.Callable[[list[str]], list[str]] = lambda lp: [

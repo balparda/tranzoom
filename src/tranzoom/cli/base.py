@@ -38,9 +38,9 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 # if `tests/data/images/demo-mandel-seahorse-tail.png` internal data changes this will change!
 # this indicates that the mathematical computation or the setting of colors has changed;
 # this should NOT change over metadata changes, as it is computed from raw pixel data
-SEAHORSE_TAIL_HASH: str = 'bc8befe1492f4d296cf93994ba201ef06c3fa4858a47a657bb7f136f42bceb5d'
-SEAHORSE_ANIMATED_HASH: str = '4cc2c56c0d6363bcb4bf63d7221843cf668f12e8582490ed3fac7100b413b2c9'
-SUZANA_WAVE_HASH: str = '4be1409a9c55b4f9cbe21f45fa29d0bfc11622bffc248a5639fbffdea0cd80fe'
+SEAHORSE_TAIL_HASH: str = 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9'
+SEAHORSE_ANIMATED_HASH: str = 'ba053970ecbd96a3d9f77caac43af8ffc1c8a0f4d22fe9150744308471898281'
+SUZANA_WAVE_HASH: str = '8f06e7bcd0ea14dff1b6fc3c829cdc295367695fea882e2cf9e25bb1a6dfb5fc'
 # this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 
 # CLI options that can be re-used

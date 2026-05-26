@@ -33,97 +33,98 @@ from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
+from tranzoom import __app__ as _app
 from tranzoom.core import frame, palette
 
 # metadata keys for PNG tEXt chunks; used to store the frame parameters and other info in the PNG;
 # don't add "version", or "date", or other metadata that can change without changing the
 # actual image/mathematical data;
-# keys use a "tranzoom:" namespace to avoid collisions with other metadata
+# keys use a "tranZoom:" (_app) namespace to avoid collisions with other metadata
 # all are converted to str for storage in PNG metadata, but the original types are indicated below
-META_IMAGE_ANIMATION_KEY = 'tranzoom:image:animation'  # AnimationType or "none" if static image
-META_IMAGE_WIDTH_KEY = 'tranzoom:image:width'  # int, in pixels
-META_IMAGE_HEIGHT_KEY = 'tranzoom:image:height'  # int, in pixels
-META_IMAGE_HASH_KEY = 'tranzoom:image:hash'  # str, like "abcdef1234567890", a SHA256
-META_ITER_SEARCH_DEPTH_KEY = 'tranzoom:image:iter_depth:search'  # int
-META_IMAGE_COLOR_SET_KEY = 'tranzoom:image:color_set'  # frame.SetHighlightAlgorithm or "none"
-META_IMAGE_EXT_COUNT_KEY = 'tranzoom:image:exterior:count'  # int; count escaped
-META_IMAGE_EXT_N_MIN_KEY = 'tranzoom:image:exterior:n:min'  # int; min iter
-META_IMAGE_EXT_N_MAX_KEY = 'tranzoom:image:exterior:n:max'  # int; max iter
-META_IMAGE_EXT_NU_MIN_KEY = 'tranzoom:image:exterior:nu:min'  # int
-META_IMAGE_EXT_NU_MAX_KEY = 'tranzoom:image:exterior:nu:max'  # int
-META_IMAGE_EXT_BUCKET_MIN_KEY = 'tranzoom:image:exterior:bucket:min'  # int
-META_IMAGE_EXT_BUCKET_MAX_KEY = 'tranzoom:image:exterior:bucket:max'  # int
-META_IMAGE_SET_COUNT_KEY = 'tranzoom:image:set:count'  # int; count interior
-META_IMAGE_SET_N_MIN_KEY = 'tranzoom:image:set:n:min'  # int; min iter
-META_IMAGE_SET_N_MAX_KEY = 'tranzoom:image:set:n:max'  # int; max iter
-META_IMAGE_SET_NU_MIN_KEY = 'tranzoom:image:set:nu:min'  # int
-META_IMAGE_SET_NU_MAX_KEY = 'tranzoom:image:set:nu:max'  # int
-META_IMAGE_SET_BUCKET_MIN_KEY = 'tranzoom:image:set:bucket:min'  # int
-META_IMAGE_SET_BUCKET_MAX_KEY = 'tranzoom:image:set:bucket:max'  # int
-META_RENDER_PALETTE_KEY = 'tranzoom:render:palette'  # str, like "sunset", one of palette.Palette
-META_RENDER_SET_PALETTE_KEY = 'tranzoom:render:set_palette'  # str, interior Set palette name
-META_RENDER_OVERLAY_KEY = 'tranzoom:render:overlay'  # image.OverlayType or "none"
-META_RENDER_MARK_RE_KEY = 'tranzoom:render:mark_re'  # gmpy2.mpq
-META_RENDER_MARK_IM_KEY = 'tranzoom:render:mark_im'  # gmpy2.mpq
-META_RENDER_MARK_COLOR_KEY = 'tranzoom:render:mark_color'  # Color.name.lower() or "none" (=no mark)
-META_RENDER_MARK_WIDTH_KEY = 'tranzoom:render:mark_width'  # int
-META_IMAGE_STATS_MAX_LO_KEY = 'tranzoom:image:stats:max_lo'  # gmpy2.mpfr
-META_IMAGE_STATS_MAX_HI_KEY = 'tranzoom:image:stats:max_hi'  # gmpy2.mpfr
-META_IMAGE_STATS_MIN_LO_KEY = 'tranzoom:image:stats:min_lo'  # gmpy2.mpfr
-META_IMAGE_STATS_MIN_HI_KEY = 'tranzoom:image:stats:min_hi'  # gmpy2.mpfr
-META_IMAGE_STATS_ANG_LO_KEY = 'tranzoom:image:stats:ang_lo'  # gmpy2.mpfr
-META_IMAGE_STATS_ANG_HI_KEY = 'tranzoom:image:stats:ang_hi'  # gmpy2.mpfr
-META_IMAGE_STATS_IMAG_LO_KEY = 'tranzoom:image:stats:imag_lo'  # gmpy2.mpfr
-META_IMAGE_STATS_IMAG_HI_KEY = 'tranzoom:image:stats:imag_hi'  # gmpy2.mpfr
-META_FRACTAL_KEY = 'tranzoom:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal, lowercase
-META_TOP_RE_KEY = 'tranzoom:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
-META_TOP_IM_KEY = 'tranzoom:frame:top_im'  # gmpy2.mpq
-META_BOTTOM_RE_KEY = 'tranzoom:frame:bottom_re'  # gmpy2.mpq
-META_BOTTOM_IM_KEY = 'tranzoom:frame:bottom_im'  # gmpy2.mpq
-META_CENTER_RE_KEY = 'tranzoom:frame:center_re'  # gmpy2.mpq
-META_CENTER_IM_KEY = 'tranzoom:frame:center_im'  # gmpy2.mpq
-META_WIDTH_RE_KEY = 'tranzoom:frame:width_re'  # gmpy2.mpq
-META_HEIGHT_IM_KEY = 'tranzoom:frame:height_im'  # gmpy2.mpq
-META_PRECISION_KEY = 'tranzoom:frame:precision'  # int, in bits
-META_MAGNIFICATION_ORDER_KEY = 'tranzoom:frame:magnification_order'  # float
+META_IMAGE_ANIMATION_KEY: str = f'{_app}:image:animation'  # AnimationType or "none" if static image
+META_IMAGE_WIDTH_KEY: str = f'{_app}:image:width'  # int, in pixels
+META_IMAGE_HEIGHT_KEY: str = f'{_app}:image:height'  # int, in pixels
+META_IMAGE_HASH_KEY: str = f'{_app}:image:hash'  # str, like "abcdef1234567890", a SHA256
+META_ITER_SEARCH_DEPTH_KEY: str = f'{_app}:image:depth'  # int
+META_IMAGE_COLOR_SET_KEY: str = f'{_app}:image:color_set'  # frame.SetHighlightAlgorithm or "none"
+META_IMAGE_EXT_COUNT_KEY: str = f'{_app}:image:exterior:count'  # int; count escaped
+META_IMAGE_EXT_N_MIN_KEY: str = f'{_app}:image:exterior:n:min'  # int; min iter
+META_IMAGE_EXT_N_MAX_KEY: str = f'{_app}:image:exterior:n:max'  # int; max iter
+META_IMAGE_EXT_NU_MIN_KEY: str = f'{_app}:image:exterior:nu:min'  # int
+META_IMAGE_EXT_NU_MAX_KEY: str = f'{_app}:image:exterior:nu:max'  # int
+META_IMAGE_EXT_BUCKET_MIN_KEY: str = f'{_app}:image:exterior:bucket:min'  # int
+META_IMAGE_EXT_BUCKET_MAX_KEY: str = f'{_app}:image:exterior:bucket:max'  # int
+META_IMAGE_SET_COUNT_KEY: str = f'{_app}:image:set:count'  # int; count interior
+META_IMAGE_SET_N_MIN_KEY: str = f'{_app}:image:set:n:min'  # int; min iter
+META_IMAGE_SET_N_MAX_KEY: str = f'{_app}:image:set:n:max'  # int; max iter
+META_IMAGE_SET_NU_MIN_KEY: str = f'{_app}:image:set:nu:min'  # int
+META_IMAGE_SET_NU_MAX_KEY: str = f'{_app}:image:set:nu:max'  # int
+META_IMAGE_SET_BUCKET_MIN_KEY: str = f'{_app}:image:set:bucket:min'  # int
+META_IMAGE_SET_BUCKET_MAX_KEY: str = f'{_app}:image:set:bucket:max'  # int
+META_RENDER_PALETTE_KEY: str = f'{_app}:render:palette'  # str, ex "sunset", one of palette.Palette
+META_RENDER_SET_PALETTE_KEY: str = f'{_app}:render:set_palette'  # str, interior Set palette name
+META_RENDER_OVERLAY_KEY: str = f'{_app}:render:overlay'  # image.OverlayType or "none"
+META_RENDER_MARK_RE_KEY: str = f'{_app}:render:mark_re'  # gmpy2.mpq
+META_RENDER_MARK_IM_KEY: str = f'{_app}:render:mark_im'  # gmpy2.mpq
+META_RENDER_MARK_COLOR_KEY: str = f'{_app}:render:mark_color'  # Color.name.lower() / "none"=no mark
+META_RENDER_MARK_WIDTH_KEY: str = f'{_app}:render:mark_width'  # int
+META_IMAGE_STATS_MAX_LO_KEY: str = f'{_app}:image:stats:max_lo'  # gmpy2.mpfr
+META_IMAGE_STATS_MAX_HI_KEY: str = f'{_app}:image:stats:max_hi'  # gmpy2.mpfr
+META_IMAGE_STATS_MIN_LO_KEY: str = f'{_app}:image:stats:min_lo'  # gmpy2.mpfr
+META_IMAGE_STATS_MIN_HI_KEY: str = f'{_app}:image:stats:min_hi'  # gmpy2.mpfr
+META_IMAGE_STATS_ANG_LO_KEY: str = f'{_app}:image:stats:ang_lo'  # gmpy2.mpfr
+META_IMAGE_STATS_ANG_HI_KEY: str = f'{_app}:image:stats:ang_hi'  # gmpy2.mpfr
+META_IMAGE_STATS_IMAG_LO_KEY: str = f'{_app}:image:stats:imag_lo'  # gmpy2.mpfr
+META_IMAGE_STATS_IMAG_HI_KEY: str = f'{_app}:image:stats:imag_hi'  # gmpy2.mpfr
+META_FRACTAL_KEY: str = f'{_app}:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal
+META_TOP_RE_KEY: str = f'{_app}:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
+META_TOP_IM_KEY: str = f'{_app}:frame:top_im'  # gmpy2.mpq
+META_BOTTOM_RE_KEY: str = f'{_app}:frame:bottom_re'  # gmpy2.mpq
+META_BOTTOM_IM_KEY: str = f'{_app}:frame:bottom_im'  # gmpy2.mpq
+META_CENTER_RE_KEY: str = f'{_app}:frame:center_re'  # gmpy2.mpq
+META_CENTER_IM_KEY: str = f'{_app}:frame:center_im'  # gmpy2.mpq
+META_WIDTH_RE_KEY: str = f'{_app}:frame:width_re'  # gmpy2.mpq
+META_HEIGHT_IM_KEY: str = f'{_app}:frame:height_im'  # gmpy2.mpq
+META_PRECISION_KEY: str = f'{_app}:frame:precision'  # int, in bits
+META_MAGNIFICATION_ORDER_KEY: str = f'{_app}:frame:magnification_order'  # float
 # extra keys added to some images only
 # images with exterior points (almost all!)
-META_IMAGE_EXT_HISTOGRAM_LINEAR_KEY = 'tranzoom:image:exterior:hist:linear'  # str
-META_IMAGE_EXT_HISTOGRAM_LINEAR_CUM_KEY = 'tranzoom:image:exterior:hist:linear:cumulative'  # str
-META_IMAGE_EXT_HISTOGRAM_BUCKET_KEY = 'tranzoom:image:exterior:hist:bucket'  # str
-META_IMAGE_EXT_HISTOGRAM_BUCKET_CUM_KEY = 'tranzoom:image:exterior:hist:bucket:cumulative'  # str
+META_IMAGE_EXT_HISTOGRAM_LINEAR_KEY: str = f'{_app}:image:exterior:hist:linear'  # str
+META_IMAGE_EXT_HISTOGRAM_LINEAR_CUM_KEY: str = f'{_app}:image:exterior:hist:linear:cumulative'
+META_IMAGE_EXT_HISTOGRAM_BUCKET_KEY: str = f'{_app}:image:exterior:hist:bucket'  # str
+META_IMAGE_EXT_HISTOGRAM_BUCKET_CUM_KEY: str = f'{_app}:image:exterior:hist:bucket:cumulative'
 # images with interior points and a Set palette (so we have interior histograms)
-META_IMAGE_SET_HISTOGRAM_LINEAR_KEY = 'tranzoom:image:set:hist:linear'  # str
-META_IMAGE_SET_HISTOGRAM_LINEAR_CUM_KEY = 'tranzoom:image:set:hist:linear:cumulative'  # str
-META_IMAGE_SET_HISTOGRAM_BUCKET_KEY = 'tranzoom:image:set:hist:bucket'  # str
-META_IMAGE_SET_HISTOGRAM_BUCKET_CUM_KEY = 'tranzoom:image:set:hist:bucket:cumulative'  # str
+META_IMAGE_SET_HISTOGRAM_LINEAR_KEY: str = f'{_app}:image:set:hist:linear'  # str
+META_IMAGE_SET_HISTOGRAM_LINEAR_CUM_KEY: str = f'{_app}:image:set:hist:linear:cumulative'  # str
+META_IMAGE_SET_HISTOGRAM_BUCKET_KEY: str = f'{_app}:image:set:hist:bucket'  # str
+META_IMAGE_SET_HISTOGRAM_BUCKET_CUM_KEY: str = f'{_app}:image:set:hist:bucket:cumulative'  # str
 # Julia extra keys
-META_JULIA_RE_KEY = 'tranzoom:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
-META_JULIA_IM_KEY = 'tranzoom:frame:julia_im'  # gmpy2.mpq, only added for Julia Set frames
+META_JULIA_RE_KEY: str = f'{_app}:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
+META_JULIA_IM_KEY: str = f'{_app}:frame:julia_im'  # gmpy2.mpq, only added for Julia Set frames
 # Animation extra keys
-META_ANIM_INITIAL_WIDTH_RE_KEY = 'tranzoom:animation:frame:initial_width_re'  # gmpy2.mpq
-META_ANIM_INITIAL_HEIGHT_IM_KEY = 'tranzoom:animation:frame:initial_height_im'  # gmpy2.mpq
-META_ANIM_MAGNITUDE_KEY = 'tranzoom:animation:zoom:magnitude'  # float
-META_ANIM_MAGNITUDE_PER_STEP_KEY = 'tranzoom:animation:zoom:magnitude_per_step'  # float
-META_ANIM_MAGNIFICATION_PER_STEP_KEY = 'tranzoom:animation:zoom:magnification_per_step'  # float
-META_ANIM_DURATION_KEY = 'tranzoom:animation:duration'  # float
-META_ANIM_FRAMES_KEY = 'tranzoom:animation:frames'  # int
-META_ANIM_STEPS_KEY = 'tranzoom:animation:steps'  # int
-META_ANIM_FPS_KEY = 'tranzoom:animation:fps'  # float
-META_ANIM_LOOP_KEY = 'tranzoom:animation:loop'  # int; 0 means infinite loop; meaningless for MP4
+META_ANIM_INITIAL_WIDTH_RE_KEY: str = f'{_app}:animation:frame:initial_width_re'  # gmpy2.mpq
+META_ANIM_INITIAL_HEIGHT_IM_KEY: str = f'{_app}:animation:frame:initial_height_im'  # gmpy2.mpq
+META_ANIM_MAGNITUDE_KEY: str = f'{_app}:animation:zoom:magnitude'  # float
+META_ANIM_MAGNITUDE_PER_STEP_KEY: str = f'{_app}:animation:zoom:magnitude_per_step'  # float
+META_ANIM_MAGNIFICATION_PER_STEP_KEY: str = f'{_app}:animation:zoom:magnification_per_step'  # float
+META_ANIM_DURATION_KEY: str = f'{_app}:animation:duration'  # float
+META_ANIM_FRAMES_KEY: str = f'{_app}:animation:frames'  # int
+META_ANIM_STEPS_KEY: str = f'{_app}:animation:steps'  # int
+META_ANIM_FPS_KEY: str = f'{_app}:animation:fps'  # float
+META_ANIM_LOOP_KEY: str = f'{_app}:animation:loop'  # int; 0 means inf loop; meaningless for MP4
 # LLM extra keys
-META_LLM_MODEL_KEY = 'tranzoom:llm:model'  # str (or "HUMAN"/META_LLM_MODEL_VALUE_HUMAN for human)
-META_LLM_TEMPERATURE_KEY = 'tranzoom:llm:temperature'  # float
-META_LLM_SEED_KEY = 'tranzoom:llm:seed'  # int (0 if not set)
-META_LLM_QUERY_MEMORY_KEY = 'tranzoom:llm:query:memory'  # int; number of previous steps chat
-META_LLM_QUERY_REASONING_KEY = 'tranzoom:llm:query:reasoning'  # bool; stored as "true"/"false"
-META_LLM_QUERY_SETUP_KEY = 'tranzoom:llm:query:setup'  # str
-META_LLM_QUERY_IMAGE_KEY = 'tranzoom:llm:query:image'  # str
-META_LLM_QUERY_EXTRA_KEY = 'tranzoom:llm:query:extra'  # str
-META_LLM_RESULT_JSON_KEY = 'tranzoom:llm:result:json'  # JSON with evaluation info from LLM or HUMAN
-META_LLM_ZOOM_COUNT_KEY = 'tranzoom:llm:zoom:count'  # int; zoom iteration depth
+META_LLM_MODEL_KEY: str = f'{_app}:llm:model'  # str (META_LLM_MODEL_VALUE_HUMAN or "HUMAN")
+META_LLM_TEMPERATURE_KEY: str = f'{_app}:llm:temperature'  # float
+META_LLM_SEED_KEY: str = f'{_app}:llm:seed'  # int (0 if not set)
+META_LLM_QUERY_MEMORY_KEY: str = f'{_app}:llm:query:memory'  # int; number of previous steps chat
+META_LLM_QUERY_REASONING_KEY: str = f'{_app}:llm:query:reasoning'  # bool; stored as "true"/"false"
+META_LLM_QUERY_SETUP_KEY: str = f'{_app}:llm:query:setup'  # str
+META_LLM_QUERY_IMAGE_KEY: str = f'{_app}:llm:query:image'  # str
+META_LLM_QUERY_EXTRA_KEY: str = f'{_app}:llm:query:extra'  # str
+META_LLM_RESULT_JSON_KEY: str = f'{_app}:llm:result:json'  # JSON with evaluation inf from LLM/HUMAN
+META_LLM_ZOOM_COUNT_KEY: str = f'{_app}:llm:zoom:count'  # int; zoom iteration depth
 # special values
-META_LLM_MODEL_VALUE_HUMAN = 'HUMAN'  # used when the evaluation is done by a flesh-and-blood human
+META_LLM_MODEL_VALUE_HUMAN: str = 'HUMAN'  # used if evaluation is done by flesh-and-blood human
 
 # pre-compiled constants for encoding/decoding
 _PACK_IF = struct.Struct('>if')  # signed int32 + float32
@@ -565,14 +566,14 @@ class Image:
     bucket_max: int
     min_nu: float
     max_nu: float
-    linear: list[tuple[int, float]]  # sorted!
-    d_linear: dict[int, float]  # {value: count}, for O(1) lookups
-    cumulative: list[tuple[int, float]]  # sorted!
-    d_cumulative: dict[int, float]  # {value: cumulative_count}, for O(1) lookups
-    bucket_linear: list[tuple[int, float]]  # sorted!
-    d_bucket_linear: dict[int, float]  # {value: count}, for O(1) lookups
-    bucket_cumulative: list[tuple[int, float]]  # sorted!
-    d_bucket_cumulative: dict[int, float]  # {value: cumulative_count}, for O(1) lookups
+    linear: list[tuple[int, int]]  # sorted!
+    d_linear: dict[int, int]  # {value: count}, for O(1) lookups
+    cumulative: list[tuple[int, int]]  # sorted!
+    d_cumulative: dict[int, int]  # {value: cumulative_count}, for O(1) lookups
+    bucket_linear: list[tuple[int, int]]  # sorted!
+    d_bucket_linear: dict[int, int]  # {value: count}, for O(1) lookups
+    bucket_cumulative: list[tuple[int, int]]  # sorted!
+    d_bucket_cumulative: dict[int, int]  # {value: cumulative_count}, for O(1) lookups
 
     def BucketCumulativeBefore(self, key: int) -> float:
       """Get the cumulative count before the given key, using binary search.
@@ -605,7 +606,7 @@ class Image:
       if n > self.bucket_max:
         return _ALMOST_ONE
       c_before: float = self.BucketCumulativeBefore(n)
-      bucket: float = self.d_bucket_linear.get(n, 0.0)
+      bucket: int = self.d_bucket_linear.get(n, 0)
       t: float = (c_before + nu * bucket) / self.count
       if t < 0.0:
         return 0.0
@@ -745,7 +746,7 @@ class Image:
     img: PILImage.Image = PILImage.frombytes(
       'RGB', (self._params.width, self._params.height), raw_img
     )
-    # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranzoom:" namespace
+    # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranZoom:" (_app) namespace
     png_meta = PngImagePlugin.PngInfo()
     for k, v in MakeImageMeta(self, render, img_data_hash).items():
       png_meta.add_text(k, v)
@@ -795,7 +796,7 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
     META_RENDER_MARK_COLOR_KEY: render.mark_color.name.lower() if render.mark_color else 'none',
     META_RENDER_MARK_WIDTH_KEY: str(render.mark_width),  # int
     # frame
-    META_FRACTAL_KEY: frm.fractal.value.lower(),
+    META_FRACTAL_KEY: frm.fractal.value,
     # frame as corners
     META_TOP_RE_KEY: str(frm.top_re),
     META_TOP_IM_KEY: str(frm.top_im),
@@ -864,11 +865,11 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
   return img_meta
 
 
-def SummaryHistogram(sorted_histogram: list[tuple[int, float]]) -> str:
+def SummaryHistogram(sorted_histogram: list[tuple[int, int]]) -> str:
   """Summarize a histogram as a string, showing the first 3, last 3 values, summarizing the middle.
 
   Args:
-    sorted_histogram (list[tuple[int, float]]): A list of (key, count) tuples representing
+    sorted_histogram (list[tuple[int, int]]): A list of (key, count) tuples representing
         the histogram, SORTED by key.
 
   Returns:
@@ -877,7 +878,7 @@ def SummaryHistogram(sorted_histogram: list[tuple[int, float]]) -> str:
 
   """
 
-  def _SmallHistogram() -> list[tuple[int | str, float]]:
+  def _SmallHistogram() -> list[tuple[int | str, int]]:
     if len(sorted_histogram) <= 7:  # noqa: PLR2004
       # small histogram, no need to summarize
       return sorted_histogram  # type: ignore[return-value]
@@ -885,11 +886,11 @@ def SummaryHistogram(sorted_histogram: list[tuple[int, float]]) -> str:
     # make a new list with the first 3 and last 3 values, and a summary of the middle values "..."
     return [
       *sorted_histogram[:3],
-      ('...', float(sum(count for _, count in sorted_histogram[3:-3]))),
+      ('...', sum(count for _, count in sorted_histogram[3:-3])),
       *sorted_histogram[-3:],
     ]
 
-  return '{' + (', '.join(f'{n}: {f:.4f}' for n, f in _SmallHistogram())) + '}'
+  return '{' + (', '.join(f'{n}: {f}' for n, f in _SmallHistogram())) + '}'
 
 
 def MakeImagePath(
@@ -1315,15 +1316,15 @@ def _BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram
   # build the raw histograms
   k: int
   f: float
-  histogram: dict[int, float] = {}
-  bucket_histogram: dict[int, float] = {}
+  histogram: dict[int, int] = {}
+  bucket_histogram: dict[int, int] = {}
   total: int = 0
   min_nu: float = 1000.0
   max_nu: float = -1000.0
   for v, nu in values:
-    histogram[v] = histogram.get(v, 0.0) + 1.0
+    histogram[v] = histogram.get(v, 0) + 1
     k, _ = _SmoothHistKey(v, nu)
-    bucket_histogram[k] = bucket_histogram.get(k, 0.0) + 1.0
+    bucket_histogram[k] = bucket_histogram.get(k, 0) + 1
     total += 1
     min_nu = min(min_nu, nu)
     max_nu = max(max_nu, nu)
@@ -1347,15 +1348,15 @@ def _BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram
       d_bucket_cumulative={},
     )
   # build the cumulative histogram by iterating over the sorted keys of the raw histogram
-  cum: float = 0.0
-  s_histogram: list[tuple[int, float]] = sorted(histogram.items())
-  s_cum: list[tuple[int, float]] = []
+  cum: int = 0
+  s_histogram: list[tuple[int, int]] = sorted(histogram.items())
+  s_cum: list[tuple[int, int]] = []
   for k, f in s_histogram:
     cum += f
     s_cum.append((k, cum))
-  cum = 0.0
-  s_bucket_histogram: list[tuple[int, float]] = sorted(bucket_histogram.items())
-  s_bucket_cum: list[tuple[int, float]] = []
+  cum = 0
+  s_bucket_histogram: list[tuple[int, int]] = sorted(bucket_histogram.items())
+  s_bucket_cum: list[tuple[int, int]] = []
   for k, f in s_bucket_histogram:
     cum += f
     s_bucket_cum.append((k, cum))
