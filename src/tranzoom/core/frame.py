@@ -33,7 +33,6 @@ MAX_UINT32: int = 0xFFFFFFFF
 
 N_BYTES_UINT: int = 8  # we use array of uint64 to store pixel data / array.array('Q') / unsigned 64
 MIN_ITER: int = 1000  # minimum, but also a mark that we want to automatically calculate the depth
-DEFAULT_ITER: int = 1000
 HIGH_ITERS: list[int] = [100_000, 1_000_000, 10_000_000]  # these are very high iteration counts
 SET_INTERIOR_RESOLUTION: int = 100_000_000  # interior points max val [0..SET_INTERIOR_RESOLUTION]
 MAX_ITER: int = BIT_31 - 1  # ± 2_147_483_647, max for signed array('i'), sint32
@@ -59,7 +58,7 @@ _MPQ_ONE: gmpy2.mpq = gmpy2.mpq('1')
 _MPQ_SQRT_TWO_NOT_EXACT: gmpy2.mpq = gmpy2.mpq('99/70')  # good enough for our purposes
 _MPQ_TWO: gmpy2.mpq = gmpy2.mpq('2')
 # constant to divide frame size when zooming one step
-DEFAULT_MPQ_ZOOM: gmpy2.mpq = gmpy2.mpq('5/3')  # 1.67
+DEFAULT_MPQ_ZOOM: gmpy2.mpq = gmpy2.mpq('2')  # 2x
 # fraction of frame size to move when moving in a cardinal direction
 DEFAULT_STEP_DIRECT: int = 3
 DEFAULT_MPQ_STEP_DIRECT: gmpy2.mpq = gmpy2.mpq(f'1/{DEFAULT_STEP_DIRECT}')
@@ -80,7 +79,6 @@ DEFAULT_JULIA_WIDTH: str = '1.8'
 DEFAULT_JULIA_HEIGHT: str = '2.2'
 
 
-# TODO: video/gif to save check the frames for existence, thus recovering from a crash
 # TODO: image to store: on set/non-escaped the actual final value of the tracked constant;
 #     and if we store the mpfr on a dict for example, we will have space for more info in the array
 # TODO: with all the frames in place (DB) and richer images and "nu" we can start video smoothing;
@@ -303,6 +301,20 @@ class Frame(SerializingFractalObject):
     return s[0] * s[1]
 
   @property
+  def mag2(self) -> gmpy2.mpq:
+    """Magnification squared; OR area ratio. Has not gone through sqrt(): Exact.
+
+    DEFAULT_FRAMES[self.fractal].area / self.area i.e., WHOLE / this
+
+    You can use this to compute total magnification: sqrt( obj1.mag2 / obj2.mag2 )
+
+    Returns:
+      gmpy2.mpq: The magnification squared; OR The area ratio
+
+    """
+    return DEFAULT_FRAMES[self.fractal].area / self.area
+
+  @property
   def magnification(self) -> tuple[gmpy2.mpfr, float]:
     """Get frame magnification: How much "zoom" this frame has in relation to the whole set.
 
@@ -313,9 +325,7 @@ class Frame(SerializingFractalObject):
 
     """
     with PrecisionContext():
-      magnification: gmpy2.mpfr = cast(
-        'gmpy2.mpfr', gmpy2.sqrt(DEFAULT_FRAMES[self.fractal].area / self.area)
-      )
+      magnification: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(self.mag2))
       return (magnification, float(cast('gmpy2.mpfr', gmpy2.log10(magnification))))
 
   @property

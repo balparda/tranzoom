@@ -101,17 +101,18 @@ META_IMAGE_SET_HISTOGRAM_BUCKET_CUM_KEY: str = f'{_app}:image:set:hist:bucket:cu
 # Julia extra keys
 META_JULIA_RE_KEY: str = f'{_app}:frame:julia_re'  # gmpy2.mpq, only added for Julia Set frames
 META_JULIA_IM_KEY: str = f'{_app}:frame:julia_im'  # gmpy2.mpq, only added for Julia Set frames
-# Animation extra keys
-META_ANIM_INITIAL_WIDTH_RE_KEY: str = f'{_app}:animation:frame:initial_width_re'  # gmpy2.mpq
-META_ANIM_INITIAL_HEIGHT_IM_KEY: str = f'{_app}:animation:frame:initial_height_im'  # gmpy2.mpq
-META_ANIM_MAGNITUDE_KEY: str = f'{_app}:animation:zoom:magnitude'  # float
-META_ANIM_MAGNITUDE_PER_STEP_KEY: str = f'{_app}:animation:zoom:magnitude_per_step'  # float
-META_ANIM_MAGNIFICATION_PER_STEP_KEY: str = f'{_app}:animation:zoom:magnification_per_step'  # float
-META_ANIM_DURATION_KEY: str = f'{_app}:animation:duration'  # float
-META_ANIM_FRAMES_KEY: str = f'{_app}:animation:frames'  # int
-META_ANIM_STEPS_KEY: str = f'{_app}:animation:steps'  # int
-META_ANIM_FPS_KEY: str = f'{_app}:animation:fps'  # float
-META_ANIM_LOOP_KEY: str = f'{_app}:animation:loop'  # int; 0 means inf loop; meaningless for MP4
+# Zoom extra keys
+META_ZOOM_TYPE_KEY: str = f'{_app}:zoom:type'  # one of AnimationType (ex: 'gif')
+META_ZOOM_INITIAL_WIDTH_RE_KEY: str = f'{_app}:zoom:frame:initial:width_re'  # gmpy2.mpq
+META_ZOOM_INITIAL_HEIGHT_IM_KEY: str = f'{_app}:zoom:frame:initial:height_im'  # gmpy2.mpq
+META_ZOOM_MAGNITUDE_KEY: str = f'{_app}:zoom:frame:magnitude'  # gmpy2.mpq
+META_ZOOM_FRAMES_KEY: str = f'{_app}:zoom:frame:frames'  # int
+META_ZOOM_SECONDS_KEY: str = f'{_app}:zoom:frame:seconds'  # gmpy2.mpq
+META_ZOOM_LOOP_KEY: str = f'{_app}:zoom:frame:loop'  # int; 0 means inf loop; meaningless for MP4
+META_ZOOM_STEPS_KEY: str = f'{_app}:zoom:frame:steps'  # int
+META_ZOOM_FPS_KEY: str = f'{_app}:zoom:frame:fps'  # gmpy2.mpq
+META_ZOOM_MAGNITUDE_PER_STEP_KEY: str = f'{_app}:zoom:frame:magnitude_per_step'  # gmpy2.mpq
+META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str = f'{_app}:zoom:frame:magnification_per_step'  # gmpy2.mpq
 # LLM extra keys
 META_LLM_MODEL_KEY: str = f'{_app}:llm:model'  # str (META_LLM_MODEL_VALUE_HUMAN or "HUMAN")
 META_LLM_TEMPERATURE_KEY: str = f'{_app}:llm:temperature'  # float
@@ -144,14 +145,6 @@ _CIRCLE_RADIUS: int = 20
 _LABEL_OFFSET: int = 5
 # scale factor for converting stored Set interior integers back to |z| float magnitudes;
 # interior points are stored as -(int(floor(scale * |z|)) + 1), with scale = RES / MAX_Z = RES / 2
-
-# gmpy2.mpfr constants
-_MPFR_ZERO: gmpy2.mpfr = gmpy2.mpfr('0')
-_MPFR_ONE: gmpy2.mpfr = gmpy2.mpfr('1')
-_MPFR_FOUR: gmpy2.mpfr = gmpy2.mpfr('4')
-
-# gmpy2.mpq constants
-_MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 
 
 class Error(frame.Error):
@@ -216,10 +209,22 @@ MAX_FPS: float = 30.0  # maximum frames per second for an animation, for sanity 
 MIN_LOOP: int = 0  # minimum number of loops for a GIF animation; 0 means infinite loop
 MAX_LOOP: int = 1000  # maximum number of loops for a GIF animation, for sanity checking
 
-MAX_ZOOM_MAGNIFICATION_10: float = 10000.0  # this is 10**10000 which is more than enough
-DEFAULT_DEST_MAGNIFICATION_10: float = 1.0  # default dest magnification for zooms 10**1 = 10x zoom
+MAX_ZOOM_MAGNITUDE_10: float = 10000.0  # this is 10**10000 which is more than enough
+DEFAULT_DEST_MAGNITUDE_10: str = '1'  # default dest magnification for zooms 10**1 = 10x zoom
 DEFAULT_LOOP: int = 0  # 0 means infinite loop for GIFs
 THRESHOLD_JUMPY_ZOOM_PER_FRAME: float = 1.25  # if zoom per frame is above this warn about jumpiness
+MAX_TOLERATED_FRAME_MAG_ERROR: float = 0.00002  # 0.002% - max error Frame vs. reduced mpq Frame
+MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.0001  # 0.01% - max total cumulative error of total zoom
+
+
+# gmpy2.mpfr constants
+_MPFR_ZERO: gmpy2.mpfr = gmpy2.mpfr('0')
+_MPFR_ONE: gmpy2.mpfr = gmpy2.mpfr('1')
+_MPFR_FOUR: gmpy2.mpfr = gmpy2.mpfr('4')
+
+# gmpy2.mpq constants
+_MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
+_MPQ_VIDEO_DURATION_STORE_SCALE: gmpy2.mpq = gmpy2.mpq(str(VIDEO_DURATION_STORE_SCALE))
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
@@ -422,9 +427,9 @@ class ZoomParameters(frame.SerializingFractalObject):
 
   # ATTENTION: changing anything here changes the HASH!!
   tp: AnimationType  # 'gif' or 'mp4'
-  img: frame.ComputationParameters  # initial frame and computation parameters for all images
-  render: RenderParameters  # render parameters for all images
-  mag: gmpy2.mpq  # destination magnification
+  img: frame.ComputationParameters  # INITIAL frame; one computation parameters for all images
+  render: RenderParameters  # one render parameters for all images
+  mag: gmpy2.mpq  # destination magnitude
   n_frames: int  # number of frames in the animation
   duration: int  # round(duration in seconds * VIDEO_DURATION_STORE_SCALE): no float precision snafu
   loop: int = 0  # number of loops for GIFs; 0 means infinite loop; ignored for non-GIFs
@@ -439,19 +444,24 @@ class ZoomParameters(frame.SerializingFractalObject):
     # check type is valid
     if self.tp not in {AnimationType.GIF, AnimationType.MP4}:
       raise Error(f'Unknown animation type: {self.tp}')
-    # check magnification is valid
-    if not (-MAX_ZOOM_MAGNIFICATION_10 <= self.mag <= MAX_ZOOM_MAGNIFICATION_10):
-      raise Error(f'Magnification abs() must be <= {MAX_ZOOM_MAGNIFICATION_10}, got {self.mag}')
+    # check magnitude is valid
+    if not (-MAX_ZOOM_MAGNITUDE_10 <= self.mag <= MAX_ZOOM_MAGNITUDE_10):
+      raise Error(f'Magnitude abs() must be <= {MAX_ZOOM_MAGNITUDE_10}, got {self.mag}')
     if self.mag == _MPQ_ZERO:
-      raise Error('Magnification cannot be zero')
+      raise Error('Magnitude cannot be zero')
     # check number of frames is valid
-    if not (MIN_FRAMES <= self.n_frames <= MAX_FRAMES):
+    if not (MIN_FRAMES <= self.n_frames <= MAX_FRAMES) or self.n_steps <= 1:
       raise Error(
         f'Number of frames must be between {MIN_FRAMES} and {MAX_FRAMES}, got {self.n_frames}'
       )
     # check duration is valid
-    if not (MIN_DURATION <= (dur := self.duration / VIDEO_DURATION_STORE_SCALE) <= MAX_DURATION):
-      raise Error(f'Duration must be between {MIN_DURATION} and {MAX_DURATION} seconds, got {dur}')
+    if not (MIN_DURATION <= self.n_seconds <= MAX_DURATION):
+      raise Error(
+        f'Duration must be between {MIN_DURATION} and {MAX_DURATION} seconds, got {self.n_seconds}'
+      )
+    # check fps is valid: we already validated n_frames and duration that are used to compute fps
+    if not (MIN_FPS <= self.fps <= MAX_FPS):
+      raise Error(f'Frames per second must be between {MIN_FPS} and {MAX_FPS}, got {self.fps}')
     # check loop count is valid for GIFs
     if self.tp == AnimationType.GIF and not (MIN_LOOP <= self.loop <= MAX_LOOP):
       raise Error(f'Loop count for GIFs must be between {MIN_LOOP} and {MAX_LOOP}, got {self.loop}')
@@ -463,7 +473,7 @@ class ZoomParameters(frame.SerializingFractalObject):
 
     Format is:
       "<[ANIMATION_TYPE]: [RENDER_PARAMETERS] -> [COMPUTATION_PARAMETERS] / "
-      "([MAGNIFICATION], [N_FRAMES], [DURATION], [LOOP])>"
+      "(mag:[MAGNIFICATION], n:[N_FRAMES], d:[DURATION(sec)], fps:[FPS], l:[LOOP])>"
 
     Returns:
       str: String representation of the ZoomParameters.
@@ -471,8 +481,70 @@ class ZoomParameters(frame.SerializingFractalObject):
     """
     return (
       f'<{self.tp.name.upper()}: {self.img} -> {self.render} / '
-      f'({self.mag}, {self.n_frames}, {self.duration}, {self.loop})>'
+      f'(mag:{self.mag}, n:{self.n_frames}, d:{self.n_seconds}, fps:{self.fps}, l:{self.loop})>'
     )
+
+  @property
+  def n_steps(self) -> int:
+    """Zoom steps (always one less than the number of frames). Exact.
+
+    Returns:
+      int: The number of zoom steps.
+
+    """
+    return self.n_frames - 1  # steps is one less than frames
+
+  @property
+  def n_seconds(self) -> gmpy2.mpq:
+    """Get duration, in seconds. Exactly consistent, but within ~1/VIDEO_DURATION_STORE_SCALE.
+
+    Returns:
+      gmpy2.mpq: The video duration in seconds.
+
+    """
+    return gmpy2.mpq(self.duration) / _MPQ_VIDEO_DURATION_STORE_SCALE
+
+  @property
+  def fps(self) -> gmpy2.mpq:
+    """Get the frames per second for this animation, calculated from n_frames and duration. Exact.
+
+    Returns:
+      float: The frames per second for this animation.
+
+    """
+    return gmpy2.mpq(self.n_frames) / self.n_seconds
+
+  @property
+  def mag_per_step(self) -> gmpy2.mpq:
+    """Get the magnification per step for this animation. Exact.
+
+    Returns:
+      gmpy2.mpq: The magnification per step for this animation.
+
+    """
+    return self.mag / gmpy2.mpq(self.n_steps)
+
+  @property
+  def scalar_magnification(self) -> gmpy2.mpfr:
+    """Get the scalar magnification for the whole zoom. Ultra-precision, but not exact.
+
+    Returns:
+      gmpy2.mpfr: The scalar magnification for the whole zoom.
+
+    """
+    with frame.PrecisionContext():
+      return gmpy2.exp10(self.mag)
+
+  @property
+  def scalar_magnification_per_step(self) -> gmpy2.mpq:
+    """Get the scalar magnification per step for this animation. Good precision, but not exact.
+
+    Returns:
+      gmpy2.mpq: The scalar magnification per step for this animation.
+
+    """
+    m: gmpy2.mpfr = gmpy2.exp10(self.mag_per_step)  # mpq -> mpfr -> mpq unavoidable, unfortunately
+    return gmpy2.mpq(m)
 
   @property
   def json(self) -> tbase.JSONDict:
@@ -528,6 +600,72 @@ class ZoomParameters(frame.SerializingFractalObject):
     if check_hash is not None and params.sha != check_hash:
       raise Error(f'ZoomParameters {params.sha!r} does not match expected {check_hash!r}')
     return params
+
+  def Frames(self) -> list[frame.Frame]:
+    """Get the Frames. Could be a property, but is a method to remind this is an expensive-ish call.
+
+    Returns:
+      list[frame.Frame]: The frames for this animation.
+
+    Raises:
+      Error: if the frames cannot be generated within the tolerated error threshold.
+
+    """
+    dx: gmpy2.mpq
+    dy: gmpy2.mpq
+    rdx: gmpy2.mpq
+    rdy: gmpy2.mpq
+    mpq_mag: gmpy2.mpq = self.scalar_magnification_per_step
+    reduced_frm: frame.Frame
+    all_frames: list[frame.Frame] = [self.img.frm]  # start with initial frame, keep as-is
+    # reproduce the zoom run with full precision
+    frm: frame.Frame = self.img.frm
+    for i in range(self.n_steps):
+      # keep frm full precision and iterate
+      frm = frame.Frame.FromCenter(
+        frm.fractal,
+        *frm.center,
+        frm.size[0] / mpq_mag,  # these mpq will get HUGE: the reason we keep them in check below
+        height=frm.size[1] / mpq_mag,  # these mpq will get HUGE
+        point_re=frm.point_re,
+        point_im=frm.point_im,
+      )
+      # make a less aggressive version of the zoom
+      max_denominator: int = 10_000 * (10 ** math.ceil(frm.magnification[1]))
+      reduced_frm = frame.Frame.FromCenter(
+        frm.fractal,
+        *frm.center,
+        frm.size[0].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+        height=frm.size[1].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+        point_re=frm.point_re,
+        point_im=frm.point_im,
+      )
+      all_frames.append(reduced_frm)
+      # test error
+      dx, dy = frm.size
+      rdx, rdy = reduced_frm.size
+      error_x: gmpy2.mpq = abs(dx - rdx) / dx
+      error_y: gmpy2.mpq = abs(dy - rdy) / dy
+      if error_x > MAX_TOLERATED_FRAME_MAG_ERROR or error_y > MAX_TOLERATED_FRAME_MAG_ERROR:
+        raise Error(
+          f'Frame {i + 2} has size {frm.size} but reduced frame has size {reduced_frm.size}, '
+          f'which is {float(gmpy2.mpq(100) * error_x):.6f}% different in width '
+          f'and {float(gmpy2.mpq(100) * error_y):.6f}% '
+          'different in height, which is above the tolerated error threshold. This is a bug!'
+        )
+    # done adding frames, final check: directly compute the actual magnification achieved
+    # to make sure the accumulated error is within the tolerated threshold
+    actual_mag: gmpy2.mpfr = cast(
+      'gmpy2.mpfr', gmpy2.log10(gmpy2.sqrt(all_frames[-1].mag2 / all_frames[0].mag2))
+    )
+    if (mag_error := abs(actual_mag - self.mag) / self.mag) > MAX_TOLERATED_TOTAL_MAG_ERROR:
+      raise Error(
+        'the actual magnification achieved by zooming in the frame is '
+        f'{float(actual_mag):.4f}, which is {100.0 * float(mag_error):.4f}% different '
+        f'from the intended {self.mag} ({float(self.mag):.4f}). This means the gmpy2.mpq needs '
+        'more precision for conversion. This is a bug!'
+      )
+    return all_frames
 
 
 class Image:

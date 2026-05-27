@@ -12,7 +12,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 
 name = "tranzoom"
-version = "1.5.1"  # also update src/tranzoom/__init__.py
+version = "1.5.2"  # also update src/tranzoom/__init__.py
 
 description = "Fractal manipulation with LLMs"
 license = "Apache-2.0"

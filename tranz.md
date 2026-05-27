@@ -9,145 +9,144 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
  tranZoom: Fractal (Mandelbrot/Julia) image and zoom generator, with LLM-powered features                                                                  
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --version                                                                                            Show version and exit.                             │
-│ --verbose             -v                         INTEGER RANGE [0<=x<=3]                             Verbosity (nothing=ERROR, -v=WARNING, -vv=INFO,    │
-│                                                                                                      -vvv=DEBUG).                                       │
+│ --version                                                                                           Show version and exit.                              │
+│ --verbose             -v                         INTEGER RANGE [0<=x<=3]                            Verbosity (nothing=ERROR, -v=WARNING, -vv=INFO,     │
+│                                                                                                     -vvv=DEBUG).                                        │
 │                                                                                                                                             │
-│ --color                   --no-color                                                                 Force enable/disable colored output (respects      │
-│                                                                                                      NO_COLOR env var if not provided). Defaults to     │
-│                                                                                                      having colors.                                     │
-│ --db                      --no-db                                                                    Use local DB in `--db`? True means use it, False   │
-│                                                                                                      means do not use it; default is False; this option │
-│                                                                                                      can also be loaded from the disk config, but if    │
-│                                                                                                      given should override the config                   │
-│ --db-path             -d                         DIRECTORY                                           The local DB root directory path, ex:              │
-│                                                                                                      "~/foo/bar/"; if not given (DEFAULT), the DB will  │
-│                                                                                                      be saved in the current app config directory,      │
-│                                                                                                      i.e.: on MacOS this is                             │
-│                                                                                                      "/Users//Library/Application Support/{/}"; on      │
-│                                                                                                      Windows:                                           │
-│                                                                                                      "C:\Users\AppData\Local{}[app_n… │
-│                                                                                                      on Linux: "/home//.config/{/}"                     │
-│ --db-compression          --no-db-compression                                                        Use compression for the local DB to save space?    │
-│                                                                                                      True means use it but the file will be unreadable  │
-│                                                                                                      by humans, False means do not use it and file will │
-│                                                                                                      be readable; default is False, a larger, readable  │
-│                                                                                                      file; this option can also be loaded from the disk │
-│                                                                                                      config, but if given should override the config    │
-│ --out                 -o                         DIRECTORY                                           The local output root directory path, ex:          │
-│                                                                                                      "~/foo/bar/"; if not given, the image will be      │
-│                                                                                                      saved in the current working directory             │
-│ --prefix                                         TEXT                                                Image save prefix; default: None, meaning use      │
-│                                                                                                      "mandel" for Mandelbrot and "julia" for Julia (the │
-│                                                                                                      final file name will be                            │
-│                                                                                                      "<prefix>[-<date>][-<hash20>].png", note the date  │
-│                                                                                                      and the hash can be turned off with --no-date and  │
-│                                                                                                      --no-hash, respectively)                           │
-│ --date                    --no-date                                                                  If True, file names will include the date-time as  │
-│                                                                                                      YYYYMMDDhhmmss; if False, file names will not      │
-│                                                                                                      include the date-time; default is True             │
+│ --color                   --no-color                                                                Force enable/disable colored output (respects       │
+│                                                                                                     NO_COLOR env var if not provided). Defaults to      │
+│                                                                                                     having colors.                                      │
+│ --db                      --no-db                                                                   Use local DB in `--db`? True means use it, False    │
+│                                                                                                     means do not use it; default is False; this option  │
+│                                                                                                     can also be loaded from the disk config, but if     │
+│                                                                                                     given should override the config                    │
+│ --db-path             -d                         DIRECTORY                                          The local DB root directory path, ex: "~/foo/bar/"; │
+│                                                                                                     if not given (DEFAULT), the DB will be saved in the │
+│                                                                                                     current app config directory, i.e.: on MacOS this   │
+│                                                                                                     is "/Users//Library/Application Support/{/}"; on    │
+│                                                                                                     Windows:                                            │
+│                                                                                                     "C:\Users\AppData\Local{}[app_na… │
+│                                                                                                     on Linux: "/home//.config/{/}"                      │
+│ --db-compression          --no-db-compression                                                       Use compression for the local DB to save space?     │
+│                                                                                                     True means use it but the file will be unreadable   │
+│                                                                                                     by humans, False means do not use it and file will  │
+│                                                                                                     be readable; default is False, a larger, readable   │
+│                                                                                                     file; this option can also be loaded from the disk  │
+│                                                                                                     config, but if given should override the config     │
+│ --out                 -o                         DIRECTORY                                          The local output root directory path, ex:           │
+│                                                                                                     "~/foo/bar/"; if not given, the image will be saved │
+│                                                                                                     in the current working directory                    │
+│ --prefix                                         TEXT                                               Image save prefix; default: None, meaning use       │
+│                                                                                                     "mandel" for Mandelbrot and "julia" for Julia (the  │
+│                                                                                                     final file name will be                             │
+│                                                                                                     "<prefix>[-<date>][-<hash20>].png", note the date   │
+│                                                                                                     and the hash can be turned off with --no-date and   │
+│                                                                                                     --no-hash, respectively)                            │
+│ --date                    --no-date                                                                 If True, file names will include the date-time as   │
+│                                                                                                     YYYYMMDDhhmmss; if False, file names will not       │
+│                                                                                                     include the date-time; default is True              │
 │                                                                                                                                          │
-│ --hash                    --no-hash                                                                  If True, file names will include the hash; if      │
-│                                                                                                      False, file names will not include the hash;       │
-│                                                                                                      default is True                                    │
+│ --hash                    --no-hash                                                                 If True, file names will include the hash; if       │
+│                                                                                                     False, file names will not include the hash;        │
+│                                                                                                     default is True                                     │
 │                                                                                                                                          │
-│ --force                   --no-force                                                                 If True, forces re-computation and re-saving of    │
-│                                                                                                      the image(s)/computation(s) even if an             │
-│                                                                                                      image/computation with the same parameters already │
-│                                                                                                      exists; if False will use existing (DB) entries to │
-│                                                                                                      avoid redundant computations/rendering as much as  │
-│                                                                                                      possible/reasonable; default is False, so we will  │
-│                                                                                                      try to avoid redundant computations/rendering      │
+│ --force                   --no-force                                                                If True, forces re-computation and re-saving of the │
+│                                                                                                     image(s)/computation(s) even if an                  │
+│                                                                                                     image/computation with the same parameters already  │
+│                                                                                                     exists; if False will use existing (DB) entries to  │
+│                                                                                                     avoid redundant computations/rendering as much as   │
+│                                                                                                     possible/reasonable; default is False, so we will   │
+│                                                                                                     try to avoid redundant computations/rendering       │
 │                                                                                                                                      │
-│ --palette                                          Color palette to use for rendering; default is     │
-│                                                                                                      'sahara'; available palettes: ['electric',         │
-│                                                                                                      'grayscale', 'lava', 'rgrayscale', 'sahara',       │
-│                                                                                                      'sunset']                                          │
+│ --palette                                        [sahara|lava|electric|sunset|aurora|plasma|forest  Color palette to use for rendering; default is      │
+│                                                  |coral|gold|toxic|iris|ember|grayscale|rgrayscale  'sahara'; available palettes: ['aurora', 'coral',   │
+│                                                  ]                                                  'electric', 'ember', 'forest', 'gold', 'grayscale', │
+│                                                                                                     'iris', 'lava', 'plasma', 'rgrayscale', 'sahara',   │
+│                                                                                                     'sunset', 'toxic']                                  │
 │                                                                                                                                        │
-│ --set-palette                                      Color palette to use for rendering the interior    │
-│                                                                                                      Set points; default is 'rgrayscale'; available     │
-│                                                                                                      palettes: ['electric', 'grayscale', 'lava',        │
-│                                                                                                      'rgrayscale', 'sahara', 'sunset']                  │
+│ --set-palette                                                                                      palettes: ['aurora', 'coral', 'electric', 'ember',  │
+│                                                                                                     'forest', 'gold', 'grayscale', 'iris', 'lava',      │
+│                                                                                                     'plasma', 'rgrayscale', 'sahara', 'sunset',         │
+│                                                                                                     'toxic']                                            │
 │                                                                                                                                    │
-│ --set                                                                       Which algorithm to use for coloring the interior   │
-│                                                                                                      Set points, either None, or one of 'min', 'max',   │
-│                                                                                                      'angle', 'imaginary'; default is None, do not      │
-│                                                                                                      color the Set points (i.e., they will be black)    │
-│ --threads                                        INTEGER RANGE [1<=x<=16]                            Number of threads to use for rendering; default is │
-│                                                                                                      None, which means to use all available CPU cores;  │
-│                                                                                                      will be limited to 16 threads                      │
-│ --model               -m                         TEXT                                                LLM vision model to load and use: the model must   │
-│                                                                                                      be compatible with the LMStudio client libraries   │
-│                                                                                                      and must support vision; will NOT get the model    │
-│                                                                                                      for you, so make sure you either have it available │
-│                                                                                                      in your LMStudio; should be a string you would use │
-│                                                                                                      with `lms get <THIS>` or                           │
-│                                                                                                      `https://huggingface.co/<THIS>`; default:          │
-│                                                                                                      'qwen3-vl-32b-instruct@q8_0', a good               │
-│                                                                                                      general-purpose vision model                       │
+│ --set                                                                      Which algorithm to use for coloring the interior    │
+│                                                                                                     Set points, either None, or one of 'min', 'max',    │
+│                                                                                                     'angle', 'imaginary'; default is None, do not color │
+│                                                                                                     the Set points (i.e., they will be black)           │
+│ --threads                                        INTEGER RANGE [1<=x<=16]                           Number of threads to use for rendering; default is  │
+│                                                                                                     None, which means to use all available CPU cores;   │
+│                                                                                                     will be limited to 16 threads                       │
+│ --model               -m                         TEXT                                               LLM vision model to load and use: the model must be │
+│                                                                                                     compatible with the LMStudio client libraries and   │
+│                                                                                                     must support vision; will NOT get the model for     │
+│                                                                                                     you, so make sure you either have it available in   │
+│                                                                                                     your LMStudio; should be a string you would use     │
+│                                                                                                     with `lms get <THIS>` or                            │
+│                                                                                                     `https://huggingface.co/<THIS>`; default:           │
+│                                                                                                     'qwen3-vl-32b-instruct@q8_0', a good                │
+│                                                                                                     general-purpose vision model                        │
 │                                                                                                                    │
-│ --tokens              -t                         INTEGER RANGE [2<=x<=200]                           Speculative Decoding: controls how many tokens the │
-│                                                                                                      model should generate in advance during            │
-│                                                                                                      auto-tagging; if you do not define this flag then  │
-│                                                                                                      speculative decoding will be disabled; usually     │
-│                                                                                                      this is a small value, like 4 or 8, and it can     │
-│                                                                                                      improve the speed of processing by allowing the    │
-│                                                                                                      model to generate tokens in parallel; default:     │
-│                                                                                                      None (disabled)                                    │
-│ --seed                -s                         INTEGER RANGE [2<=x<=2147483647]                    A seed value for the random number generator used  │
-│                                                                                                      to load the models into memory; providing a seed   │
-│                                                                                                      ensures reproducibility of the results; default:   │
-│                                                                                                      None (randomized seed)                             │
-│ --context                                        INTEGER RANGE [16<=x<=16777216]                     Maximum number of tokens to use as context for the │
-│                                                                                                      model; default: 32768 tokens                       │
+│ --tokens              -t                         INTEGER RANGE [2<=x<=200]                          Speculative Decoding: controls how many tokens the  │
+│                                                                                                     model should generate in advance during             │
+│                                                                                                     auto-tagging; if you do not define this flag then   │
+│                                                                                                     speculative decoding will be disabled; usually this │
+│                                                                                                     is a small value, like 4 or 8, and it can improve   │
+│                                                                                                     the speed of processing by allowing the model to    │
+│                                                                                                     generate tokens in parallel; default: None          │
+│                                                                                                     (disabled)                                          │
+│ --seed                -s                         INTEGER RANGE [2<=x<=2147483647]                   A seed value for the random number generator used   │
+│                                                                                                     to load the models into memory; providing a seed    │
+│                                                                                                     ensures reproducibility of the results; default:    │
+│                                                                                                     None (randomized seed)                              │
+│ --context                                        INTEGER RANGE [16<=x<=16777216]                    Maximum number of tokens to use as context for the  │
+│                                                                                                     model; default: 32768 tokens                        │
 │                                                                                                                                         │
-│ --temperature         -x                         FLOAT RANGE [0.0<=x<=2.0]                           Temperature controls how random token selection is │
-│                                                                                                      during generation; [0 or near 0]: most             │
-│                                                                                                      deterministic, focused, repetitive, best for       │
-│                                                                                                      extraction / structured output / coding / tool     │
-│                                                                                                      use; [0.2-0.5]: still stable, but less rigid;      │
-│                                                                                                      [0.7-1.0]: more natural and varied; [>1.0]: often  │
-│                                                                                                      more creative, but also more errors, drift, and    │
-│                                                                                                      nonsense; default: 0.150 (a good value for         │
-│                                                                                                      structured output and tool use)                    │
+│ --temperature         -x                         FLOAT RANGE [0.0<=x<=2.0]                          Temperature controls how random token selection is  │
+│                                                                                                     during generation; [0 or near 0]: most              │
+│                                                                                                     deterministic, focused, repetitive, best for        │
+│                                                                                                     extraction / structured output / coding / tool use; │
+│                                                                                                     [0.2-0.5]: still stable, but less rigid; [0.7-1.0]: │
+│                                                                                                     more natural and varied; [>1.0]: often more         │
+│                                                                                                     creative, but also more errors, drift, and          │
+│                                                                                                     nonsense; default: 0.150 (a good value for          │
+│                                                                                                     structured output and tool use)                     │
 │                                                                                                                                          │
-│ --gpu                 -g                         FLOAT RANGE [0.1<=x<=1.0]                           GPU ratio to use, a value between 0.1 (10%) and    │
-│                                                                                                      1.0 (100%) that indicates the percentage of GPU    │
-│                                                                                                      resources to allocate to AI; default: 0.80         │
+│ --gpu                 -g                         FLOAT RANGE [0.1<=x<=1.0]                          GPU ratio to use, a value between 0.1 (10%) and 1.0 │
+│                                                                                                     (100%) that indicates the percentage of GPU         │
+│                                                                                                     resources to allocate to AI; default: 0.80          │
 │                                                                                                                                           │
-│ --gpu-layers                                     INTEGER RANGE [-1<=x<=128]                          Number of layers offloaded to GPU; default: -1     │
-│                                                                                                      (which means "as many as possible")                │
+│ --gpu-layers                                     INTEGER RANGE [-1<=x<=128]                         Number of layers offloaded to GPU; default: -1      │
+│                                                                                                     (which means "as many as possible")                 │
 │                                                                                                                                            │
-│ --fp16                    --no-fp16                                                                  Use FP16 precision for the auto-tagger model? This │
-│                                                                                                      can reduce memory usage and potentially increase   │
-│                                                                                                      speed, but may slightly affect the accuracy of the │
-│                                                                                                      tagging results default: False (do not use FP16,   │
-│                                                                                                      use full precision)                                │
+│ --fp16                    --no-fp16                                                                 Use FP16 precision for the auto-tagger model? This  │
+│                                                                                                     can reduce memory usage and potentially increase    │
+│                                                                                                     speed, but may slightly affect the accuracy of the  │
+│                                                                                                     tagging results default: False (do not use FP16,    │
+│                                                                                                     use full precision)                                 │
 │                                                                                                                                       │
-│ --mmap                    --no-mmap                                                                  Use memory-mapped file loading (if supported)?     │
-│                                                                                                      default: True (use mmap)                           │
+│ --mmap                    --no-mmap                                                                 Use memory-mapped file loading (if supported)?      │
+│                                                                                                     default: True (use mmap)                            │
 │                                                                                                                                          │
-│ --flash                   --no-flash                                                                 Enable flash attention (if supported)? default:    │
-│                                                                                                      True (use flash)                                   │
+│ --flash                   --no-flash                                                                Enable flash attention (if supported)? default:     │
+│                                                                                                     True (use flash)                                    │
 │                                                                                                                                         │
-│ --kv-cache                                       INTEGER RANGE [4<=x<=128]                           GGML type for KV-cache keys/values (if supported): │
-│                                                                                                      determines the precision level used to store       │
-│                                                                                                      keys/values; default: None (store according to     │
-│                                                                                                      original precision in model)                       │
-│ --timeout                                        FLOAT RANGE [0.0<=x<=86400.0]                       Timeout, in seconds, for AI calls; zero, or <1s,   │
-│                                                                                                      means no timeout (infinite); default: 300.0        │
-│                                                                                                      seconds                                            │
+│ --kv-cache                                       INTEGER RANGE [4<=x<=128]                          GGML type for KV-cache keys/values (if supported):  │
+│                                                                                                     determines the precision level used to store        │
+│                                                                                                     keys/values; default: None (store according to      │
+│                                                                                                     original precision in model)                        │
+│ --timeout                                        FLOAT RANGE [0.0<=x<=86400.0]                      Timeout, in seconds, for AI calls; zero, or <1s,    │
+│                                                                                                     means no timeout (infinite); default: 300.0 seconds │
 │                                                                                                                                         │
-│ --iterm                   --no-iterm                                                                 If True, will output the image to iTerm2 (only use │
-│                                                                                                      on macOS with iTerm2!                              │
-│                                                                                                      <https://iterm2.com/documentation-images.html>);   │
-│                                                                                                      if False, will not output the image to iTerm2;     │
-│                                                                                                      default is False                                   │
+│ --iterm                   --no-iterm                                                                If True, will output the image to iTerm2 (only use  │
+│                                                                                                     on macOS with iTerm2!                               │
+│                                                                                                     <https://iterm2.com/documentation-images.html>); if │
+│                                                                                                     False, will not output the image to iTerm2; default │
+│                                                                                                     is False                                            │
 │                                                                                                                                      │
-│ --install-completion                                                                                 Install completion for the current shell.          │
-│ --show-completion                                                                                    Show completion for the current shell, to copy it  │
-│                                                                                                      or customize the installation.                     │
-│ --help                                                                                               Show this message and exit.                        │
+│ --install-completion                                                                                Install completion for the current shell.           │
+│ --show-completion                                                                                   Show completion for the current shell, to copy it   │
+│                                                                                                     or customize the installation.                      │
+│ --help                                                                                              Show this message and exit.                         │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ markdown  Emit Markdown docs for the CLI (see README.md section "Versioning and releases").                                                             │
@@ -593,9 +592,11 @@ Usage: tranz zoom auto [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │   f_height                   [F_HEIGHT]               Height of the frame in the imaginary plane; this can be a float (ex: "0.34") or a fraction of     │
 │                                                       ints (rational number, ex: "123/451") and the number will be fed directly to multi-precision      │
 │                                                       arithmetic so no precision is lost; default is None, i.e, the same as width                       │
-│   dest_magnification_10      [DEST_MAGNIFICATION_10]  Magnification magnitude to go through in the animation zoom; ATTENTION!! this is exponential      │
-│                                                       10**mag, so a value of 2.0 means 10**2 = 100x zoom; default is 1.00, i.e., 10.00x zoom            │
-│                                                                                                                                           │
+│   dest_magnification_10      [DEST_MAGNIFICATION_10]  Magnification magnitude to go through in the animation zoom; this can be a float (ex: "0.34") or  │
+│                                                       a fraction of ints (rational number, ex: "123/451") and the number will be fed directly to        │
+│                                                       multi-precision arithmetic so no precision is lost; -10000.0 ≤ mag ≤ 10000.0; ATTENTION!! this is │
+│                                                       exponential 10**mag, so a value of 2.0 means 10**2 = 100x zoom; default is 1, i.e., 10.00x zoom   │
+│                                                                                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --anim                                                             Type of animation to produce; possible values: 'gif', 'mp4'; default is     │

@@ -19,6 +19,8 @@ from transcrypto.utils import timer
 
 from tranzoom.core import frame, frdb, image, queries
 
+# TODO: divide image into the sectors and feed them separately to the LLM so they can be scored
+
 DEFAULT_MEMORY_SIZE: int = 5  # default number of iterations the LLM will remember
 MAX_MEMORY_SIZE: int = 30  # maximum number of iterations the LLM will remember
 _DIRECTION_MAP: dict[int, str] = {
@@ -138,6 +140,8 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
     query = query.strip() if query else None
     setup_query, image_query = queries.BuildImageThirdsPrompts(params.frm, reason, query)
     logging.debug(f'AI setup query:\n{setup_query}\n')
+  # add grid to render
+  render = dataclasses.replace(render, overlay=render.overlay or image.OverlayType.GRID)
   # use LMStudioWorker for AI mode; nullcontext (no-op) for manual mode
   ai_ctx: contextlib.AbstractContextManager[lms.LMStudioWorker | None] = (
     lms.LMStudioWorker(timeout=timeout, free_resources=True)
@@ -177,7 +181,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
       while True:
         count += 1
         # render the image for the current frame
-        _, img_data, _, full_path = db.CoreComputeImage(
+        params, _, img_data, _, full_path = db.CoreComputeImage(
           params, render, out, count, zoom_tm, max_threads, iterm, print_comm, force=force
         )
         print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
@@ -304,9 +308,9 @@ def _MoveCenter(  # noqa: C901
   frame_width, frame_height = frm.size
   width_step: gmpy2.mpq = frame_width * frame.DEFAULT_MPQ_STEP_DIRECT
   height_step: gmpy2.mpq = frame_height * frame.DEFAULT_MPQ_STEP_DIRECT
-  w_diagonal_step: gmpy2.mpq = width_step * frame.DEFAULT_MPQ_STEP_DIAGONAL
-  h_diagonal_step: gmpy2.mpq = height_step * frame.DEFAULT_MPQ_STEP_DIAGONAL
-  # now move the center according to the direction, if requested
+  # now move the center according to the direction, if requested;
+  # we used to do w/h_diagonal_step = width/height_step * frame.DEFAULT_MPQ_STEP_DIAGONAL
+  # but since we have a square grid, the diagonal steps are the same as the direct steps!
   best: queries.SectorCompleteEvaluation | queries.SectorEvaluation = response.BestEvaluation(
     target_weight=target_weight
   )
@@ -316,23 +320,23 @@ def _MoveCenter(  # noqa: C901
   elif direction == 'N':
     center_mpq_im += height_step
   elif direction == 'NE':
-    center_mpq_re += w_diagonal_step
-    center_mpq_im += h_diagonal_step
+    center_mpq_re += width_step  # w_diagonal_step
+    center_mpq_im += height_step  # h_diagonal_step
   elif direction == 'E':
     center_mpq_re += width_step
   elif direction == 'SE':
-    center_mpq_re += w_diagonal_step
-    center_mpq_im -= h_diagonal_step
+    center_mpq_re += width_step  # w_diagonal_step
+    center_mpq_im -= height_step  # h_diagonal_step
   elif direction == 'S':
     center_mpq_im -= height_step
   elif direction == 'SW':
-    center_mpq_re -= w_diagonal_step
-    center_mpq_im -= h_diagonal_step
+    center_mpq_re -= width_step  # w_diagonal_step
+    center_mpq_im -= height_step  # h_diagonal_step
   elif direction == 'W':
     center_mpq_re -= width_step
   elif direction == 'NW':
-    center_mpq_re -= w_diagonal_step
-    center_mpq_im += h_diagonal_step
+    center_mpq_re -= width_step  # w_diagonal_step
+    center_mpq_im += height_step  # h_diagonal_step
   else:
     raise Error(f'invalid direction: {direction!r}')
   print_comm(f'[yellow]MODEL: move [bold]{best.sector}/{direction}-wards[/][/] (in {tmr})')

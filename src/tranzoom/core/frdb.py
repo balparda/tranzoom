@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import pathlib
@@ -148,17 +149,18 @@ class ZoomData(TypedDict):
   """Video/GIF zoom data type, for storing zoom metadata and parameters.
 
   Attributes:
-    zoom (tbase.JSONDict): (CORE DATA) image.ZoomParameters.json
+    zoom (tbase.JSONDict): (CORE DATA) image.ZoomParameters.json; note that zoom is created
+        with the sentinel value (if on AUTO) and does NOT update!
     fps (float): (CACHE) frames-per-second; number of total frames is exactly len(frames)
     step_mag (float): (CACHE) video step scalar magnification (magnification per frame step)
     data_hash (str): (CACHE) hash of the video/GIF data; if we have this entry,
         we must have the hash!
-    tm (int | None): (CACHE) timestamp of rendered video/GIF creation; None if not saved
+    tm (int): (CACHE) timestamp of last rendered video/GIF creation
     rendered_path (str | None): (CACHE) path to video/GIF file; None if not saved
     frames (list[str]): ("CHILDREN") list of Frame hashes -> grandfather Frames; ordered by
         magnification ascending; len >=3
     markers (list[str]): ("CHILDREN") subset of frames entry: key Frame(s) for color
-        normalization; len >=1
+        normalization; len >=2 (first & last)
 
   Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
   Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
@@ -166,26 +168,45 @@ class ZoomData(TypedDict):
   """
 
   # CORE DATA: ZoomParameters = a specific video, the rest is computed
-  zoom: tbase.JSONDict  # image.ZoomParameters.json
+  zoom: tbase.JSONDict  # image.ZoomParameters.json; has original sentinel value (if on AUTO)
 
   # CACHE
   fps: float  # = len(`frames`) / `zoom.duration`
   step_mag: float  # video step SCALAR magnification (total magnitude is in `zoom.mag`)
   data_hash: str  # hash of the video/GIF data = SHA-256('|'.join(data_hash for all frames))
-  tm: int | None  # timestamp of rendered video/GIF creation; None if not saved
+  tm: int  # timestamp of last rendered video/GIF creation
   rendered_path: str | None  # path to video/GIF file; None if not saved
 
   # "CHILDREN" would be the individual frames/images that compose the video;
   # we compute this from core data, so this could be "CACHE" too...
   frames: list[str]  # Frame hashes; ordered by magnification ascending; len >=3
-  markers: list[str]  # subset of frames entry: key Frame(s); len >=1
+  markers: list[str]  # subset of frames entry: key Frame(s); len >=2 (first & last)
 
 
 class _DBType(TypedDict):
   """DB object type.
 
+  Attributes:
+    db_version (int): DB version; increment on save
+    app_version (str): package version (tranzoom.__version__) at time of last save
+    last_save (int): timestamp of last save
+    frames (dict[str, FrameData]): {frame_hash: FrameData}
+    cps (dict[str, tbase.JSONDict]): {cp_hash: frame.ComputationParameters.json}
+    renders (dict[str, tbase.JSONDict]): {render_hash: image.RenderParameters.json}
+    videos (dict[str, ZoomData]): {video_hash: ZoomData}, video_hash is the ZoomData.sha hash!
+    sentinel_cps_idx (dict[str, str]): {cp_hash: cp_hash} depth lookup, maps sentinel cp_hash,
+        that has fixed depth=1000, to the final cp_hash with actual depth; this allows us to
+        quickly find the actual computation parameters for a given sentinel, which is what we use
+    img_paths_idx (dict[str, ImageCoreKey]): {img_path: ImageCoreKey} for easy lookup of PNG paths
+    video_paths_idx (dict[str, str]): {video_path: video_hash} for easy lookup of GIF/video paths
+    images_idx (dict[str, list[ImageCoreKey]]): {data_hash: [im1, im2, ...]} for lookup of images by
+        their data hash; since the hash is PRE-overlay, we might have multiple obj with same hash
+    videos_idx (dict[str, list[str]]): {data_hash: [video_hash1, video_hash2, ...]} for lookup by
+        their data hash; since the hash is PRE-overlay, we might have multiple obj with same hash
+
   Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
   Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
+
   """
 
   # DB internal data and metadata
@@ -198,6 +219,9 @@ class _DBType(TypedDict):
   cps: dict[str, tbase.JSONDict]  # {cp_hash: frame.ComputationParameters.json}
   renders: dict[str, tbase.JSONDict]  # {render_hash: image.RenderParameters.json}
   videos: dict[str, ZoomData]  # {video_hash: ZoomData}, video_hash is the ZoomData.sha hash!
+
+  # internal indexes: for fast lookup of data based on known keys
+  sentinel_cps_idx: dict[str, str]  # {cp_hash: cp_hash} depth lookup, from sentinel 1000 to actual
 
   # path indexes: from known image/video on-disk paths -> core data key entries
   img_paths_idx: dict[str, ImageCoreKey]  # {img_path: ImageCoreKey} for easy lookup of PNG paths
@@ -227,6 +251,7 @@ def _DBTypeFactory(overrides: dict[str, object] | None = None) -> _DBType:
     'cps': {},
     'renders': {},
     'videos': {},
+    'sentinel_cps_idx': {},
     'images_idx': {},
     'videos_idx': {},
     'img_paths_idx': {},
@@ -472,7 +497,13 @@ class FractalDatabase:
 
   def FindImage(
     self, params: frame.ComputationParameters, render: image.RenderParameters
-  ) -> tuple[ImageCoreKey, FrameData | None, ComputationData | None, ImageData | None]:
+  ) -> tuple[
+    frame.ComputationParameters,
+    ImageCoreKey,
+    FrameData | None,
+    ComputationData | None,
+    ImageData | None,
+  ]:
     """Find an image in the database given its computation parameters and render parameters.
 
     Args:
@@ -480,9 +511,12 @@ class FractalDatabase:
       render (image.RenderParameters): the render parameters associated with the image
 
     Returns:
-      tuple[ImageCoreKey, FrameData | None, ComputationData | None, ImageData | None]: a tuple
-          containing the ImageCoreKey and the corresponding FrameData, ComputationData,
-          and ImageData if found; if not found, the missing entries will be None
+      tuple[
+          frame.ComputationParameters, ImageCoreKey, FrameData | None, ComputationData | None,
+          ImageData | None]: a tuple containing the ComputationParameters, ImageCoreKey,
+          and the corresponding FrameData, ComputationData, and ImageData if found;
+          if not found, the missing entries will be None; we have to return params because
+          it could have been replaced with one with the "real" depth
 
     Raises:
       Error: on error, mostly inconsistent DB, not missing data
@@ -490,10 +524,27 @@ class FractalDatabase:
     """
     # build the core key for this image
     ck: ImageCoreKey = CoreKeyFromData(params, render)
-    # first check: do we know this computation?
+    # first check: do we know this computation? it could be a sentinel with depth=1000
+    if params.depth == frame.MIN_ITER and ck['cp'] in self._db['sentinel_cps_idx']:
+      # this is a sentinel
+      cp_hash: str = self._db['sentinel_cps_idx'][ck['cp']]
+      if cp_hash not in self._db['cps']:
+        raise Error(
+          f'Inconsistent DB: found sentinel cp_hash {ck["cp"]!r} but not in cps; Report bug!'
+        )
+      # update depth; remember to re-compute ck too
+      params = dataclasses.replace(params, depth=cast('int', self._db['cps'][cp_hash]['depth']))
+      ck = CoreKeyFromData(params, render)
+      # sanity check: the new core key with updated depth should be consistent with the DB
+      if ck['cp'] != cp_hash:
+        raise Error(
+          f'Inconsistent DB: sentinel cp_hash {ck["cp"]!r} maps to cp_hash {cp_hash!r} with '
+          f'different hash than expected {params.sha!r}; Report bug!'
+        )
+    # now we can check if we have the computation parameters
     if ck['cp'] not in self._db['cps']:
       # we don't even know the computation parameters, so we definitely don't have the image
-      return (ck, None, None, None)
+      return (params, ck, None, None, None)
     # we know the computation parameters: get it
     if ck['frm'] not in self._db['frames']:
       raise Error(
@@ -508,14 +559,27 @@ class FractalDatabase:
     # check if we know this render
     if ck['render'] not in cp_data['renders']:
       # we don't know this render, so we don't have the image, but we do have the computation
-      return (ck, frm_data, cp_data, None)
+      return (params, ck, frm_data, cp_data, None)
     # we know the render parameters: get it
     if ck['render'] not in self._db['renders']:
       raise Error(
         f'Inconsistent DB: found render_hash {ck["render"]!r} in DB but not in renders; Report bug!'
       )
     render_data: ImageData = cp_data['renders'][ck['render']]
-    return (ck, frm_data, cp_data, render_data)
+    return (params, ck, frm_data, cp_data, render_data)
+
+  def FindZoom(self, zoom: image.ZoomParameters) -> ZoomData | None:
+    """Find a zoom (video/GIF) in the database given its zoom parameters.
+
+    Args:
+      zoom (image.ZoomParameters): the zoom parameters to look up
+
+    Returns:
+      ZoomData | None: the ZoomData for the given zoom parameters, or None if not found
+
+    """
+    # videos are keyed directly by zoom.sha; one hash -> one ZoomData entry (no indirection)
+    return self._db['videos'].get(zoom.sha)
 
   def AddComputationToDB(
     self, params: frame.ComputationParameters, img_tm: int, img_path: str | None
@@ -563,6 +627,11 @@ class FractalDatabase:
         renders={},
       )
       frm['cps'][cp_hash] = cp
+    # add sentinel index, if needed
+    if params.depth > frame.MIN_ITER:
+      # depth > 1000 means we should add to the index, so we can find this later
+      sentinel_cp: frame.ComputationParameters = dataclasses.replace(params, depth=frame.MIN_ITER)
+      self._db['sentinel_cps_idx'][sentinel_cp.sha] = cp_hash
     # return the FrameData / ComputationData
     return (frm, cp)
 
@@ -627,6 +696,52 @@ class FractalDatabase:
     # return the new ImageData
     return img
 
+  def AddZoomToDB(
+    self,
+    zoom: image.ZoomParameters,
+    data_hash: str,
+    tm: int,
+    path: str,
+    all_frames: list[frame.Frame],
+    markers: list[frame.Frame],
+  ) -> None:
+    """Add a zoom (video/GIF) to the DB.
+
+    Args:
+      zoom (image.ZoomParameters): the zoom parameters to add; zoom is created with the sentinel
+          value (if on AUTO) and does NOT update!
+      data_hash (str): the hash of the video/GIF data, used for indexing and deduplication
+      tm (int): the timestamp of the video/GIF creation
+      path (str): the path to the video/GIF file, as stored in the DB; this is absolute disk path
+      all_frames (list[frame.Frame]): the list of all frames that compose the video, ordered by
+          magnification ascending (video order)
+      markers (list[frame.Frame]): the marker frames that compose the video, subset of all_frames
+
+    """
+    zoom_hash: str = zoom.sha
+    if zoom_hash in self._db['videos']:
+      # we have an entry: we assume it is mostly correct, but update the path
+      self._db['videos'][zoom_hash]['tm'] = tm  # always update timestamp
+      self._db['videos'][zoom_hash]['rendered_path'] = path  # update path (in case it changed)
+    else:
+      # new entry
+      self._db['videos'][zoom_hash] = ZoomData(
+        zoom=zoom.json,
+        fps=float(zoom.fps),
+        step_mag=float(zoom.scalar_magnification_per_step),
+        data_hash=data_hash,
+        tm=tm,
+        rendered_path=path,
+        frames=[f.sha for f in all_frames],
+        markers=[f.sha for f in markers],
+      )
+    # add path index
+    self._db['video_paths_idx'][path] = zoom_hash
+    # add hash index
+    idx_list: list[str] = self._db['videos_idx'].setdefault(data_hash, [])
+    if zoom_hash not in idx_list:
+      idx_list.append(zoom_hash)
+
   def CoreComputeImage(  # noqa: C901, PLR0912, PLR0915
     self,
     params: frame.ComputationParameters,
@@ -640,7 +755,7 @@ class FractalDatabase:
     *,
     require_img_obj: bool = True,
     force: bool = False,
-  ) -> tuple[image.Image | None, bytes, str, pathlib.Path]:
+  ) -> tuple[frame.ComputationParameters, image.Image | None, bytes, str, pathlib.Path]:
     """Compute a fractal image and return the result unsaved; the shared rendering primitive.
 
     This is the shared image computation primitive used by all rendering paths (static images,
@@ -670,7 +785,9 @@ class FractalDatabase:
       force (bool): If True, will force re-computation of the image even if it is found in the DB
 
     Returns:
-      tuple[image.Image, bytes, str, pathlib.Path]: A 4-tuple of:
+      tuple[frame.ComputationParameters, image.Image | None, bytes, str, pathlib.Path]: A 5-tuple:
+          - frame.ComputationParameters: The computation parameters used for the frame
+              (with actual depth if a sentinel was used)
           - image.Image: the computed fractal Image object
           - bytes: the final PNG bytes (with crosshair mark and sector overlay applied, if any)
           - str: the SHA-256 hash of the raw PNG before any post-processing overlays
@@ -690,11 +807,11 @@ class FractalDatabase:
     # log
     set_param: str = '' if params.set_points is None else f' w/ SET {params.set_points.value!r}'
     print_comm(
-      f'\n{params.width}x{params.height} {render.escaped_pal.value!r} '
+      f'\n{params.width} x {params.height} {render.escaped_pal.value!r} '
       f'{params.frm.fractal.value.capitalize()}{set_param}, '
       f'10^{params.frm.magnification[1]:.3f} magnitude...'
     )
-    print_comm(str(params))
+    print_comm(f'{params} + {render}')
     # create path callback missing only the hash
     full_path: abc.Callable[[str], pathlib.Path] = lambda h: image.MakeImagePath(
       out.path,
@@ -714,7 +831,7 @@ class FractalDatabase:
     ck: ImageCoreKey
     cp_data: ComputationData | None
     render_data: ImageData | None
-    ck, _, cp_data, render_data = self.FindImage(params, render)
+    params, ck, _, cp_data, render_data = self.FindImage(params, render)
     # do we know about this computation?
     if cp_data is not None:
       # we have done a render with these parameters before
@@ -729,6 +846,8 @@ class FractalDatabase:
       else:
         # we have done the computation but do not have the data on disk
         print_comm(f'[red]DB computation[/] @{timer.TimeStr(img_tm)} -> [red]no cache on disk[/]')
+    else:
+      logging.info('DB miss: no computation data')
     # look at the actual render
     if render_data is not None:
       # we have done a render with these parameters before
@@ -745,13 +864,20 @@ class FractalDatabase:
           img_data = path.read_bytes()
           if not require_img_obj or (require_img_obj and img is not None):
             # we can end this: we have the image PNG on disk and img is as good as necessary
-            return (img, img_data, img_hash, full_path(img_hash))
+            # print inline in iTerm2 if requested
+            if iterm:
+              print_comm('')
+              image.PrintITerm2(img_data)
+            print_comm('')
+            return (params, img, img_data, img_hash, full_path(img_hash))
       else:
         # if we got here, we have the render parameters but no existing image on disk
         print_comm(
           f'[red]DB render[/], {render_data["data_hash"]!r}@{timer.TimeStr(render_data["tm"])} '
           f'-> [red]no render on disk[/]'
         )
+    else:
+      logging.info('DB miss: no render data')
     # render the image for the current frame
     print_comm('')
     comp_tmr: timer.Timer | None = None
@@ -768,8 +894,14 @@ class FractalDatabase:
         _, cp_data = self.AddComputationToDB(params, img_tm, img_path)  # DB only
     # we could possibly already have the data from the disk?...
     if img_data and img_hash and not force:
+      # we can skip the render and just return the data we have on disk
       print_comm('[red]DB render[/]: Using image data from disk, skipping PNG render')
-      return (img, img_data, img_hash, full_path(img_hash))
+      # print inline in iTerm2 if requested
+      if iterm:
+        print_comm('')
+        image.PrintITerm2(img_data)
+      print_comm('')
+      return (params, img, img_data, img_hash, full_path(img_hash))
     # we got to here, so we have to render the PNG data from the image object and add overlay/mark;
     # hash is computed from the raw PNG before any post-processing overlays
     with timer.Timer(emit_log=False) as render_tmr:
@@ -803,7 +935,7 @@ class FractalDatabase:
       print_comm('')
       image.PrintITerm2(img_data)
     print_comm('')
-    return (img, img_data, img_hash, full_path(img_hash))
+    return (params, img, img_data, img_hash, full_path(img_hash))
 
 
 def _DBLabel(db: _DBType) -> str:

@@ -10,9 +10,8 @@ README.md has good examples for different zoom levels.
 from __future__ import annotations
 
 import dataclasses
-import math
 import pathlib
-from typing import cast
+from collections import abc
 
 import click
 import gmpy2
@@ -23,11 +22,9 @@ from transcrypto.utils import human, timer
 
 from tranzoom import tranz
 from tranzoom.cli import base
-from tranzoom.core import ai, frame, image
+from tranzoom.core import ai, frame, frdb, image
 
 _MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the fractal score
-_MAX_TOLERATED_FRAME_MAG_ERROR: float = 0.00002  # 0.002%
-_MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.02  # 2%
 
 # gmpy2.mpq constants
 _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
@@ -129,58 +126,12 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
   config: base.TranZoomConfig = ctx.obj
-  frm: frame.Frame = base.MakeFrameFromCLIArgs(
-    config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
-  )
-  # if it is a Julia, make the Julia point and add it to the frame
-  julia_re: gmpy2.mpq
-  julia_im: gmpy2.mpq
-  julia_re, julia_im = base.MakePointFromCLIArgs(
-    config.julia_re, config.julia_im, config.console.print
-  )
-  frm = (
-    frame.Frame.FromCenter(
-      frame.Fractal.JULIA,
-      *frm.center,
-      frm.size[0],
-      height=frm.size[1],
-      point_re=julia_re,
-      point_im=julia_im,
-    )
-    if config.fractal_type == frame.Fractal.JULIA
-    else frm
-  )
-  # determine width and height
-  width: int
-  height: int
-  width, height = (
-    frm.PixelDimensionsFromSize(config.img_size)
-    if config.img_size
-    else (config.img_width, config.img_height)
-  )
-  params: frame.ComputationParameters = frame.ComputationParameters(
-    frm=frm, width=width, height=height, set_points=config.set_points
-  )
-  # add the mark? parse coordinates early to catch errors before expensive computation
-  mark_coords: tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]] | None = (
-    params.CoordsTupleToPixel(config.mark_coords) if config.mark_coords else None
-  )
-  # we have a valid frame, let's start the AI search loop
-  render: image.RenderParameters = image.RenderParameters(
-    escaped_pal=config.pal,
-    set_pal=None if config.set_points is None else config.set_pal,
-    overlay=image.OverlayType.GRID,  # always show numbered thirds grid for AI navigation
-    mark_re=_MPQ_ZERO if mark_coords is None else mark_coords[0][0],
-    mark_im=_MPQ_ZERO if mark_coords is None else mark_coords[0][1],
-    mark_color=None if mark_coords is None else config.mark_color,
-    mark_width=config.mark_width,
-  )
-  out: image.ImageOutputConfig = image.ImageOutputConfig(
-    path=config.img_output_path,
-    use_date=config.img_use_date,
-    use_hash=config.img_use_hash,
-    prefix=config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
-  )
+  frm: frame.Frame = base.MakeFrameFromConfig(config, center_re, center_im, f_width, f_height)
+  params: frame.ComputationParameters = base.MakeComputationParameters(frm, config)
+  render: image.RenderParameters
+  out: image.ImageOutputConfig
+  render, out = base.MakeRenderParameters(params, config)
+  # call the main zoom loop
   with config.OpenDB() as db:
     ai.ZoomLoop(
       db,
@@ -237,58 +188,12 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
 ) -> None:
   # check sanity, create frame, and print info about the image we're going to generate
   config: base.TranZoomConfig = ctx.obj
-  frm: frame.Frame = base.MakeFrameFromCLIArgs(
-    config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
-  )
-  # if it is a Julia, make the Julia point and add it to the frame
-  julia_re: gmpy2.mpq
-  julia_im: gmpy2.mpq
-  julia_re, julia_im = base.MakePointFromCLIArgs(
-    config.julia_re, config.julia_im, config.console.print
-  )
-  frm = (
-    frame.Frame.FromCenter(
-      frame.Fractal.JULIA,
-      *frm.center,
-      frm.size[0],
-      height=frm.size[1],
-      point_re=julia_re,
-      point_im=julia_im,
-    )
-    if config.fractal_type == frame.Fractal.JULIA
-    else frm
-  )
-  # determine width and height
-  width: int
-  height: int
-  width, height = (
-    frm.PixelDimensionsFromSize(config.img_size)
-    if config.img_size
-    else (config.img_width, config.img_height)
-  )
-  params: frame.ComputationParameters = frame.ComputationParameters(
-    frm=frm, width=width, height=height, set_points=config.set_points
-  )
-  # add the mark? parse coordinates early to catch errors before expensive computation
-  mark_coords: tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]] | None = (
-    params.CoordsTupleToPixel(config.mark_coords) if config.mark_coords else None
-  )
-  # we have a valid frame, let's start the manual search loop
-  render: image.RenderParameters = image.RenderParameters(
-    escaped_pal=config.pal,
-    set_pal=None if config.set_points is None else config.set_pal,
-    overlay=image.OverlayType.GRID,  # always show numbered thirds grid for manual navigation
-    mark_re=_MPQ_ZERO if mark_coords is None else mark_coords[0][0],
-    mark_im=_MPQ_ZERO if mark_coords is None else mark_coords[0][1],
-    mark_color=None if mark_coords is None else config.mark_color,
-    mark_width=config.mark_width,
-  )
-  out: image.ImageOutputConfig = image.ImageOutputConfig(
-    path=config.img_output_path,
-    use_date=config.img_use_date,
-    use_hash=config.img_use_hash,
-    prefix=config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
-  )
+  frm: frame.Frame = base.MakeFrameFromConfig(config, center_re, center_im, f_width, f_height)
+  params: frame.ComputationParameters = base.MakeComputationParameters(frm, config)
+  render: image.RenderParameters
+  out: image.ImageOutputConfig
+  render, out = base.MakeRenderParameters(params, config)
+  # call the main zoom loop
   with config.OpenDB() as db:
     ai.ZoomLoop(
       db,
@@ -326,7 +231,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   center_im: str = base.FRAME_CENTER_IM_ARGUMENT,  # type: ignore[assignment]
   f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]
   f_height: str | None = base.FRAME_HEIGHT_ARGUMENT,  # type: ignore[assignment]
-  dest_magnification_10: float = base.ANIM_DEST_MAGNIFICATION_ARGUMENT,  # type: ignore[assignment]
+  dest_magnification_10: str = base.ANIM_DEST_MAGNIFICATION_ARGUMENT,  # type: ignore[assignment]
   anim_type: image.AnimationType = base.ANIM_TYPE_OPTION,  # type: ignore[assignment]
   duration: float | None = base.ANIM_DURATION_OPTION,  # type: ignore[assignment]
   frames: int | None = base.ANIM_FRAMES_OPTION,  # type: ignore[assignment]
@@ -339,9 +244,9 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   ctx.obj = dataclasses.replace(ctx.obj, max_iter=max_iter)
   config: base.TranZoomConfig = ctx.obj
   timestamp: int = timer.Now()
-  # check sanity, create frame, and print info about the image we're going to generate
+  # make basic video params conversion; will be validated later in ZoomParameters
   if duration and frames and not fps:
-    fps = frames / duration
+    pass  # no need, we prefer to have duration and frames anyway...
   elif duration and fps and not frames:
     frames = int(duration * fps)
   elif frames and fps and not duration:
@@ -351,203 +256,186 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       'Please provide exactly 2 of the 3 options: `--duration`, `--frames` and `--fps`; '
       f'got {duration=}, {frames=} and {fps=}'
     )
-  if not (image.MIN_FPS <= fps <= image.MAX_FPS):
-    raise base.UsageError(
-      f'FPS={fps:.2f} must be between {image.MIN_FPS:.2f} and {image.MAX_FPS:.2f}'
+  # build parameters
+  frm: frame.Frame = base.MakeFrameFromConfig(config, center_re, center_im, f_width, f_height)
+  params: frame.ComputationParameters = base.MakeComputationParameters(frm, config)
+  render: image.RenderParameters
+  out: image.ImageOutputConfig
+  render, out = base.MakeRenderParameters(params, config)
+  zoom_params: image.ZoomParameters = image.ZoomParameters(
+    tp=anim_type,
+    img=params,  # zoom is created with the sentinel value (if on AUTO) and does NOT update!
+    render=render,
+    mag=gmpy2.mpq(dest_magnification_10),
+    n_frames=frames,
+    duration=round(duration * image.VIDEO_DURATION_STORE_SCALE),
+    loop=loop,
+  )
+  all_frames: list[frame.Frame] = zoom_params.Frames()  # last thing that gould go boom!
+  # we should be good to go, all options check out; log and warn if needed
+  config.console.print(
+    f'\n{params.width} x {params.height} {render.escaped_pal.value!r} '
+    f'{frm.fractal.value.capitalize()!r} [magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/]'
+    f', {human.HumanizedSeconds(duration)} long, at {fps:.2f} FPS, with {frames} frames, '
+    f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step...'
+  )
+  config.console.print(f'{zoom_params} ... {all_frames[-1]}\n')
+  if zoom_params.scalar_magnification_per_step > image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
+    config.console.print(
+      '[red]Warning: the zoom per frame is high: 10^(mag/(frames-1)) = '
+      f'10^({float(zoom_params.mag):.4f}/{zoom_params.n_steps}) = '
+      f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step. '
+      'The resulting animation may look jumpy! Please consider increasing the number of frames '
+      'or reducing the total magnification.[/]\n'
     )
-  if not (image.MIN_FRAMES <= frames <= image.MAX_FRAMES):
-    raise base.UsageError(
-      f'Frames={frames} must be between {image.MIN_FRAMES} and {image.MAX_FRAMES}'
-    )
-  if not (image.MIN_DURATION <= duration <= image.MAX_DURATION):
-    raise base.UsageError(
-      f'Duration={duration:.2f} must be between {image.MIN_DURATION:.2f} and '
-      f'{image.MAX_DURATION:.2f} seconds'
-    )
-  frm: frame.Frame = base.MakeFrameFromCLIArgs(
-    config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
+  # create path callback missing only the hash
+  full_path: abc.Callable[[str], pathlib.Path] = lambda h: image.MakeImagePath(
+    config.img_output_path,
+    config.img_use_date,
+    config.img_use_hash,
+    config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
+    h,
+    tm=timestamp,
+    suffix=anim_type.value.lower(),
   )
-  # if it is a Julia, make the Julia point and add it to the frame
-  julia_re: gmpy2.mpq
-  julia_im: gmpy2.mpq
-  julia_re, julia_im = base.MakePointFromCLIArgs(
-    config.julia_re, config.julia_im, config.console.print
-  )
-  frm = (
-    frame.Frame.FromCenter(
-      frame.Fractal.JULIA,
-      *frm.center,
-      frm.size[0],
-      height=frm.size[1],
-      point_re=julia_re,
-      point_im=julia_im,
-    )
-    if config.fractal_type == frame.Fractal.JULIA
-    else frm
-  )
-  # determine width and height
-  width: int
-  height: int
-  width, height = (
-    frm.PixelDimensionsFromSize(config.img_size)
-    if config.img_size
-    else (config.img_width, config.img_height)
-  )
-  # compute zoom constants
-  steps: int = frames - 1
-  mag_per_step: float = dest_magnification_10 / steps
-  scalar_magnification: gmpy2.mpfr = gmpy2.exp10(dest_magnification_10)
-  scalar_magnification_per_step: float = math.pow(10.0, mag_per_step)
-  all_reasonable_frames: list[frame.Frame] = _ComputeReasonableFrames(
-    frm, frames, scalar_magnification_per_step
-  )
-  # now we can compute the actual final magnification
-  actual_mag: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(frm.area / all_reasonable_frames[-1].area))
-  mag_error: gmpy2.mpfr = abs(actual_mag - scalar_magnification) / scalar_magnification
   # DB
   with config.OpenDB() as db:
-    # log; log errors
-    config.console.print(
-      f'\nZOOM: {width}x{height} 10^{dest_magnification_10:.2f} magnitude animation, '
-      f'{human.HumanizedSeconds(duration)} long, at {fps:.2f} FPS, '
-      f'with {frames} frames, {100.0 * scalar_magnification_per_step:.2f}% per step...\n'
-    )
-    if scalar_magnification_per_step >= image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
-      config.console.print(
-        '[red]Warning: the zoom per frame is high: 10^(mag/(frames-1)) = '
-        f'10^({dest_magnification_10:.2f}/{steps}) = '
-        f'{100.0 * scalar_magnification_per_step:.2f}%/step. '
-        'The resulting animation may look jumpy. Consider increasing the number of frames '
-        'or reducing the total magnification.[/]\n'
-      )
-    if mag_error > _MAX_TOLERATED_TOTAL_MAG_ERROR:
-      config.console.print(
-        f'[red]Warning: the actual magnification achieved by zooming in the frame is '
-        f'{float(actual_mag):.2f}, which is {float(gmpy2.mpfr(100.0) * mag_error):.4f}% different '
-        f'from the intended {scalar_magnification:.2f}. This means the gmpy2.mpq needs more '
-        'precision for conversion. This is a bug! The final animation may not have the exact '
-        'intended zoom level.[/]\n'
-      )
-    # main zoom loop, go for frames iterations, producing the image and then zooming in the frame
-    img: image.Image | None = None
-    img_data: bytes
-    data_hash: str
-    all_frames: list[bytes] = []
-    all_hash: list[str] = []
-    render: image.RenderParameters | None = None
-    with timer.Timer(emit_log=False) as tmr:
-      for i, frm in enumerate(all_reasonable_frames):
-        config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
-        # we have the frame, now feed it to the producer
-        img, img_data, data_hash, render = base.ProduceFractalImage(
-          db,
-          frm,
-          config,
-          tm=timestamp,
-          add_serial=i + 1,
-          save_image=save_frames,
-          require_img_obj=True,
+    success: bool = False
+    video_hash: str | None = None
+    video_path: pathlib.Path | None = None
+    tmr: timer.Timer | None = None
+    try:
+      # see if we have a cache of this zoom
+      zoom_data: frdb.ZoomData | None = db.FindZoom(zoom_params)
+      if zoom_data:
+        video_hash = zoom_data['data_hash']
+        old_path: pathlib.Path | None = (
+          pathlib.Path(zoom_data['rendered_path']) if zoom_data['rendered_path'] else None
         )
-        all_frames.append(img_data)
-        all_hash.append(data_hash)
-      # check we got something
-      if not img or not render:
-        raise base.Error('No image produced for animation! should never happen; report bug')
-    # compute hash and so the path
-    video_hash: str = hashes.Hash256(
-      ('|'.join(all_hash)).encode('ascii')  # stable if all images are the same
-    ).hex()
-    video_path: pathlib.Path = image.MakeImagePath(
-      config.img_output_path,
-      config.img_use_date,
-      config.img_use_hash,
-      config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
-      video_hash,
-      tm=timestamp,
-      suffix=anim_type.value,
-    )
-    # create metadata
-    meta: dict[str, str] = image.MakeImageMeta(img, render, video_hash)  # using LAST FRAME!
-    # add video-specific metadata
-    meta[image.META_IMAGE_ANIMATION_KEY] = anim_type.value.lower()
-    meta.update(
-      # the extra animation keys
-      {
-        image.META_ANIM_INITIAL_WIDTH_RE_KEY: str(all_reasonable_frames[0].size[0]),
-        image.META_ANIM_INITIAL_HEIGHT_IM_KEY: str(all_reasonable_frames[0].size[1]),
-        image.META_ANIM_MAGNITUDE_KEY: str(dest_magnification_10),
-        image.META_ANIM_MAGNITUDE_PER_STEP_KEY: str(mag_per_step),
-        image.META_ANIM_MAGNIFICATION_PER_STEP_KEY: str(scalar_magnification_per_step),
-        image.META_ANIM_DURATION_KEY: str(duration),
-        image.META_ANIM_FRAMES_KEY: str(frames),
-        image.META_ANIM_STEPS_KEY: str(steps),
-        image.META_ANIM_FPS_KEY: str(fps),
-        image.META_ANIM_LOOP_KEY: str(loop),
-      }
-    )
-    # save the final animation
-    if anim_type == image.AnimationType.GIF:
-      image.WriteAnimatedGIF(
-        all_frames, video_path, width, height, frames, duration, meta=meta, loop=loop
+        if old_path and old_path.exists() and old_path.is_file():
+          # we do have the video!
+          config.console.print(
+            f'[red]DB render[/], {video_hash!r}@{timer.TimeStr(zoom_data["tm"])} -> "{old_path}"\n'
+          )
+          video_path = full_path(video_hash)
+          if video_path != old_path:
+            video_data: bytes = old_path.read_bytes()
+            video_path.write_bytes(video_data)
+          success = True
+          return
+      # main zoom loop, go for frames iterations, producing the image and then zooming in the frame
+      img: image.Image | None = None
+      img_path: pathlib.Path | None = None
+      img_data: bytes
+      data_hash: str
+      all_img_bytes: list[bytes] = []
+      all_hash: list[str] = []
+      with timer.Timer(emit_log=False) as tmr:
+        for i, frm in enumerate(all_frames):
+          config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
+          # we have the frame, now feed it to the producer
+          params, img, img_data, data_hash, img_path = db.CoreComputeImage(
+            dataclasses.replace(
+              params, frm=frm, depth=frame.MIN_ITER
+            ),  # send frm, mark as sentinel
+            render,
+            out,
+            add_serial=i + 1,
+            tm=timestamp,
+            max_threads=config.max_threads,
+            iterm=config.iterm,
+            print_comm=config.console.print,
+            require_img_obj=True,
+            force=config.img_force_redo,
+          )
+          # check we got something
+          if not img or not img_path:
+            raise base.Error('No image produced for frame! should never happen; report bug')
+          # save the image to disk if requested
+          if save_frames:
+            img_path.write_bytes(img_data)
+            config.console.print(f'Saved to "{img_path}"\n')
+          all_img_bytes.append(img_data)
+          all_hash.append(data_hash)
+        # check we got something; also appease type checker
+        if not img:
+          raise base.Error('No image produced for animation! should never happen; report bug')
+      # video loop is done; compute hash and so the path
+      video_hash = hashes.Hash256(
+        ('|'.join(all_hash)).encode('ascii')  # stable if all images are the same
+      ).hex()
+      # computation is done
+      video_path = image.MakeImagePath(
+        config.img_output_path,
+        config.img_use_date,
+        config.img_use_hash,
+        config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
+        video_hash,
+        tm=timestamp,
+        suffix=anim_type.value,
       )
-    elif anim_type == image.AnimationType.MP4:
-      image.WriteVideoMP4(all_frames, video_path, width, height, frames, duration, meta=meta)
-    else:
-      raise base.UsageError(f'Unsupported animation type: {anim_type}')
-    # done
-    config.console.print(f'Success: {anim_type.value.upper()} {video_hash!r} in {tmr}')
-    config.console.print(f'Saved {anim_type.value.upper()} to "{video_path}"\n')
-    # iterm
-    if config.iterm and anim_type != image.AnimationType.MP4:  # iTerm2 does not support MP4
-      image.PrintITerm2(video_path.read_bytes())
-      config.console.print()
-
-
-def _ComputeReasonableFrames(
-  initial_frame: frame.Frame, frames: int, scalar_magnification_per_step: float
-) -> list[frame.Frame]:
-  dx: gmpy2.mpq
-  dy: gmpy2.mpq
-  rdx: gmpy2.mpq
-  rdy: gmpy2.mpq
-  steps: int = frames - 1
-  mpq_mag: gmpy2.mpq = gmpy2.mpq(scalar_magnification_per_step)
-  reduced_frm: frame.Frame
-  all_frames: list[frame.Frame] = [initial_frame]  # start with initial frame, keep as-is
-  # reproduce the zoom run with full precision
-  frm: frame.Frame = initial_frame
-  for i in range(steps):
-    # keep frm full precision and iterate
-    frm = frame.Frame.FromCenter(
-      frm.fractal,
-      *frm.center,
-      frm.size[0] / mpq_mag,
-      height=frm.size[1] / mpq_mag,
-      point_re=frm.point_re,
-      point_im=frm.point_im,
-    )
-    # make a less aggressive version of the zoom
-    max_denominator: int = 10_000 * (10 ** math.ceil(frm.magnification[1]))
-    reduced_frm = frame.Frame.FromCenter(
-      frm.fractal,
-      *frm.center,
-      frm.size[0].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
-      height=frm.size[1].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
-      point_re=frm.point_re,
-      point_im=frm.point_im,
-    )
-    all_frames.append(reduced_frm)
-    # test error
-    dx, dy = frm.size
-    rdx, rdy = reduced_frm.size
-    error_x: gmpy2.mpq = abs(dx - rdx) / dx
-    error_y: gmpy2.mpq = abs(dy - rdy) / dy
-    if error_x > _MAX_TOLERATED_FRAME_MAG_ERROR or error_y > _MAX_TOLERATED_FRAME_MAG_ERROR:
-      raise base.Error(
-        f'Frame {i + 2} has size {frm.size} but reduced frame has size {reduced_frm.size}, '
-        f'which is {float(gmpy2.mpq(100) * error_x):.6f}% different in width '
-        f'and {float(gmpy2.mpq(100) * error_y):.6f}% '
-        'different in height, which is above the tolerated error threshold. This is a bug!'
+      # create metadata
+      meta: dict[str, str] = image.MakeImageMeta(img, render, video_hash)  # using LAST FRAME!
+      # add video-specific metadata
+      meta[image.META_IMAGE_ANIMATION_KEY] = anim_type.value.lower()
+      meta.update(
+        # the extra animation keys
+        {
+          image.META_ZOOM_TYPE_KEY: zoom_params.tp.value,
+          image.META_ZOOM_INITIAL_WIDTH_RE_KEY: str(all_frames[0].size[0]),
+          image.META_ZOOM_INITIAL_HEIGHT_IM_KEY: str(all_frames[0].size[1]),
+          image.META_ZOOM_MAGNITUDE_KEY: str(zoom_params.mag),
+          image.META_ZOOM_FRAMES_KEY: str(zoom_params.n_frames),
+          image.META_ZOOM_SECONDS_KEY: str(zoom_params.n_seconds),
+          image.META_ZOOM_LOOP_KEY: str(zoom_params.loop),
+          image.META_ZOOM_STEPS_KEY: str(zoom_params.n_steps),
+          image.META_ZOOM_FPS_KEY: str(zoom_params.fps),
+          image.META_ZOOM_MAGNITUDE_PER_STEP_KEY: str(zoom_params.mag_per_step),
+          image.META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str(
+            zoom_params.scalar_magnification_per_step
+          ),
+        }
       )
-  # done adding frames, return
-  return all_frames
+      # save the final animation
+      if anim_type == image.AnimationType.GIF:
+        image.WriteAnimatedGIF(
+          all_img_bytes,
+          video_path,
+          zoom_params.img.width,
+          zoom_params.img.height,
+          frames,
+          duration,
+          meta=meta,
+          loop=loop,
+        )
+      elif anim_type == image.AnimationType.MP4:
+        image.WriteVideoMP4(
+          all_img_bytes,
+          video_path,
+          zoom_params.img.width,
+          zoom_params.img.height,
+          frames,
+          duration,
+          meta=meta,
+        )
+      else:
+        raise base.UsageError(f'Unsupported animation type: {anim_type}')
+      # add to DB
+      db.AddZoomToDB(
+        zoom_params,
+        video_hash,
+        timestamp,
+        str(video_path),
+        all_frames,
+        [all_frames[0], all_frames[-1]],  # TODO: for real markers
+      )
+      # done
+      success = True
+    finally:
+      if success and video_hash and video_path:
+        config.console.print(f'Success: {anim_type.value.upper()} {video_hash!r} in {tmr or "-"}')
+        config.console.print(f'Saved {anim_type.value.upper()} to "{video_path}"\n')
+        # iterm
+        if config.iterm and anim_type != image.AnimationType.MP4:  # iTerm2 does not support MP4
+          image.PrintITerm2(video_path.read_bytes())
+          config.console.print()

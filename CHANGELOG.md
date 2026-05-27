@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 - [Changelog](#changelog)
   - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
   - [1.6.0 - 2026-06-TBD](#160---2026-06-tbd)
+  - [1.5.2 - 2026-06-27](#152---2026-06-27)
   - [1.5.1 - 2026-06-26](#151---2026-06-26)
   - [1.5.0 - 2026-05-26](#150---2026-05-26)
   - [1.4.1 - 2026-05-21](#141---2026-05-21)
@@ -42,7 +43,85 @@ This project follows a pragmatic versioning approach:
   - TBD
 
 - Fixed
-  - TBC
+  - TBD
+
+## 1.5.2 - 2026-06-27
+
+- Added
+  - **8 new palettes** (`palette.py`): `aurora` (night-sky → polar-green aurora → white), `plasma`
+    (dark void → purple → magenta → white), `forest` (dark soil → forest green → lime-yellow),
+    `coral` (deep abyss → teal → coral → pale pink), `gold`, `toxic`, `iris`, `ember`.
+  - **`ZoomParameters.Frames()`** (`image.py`): new method to generate all `Frame` objects for a
+    zoom animation, computing each zoomed frame from the initial frame and magnification.
+  - **`ZoomParameters` computed properties** (`image.py`): `n_steps`, `n_seconds`, `fps`,
+    `mag_per_step`, `scalar_magnification`, `scalar_magnification_per_step`.
+  - **`Frame.mag2` property** (`frame.py`): magnification-squared / area-ratio, an exact `mpq`
+    value without the `sqrt()` overhead; used internally by `Frame.magnification`.
+  - **`FractalDatabase.FindZoom()`** (`frdb.py`): new method to look up a cached zoom (video/GIF)
+    by its `ZoomParameters`.
+  - **`FractalDatabase.AddZoomToDB()`** (`frdb.py`): new method to persist a rendered zoom
+    (video/GIF) record in the DB, including all composed frames and marker frames.
+  - **Zoom DB caching** (`zoomcommand.py`): `tranz zoom auto` now checks the DB before rendering;
+    if a matching zoom entry exists and the file is on disk, it is served from cache immediately.
+  - **Sentinel depth index** (`frdb.py`): new `sentinel_cps_idx` field in `_DBType` (and
+    `_DBTypeFactory`) that maps a sentinel `cp_hash` (depth = `MIN_ITER` = 1000) to the actual
+    `cp_hash` with the real computed depth, enabling frame recovery across sessions.
+  - **CLI helper functions** (`cli/base.py`): `MakeFrameFromCLIArgs()`, `MakeFrameFromConfig()`,
+    `MakeComputationParameters()`, `MakeRenderParameters()` — extracted from repeated code in
+    zoom command handlers to eliminate duplication.
+  - **Zoom header log line** (`zoomcommand.py`): `tranz zoom auto` now prints a summary header
+    before the first frame: dimensions, palette, fractal type, magnitude, duration, FPS, frame
+    count, and per-step scalar magnification percentage.
+  - **Jumpy-zoom warning** (`zoomcommand.py`): if scalar magnification per frame exceeds
+    `THRESHOLD_JUMPY_ZOOM_PER_FRAME`, a red warning is printed suggesting more frames or less
+    total magnification.
+  - **New zoom PNG metadata keys** (`image.py`): `META_ZOOM_TYPE_KEY`, `META_ZOOM_INITIAL_WIDTH_RE_KEY`,
+    `META_ZOOM_INITIAL_HEIGHT_IM_KEY`, `META_ZOOM_MAGNITUDE_KEY`, `META_ZOOM_FRAMES_KEY`,
+    `META_ZOOM_SECONDS_KEY`, `META_ZOOM_LOOP_KEY`, `META_ZOOM_STEPS_KEY`, `META_ZOOM_FPS_KEY`,
+    `META_ZOOM_MAGNITUDE_PER_STEP_KEY`, `META_ZOOM_MAGNIFICATION_PER_STEP_KEY`.
+
+- Changed
+  - **`MAX_TOLERATED_FRAME_MAG_ERROR` and `MAX_TOLERATED_TOTAL_MAG_ERROR`** moved from
+    `cli/zoomcommand.py` to `image.py` (public constants); `MAX_TOLERATED_TOTAL_MAG_ERROR` tightened
+    from `0.02` (2%) to `0.0001` (0.01%) for more accurate zoom frame validation.
+  - **`DEFAULT_DEST_MAGNIFICATION_10` → `DEFAULT_DEST_MAGNITUDE_10`** and
+    **`MAX_ZOOM_MAGNIFICATION_10` → `MAX_ZOOM_MAGNITUDE_10`** renamed in `image.py` for
+    consistency ("magnitude" = log₁₀ of the zoom factor, "magnification" = the linear factor).
+    `DEFAULT_DEST_MAGNITUDE_10` is now `str = '1'` (exact rational, was `float = 1.0`).
+  - **`ZoomParameters.__repr__`** updated to include `fps` and use named fields:
+    `(mag:…, n:…, d:…, fps:…, l:…)` instead of the old `([MAG], [N_FRAMES], [DURATION], [LOOP])`.
+  - **`FindImage()` return type** (`frdb.py`): now returns a 5-tuple
+    `(ComputationParameters, ImageCoreKey, FrameData | None, ComputationData | None, ImageData | None)`;
+    the first element is the (possibly depth-resolved) `ComputationParameters`; callers updated.
+  - **`ZoomData.tm`** (`frdb.py`): type changed from `int | None` to `int` (always set on creation).
+  - **`ZoomData.markers`** (`frdb.py`): minimum length changed from `>= 1` to `>= 2` (first & last
+    frame are always markers).
+  - **`DEFAULT_MPQ_ZOOM`** (`frame.py`): default zoom factor changed from `5/3` (≈ 1.67x) to `2`
+    (2x).
+  - **`ZoomParameters` validation** (`image.py`): added explicit FPS range check and `n_steps > 1`
+    guard alongside the existing frame-count and duration checks.
+  - **Breaking: animation metadata keys renamed** from `META_ANIM_*` to `META_ZOOM_*` throughout
+    `image.py` and `zoomcommand.py`; existing GIF/MP4 files written by v1.5.1 will have stale
+    `tranzoom:animation:*` metadata keys when read by this version.
+  - **`_DBType` docstring** completed with all field descriptions (`frdb.py`).
+  - `tranz zoom ai` and `tranz zoom manual` now use the new shared
+    `MakeFrameFromConfig()` / `MakeComputationParameters()` / `MakeRenderParameters()` helpers.
+  - **`CoreComputeImage` render info log line** (`frdb.py`): the generation log line now prints
+    both `params` and `render` (`"{params} + {render}"`) instead of only `params`, giving more
+    context on every fractal generation.
+
+- Fixed
+  - **AI diagonal step bug** (`ai.py`): diagonal directions (NE/SE/SW/NW) were computed using
+    `width_step * DEFAULT_MPQ_STEP_DIAGONAL` and `height_step * DEFAULT_MPQ_STEP_DIAGONAL`,
+    resulting in a shorter step than the cardinal directions on a square grid. Since the grid is
+    square, diagonal steps now use the same distance as cardinal steps (`width_step` /
+    `height_step` directly).
+  - **iTerm2 display on loaded/cached images** (`ai.py`): `db.CoreComputeImage()` now returns a
+    5-tuple `(params, …)` but the caller was unpacking only 4 values, causing the wrong variable
+    to be used for iTerm2 display; fixed by correctly unpacking all 5 elements.
+  - **Missing grid overlay on zoom start** (`ai.py`): grid overlay was not applied to the initial
+    render when entering `ZoomLoop`; the render parameters are now patched with
+    `OverlayType.GRID` before the loop starts (if no other overlay is set).
 
 ## 1.5.1 - 2026-06-26
 
