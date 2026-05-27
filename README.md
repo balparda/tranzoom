@@ -188,10 +188,10 @@ Starting with version 1.5.0, the fractal renderer uses **smooth coloring**: each
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
 - **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
 - **Smooth coloring**: Each exterior pixel stores both an integer escape count `n` and a fractional smooth-escape value `nu ∈ [0, 1)` using the normalized iteration count formula. The two values are packed into a single `uint64` (8 bytes per pixel) using `EncodeIntFloatTo64`. Palette mapping uses `(n, nu)` interpolation over the cumulative histogram for smooth, band-free color gradients at all zoom depths.
-- **Color palette**: Six built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette` (global flag). Positions in the palette are determined by smooth histogram equalization of `(n, nu)` escape values, so the full color range is used regardless of zoom depth or iteration scale. Available palettes: `sahara` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient), `rgrayscale` (8-stop white-to-black gradient, designed for interior coloring), `grayscale` (8-stop black-to-white gradient).
+- **Color palette**: Fourteen built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette` (global flag). Positions in the palette are determined by smooth histogram equalization of `(n, nu)` escape values, so the full color range is used regardless of zoom depth or iteration scale. Available palettes: `sahara` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient), `aurora` (16-stop night-sky → polar-green aurora → white), `plasma` (16-stop dark void → purple → magenta → white), `forest` (16-stop dark soil → forest green → lime-yellow), `coral` (16-stop deep abyss → teal → coral → pale pink), `gold`, `toxic`, `iris`, `ember`, `rgrayscale` (8-stop white-to-black gradient, designed for interior coloring), `grayscale` (8-stop black-to-white gradient).
 - **DB computation and render caching**: The `FractalDatabase` persists the raw computed `Image` data to disk after each fractal render. On subsequent calls with the same frame and computation parameters, the expensive fractal computation is skipped and the cached data is loaded instead. Rendered PNGs are also cached; if a matching PNG file exists on disk, it is returned immediately. Use `--force` to bypass the cache and always recompute.
 - **Interior (Set) coloring**: By default, interior points (those that never escape, i.e., inside the Mandelbrot/Julia Set) are rendered as pure black. Passing `--set ALGORITHM` enables smooth coloring of those points using a separate `--set-palette` (default `rgrayscale`); supported algorithms: `min` (minimum `|z|` at max depth), `max` (maximum `|z|`), `angle` (angle of `z`), `imaginary` (imaginary-weighted average of `z`). Histogram equalization is applied over the stored values. The `rgrayscale` set palette goes white (deep interior, low `|z|`) → black (near boundary, high `|z|`), so the Set boundary is always dark for contrast with the exterior colors. Both flags are global and apply to all `image` and `zoom` commands.
-- **Zoom animation**: The `tranz zoom auto` command renders a straight zoom-in path from a starting frame down to a target magnification and saves it as an animated GIF or MP4 video. Specify any two of `--frames`, `--fps`, and `--duration` to constrain the third. Use `--anim gif` (default) or `--anim mp4` to select the output format.
+- **Zoom animation**: The `tranz zoom auto` command renders a straight zoom-in path from a starting frame down to a target magnification and saves it as an animated GIF or MP4 video. Specify any two of `--frames`, `--fps`, and `--duration` to constrain the third. Use `--anim gif` (default) or `--anim mp4` to select the output format. Rendered zoom animations are cached in the DB; if the same zoom parameters were already rendered and the file is still on disk, the cached file is served immediately.
 - **AI zoom session**: The `tranz zoom ai` command starts an iterative loop: render the current frame, draw a 3×3 thirds grid overlay with green sector labels, send the image to a local LLM vision model, parse the 9-sector scoring response, and move the frame center toward the highest-scoring sector. Supports both Mandelbrot (default) and Julia Set fractals via `-f/--fractal`. The optional `--query` flag enables targeted search, blending fractal-quality scores with target-match scores. The loop runs until Ctrl+C or `--max-steps` is reached.
 - **Manual zoom session**: The `tranz zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM. Supports both Mandelbrot and Julia Set fractals.
 - **Sector scoring**: Each sector is scored on a 0–100 scale for `fractal_score` (visual complexity / zoom promise). When targeted search is active, an additional `target_match_score` (also 0–100) is blended in with a configurable weight.
@@ -314,7 +314,7 @@ Render the [full Mandelbrot set](#full--default-1) (default, 1024×1024):
 $ poetry run tranz --no-date image mandel
 
 1024 x 1024 'sahara' Mandelbrot, 10^0.000 magnitude...
-{[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
+{[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]} + {[PNG, SAHARA, none]}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 349184.33px/s]
 Picked depth 1000, histogram {2: 20, 3: 64, 4: 40, ...: 68, 35: 2, 57: 2, 222: 2}, 58/256 set points
@@ -348,14 +348,18 @@ See many more examples in *[Comprehensive example images and zooms](#comprehensi
 
 With the `--palette` global flag you can pick your color scheme for exterior (escaped) pixels. With `--set-palette` you can pick the color scheme for interior Set points (only visible when `--set` is also given). We provide the following palettes:
 
-| Flag Value | Notes |
-| --- | --- |
-| **`"sahara"` (DEFAULT)** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-sahara.png) |
-| **`"lava"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-lava.png) |
-| **`"electric"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-electric.png) |
-| **`"sunset"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-sunset.png) |
-| **`"rgrayscale"` (DEFAULT for `--set-palette`)** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-rgrayscale.png) |
-| **`"grayscale"`** | ![Seahorse Tail](tests/data/images/demo-mandel-seahorse-tail-grayscale.png) |
+| | | |
+| :---: | :---: | :---: |
+| ![sahara](tests/data/images/demo-mandel-seahorse-tail-sahara.png) | ![lava](tests/data/images/demo-mandel-seahorse-tail-lava.png) | ![electric](tests/data/images/demo-mandel-seahorse-tail-electric.png) |
+| **`"sahara"` (DEFAULT)** | **`"lava"`** | **`"electric"`** |
+| ![sunset](tests/data/images/demo-mandel-seahorse-tail-sunset.png) | ![aurora](tests/data/images/demo-mandel-seahorse-tail-aurora.png) | ![plasma](tests/data/images/demo-mandel-seahorse-tail-plasma.png) |
+| **`"sunset"`** | **`"aurora"`** | **`"plasma"`** |
+| ![forest](tests/data/images/demo-mandel-seahorse-tail-forest.png) | ![coral](tests/data/images/demo-mandel-seahorse-tail-coral.png) | ![gold](tests/data/images/demo-mandel-seahorse-tail-gold.png) |
+| **`"forest"`** | **`"coral"`** | **`"gold"`** |
+| ![toxic](tests/data/images/demo-mandel-seahorse-tail-toxic.png) | ![iris](tests/data/images/demo-mandel-seahorse-tail-iris.png) | ![ember](tests/data/images/demo-mandel-seahorse-tail-ember.png) |
+| **`"toxic"`** | **`"iris"`** | **`"ember"`** |
+| ![rgrayscale](tests/data/images/demo-mandel-seahorse-tail-rgrayscale.png) | ![grayscale](tests/data/images/demo-mandel-seahorse-tail-grayscale.png) | |
+| **`"rgrayscale"` (DEFAULT for `--set-palette`)** | **`"grayscale"`** | |
 
 ### Command structure
 
@@ -388,7 +392,7 @@ Available subgroup / command combinations:
 | `--hash`/`--no-hash` | Include 20-char SHA256 hash in filename | `--hash` |
 | `--force`/`--no-force` | Force re-computation and re-rendering even when matching DB cache entries exist | `--no-force` |
 | `--iterm`/`--no-iterm` | Print image inline in iTerm2 (macOS + iTerm2 only) | off |
-| `--palette` | Color palette for exterior (escaped) pixels; one of `sahara`, `lava`, `electric`, `sunset`, `rgrayscale`, `grayscale` | `sahara` |
+| `--palette` | Color palette for exterior (escaped) pixels; one of `sahara`, `lava`, `electric`, `sunset`, `aurora`, `plasma`, `forest`, `coral`, `gold`, `toxic`, `iris`, `ember`, `rgrayscale`, `grayscale` | `sahara` |
 | `--set-palette` | Color palette for interior Set points (used only when `--set` is given) | `rgrayscale` |
 | `--set` | Algorithm for interior Set point coloring; one of `min`, `max`, `angle`, `imaginary`; omit to keep interior black | None |
 | `-m`/`--model` | LMStudio vision model identifier to load | `qwen3-vl-32b-instruct@q8_0` |
@@ -507,7 +511,7 @@ Image size and render options are set at the `tranz image` subgroup level (see [
 **Tip — proportional sizing:** use `-s` instead of `-w`/`-h` so the output image always matches the frame's aspect ratio:
 
 ```sh
-poetry run tranz --palette electric-ocean image -s 1024 julia
+poetry run tranz --palette electric image -s 1024 julia
 ```
 
 **Tip — re-render from a saved image:** pass a tranZoom PNG path as `POINT_RE` to pick up the same Julia constant:
@@ -622,7 +626,7 @@ poetry run tranz [global flags] zoom [-w WIDTH] [-h HEIGHT] [-s SIZE] [-f FRACTA
 
 Renders a straight zoom-in animation from a starting frame to a target magnification and saves it as an animated GIF or MP4 file. Specify any two of `--duration`, `--frames`, and `--fps` to constrain the third; the command validates that all three resulting values are within allowed bounds.
 
-The zoom progression is geometrically uniform: each successive frame is scaled by a fixed rational factor computed so that the product of all per-frame zoom steps equals exactly the requested total magnification. Animation metadata such as initial frame size, zoom step, FPS, duration, frame count, and loop count is stored with the final animated output; if you save intermediate PNG frames, they are written as regular tranZoom still images and do not currently include per-frame `tranzoom:animation:*` PNG text chunks.
+The zoom progression is geometrically uniform: each successive frame is scaled by a fixed rational factor computed so that the product of all per-frame zoom steps equals exactly the requested total magnification. Zoom metadata such as initial frame size, zoom step, FPS, duration, frame count, and loop count is stored with the final animated output under `tranZoom:zoom:*` PNG text chunks; if you save intermediate PNG frames, they are written as regular tranZoom still images.
 
 Positional arguments:
 
@@ -674,7 +678,7 @@ Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) w
 $ poetry run tranz --no-date image mandel
 
 1024 x 1024 'sahara' Mandelbrot, 10^0.000 magnitude...
-{[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
+{[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]} + {[PNG, SAHARA, none]}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 349184.33px/s]
 Picked depth 1000, histogram {2: 20, 3: 64, 4: 40, ...: 68, 35: 2, 57: 2, 222: 2}, 58/256 set points
@@ -696,7 +700,7 @@ You can also extract details from the set points (the traditionally black part o
 $ poetry run tranz --set imaginary --set-palette "lava" --palette "rgrayscale" --no-date image mandel
 
 1024 x 1024 'rgrayscale' Mandelbrot w/ SET 'imaginary', 10^0.000 magnitude...
-{[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO] : imaginary}
+{[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO] : imaginary} + {[PNG, GRAYSCALE_REVERSE, LAVA]}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 303.86px/s]
 Picked depth 1000, histogram {2: 20, 3: 64, 4: 40, ...: 68, 35: 2, 57: 2, 222: 2}, 58/256 set points
@@ -718,7 +722,7 @@ Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mande
 $ poetry run tranz --no-date image mandel " -0.74303" "0.126433" "0.01611"
 
 1024 x 1024 'sahara' Mandelbrot, 10^2.191 magnitude...
-{[MANDELBROT: (-74303/100000, 126433/1000000) ± 1611/100000] : [1024, 1024, AUTO]}
+{[MANDELBROT: (-74303/100000, 126433/1000000) ± 1611/100000] : [1024, 1024, AUTO]} + {[PNG, SAHARA, none]}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 2093.76px/s]
 Picked depth 9277, histogram {24: 2, 25: 12, 26: 11, ...: 162, 2264: 1, 3215: 1, 6185: 1}, 66/256 set points
@@ -740,7 +744,7 @@ Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tai
 $ poetry run tranz --set imaginary --no-date image mandel " -0.7436499" "0.13188204" "0.00073801"
 
 1024 x 1024 'sahara' Mandelbrot w/ SET 'imaginary', 10^3.530 magnitude...
-{[MANDELBROT: (-7436499/10000000, 3297051/25000000) ± 73801/100000000] : [1024, 1024, AUTO] : imaginary}
+{[MANDELBROT: (-7436499/10000000, 3297051/25000000) ± 73801/100000000] : [1024, 1024, AUTO] : imaginary} + {[PNG, SAHARA, GRAYSCALE_REVERSE]}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 56175.67px/s]
 Picked depth 1000, histogram {37: 8, 38: 11, 39: 14, ...: 220, 415: 1, 465: 1, 650: 1}, 0/256 set points
@@ -775,7 +779,7 @@ Frame 1 / 40
 Frame 1 / 40
 
 220 x 220 'sahara' Mandelbrot, 10^3.530 magnitude...
-{[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]}
+{[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]} + {[PNG, SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 64531.63px/s]
 Picked depth 1000, histogram {36: 14, 37: 20, 38: 21, ...: 198, 439: 1, 478: 1, 639: 1}, 0/256 set points
@@ -803,7 +807,7 @@ Render a "Julia Suzana" at `-s/--size` 1024, one of the possible [Julia Set](htt
 $ poetry run tranz --no-date --palette electric image -s 1024 julia
 
 838 x 1024 'electric' Julia, 10^0.000 magnitude...
-{[JULIA: (0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)] : [838, 1024, AUTO]}
+{[JULIA: (0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)] : [838, 1024, AUTO]} + {[PNG, ELECTRIC, none]}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 149.06px/s]
 Picked depth 1000, histogram {2: 12, 3: 16, 4: 34, ...: 64, 41: 2, 44: 2, 45: 2}, 124/256 set points
@@ -823,7 +827,7 @@ Render a "Julia Suzana Wave" at `-s/--size` 1024:
 $ poetry run tranz --palette electric --set max --set-palette sunset --no-date image -s 512 julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
 
 512 x 377 'electric' Julia w/ SET 'max', 10^2.630 magnitude...
-{[JULIA: (-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)] : [512, 377, AUTO] : max}
+{[JULIA: (-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)] : [512, 377, AUTO] : max} + {[PNG, ELECTRIC, SUNSET]}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 135.13px/s]
 Picked depth 1819, histogram {43: 2, 44: 14, 45: 14, ...: 98, 147: 1, 208: 1, 1213: 1}, 125/256 set points
@@ -848,7 +852,7 @@ or, if you want to use as parameters:
 We have, for fun, generated a sequence of powers of 1000, demonstrating the amazing power of the infinite. The view size of each image is always $2.5$ times some power of 1000.
 
 | Image | Bits | Size $2.5\times$ | Equivalent real-world size / Landmark examples |
-| --- | --- | --- | --- |
+| :---: | :---: | :---: | :--- |
 | ![Zoom 1](tests/data/images/demo-mandel-zoom-01.png) | $140$ | $1$ | $\sim 10^{11}$ light-years = Observable-universe scale, about $93$ billion light-years across. |
 | ![Zoom 10^-3](tests/data/images/demo-mandel-zoom-02.png) | $140$ | $10^{-3}$ | $\sim 10^{8}$ light-years = Cosmic-web / supercluster scale: galaxy walls, voids. |
 | ![Zoom 10^-6](tests/data/images/demo-mandel-zoom-03.png) | $140$ | $10^{-6}$ | $\sim 10^{5}$ light-years = Galaxy scale: the Milky Way is about $100{,}000$ light-years across. |
