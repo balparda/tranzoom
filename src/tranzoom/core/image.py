@@ -214,7 +214,7 @@ DEFAULT_DEST_MAGNITUDE_10: str = '1'  # default dest magnification for zooms 10*
 DEFAULT_LOOP: int = 0  # 0 means infinite loop for GIFs
 THRESHOLD_JUMPY_ZOOM_PER_FRAME: float = 1.25  # if zoom per frame is above this warn about jumpiness
 MAX_TOLERATED_FRAME_MAG_ERROR: float = 0.00002  # 0.002% - max error Frame vs. reduced mpq Frame
-MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.001  # 0.1% - max total cumulative error of total zoom
+MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.0001  # 0.01% - max total cumulative error of total zoom
 
 
 # gmpy2.mpfr constants
@@ -656,13 +656,12 @@ class ZoomParameters(frame.SerializingFractalObject):
     # done adding frames, final check: directly compute the actual magnification achieved
     # to make sure the accumulated error is within the tolerated threshold
     actual_mag: gmpy2.mpfr = cast(
-      'gmpy2.mpfr', gmpy2.sqrt(all_frames[0].mag2 / all_frames[-1].mag2)
+      'gmpy2.mpfr', gmpy2.log10(gmpy2.sqrt(all_frames[-1].mag2 / all_frames[0].mag2))
     )
-    mag_error: gmpy2.mpfr = abs(actual_mag - self.mag) / self.mag
-    if mag_error > MAX_TOLERATED_TOTAL_MAG_ERROR:
+    if (mag_error := abs(actual_mag - self.mag) / self.mag) > MAX_TOLERATED_TOTAL_MAG_ERROR:
       raise Error(
         'the actual magnification achieved by zooming in the frame is '
-        f'{float(actual_mag):.4f}, which is {float(gmpy2.mpfr(100.0) * mag_error):.4f}% different '
+        f'{float(actual_mag):.4f}, which is {100.0 * float(mag_error):.4f}% different '
         f'from the intended {self.mag} ({float(self.mag):.4f}). This means the gmpy2.mpq needs '
         'more precision for conversion. This is a bug!'
       )
