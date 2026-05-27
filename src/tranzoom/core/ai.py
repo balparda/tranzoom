@@ -19,6 +19,8 @@ from transcrypto.utils import timer
 
 from tranzoom.core import frame, frdb, image, queries
 
+# TODO: divide image into the sectors and feed them separately to the LLM so they can be scored
+
 DEFAULT_MEMORY_SIZE: int = 5  # default number of iterations the LLM will remember
 MAX_MEMORY_SIZE: int = 30  # maximum number of iterations the LLM will remember
 _DIRECTION_MAP: dict[int, str] = {
@@ -138,6 +140,8 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
     query = query.strip() if query else None
     setup_query, image_query = queries.BuildImageThirdsPrompts(params.frm, reason, query)
     logging.debug(f'AI setup query:\n{setup_query}\n')
+  # add grid to render
+  render = dataclasses.replace(render, overlay=render.overlay or image.OverlayType.GRID)
   # use LMStudioWorker for AI mode; nullcontext (no-op) for manual mode
   ai_ctx: contextlib.AbstractContextManager[lms.LMStudioWorker | None] = (
     lms.LMStudioWorker(timeout=timeout, free_resources=True)
