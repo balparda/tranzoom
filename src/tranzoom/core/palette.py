@@ -14,6 +14,14 @@ class Palette(enum.Enum):
   LAVA = 'lava'
   ELECTRIC = 'electric'
   SUNSET = 'sunset'
+  AURORA = 'aurora'
+  PLASMA = 'plasma'
+  FOREST = 'forest'
+  CORAL = 'coral'
+  GOLD = 'gold'
+  TOXIC = 'toxic'
+  IRIS = 'iris'
+  EMBER = 'ember'
   GRAYSCALE = 'grayscale'
   GRAYSCALE_REVERSE = 'rgrayscale'
 
@@ -132,6 +140,166 @@ PALETTES: dict[Palette, tuple[tuple[int, int, int], ...]] = {
     (38, 8, 75),  # deep violet
     (22, 5, 60),  # near-dark indigo
     (13, 3, 50),  # almost black indigo (wraps back to start)
+  ),
+  # 16-stop northern-lights aurora: near-black night sky → polar green aurora → brilliant white.
+  # Ends in white for maximum contrast with the black set interior.
+  Palette.AURORA: (
+    (2, 2, 20),  # near-black night sky
+    (5, 5, 45),  # dark midnight blue
+    (5, 15, 60),  # deep navy
+    (0, 35, 65),  # dark teal-navy
+    (0, 65, 55),  # dark teal
+    (0, 95, 45),  # dark green-teal
+    (0, 130, 50),  # forest green
+    (0, 170, 70),  # medium green
+    (0, 205, 95),  # bright green
+    (30, 230, 130),  # emerald
+    (80, 245, 170),  # light emerald
+    (145, 255, 210),  # seafoam green
+    (200, 255, 235),  # mint
+    (230, 255, 248),  # pale mint
+    (245, 255, 252),  # near-white mint
+    (255, 255, 255),  # white (near-boundary; high contrast with black set interior)
+  ),
+  # 16-stop high-energy plasma: near-black void → deep purple → hot magenta → white-hot.
+  # Ends in white for maximum contrast with the black set interior.
+  Palette.PLASMA: (
+    (3, 0, 10),  # near-black void
+    (15, 0, 35),  # deep dark purple
+    (40, 0, 80),  # dark purple
+    (80, 0, 130),  # purple
+    (125, 0, 175),  # bright purple
+    (165, 0, 205),  # violet
+    (200, 0, 210),  # purple-magenta
+    (230, 10, 200),  # magenta
+    (250, 30, 180),  # hot pink
+    (255, 60, 150),  # bright pink
+    (255, 100, 120),  # salmon pink
+    (255, 150, 100),  # peach
+    (255, 200, 120),  # light amber
+    (255, 235, 180),  # cream
+    (255, 250, 230),  # near-white warm
+    (255, 255, 255),  # white (near-boundary; high contrast with black set interior)
+  ),
+  # 16-stop deep forest: near-black soil → mossy dark green → acid lime-yellow.
+  # Ends in bright lime-yellow for high contrast with the black set interior.
+  Palette.FOREST: (
+    (10, 5, 0),  # near-black dark soil
+    (30, 15, 0),  # dark brown soil
+    (55, 30, 0),  # dark brown
+    (70, 45, 5),  # brown
+    (60, 55, 5),  # olive brown
+    (40, 65, 5),  # dark olive
+    (20, 80, 10),  # dark olive green
+    (10, 100, 15),  # forest green
+    (5, 125, 20),  # medium forest green
+    (15, 155, 25),  # green
+    (40, 185, 30),  # bright green
+    (80, 210, 35),  # light green
+    (130, 230, 40),  # yellow-green
+    (175, 245, 50),  # lime green
+    (215, 255, 80),  # bright lime
+    (240, 255, 120),  # lime-yellow (near-boundary; high contrast with black set interior)
+  ),
+  # 16-stop coral reef: near-black abyss → teal → coral → bright pale pink.
+  # Ends in pale pink for contrast with the black set interior.
+  Palette.CORAL: (
+    (0, 5, 15),  # near-black abyss
+    (0, 20, 40),  # very dark teal
+    (0, 45, 65),  # dark teal
+    (0, 75, 85),  # teal
+    (0, 110, 100),  # medium teal
+    (10, 140, 110),  # light teal
+    (30, 165, 115),  # seafoam teal
+    (70, 185, 120),  # seafoam
+    (120, 200, 130),  # light seafoam
+    (170, 210, 140),  # sage
+    (210, 200, 140),  # warm tan
+    (240, 175, 120),  # light coral
+    (255, 145, 100),  # coral
+    (255, 110, 90),  # deep coral
+    (255, 165, 165),  # light pink
+    (255, 220, 225),  # pale pink (near-boundary; high contrast with black set interior)
+  ),
+  # 16-stop molten metal: near-black iron → bronze → gold → brilliant white-gold.
+  # Ends in white for maximum contrast with the black set interior.
+  Palette.GOLD: (
+    (5, 3, 0),  # near-black
+    (20, 12, 0),  # very dark brown
+    (45, 25, 0),  # dark brown
+    (80, 45, 0),  # brown
+    (120, 65, 0),  # dark amber
+    (160, 90, 0),  # amber
+    (200, 120, 0),  # golden amber
+    (230, 155, 0),  # gold
+    (250, 190, 0),  # bright gold
+    (255, 215, 30),  # yellow-gold
+    (255, 235, 80),  # golden yellow
+    (255, 248, 140),  # pale yellow
+    (255, 253, 195),  # very pale yellow
+    (255, 255, 230),  # near-white yellow
+    (255, 255, 250),  # near-white
+    (255, 255, 255),  # white (near-boundary; high contrast with black set interior)
+  ),
+  # 16-stop biohazard: near-black swamp → murky dark green → acid yellow-green.
+  # Ends in bright acid yellow for maximum contrast with the black set interior.
+  Palette.TOXIC: (
+    (0, 8, 0),  # near-black
+    (5, 20, 0),  # very dark green
+    (10, 40, 0),  # dark green
+    (10, 65, 0),  # dark olive green
+    (15, 90, 0),  # dark green
+    (25, 115, 0),  # medium-dark green
+    (40, 140, 0),  # medium green
+    (60, 165, 0),  # green
+    (90, 185, 0),  # bright green
+    (125, 200, 0),  # yellow-green
+    (160, 215, 0),  # lime
+    (195, 230, 0),  # lime-yellow
+    (220, 240, 0),  # bright lime
+    (240, 250, 0),  # near-yellow
+    (250, 255, 30),  # bright yellow
+    (255, 255, 80),  # acid yellow (near-boundary; high contrast with black set interior)
+  ),
+  # 16-stop iris flower: near-black indigo → deep violet → bright lavender → white.
+  # Ends in white for maximum contrast with the black set interior.
+  Palette.IRIS: (
+    (5, 0, 20),  # near-black indigo
+    (15, 0, 55),  # deep indigo
+    (35, 0, 100),  # indigo
+    (65, 0, 150),  # blue-violet
+    (100, 10, 190),  # violet-blue
+    (135, 30, 220),  # violet
+    (165, 60, 235),  # medium violet
+    (190, 95, 245),  # light violet
+    (210, 130, 250),  # lavender
+    (225, 160, 255),  # light lavender
+    (235, 190, 255),  # pale lavender
+    (242, 215, 255),  # very pale lavender
+    (248, 235, 255),  # near-white lavender
+    (252, 248, 255),  # almost-white lavender
+    (255, 253, 255),  # near-white
+    (255, 255, 255),  # white (near-boundary; high contrast with black set interior)
+  ),
+  # 16-stop dying ember: cold charcoal ash → smoldering red → incandescent near-white.
+  # Ends in near-white for high contrast with the black set interior.
+  Palette.EMBER: (
+    (8, 6, 5),  # near-black ash
+    (25, 15, 10),  # dark charcoal
+    (55, 28, 10),  # dark brown
+    (95, 40, 5),  # dark reddish-brown
+    (140, 45, 0),  # deep red-brown
+    (185, 40, 0),  # dark red
+    (220, 50, 0),  # red
+    (245, 75, 0),  # red-orange
+    (255, 110, 0),  # orange
+    (255, 150, 0),  # bright orange
+    (255, 185, 0),  # amber-orange
+    (255, 215, 10),  # amber
+    (255, 235, 50),  # golden yellow
+    (255, 248, 120),  # light yellow
+    (255, 253, 200),  # near-white yellow
+    (255, 255, 240),  # incandescent white (near-boundary; high contrast with black set interior)
   ),
   # 8-stop smooth grayscale: white (deep interior, low |z|) → black (near boundary, high |z|);
   # black near the boundary provides contrast with exterior colors; this is the DEFAULT_SET_PALETTE
