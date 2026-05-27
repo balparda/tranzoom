@@ -271,7 +271,9 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     duration=round(duration * image.VIDEO_DURATION_STORE_SCALE),
     loop=loop,
   )
-  all_frames: list[frame.Frame] = zoom_params.Frames()  # last thing that gould go boom!
+  all_frames: list[frame.Frame]
+  all_markers: list[frame.Frame]
+  all_frames, all_markers = zoom_params.Frames()  # last thing that gould go boom!
   # we should be good to go, all options check out; log and warn if needed
   config.console.print(
     f'\n{params.width} x {params.height} {render.escaped_pal.value!r} '
@@ -427,7 +429,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
         timestamp,
         str(video_path),
         all_frames,
-        [all_frames[0], all_frames[-1]],  # TODO: for real markers
+        all_markers,
       )
       # done
       success = True

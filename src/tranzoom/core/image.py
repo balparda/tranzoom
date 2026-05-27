@@ -215,6 +215,8 @@ DEFAULT_LOOP: int = 0  # 0 means infinite loop for GIFs
 THRESHOLD_JUMPY_ZOOM_PER_FRAME: float = 1.25  # if zoom per frame is above this warn about jumpiness
 MAX_TOLERATED_FRAME_MAG_ERROR: float = 0.00002  # 0.002% - max error Frame vs. reduced mpq Frame
 MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.0001  # 0.01% - max total cumulative error of total zoom
+MAGNITUDE_PER_FRAME_MARKER: gmpy2.mpq = gmpy2.mpq('1')  # one marker every 10x zoom
+MAX_TOLERATED_MARKER_MAG_ERROR: float = 0.06  # 6% max error for marker frames
 
 
 # gmpy2.mpfr constants
@@ -601,11 +603,12 @@ class ZoomParameters(frame.SerializingFractalObject):
       raise Error(f'ZoomParameters {params.sha!r} does not match expected {check_hash!r}')
     return params
 
-  def Frames(self) -> list[frame.Frame]:
+  def Frames(self) -> tuple[list[frame.Frame], list[frame.Frame]]:  # noqa: C901, PLR0914
     """Get the Frames. Could be a property, but is a method to remind this is an expensive-ish call.
 
     Returns:
-      list[frame.Frame]: The frames for this animation.
+      tuple[list[frame.Frame], list[frame.Frame]]: The (frames, marker_frames) for this animation,
+          where marker_frames is a strict subset of frames
 
     Raises:
       Error: if the frames cannot be generated within the tolerated error threshold.
@@ -620,6 +623,7 @@ class ZoomParameters(frame.SerializingFractalObject):
     all_frames: list[frame.Frame] = [self.img.frm]  # start with initial frame, keep as-is
     # reproduce the zoom run with full precision
     frm: frame.Frame = self.img.frm
+    max_denominator: int
     for i in range(self.n_steps):
       # keep frm full precision and iterate
       frm = frame.Frame.FromCenter(
@@ -630,8 +634,19 @@ class ZoomParameters(frame.SerializingFractalObject):
         point_re=frm.point_re,
         point_im=frm.point_im,
       )
+      if i and not i % 10:
+        # we have to keep the mpq in check, otherwise they will get too big
+        max_denominator = 10_000_000 * (10 ** math.ceil(frm.magnification[1]))
+        frm = frame.Frame.FromCenter(
+          frm.fractal,
+          *frm.center,
+          frm.size[0].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+          height=frm.size[1].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+          point_re=frm.point_re,
+          point_im=frm.point_im,
+        )
       # make a less aggressive version of the zoom
-      max_denominator: int = 10_000 * (10 ** math.ceil(frm.magnification[1]))
+      max_denominator = 100 * (10 ** math.ceil(frm.magnification[1]))
       reduced_frm = frame.Frame.FromCenter(
         frm.fractal,
         *frm.center,
@@ -665,7 +680,61 @@ class ZoomParameters(frame.SerializingFractalObject):
         f'from the intended {self.mag} ({float(self.mag):.4f}). This means the gmpy2.mpq needs '
         'more precision for conversion. This is a bug!'
       )
-    return all_frames
+    # we finished the frame generation, now we pick them special ones
+    # we don't care about the number of frames, we care about a fixed zoom magnitude
+    n_marker_steps: gmpy2.mpz = cast(
+      'gmpy2.mpz', max(math.floor(self.mag / MAGNITUDE_PER_FRAME_MARKER), 1)
+    )
+    if n_marker_steps <= 1 or self.n_frames < 5:  # noqa: PLR2004
+      # if we only have 2 or fewer markers (1 step), just use the first and last frames as markers;
+      # same thing for few frames: [1st, X, Y, Z, last] is the smallest degenerate case where
+      # it is worth having a "marker", frame Y, and return [1st, Y, last]
+      return (all_frames, [all_frames[0], all_frames[-1]])
+    # we will need more markers; start from the first and find the "ideal" stops
+    marker_mag: gmpy2.mpq = self.mag / n_marker_steps
+    marker_mag = gmpy2.mpq(gmpy2.exp10(marker_mag))  # mpq -> mpfr -> mpq unavoidable, unfortunately
+    frm = all_frames[0]  # start with initial frame, keep as-is
+    marker_frames: list[frame.Frame] = [frm]
+    last_idx: int = 0
+    idx: int
+    min_mag: gmpy2.mpq
+    max_min_mag: gmpy2.mpq = _MPQ_ZERO
+    for i in range(int(n_marker_steps)):
+      # first compute the "ideal" frame for this marker, by applying the ideal zoom
+      frm = frame.Frame.FromCenter(
+        frm.fractal,
+        *frm.center,
+        frm.size[0] / marker_mag,  # these mpq will get HUGE
+        height=frm.size[1] / marker_mag,  # these mpq will get HUGE
+        point_re=frm.point_re,
+        point_im=frm.point_im,
+      )
+      # then we find the actual frame in all_frames that is closest to this ideal frame
+      min_mag, idx = min((abs(f.mag2 - frm.mag2), j) for j, f in enumerate(all_frames[last_idx:]))
+      max_min_mag = max(max_min_mag, min_mag / frm.mag2)  # keep track of the maximum relative error
+      # test that the frames are in the expected order and we are not going backwards
+      new_marker: frame.Frame = all_frames[last_idx + idx]
+      if not idx:
+        raise Error(
+          f'Marker frame {i + 1} is closer to last marker index {last_idx}. This is a bug!'
+        )
+      # make sure we don't have duplicates; add it
+      if new_marker in marker_frames:
+        raise Error(f'Duplicate marker frame found; bug! report. Marker frame: {new_marker}')
+      marker_frames.append(new_marker)
+      last_idx += idx
+    # done; check we arrived at the last frame and error is acceptable; if so, all is good
+    if marker_frames[-1] != all_frames[-1]:
+      raise Error(
+        'Last marker frame is not the same as the last frame; bug! report. '
+        f'Last marker frame: {marker_frames[-1]}, last frame: {all_frames[-1]}'
+      )
+    if max_min_mag > MAX_TOLERATED_MARKER_MAG_ERROR:
+      raise Error(
+        f'Marker frames are not close enough to the ideal frames; bug! report. '
+        f'Maximum deviation in mag2 is {100.0 * float(max_min_mag)}%, which is a bug! report'
+      )
+    return (all_frames, marker_frames)
 
 
 class Image:
