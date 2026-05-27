@@ -811,7 +811,7 @@ class FractalDatabase:
       f'{params.frm.fractal.value.capitalize()}{set_param}, '
       f'10^{params.frm.magnification[1]:.3f} magnitude...'
     )
-    print_comm(str(params))
+    print_comm(f'{params} + {render}')
     # create path callback missing only the hash
     full_path: abc.Callable[[str], pathlib.Path] = lambda h: image.MakeImagePath(
       out.path,
