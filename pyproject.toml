@@ -12,7 +12,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 
 name = "tranzoom"
-version = "1.5.0"  # also update src/tranzoom/__init__.py
+version = "1.5.1"  # also update src/tranzoom/__init__.py
 
 description = "Fractal manipulation with LLMs"
 license = "Apache-2.0"
@@ -61,7 +61,7 @@ dependencies = [
 
   # TODO: pinned version because 0.26 is a mess, inline click and tests give a message that
   #    can only be fixed by disabling typeguard; probably have to fix clibase/transcrypto up
-  "typer==0.25.0",   # if this changes, also change: [tool.poetry.dependencies]
+  "typer==0.25.1",   # if this changes, also change: [tool.poetry.dependencies]
 
 ]
 
@@ -108,7 +108,7 @@ include = [
 # prefer to add dependencies inside the [project.dependencies] section
 
 python = "^3.12"  # if version changes, remember to change README.md
-typer = { version = "0.25.0", extras = ["all"] }
+typer = { version = "0.25.1", extras = ["all"] }
 
 [tool.poetry.group.dev.dependencies]
 
@@ -121,7 +121,7 @@ pytest = "^9.0"
 pytest-cov = "^7.1"
 pytest-flakefinder = "^1.1"
 pre-commit = "^4.6"
-ruff = "=0.15.13"  # 15.14 has problems with PLW0717 and indentation to solve
+ruff = "^0.15.14"
 typeguard = "^4.5"
 
 # project-specific dev-only
@@ -202,7 +202,7 @@ ignore = [
   "FBT003",   # allows boolean positional value in function call
   "PLR0913",  # Too many arguments in function definition (N > 5)
   "PLR0917",  # Too many positional arguments (N/5)
-  # "PLW0717",  # Try clause contains too many statements (N>5)
+  "PLW0717",  # Try clause contains too many statements (N>5)
 
   "TRY003",  # Avoid specifying long messages outside the exception class
   "TRY300",  # Consider moving this statement to an `else` block

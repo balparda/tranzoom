@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
+  - [1.6.0 - 2026-06-TBD](#160---2026-06-tbd)
+  - [1.5.1 - 2026-06-26](#151---2026-06-26)
   - [1.5.0 - 2026-05-26](#150---2026-05-26)
   - [1.4.1 - 2026-05-21](#141---2026-05-21)
   - [1.4.0 - 2026-05-20](#140---2026-05-20)
@@ -30,6 +32,25 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future fixes.
+
+## 1.6.0 - 2026-06-TBD
+
+- Added
+  - TBD
+
+- Changed
+  - TBD
+
+- Fixed
+  - TBC
+
+## 1.5.1 - 2026-06-26
+
+- Changed
+  - New ruff version
+
+- Fixed
+  - README examples
 
 ## 1.5.0 - 2026-05-26
 
