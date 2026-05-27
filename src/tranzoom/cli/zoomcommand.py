@@ -223,7 +223,7 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   ),
 )
 @clibase.CLIErrorGuard
-def Auto(  # documentation is help/epilog/args  # noqa: D103, PLR0914, PLR0915
+def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR0914, PLR0915
   *,
   ctx: click.Context,
   center_re: str = base.FRAME_CENTER_RE_ARGUMENT,  # type: ignore[assignment]

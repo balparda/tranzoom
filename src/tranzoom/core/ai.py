@@ -145,7 +145,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
     else contextlib.nullcontext()
   )
   count: int = 1
-  try:  # noqa: PLR1702, PLW0717
+  try:  # noqa: PLR1702
     with ai_ctx as worker:
       # load model (skipped in manual mode; worker is None when manual=True)
       model_config: transai_ai.AIModelConfig | None = None
