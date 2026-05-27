@@ -79,7 +79,6 @@ DEFAULT_JULIA_WIDTH: str = '1.8'
 DEFAULT_JULIA_HEIGHT: str = '2.2'
 
 
-# TODO: video/gif to save check the frames for existence, thus recovering from a crash
 # TODO: image to store: on set/non-escaped the actual final value of the tracked constant;
 #     and if we store the mpfr on a dict for example, we will have space for more info in the array
 # TODO: with all the frames in place (DB) and richer images and "nu" we can start video smoothing;

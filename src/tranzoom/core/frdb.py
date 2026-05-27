@@ -149,7 +149,8 @@ class ZoomData(TypedDict):
   """Video/GIF zoom data type, for storing zoom metadata and parameters.
 
   Attributes:
-    zoom (tbase.JSONDict): (CORE DATA) image.ZoomParameters.json
+    zoom (tbase.JSONDict): (CORE DATA) image.ZoomParameters.json; note that zoom is created
+        with the sentinel value (if on AUTO) and does NOT update!
     fps (float): (CACHE) frames-per-second; number of total frames is exactly len(frames)
     step_mag (float): (CACHE) video step scalar magnification (magnification per frame step)
     data_hash (str): (CACHE) hash of the video/GIF data; if we have this entry,
@@ -167,7 +168,7 @@ class ZoomData(TypedDict):
   """
 
   # CORE DATA: ZoomParameters = a specific video, the rest is computed
-  zoom: tbase.JSONDict  # image.ZoomParameters.json
+  zoom: tbase.JSONDict  # image.ZoomParameters.json; has original sentinel value (if on AUTO)
 
   # CACHE
   fps: float  # = len(`frames`) / `zoom.duration`
@@ -567,6 +568,19 @@ class FractalDatabase:
     render_data: ImageData = cp_data['renders'][ck['render']]
     return (params, ck, frm_data, cp_data, render_data)
 
+  def FindZoom(self, zoom: image.ZoomParameters) -> ZoomData | None:
+    """Find a zoom (video/GIF) in the database given its zoom parameters.
+
+    Args:
+      zoom (image.ZoomParameters): the zoom parameters to look up
+
+    Returns:
+      ZoomData | None: the ZoomData for the given zoom parameters, or None if not found
+
+    """
+    # videos are keyed directly by zoom.sha; one hash -> one ZoomData entry (no indirection)
+    return self._db['videos'].get(zoom.sha)
+
   def AddComputationToDB(
     self, params: frame.ComputationParameters, img_tm: int, img_path: str | None
   ) -> tuple[FrameData, ComputationData]:
@@ -682,9 +696,51 @@ class FractalDatabase:
     # return the new ImageData
     return img
 
-  def AddZoomToDB(self, zoom: image.ZoomParameters, zoom_data: ZoomData) -> None:
-    """Add a zoom (video/GIF) to the DB."""
-    raise NotImplementedError('Zoom/video support not implemented yet')
+  def AddZoomToDB(
+    self,
+    zoom: image.ZoomParameters,
+    data_hash: str,
+    tm: int,
+    path: str,
+    all_frames: list[frame.Frame],
+    markers: list[frame.Frame],
+  ) -> None:
+    """Add a zoom (video/GIF) to the DB.
+
+    Args:
+      zoom (image.ZoomParameters): the zoom parameters to add; zoom is created with the sentinel
+          value (if on AUTO) and does NOT update!
+      data_hash (str): the hash of the video/GIF data, used for indexing and deduplication
+      tm (int): the timestamp of the video/GIF creation
+      path (str): the path to the video/GIF file, as stored in the DB; this is absolute disk path
+      all_frames (list[frame.Frame]): the list of all frames that compose the video, ordered by
+          magnification ascending (video order)
+      markers (list[frame.Frame]): the marker frames that compose the video, subset of all_frames
+
+    """
+    zoom_hash: str = zoom.sha
+    if zoom_hash in self._db['videos']:
+      # we have an entry: we assume it is mostly correct, but update the path
+      self._db['videos'][zoom_hash]['tm'] = tm  # always update timestamp
+      self._db['videos'][zoom_hash]['rendered_path'] = path  # update path (in case it changed)
+    else:
+      # new entry
+      self._db['videos'][zoom_hash] = ZoomData(
+        zoom=zoom.json,
+        fps=float(zoom.fps),
+        step_mag=float(zoom.scalar_magnification_per_step),
+        data_hash=data_hash,
+        tm=tm,
+        rendered_path=path,
+        frames=[f.sha for f in all_frames],
+        markers=[f.sha for f in markers],
+      )
+    # add path index
+    self._db['video_paths_idx'][path] = zoom_hash
+    # add hash index
+    idx_list: list[str] = self._db['videos_idx'].setdefault(data_hash, [])
+    if zoom_hash not in idx_list:
+      idx_list.append(zoom_hash)
 
   def CoreComputeImage(  # noqa: C901, PLR0912, PLR0915
     self,

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import pathlib
+from collections import abc
 
 import click
 import gmpy2
@@ -21,7 +22,7 @@ from transcrypto.utils import human, timer
 
 from tranzoom import tranz
 from tranzoom.cli import base
-from tranzoom.core import ai, frame, image
+from tranzoom.core import ai, frame, frdb, image
 
 _MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the fractal score
 
@@ -263,7 +264,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   render, out = base.MakeRenderParameters(params, config)
   zoom_params: image.ZoomParameters = image.ZoomParameters(
     tp=anim_type,
-    img=params,
+    img=params,  # zoom is created with the sentinel value (if on AUTO) and does NOT update!
     render=render,
     mag=gmpy2.mpq(dest_magnification_10),
     n_frames=frames,
@@ -287,107 +288,154 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       'The resulting animation may look jumpy! Please consider increasing the number of frames '
       'or reducing the total magnification.[/]\n'
     )
+  # create path callback missing only the hash
+  full_path: abc.Callable[[str], pathlib.Path] = lambda h: image.MakeImagePath(
+    config.img_output_path,
+    config.img_use_date,
+    config.img_use_hash,
+    config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
+    h,
+    tm=timestamp,
+    suffix=anim_type.value.lower(),
+  )
   # DB
-  tm: int = timer.Now()
   with config.OpenDB() as db:
-    # main zoom loop, go for frames iterations, producing the image and then zooming in the frame
-    img: image.Image | None = None
-    img_path: pathlib.Path | None = None
-    img_data: bytes
-    data_hash: str
-    all_img_bytes: list[bytes] = []
-    all_hash: list[str] = []
-    with timer.Timer(emit_log=False) as tmr:
-      for i, frm in enumerate(all_frames):
-        config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
-        # we have the frame, now feed it to the producer
-        params, img, img_data, data_hash, img_path = db.CoreComputeImage(
-          dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER),  # send frm, mark as sentinel
-          render,
-          out,
-          add_serial=i + 1,
-          tm=tm,
-          max_threads=config.max_threads,
-          iterm=config.iterm,
-          print_comm=config.console.print,
-          require_img_obj=True,
-          force=config.img_force_redo,
+    success: bool = False
+    video_hash: str | None = None
+    video_path: pathlib.Path | None = None
+    tmr: timer.Timer | None = None
+    try:
+      # see if we have a cache of this zoom
+      zoom_data: frdb.ZoomData | None = db.FindZoom(zoom_params)
+      if zoom_data:
+        video_hash = zoom_data['data_hash']
+        old_path: pathlib.Path | None = (
+          pathlib.Path(zoom_data['rendered_path']) if zoom_data['rendered_path'] else None
         )
-        # check we got something
-        if not img or not img_path:
-          raise base.Error('No image produced for frame! should never happen; report bug')
-        # save the image to disk if requested
-        if save_frames:
-          img_path.write_bytes(img_data)
-          config.console.print(f'Saved to "{img_path}"\n')
-        all_img_bytes.append(img_data)
-        all_hash.append(data_hash)
-      # check we got something; also appease type checker
-      if not img:
-        raise base.Error('No image produced for animation! should never happen; report bug')
-    # compute hash and so the path
-    video_hash: str = hashes.Hash256(
-      ('|'.join(all_hash)).encode('ascii')  # stable if all images are the same
-    ).hex()
-    video_path: pathlib.Path = image.MakeImagePath(
-      config.img_output_path,
-      config.img_use_date,
-      config.img_use_hash,
-      config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
-      video_hash,
-      tm=timestamp,
-      suffix=anim_type.value,
-    )
-    # create metadata
-    meta: dict[str, str] = image.MakeImageMeta(img, render, video_hash)  # using LAST FRAME!
-    # add video-specific metadata
-    meta[image.META_IMAGE_ANIMATION_KEY] = anim_type.value.lower()
-    meta.update(
-      # the extra animation keys
-      {
-        image.META_ZOOM_TYPE_KEY: zoom_params.tp.value,
-        image.META_ZOOM_INITIAL_WIDTH_RE_KEY: str(all_frames[0].size[0]),
-        image.META_ZOOM_INITIAL_HEIGHT_IM_KEY: str(all_frames[0].size[1]),
-        image.META_ZOOM_MAGNITUDE_KEY: str(zoom_params.mag),
-        image.META_ZOOM_FRAMES_KEY: str(zoom_params.n_frames),
-        image.META_ZOOM_SECONDS_KEY: str(zoom_params.n_seconds),
-        image.META_ZOOM_LOOP_KEY: str(zoom_params.loop),
-        image.META_ZOOM_STEPS_KEY: str(zoom_params.n_steps),
-        image.META_ZOOM_FPS_KEY: str(zoom_params.fps),
-        image.META_ZOOM_MAGNITUDE_PER_STEP_KEY: str(zoom_params.mag_per_step),
-        image.META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str(zoom_params.scalar_magnification_per_step),
-      }
-    )
-    # save the final animation
-    if anim_type == image.AnimationType.GIF:
-      image.WriteAnimatedGIF(
-        all_img_bytes,
-        video_path,
-        zoom_params.img.width,
-        zoom_params.img.height,
-        frames,
-        duration,
-        meta=meta,
-        loop=loop,
+        if old_path and old_path.exists() and old_path.is_file():
+          # we do have the video!
+          config.console.print(
+            f'[red]DB render[/], {video_hash!r}@{timer.TimeStr(zoom_data["tm"])} -> "{old_path}"\n'
+          )
+          video_path = full_path(video_hash)
+          if video_path != old_path:
+            video_data: bytes = old_path.read_bytes()
+            video_path.write_bytes(video_data)
+          success = True
+          return
+      # main zoom loop, go for frames iterations, producing the image and then zooming in the frame
+      img: image.Image | None = None
+      img_path: pathlib.Path | None = None
+      img_data: bytes
+      data_hash: str
+      all_img_bytes: list[bytes] = []
+      all_hash: list[str] = []
+      with timer.Timer(emit_log=False) as tmr:
+        for i, frm in enumerate(all_frames):
+          config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
+          # we have the frame, now feed it to the producer
+          params, img, img_data, data_hash, img_path = db.CoreComputeImage(
+            dataclasses.replace(
+              params, frm=frm, depth=frame.MIN_ITER
+            ),  # send frm, mark as sentinel
+            render,
+            out,
+            add_serial=i + 1,
+            tm=timestamp,
+            max_threads=config.max_threads,
+            iterm=config.iterm,
+            print_comm=config.console.print,
+            require_img_obj=True,
+            force=config.img_force_redo,
+          )
+          # check we got something
+          if not img or not img_path:
+            raise base.Error('No image produced for frame! should never happen; report bug')
+          # save the image to disk if requested
+          if save_frames:
+            img_path.write_bytes(img_data)
+            config.console.print(f'Saved to "{img_path}"\n')
+          all_img_bytes.append(img_data)
+          all_hash.append(data_hash)
+        # check we got something; also appease type checker
+        if not img:
+          raise base.Error('No image produced for animation! should never happen; report bug')
+      # video loop is done; compute hash and so the path
+      video_hash = hashes.Hash256(
+        ('|'.join(all_hash)).encode('ascii')  # stable if all images are the same
+      ).hex()
+      # computation is done
+      video_path = image.MakeImagePath(
+        config.img_output_path,
+        config.img_use_date,
+        config.img_use_hash,
+        config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
+        video_hash,
+        tm=timestamp,
+        suffix=anim_type.value,
       )
-    elif anim_type == image.AnimationType.MP4:
-      image.WriteVideoMP4(
-        all_img_bytes,
-        video_path,
-        zoom_params.img.width,
-        zoom_params.img.height,
-        frames,
-        duration,
-        meta=meta,
+      # create metadata
+      meta: dict[str, str] = image.MakeImageMeta(img, render, video_hash)  # using LAST FRAME!
+      # add video-specific metadata
+      meta[image.META_IMAGE_ANIMATION_KEY] = anim_type.value.lower()
+      meta.update(
+        # the extra animation keys
+        {
+          image.META_ZOOM_TYPE_KEY: zoom_params.tp.value,
+          image.META_ZOOM_INITIAL_WIDTH_RE_KEY: str(all_frames[0].size[0]),
+          image.META_ZOOM_INITIAL_HEIGHT_IM_KEY: str(all_frames[0].size[1]),
+          image.META_ZOOM_MAGNITUDE_KEY: str(zoom_params.mag),
+          image.META_ZOOM_FRAMES_KEY: str(zoom_params.n_frames),
+          image.META_ZOOM_SECONDS_KEY: str(zoom_params.n_seconds),
+          image.META_ZOOM_LOOP_KEY: str(zoom_params.loop),
+          image.META_ZOOM_STEPS_KEY: str(zoom_params.n_steps),
+          image.META_ZOOM_FPS_KEY: str(zoom_params.fps),
+          image.META_ZOOM_MAGNITUDE_PER_STEP_KEY: str(zoom_params.mag_per_step),
+          image.META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str(
+            zoom_params.scalar_magnification_per_step
+          ),
+        }
       )
-    else:
-      raise base.UsageError(f'Unsupported animation type: {anim_type}')
-    # add to DB
-    # TODO: call db.AddZoomToDB(zoom, zoom_data)
-    # done
-    config.console.print(f'Success: {anim_type.value.upper()} {video_hash!r} in {tmr}')
-    config.console.print(f'Saved {anim_type.value.upper()} to "{video_path}"\n')
-    # iterm
-    if config.iterm and anim_type != image.AnimationType.MP4:  # iTerm2 does not support MP4
-      image.PrintITerm2(video_path.read_bytes())
-      config.console.print()
+      # save the final animation
+      if anim_type == image.AnimationType.GIF:
+        image.WriteAnimatedGIF(
+          all_img_bytes,
+          video_path,
+          zoom_params.img.width,
+          zoom_params.img.height,
+          frames,
+          duration,
+          meta=meta,
+          loop=loop,
+        )
+      elif anim_type == image.AnimationType.MP4:
+        image.WriteVideoMP4(
+          all_img_bytes,
+          video_path,
+          zoom_params.img.width,
+          zoom_params.img.height,
+          frames,
+          duration,
+          meta=meta,
+        )
+      else:
+        raise base.UsageError(f'Unsupported animation type: {anim_type}')
+      # add to DB
+      db.AddZoomToDB(
+        zoom_params,
+        video_hash,
+        timestamp,
+        str(video_path),
+        all_frames,
+        [all_frames[0], all_frames[-1]],  # TODO: for real markers
+      )
+      # done
+      success = True
+    finally:
+      if success and video_hash and video_path:
+        config.console.print(f'Success: {anim_type.value.upper()} {video_hash!r} in {tmr or "-"}')
+        config.console.print(f'Saved {anim_type.value.upper()} to "{video_path}"\n')
+        # iterm
+        if config.iterm and anim_type != image.AnimationType.MP4:  # iTerm2 does not support MP4
+          image.PrintITerm2(video_path.read_bytes())
+          config.console.print()
