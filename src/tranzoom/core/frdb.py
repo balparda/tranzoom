@@ -683,7 +683,8 @@ class FractalDatabase:
     return img
 
   def AddZoomToDB(self, zoom: image.ZoomParameters, zoom_data: ZoomData) -> None:
-    pass
+    """Add a zoom (video/GIF) to the DB."""
+    raise NotImplementedError('Zoom/video support not implemented yet')
 
   def CoreComputeImage(  # noqa: C901, PLR0912, PLR0915
     self,
@@ -750,7 +751,7 @@ class FractalDatabase:
     # log
     set_param: str = '' if params.set_points is None else f' w/ SET {params.set_points.value!r}'
     print_comm(
-      f'\n{params.width}x{params.height} {render.escaped_pal.value!r} '
+      f'\n{params.width} x {params.height} {render.escaped_pal.value!r} '
       f'{params.frm.fractal.value.capitalize()}{set_param}, '
       f'10^{params.frm.magnification[1]:.3f} magnitude...'
     )

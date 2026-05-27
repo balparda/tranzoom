@@ -273,14 +273,12 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   all_frames: list[frame.Frame] = zoom_params.Frames()  # last thing that gould go boom!
   # we should be good to go, all options check out; log and warn if needed
   config.console.print(
-    f'\n{params.width}x{params.height} {render.escaped_pal.value!r} '
+    f'\n{params.width} x {params.height} {render.escaped_pal.value!r} '
     f'{frm.fractal.value.capitalize()!r} [magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/]'
+    f', {human.HumanizedSeconds(duration)} long, at {fps:.2f} FPS, with {frames} frames, '
+    f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step...'
   )
-  config.console.print(f'{zoom_params} ... {all_frames[-1]}')
-  config.console.print(
-    f'{human.HumanizedSeconds(duration)} long, at {fps:.2f} FPS, with {frames} frames, '
-    f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step...\n'
-  )
+  config.console.print(f'{zoom_params} ... {all_frames[-1]}\n')
   if zoom_params.scalar_magnification_per_step > image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
     config.console.print(
       '[red]Warning: the zoom per frame is high: 10^(mag/(frames-1)) = '
@@ -385,7 +383,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     else:
       raise base.UsageError(f'Unsupported animation type: {anim_type}')
     # add to DB
-    # db.AddZoomToDB(zoom, zoom_data)
+    # TODO: call db.AddZoomToDB(zoom, zoom_data)
     # done
     config.console.print(f'Success: {anim_type.value.upper()} {video_hash!r} in {tmr}')
     config.console.print(f'Saved {anim_type.value.upper()} to "{video_path}"\n')

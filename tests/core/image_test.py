@@ -139,18 +139,18 @@ def test_render_hash_stability_and_serialization_consistency(
         '"mark_width":1,"overlay":null,"set_pal":"rgrayscale","tp":"png"}'
       ),
       '40/3',
-      100,
+      17,
       80000,
       0,
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
       (
         '{"duration":80000,"img":{"depth":9999,"frm":{"bottom_im":"-1","bottom_re":"1",'
         '"fractal":"mandelbrot","point_im":"0","point_re":"0","top_im":"1","top_re":"-1"},'
-        '"height":512,"set_points":null,"width":512},"loop":0,"mag":"40/3","n_frames":100,'
+        '"height":512,"set_points":null,"width":512},"loop":0,"mag":"40/3","n_frames":17,'
         '"render":{"escaped_pal":"sunset","mark_color":null,"mark_im":"0","mark_re":"0",'
         '"mark_width":1,"overlay":null,"set_pal":"rgrayscale","tp":"png"},"tp":"gif"}'
       ),
-      '4af30ffb71a5e60d39b92908e2946f0aeb3ad30ae90bc850fbd356d09707c08d',  # DO NOT "JUST FIX"
+      'f48d25fd28bef9c0afb130495a69b25e0ad27fea5ff2b5d9b8e84e5ad39241a2',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
     ),
     (
@@ -166,18 +166,18 @@ def test_render_hash_stability_and_serialization_consistency(
       ),
       '3/7',
       1000,
-      300000,
+      3000000,
       0,
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
       (
-        '{"duration":300000,"img":{"depth":6666,"frm":{"bottom_im":"-1","bottom_re":"1",'
+        '{"duration":3000000,"img":{"depth":6666,"frm":{"bottom_im":"-1","bottom_re":"1",'
         '"fractal":"julia","point_im":"1","point_re":"1","top_im":"1","top_re":"-1"},'
         '"height":1024,"set_points":"imaginary","width":1024},"loop":0,"mag":"3/7",'
         '"n_frames":1000,"render":{"escaped_pal":"electric","mark_color":"red",'
         '"mark_im":"9/2","mark_re":"-11/17","mark_width":2,"overlay":"grid",'
         '"set_pal":"grayscale","tp":"gif"},"tp":"mp4"}'
       ),
-      'e9205b7df0cf877a8254fd749571f18dcae29d8e871a9726eb2ed1980ce67d83',  # DO NOT "JUST FIX"
+      '2da2f8907a1c259e63c0f87b1af455ab2a0e24668adb45744ab61b26d8527db6',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
     ),
     (
@@ -192,18 +192,18 @@ def test_render_hash_stability_and_serialization_consistency(
         '"mark_re":"71/4","mark_width":3,"overlay":null,"set_pal":"sunset","tp":"mp4"}'
       ),
       '3000/4',
-      10000,
+      100,
       800000,
       2,
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
       (
         '{"duration":800000,"img":{"depth":8888,"frm":{"bottom_im":"-17/19","bottom_re":"1/31",'
         '"fractal":"julia","point_im":"-11/19","point_re":"3/2","top_im":"13/7","top_re":"-11/23"},'
-        '"height":2048,"set_points":"max","width":2048},"loop":2,"mag":"750","n_frames":10000,'
+        '"height":2048,"set_points":"max","width":2048},"loop":2,"mag":"750","n_frames":100,'
         '"render":{"escaped_pal":"grayscale","mark_color":"yellow","mark_im":"-7/11",'
         '"mark_re":"71/4","mark_width":3,"overlay":null,"set_pal":"sunset","tp":"mp4"},"tp":"gif"}'
       ),
-      '014d14e6c61d06cfe0b80271d81d5cff8853fde0faf1359ba1806484f722c9d3',  # DO NOT "JUST FIX"
+      'ad616383fac704410323d28225318ad09fc3e95a41999fb38f5c8f3b581ce50d',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
     ),
   ],

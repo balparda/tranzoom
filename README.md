@@ -313,7 +313,7 @@ Render the [full Mandelbrot set](#full--default-1) (default, 1024×1024):
 ```sh
 $ poetry run tranz --no-date image mandel
 
-1024x1024 'sahara' Mandelbrot, 10^0.000 magnitude...
+1024 x 1024 'sahara' Mandelbrot, 10^0.000 magnitude...
 {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 349184.33px/s]
@@ -673,7 +673,7 @@ Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) w
 ```sh
 $ poetry run tranz --no-date image mandel
 
-1024x1024 'sahara' Mandelbrot, 10^0.000 magnitude...
+1024 x 1024 'sahara' Mandelbrot, 10^0.000 magnitude...
 {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 349184.33px/s]
@@ -695,7 +695,7 @@ You can also extract details from the set points (the traditionally black part o
 ```sh
 $ poetry run tranz --set imaginary --set-palette "lava" --palette "rgrayscale" --no-date image mandel
 
-1024x1024 'rgrayscale' Mandelbrot w/ SET 'imaginary', 10^0.000 magnitude...
+1024 x 1024 'rgrayscale' Mandelbrot w/ SET 'imaginary', 10^0.000 magnitude...
 {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO] : imaginary}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 303.86px/s]
@@ -717,7 +717,7 @@ Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mande
 ```sh
 $ poetry run tranz --no-date image mandel " -0.74303" "0.126433" "0.01611"
 
-1024x1024 'sahara' Mandelbrot, 10^2.191 magnitude...
+1024 x 1024 'sahara' Mandelbrot, 10^2.191 magnitude...
 {[MANDELBROT: (-74303/100000, 126433/1000000) ± 1611/100000] : [1024, 1024, AUTO]}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 2093.76px/s]
@@ -739,7 +739,7 @@ Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tai
 ```sh
 $ poetry run tranz --set imaginary --no-date image mandel " -0.7436499" "0.13188204" "0.00073801"
 
-1024x1024 'sahara' Mandelbrot w/ SET 'imaginary', 10^3.530 magnitude...
+1024 x 1024 'sahara' Mandelbrot w/ SET 'imaginary', 10^3.530 magnitude...
 {[MANDELBROT: (-7436499/10000000, 3297051/25000000) ± 73801/100000000] : [1024, 1024, AUTO] : imaginary}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 56175.67px/s]
@@ -767,20 +767,27 @@ ZOOM: 220x220 10^1.00 magnitude animation, 4.000 s long, at 10.00 FPS, with 40 f
 
 Frame 1 / 40
 
-220x220 'sahara' Mandelbrot, 10^3.530 magnitude...
+220 x 220 'sahara' 'Mandelbrot' 10^1.0000 magnitude ZOOM, 4.000 s long, at 10.00 FPS, with 40 frames, 106.0818%/step...
+<GIF: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]} -> {[PNG, SAHARA, none] + [MARK: red/1 @
+(-5578776469/7500000000, 8244620127/62500000000)]} / (mag:1, n:40, d:4, fps:10, l:0)> ... [MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ±
+73801/1000000000]
+
+Frame 1 / 40
+
+220 x 220 'sahara' Mandelbrot, 10^3.530 magnitude...
 {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]}
 
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 61493.72px/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 64531.63px/s]
 Picked depth 1000, histogram {36: 14, 37: 20, 38: 21, ...: 198, 439: 1, 478: 1, 639: 1}, 0/256 set points
-Img: 100%|█████████████████████████████████████████████| 48400/48400 [00:00<00:00, 156005.12px/s]
+Img: 100%|█████████████████████████████████████████████| 48400/48400 [00:00<00:00, 150094.72px/s]
 Marking coordinate (-5578776469/7500000000, 8244620127/62500000000) with 'red' crosshair @(110, 110)/1px
-PNG: '72d624682db7ac75105322d7e048ef06ae288e2ba68842ad0f64a7674d86997a', precision 140 bits, in 777.493 ms + 88.258 ms
+PNG: '72d624682db7ac75105322d7e048ef06ae288e2ba68842ad0f64a7674d86997a', precision 140 bits, in 798.344 ms + 84.691 ms
 
 Frame 2 / 40
 
 [...]
 
-Success: GIF 'ba053970ecbd96a3d9f77caac43af8ffc1c8a0f4d22fe9150744308471898281' in 43.645 s
+Success: GIF 'ba053970ecbd96a3d9f77caac43af8ffc1c8a0f4d22fe9150744308471898281' in 44.062 s
 Saved GIF to "mandel-ba053970ecbd96a3d9f7.gif"
 ```
 
@@ -795,7 +802,7 @@ Render a "Julia Suzana" at `-s/--size` 1024, one of the possible [Julia Set](htt
 ```sh
 $ poetry run tranz --no-date --palette electric image -s 1024 julia
 
-838x1024 'electric' Julia, 10^0.000 magnitude...
+838 x 1024 'electric' Julia, 10^0.000 magnitude...
 {[JULIA: (0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)] : [838, 1024, AUTO]}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 149.06px/s]
@@ -815,7 +822,7 @@ Render a "Julia Suzana Wave" at `-s/--size` 1024:
 ```sh
 $ poetry run tranz --palette electric --set max --set-palette sunset --no-date image -s 512 julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
 
-512x377 'electric' Julia w/ SET 'max', 10^2.630 magnitude...
+512 x 377 'electric' Julia w/ SET 'max', 10^2.630 magnitude...
 {[JULIA: (-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)] : [512, 377, AUTO] : max}
 
 Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 135.13px/s]

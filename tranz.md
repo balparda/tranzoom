@@ -593,9 +593,11 @@ Usage: tranz zoom auto [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │   f_height                   [F_HEIGHT]               Height of the frame in the imaginary plane; this can be a float (ex: "0.34") or a fraction of     │
 │                                                       ints (rational number, ex: "123/451") and the number will be fed directly to multi-precision      │
 │                                                       arithmetic so no precision is lost; default is None, i.e, the same as width                       │
-│   dest_magnification_10      [DEST_MAGNIFICATION_10]  Magnification magnitude to go through in the animation zoom; ATTENTION!! this is exponential      │
-│                                                       10**mag, so a value of 2.0 means 10**2 = 100x zoom; default is 1.00, i.e., 10.00x zoom            │
-│                                                                                                                                           │
+│   dest_magnification_10      [DEST_MAGNIFICATION_10]  Magnification magnitude to go through in the animation zoom; this can be a float (ex: "0.34") or  │
+│                                                       a fraction of ints (rational number, ex: "123/451") and the number will be fed directly to        │
+│                                                       multi-precision arithmetic so no precision is lost; -10000.0 ≤ mag ≤ 10000.0; ATTENTION!! this is │
+│                                                       exponential 10**mag, so a value of 2.0 means 10**2 = 100x zoom; default is 1, i.e., 10.00x zoom   │
+│                                                                                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --anim                                                             Type of animation to produce; possible values: 'gif', 'mp4'; default is     │
