@@ -302,6 +302,20 @@ class Frame(SerializingFractalObject):
     return s[0] * s[1]
 
   @property
+  def mag2(self) -> gmpy2.mpq:
+    """Magnification squared; OR area ratio. Has not gone through sqrt(): Exact.
+
+    DEFAULT_FRAMES[self.fractal].area / self.area i.e., WHOLE / this
+
+    You can use this to compute total magnification: sqrt( obj1.mag2 / obj2.mag2 )
+
+    Returns:
+      gmpy2.mpq: The magnification squared; OR The area ratio
+
+    """
+    return DEFAULT_FRAMES[self.fractal].area / self.area
+
+  @property
   def magnification(self) -> tuple[gmpy2.mpfr, float]:
     """Get frame magnification: How much "zoom" this frame has in relation to the whole set.
 
@@ -312,9 +326,7 @@ class Frame(SerializingFractalObject):
 
     """
     with PrecisionContext():
-      magnification: gmpy2.mpfr = cast(
-        'gmpy2.mpfr', gmpy2.sqrt(DEFAULT_FRAMES[self.fractal].area / self.area)
-      )
+      magnification: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(self.mag2))
       return (magnification, float(cast('gmpy2.mpfr', gmpy2.log10(magnification))))
 
   @property

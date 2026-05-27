@@ -154,12 +154,12 @@ class ZoomData(TypedDict):
     step_mag (float): (CACHE) video step scalar magnification (magnification per frame step)
     data_hash (str): (CACHE) hash of the video/GIF data; if we have this entry,
         we must have the hash!
-    tm (int | None): (CACHE) timestamp of rendered video/GIF creation; None if not saved
+    tm (int): (CACHE) timestamp of last rendered video/GIF creation
     rendered_path (str | None): (CACHE) path to video/GIF file; None if not saved
     frames (list[str]): ("CHILDREN") list of Frame hashes -> grandfather Frames; ordered by
         magnification ascending; len >=3
     markers (list[str]): ("CHILDREN") subset of frames entry: key Frame(s) for color
-        normalization; len >=1
+        normalization; len >=2 (first & last)
 
   Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
   Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
@@ -173,13 +173,13 @@ class ZoomData(TypedDict):
   fps: float  # = len(`frames`) / `zoom.duration`
   step_mag: float  # video step SCALAR magnification (total magnitude is in `zoom.mag`)
   data_hash: str  # hash of the video/GIF data = SHA-256('|'.join(data_hash for all frames))
-  tm: int | None  # timestamp of rendered video/GIF creation; None if not saved
+  tm: int  # timestamp of last rendered video/GIF creation
   rendered_path: str | None  # path to video/GIF file; None if not saved
 
   # "CHILDREN" would be the individual frames/images that compose the video;
   # we compute this from core data, so this could be "CACHE" too...
   frames: list[str]  # Frame hashes; ordered by magnification ascending; len >=3
-  markers: list[str]  # subset of frames entry: key Frame(s); len >=1
+  markers: list[str]  # subset of frames entry: key Frame(s); len >=2 (first & last)
 
 
 class _DBType(TypedDict):
@@ -682,6 +682,9 @@ class FractalDatabase:
     # return the new ImageData
     return img
 
+  def AddZoomToDB(self, zoom: image.ZoomParameters, zoom_data: ZoomData) -> None:
+    pass
+
   def CoreComputeImage(  # noqa: C901, PLR0912, PLR0915
     self,
     params: frame.ComputationParameters,
@@ -695,7 +698,7 @@ class FractalDatabase:
     *,
     require_img_obj: bool = True,
     force: bool = False,
-  ) -> tuple[image.Image | None, bytes, str, pathlib.Path]:
+  ) -> tuple[frame.ComputationParameters, image.Image | None, bytes, str, pathlib.Path]:
     """Compute a fractal image and return the result unsaved; the shared rendering primitive.
 
     This is the shared image computation primitive used by all rendering paths (static images,
@@ -725,7 +728,9 @@ class FractalDatabase:
       force (bool): If True, will force re-computation of the image even if it is found in the DB
 
     Returns:
-      tuple[image.Image, bytes, str, pathlib.Path]: A 4-tuple of:
+      tuple[frame.ComputationParameters, image.Image | None, bytes, str, pathlib.Path]: A 5-tuple:
+          - frame.ComputationParameters: The computation parameters used for the frame
+              (with actual depth if a sentinel was used)
           - image.Image: the computed fractal Image object
           - bytes: the final PNG bytes (with crosshair mark and sector overlay applied, if any)
           - str: the SHA-256 hash of the raw PNG before any post-processing overlays
@@ -802,7 +807,7 @@ class FractalDatabase:
           img_data = path.read_bytes()
           if not require_img_obj or (require_img_obj and img is not None):
             # we can end this: we have the image PNG on disk and img is as good as necessary
-            return (img, img_data, img_hash, full_path(img_hash))
+            return (params, img, img_data, img_hash, full_path(img_hash))
       else:
         # if we got here, we have the render parameters but no existing image on disk
         print_comm(
@@ -828,7 +833,7 @@ class FractalDatabase:
     # we could possibly already have the data from the disk?...
     if img_data and img_hash and not force:
       print_comm('[red]DB render[/]: Using image data from disk, skipping PNG render')
-      return (img, img_data, img_hash, full_path(img_hash))
+      return (params, img, img_data, img_hash, full_path(img_hash))
     # we got to here, so we have to render the PNG data from the image object and add overlay/mark;
     # hash is computed from the raw PNG before any post-processing overlays
     with timer.Timer(emit_log=False) as render_tmr:
@@ -862,7 +867,7 @@ class FractalDatabase:
       print_comm('')
       image.PrintITerm2(img_data)
     print_comm('')
-    return (img, img_data, img_hash, full_path(img_hash))
+    return (params, img, img_data, img_hash, full_path(img_hash))
 
 
 def _DBLabel(db: _DBType) -> str:

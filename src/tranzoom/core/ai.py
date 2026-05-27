@@ -145,7 +145,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
     else contextlib.nullcontext()
   )
   count: int = 1
-  try:  # noqa: PLR1702
+  try:  # noqa: PLR1702, PLW0717
     with ai_ctx as worker:
       # load model (skipped in manual mode; worker is None when manual=True)
       model_config: transai_ai.AIModelConfig | None = None
@@ -177,7 +177,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
       while True:
         count += 1
         # render the image for the current frame
-        _, img_data, _, full_path = db.CoreComputeImage(
+        params, _, img_data, _, full_path = db.CoreComputeImage(
           params, render, out, count, zoom_tm, max_threads, iterm, print_comm, force=force
         )
         print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')

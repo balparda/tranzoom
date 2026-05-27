@@ -481,14 +481,15 @@ AI_OUTPUT_REASON_FIELD_OPTION: typer.models.OptionInfo = typer.Option(
 
 # Animation Options
 ANIM_DEST_MAGNIFICATION_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
-  image.DEFAULT_DEST_MAGNIFICATION_10,
-  min=-image.MAX_ZOOM_MAGNIFICATION_10,
-  max=image.MAX_ZOOM_MAGNIFICATION_10,
+  image.DEFAULT_DEST_MAGNITUDE_10,
   help=(
     'Magnification magnitude to go through in the animation zoom; '
+    'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
+    'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
+    f'{-image.MAX_ZOOM_MAGNITUDE_10} ≤ mag ≤ {image.MAX_ZOOM_MAGNITUDE_10}; '
     'ATTENTION!! this is exponential 10**mag, so a value of 2.0 means 10**2 = 100x zoom; '
-    f'default is {image.DEFAULT_DEST_MAGNIFICATION_10:.2f}, '
-    f'i.e., {10**image.DEFAULT_DEST_MAGNIFICATION_10:.2f}x zoom'
+    f'default is {image.DEFAULT_DEST_MAGNITUDE_10}, '
+    f'i.e., {10 ** float(image.DEFAULT_DEST_MAGNITUDE_10):.2f}x zoom'
   ),
 )
 ANIM_DURATION_OPTION: typer.models.OptionInfo = typer.Option(
@@ -688,109 +689,6 @@ class TranZoomConfig(clibase.CLIConfig):
     logging.info(f'Saved config to "{self.appconfig.path}": {cnf}')
 
 
-def ProduceFractalImage(
-  db: frdb.FractalDatabase,
-  frm: frame.Frame,
-  config: TranZoomConfig,
-  *,
-  tm: int | None = None,
-  add_serial: int | None = None,
-  save_image: bool = True,
-  require_img_obj: bool = True,
-) -> tuple[image.Image | None, bytes, str, image.RenderParameters]:
-  """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
-
-  Args:
-    db (frdb.FractalDatabase): the fractal database instance to use
-    frm (frame.Frame): the frame to produce the image from; must be already validated and ready
-        for rendering
-    config (TranZoomConfig): the global configuration with all the options needed for rendering
-        and saving the image
-    tm (int | None): Optional timestamp to use for the date in the file name. If None, the
-        current time is used.
-    add_serial (int | None): Optional serial number to include in the file name for uniqueness;
-        if None, no serial number is included; if provided, it is formatted as a zero-padded
-        5-digit number between the date and hash.
-    save_image (bool): If True, will save the final image to disk; if False, the image will
-        not be saved; default is True.
-    require_img_obj (bool): If True, will require the image.Image object to be returned by the
-        method; if False, the image.Image object may be None; default is True
-
-  Returns:
-    tuple[image.Image, bytes, str, image.RenderParameters]: A tuple of
-        (image.Image object, raw PNG bytes, internal hash of the raw PNG, RenderParameters)
-
-  This is a high-level function that takes care of all the steps needed to produce the final image,
-  including:
-  - determining the image dimensions from the config
-  - logging the rendering parameters
-  - rendering the image from the frame using the fractal module
-  - converting the rendered image to PNG and getting its hash
-  - optionally adding a crosshair overlay if mark coordinates are given
-  - saving the image to disk with a name based on the date and hash
-  - optionally printing the image to iTerm2 if the corresponding option is set
-
-  """
-  # determine width and height
-  width: int
-  height: int
-  width, height = (
-    frm.PixelDimensionsFromSize(config.img_size)
-    if config.img_size
-    else (config.img_width, config.img_height)
-  )
-  params: frame.ComputationParameters = (
-    frame.ComputationParameters(
-      frm=frm, width=width, height=height, set_points=config.set_points, depth=config.max_iter
-    )
-    if config.max_iter
-    else frame.ComputationParameters(  # depth=default, not None
-      frm=frm, width=width, height=height, set_points=config.set_points
-    )
-  )
-  # add the mark? parse coordinates early to catch errors before expensive computation
-  mark_coords: tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]] | None = (
-    params.CoordsTupleToPixel(config.mark_coords) if config.mark_coords else None
-  )
-  # build render and output configuration objects
-  render: image.RenderParameters = image.RenderParameters(
-    escaped_pal=config.pal,
-    set_pal=None if config.set_points is None else config.set_pal,
-    mark_re=_MPQ_ZERO if mark_coords is None else mark_coords[0][0],
-    mark_im=_MPQ_ZERO if mark_coords is None else mark_coords[0][1],
-    mark_color=None if mark_coords is None else config.mark_color,
-    mark_width=config.mark_width,
-  )
-  out: image.ImageOutputConfig = image.ImageOutputConfig(
-    path=config.img_output_path,
-    use_date=config.img_use_date,
-    use_hash=config.img_use_hash,
-    prefix=config.img_path_prefix or DEFAULT_IMAGE_PREFIX[frm.fractal],
-  )
-  # compute the image via the unified core primitive
-  img: image.Image | None
-  raw_png: bytes
-  raw_hash: str
-  full_path: pathlib.Path
-  img, raw_png, raw_hash, full_path = db.CoreComputeImage(
-    params,
-    render,
-    out,
-    add_serial=add_serial,
-    tm=tm,
-    max_threads=config.max_threads,
-    iterm=config.iterm,
-    print_comm=config.console.print,
-    require_img_obj=require_img_obj,
-    force=config.img_force_redo,
-  )
-  # save the image to disk if requested
-  if save_image:
-    full_path.write_bytes(raw_png)
-    config.console.print(f'Saved to "{full_path}"\n')
-  return (img, raw_png, raw_hash, render)
-
-
 def MakeFrameFromCLIArgs(
   fractal: frame.Fractal,
   center_re: str,
@@ -854,6 +752,218 @@ def MakeFrameFromCLIArgs(
       ) from err2
   except Exception as err:  # this error we cannot forgive
     raise UsageError(f'Error: {center_re=}, {center_im=}, {f_width=}, {f_height=}') from err
+
+
+def MakeFrameFromConfig(
+  config: TranZoomConfig,
+  center_re: str,
+  center_im: str,
+  f_width: str,
+  f_height: str | None,
+) -> frame.Frame:
+  """Make a Frame object from the config, considering Mandelbrot of Julia.
+
+  Will use the config parameters:
+    - config.console.print (for error messages)
+    - config.fractal_type
+    - config.julia_re
+    - config.julia_im
+
+  Args:
+    config (TranZoomConfig): the global configuration with all the options needed for rendering
+    center_re (str): the real part of the center point, as a string to be parsed to multi-precision
+    center_im (str): the imaginary part of the center point, as a string to be parsed to
+        multi-precision
+    f_width (str): the width of the frame, as a string to be parsed to multi-precision
+    f_height (str | None): the height of the frame, as a string to be parsed to multi-precision,
+        or None
+
+  Returns:
+    frame.Frame: a Frame object ready for rendering
+
+  """
+  # create frame
+  frm: frame.Frame = MakeFrameFromCLIArgs(
+    config.fractal_type, center_re, center_im, f_width, f_height, config.console.print
+  )
+  # if it is a Julia, make the Julia point and add it to the frame
+  julia_re: gmpy2.mpq
+  julia_im: gmpy2.mpq
+  julia_re, julia_im = MakePointFromCLIArgs(config.julia_re, config.julia_im, config.console.print)
+  return (
+    frame.Frame.FromCenter(
+      frame.Fractal.JULIA,
+      *frm.center,
+      frm.size[0],
+      height=frm.size[1],
+      point_re=julia_re,
+      point_im=julia_im,
+    )
+    if config.fractal_type == frame.Fractal.JULIA
+    else frm
+  )
+
+
+def MakeComputationParameters(
+  frm: frame.Frame, config: TranZoomConfig
+) -> frame.ComputationParameters:
+  """Make a ComputationParameters/width/height object from a frame and the config.
+
+  Will use the Frame and:
+    - config.img_size
+    - config.img_width
+    - config.img_height
+    - config.set_points
+    - config.max_iter
+
+  Args:
+    frm (frame.Frame): the frame to make the parameters for; must be already validated and ready
+    config (TranZoomConfig): the global configuration with all the options needed for rendering
+
+  Returns:
+    frame.ComputationParameters: a ComputationParameters object
+
+  """
+  # determine width and height
+  width: int
+  height: int
+  width, height = (
+    frm.PixelDimensionsFromSize(config.img_size)
+    if config.img_size
+    else (config.img_width, config.img_height)
+  )
+  return (
+    frame.ComputationParameters(
+      frm=frm, width=width, height=height, set_points=config.set_points, depth=config.max_iter
+    )
+    if config.max_iter
+    else frame.ComputationParameters(  # depth=default, not None
+      frm=frm, width=width, height=height, set_points=config.set_points
+    )
+  )
+
+
+def MakeRenderParameters(
+  params: frame.ComputationParameters,
+  config: TranZoomConfig,
+) -> tuple[image.RenderParameters, image.ImageOutputConfig]:
+  """Make a RenderParameters/ImageOutputConfig object from the ComputationParameters and the config.
+
+  Will use the ComputationParameters/Frame and:
+    - config.pal
+    - config.set_pal
+    - config.set_points
+    - config.mark_coords
+    - config.mark_color
+    - config.mark_width
+    - config.img_output_path
+    - config.img_use_date
+    - config.img_use_hash
+    - config.img_path_prefix
+
+  Args:
+    params (frame.ComputationParameters): the computation parameters
+    config (TranZoomConfig): the global configuration with all the options needed
+
+  Returns:
+    tuple[image.RenderParameters, image.ImageOutputConfig]: a tuple of the RenderParameters
+        and ImageOutputConfig
+
+  """
+  # add the mark? parse coordinates early to catch errors before expensive computation
+  mark_coords: tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]] | None = (
+    params.CoordsTupleToPixel(config.mark_coords) if config.mark_coords else None
+  )
+  # build render and output configuration objects
+  render: image.RenderParameters = image.RenderParameters(
+    escaped_pal=config.pal,
+    set_pal=None if config.set_points is None else config.set_pal,
+    mark_re=_MPQ_ZERO if mark_coords is None else mark_coords[0][0],
+    mark_im=_MPQ_ZERO if mark_coords is None else mark_coords[0][1],
+    mark_color=None if mark_coords is None else config.mark_color,
+    mark_width=config.mark_width,
+  )
+  return (
+    render,
+    image.ImageOutputConfig(
+      path=config.img_output_path,
+      use_date=config.img_use_date,
+      use_hash=config.img_use_hash,
+      prefix=config.img_path_prefix or DEFAULT_IMAGE_PREFIX[params.frm.fractal],
+    ),
+  )
+
+
+def ProduceFractalImage(
+  db: frdb.FractalDatabase,
+  frm: frame.Frame,
+  config: TranZoomConfig,
+  *,
+  tm: int | None = None,
+  add_serial: int | None = None,
+  save_image: bool = True,
+  require_img_obj: bool = True,
+) -> tuple[image.Image | None, bytes, str, image.RenderParameters]:
+  """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
+
+  Args:
+    db (frdb.FractalDatabase): the fractal database instance to use
+    frm (frame.Frame): the frame to produce the image from; must be already validated and ready
+        for rendering
+    config (TranZoomConfig): the global configuration with all the options needed for rendering
+        and saving the image
+    tm (int | None): Optional timestamp to use for the date in the file name. If None, the
+        current time is used.
+    add_serial (int | None): Optional serial number to include in the file name for uniqueness;
+        if None, no serial number is included; if provided, it is formatted as a zero-padded
+        5-digit number between the date and hash.
+    save_image (bool): If True, will save the final image to disk; if False, the image will
+        not be saved; default is True.
+    require_img_obj (bool): If True, will require the image.Image object to be returned by the
+        method; if False, the image.Image object may be None; default is True
+
+  Returns:
+    tuple[image.Image, bytes, str, image.RenderParameters]: A tuple of
+        (image.Image object, raw PNG bytes, internal hash of the raw PNG, RenderParameters)
+
+  This is a high-level function that takes care of all the steps needed to produce the final image,
+  including:
+  - determining the image dimensions from the config
+  - logging the rendering parameters
+  - rendering the image from the frame using the fractal module
+  - converting the rendered image to PNG and getting its hash
+  - optionally adding a crosshair overlay if mark coordinates are given
+  - saving the image to disk with a name based on the date and hash
+  - optionally printing the image to iTerm2 if the corresponding option is set
+
+  """
+  # build parameters
+  params: frame.ComputationParameters = MakeComputationParameters(frm, config)
+  render: image.RenderParameters
+  out: image.ImageOutputConfig
+  render, out = MakeRenderParameters(params, config)
+  # compute the image via the unified core primitive
+  img: image.Image | None
+  raw_png: bytes
+  raw_hash: str
+  full_path: pathlib.Path
+  _, img, raw_png, raw_hash, full_path = db.CoreComputeImage(
+    params,
+    render,
+    out,
+    add_serial=add_serial,
+    tm=tm,
+    max_threads=config.max_threads,
+    iterm=config.iterm,
+    print_comm=config.console.print,
+    require_img_obj=require_img_obj,
+    force=config.img_force_redo,
+  )
+  # save the image to disk if requested
+  if save_image:
+    full_path.write_bytes(raw_png)
+    config.console.print(f'Saved to "{full_path}"\n')
+  return (img, raw_png, raw_hash, render)
 
 
 def MakePointFromCLIArgs(
