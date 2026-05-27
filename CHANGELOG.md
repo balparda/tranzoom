@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 - [Changelog](#changelog)
   - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
   - [1.6.0 - 2026-06-TBD](#160---2026-06-tbd)
+  - [1.5.2 - 2026-06-27](#152---2026-06-27)
   - [1.5.1 - 2026-06-26](#151---2026-06-26)
   - [1.5.0 - 2026-05-26](#150---2026-05-26)
   - [1.4.1 - 2026-05-21](#141---2026-05-21)
@@ -42,7 +43,18 @@ This project follows a pragmatic versioning approach:
   - TBD
 
 - Fixed
-  - TBC
+  - TBD
+
+## 1.5.2 - 2026-06-27
+
+- Added
+  - TBD
+
+- Changed
+  - TBD
+
+- Fixed
+  - TBD
 
 ## 1.5.1 - 2026-06-26
 
