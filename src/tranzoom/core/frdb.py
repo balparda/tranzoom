@@ -864,6 +864,11 @@ class FractalDatabase:
           img_data = path.read_bytes()
           if not require_img_obj or (require_img_obj and img is not None):
             # we can end this: we have the image PNG on disk and img is as good as necessary
+            # print inline in iTerm2 if requested
+            if iterm:
+              print_comm('')
+              image.PrintITerm2(img_data)
+            print_comm('')
             return (params, img, img_data, img_hash, full_path(img_hash))
       else:
         # if we got here, we have the render parameters but no existing image on disk
@@ -889,7 +894,13 @@ class FractalDatabase:
         _, cp_data = self.AddComputationToDB(params, img_tm, img_path)  # DB only
     # we could possibly already have the data from the disk?...
     if img_data and img_hash and not force:
+      # we can skip the render and just return the data we have on disk
       print_comm('[red]DB render[/]: Using image data from disk, skipping PNG render')
+      # print inline in iTerm2 if requested
+      if iterm:
+        print_comm('')
+        image.PrintITerm2(img_data)
+      print_comm('')
       return (params, img, img_data, img_hash, full_path(img_hash))
     # we got to here, so we have to render the PNG data from the image object and add overlay/mark;
     # hash is computed from the raw PNG before any post-processing overlays

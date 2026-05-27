@@ -308,9 +308,9 @@ def _MoveCenter(  # noqa: C901
   frame_width, frame_height = frm.size
   width_step: gmpy2.mpq = frame_width * frame.DEFAULT_MPQ_STEP_DIRECT
   height_step: gmpy2.mpq = frame_height * frame.DEFAULT_MPQ_STEP_DIRECT
-  w_diagonal_step: gmpy2.mpq = width_step * frame.DEFAULT_MPQ_STEP_DIAGONAL
-  h_diagonal_step: gmpy2.mpq = height_step * frame.DEFAULT_MPQ_STEP_DIAGONAL
-  # now move the center according to the direction, if requested
+  # now move the center according to the direction, if requested;
+  # we used to do w/h_diagonal_step = width/height_step * frame.DEFAULT_MPQ_STEP_DIAGONAL
+  # but since we have a square grid, the diagonal steps are the same as the direct steps!
   best: queries.SectorCompleteEvaluation | queries.SectorEvaluation = response.BestEvaluation(
     target_weight=target_weight
   )
@@ -320,23 +320,23 @@ def _MoveCenter(  # noqa: C901
   elif direction == 'N':
     center_mpq_im += height_step
   elif direction == 'NE':
-    center_mpq_re += w_diagonal_step
-    center_mpq_im += h_diagonal_step
+    center_mpq_re += width_step  # w_diagonal_step
+    center_mpq_im += height_step  # h_diagonal_step
   elif direction == 'E':
     center_mpq_re += width_step
   elif direction == 'SE':
-    center_mpq_re += w_diagonal_step
-    center_mpq_im -= h_diagonal_step
+    center_mpq_re += width_step  # w_diagonal_step
+    center_mpq_im -= height_step  # h_diagonal_step
   elif direction == 'S':
     center_mpq_im -= height_step
   elif direction == 'SW':
-    center_mpq_re -= w_diagonal_step
-    center_mpq_im -= h_diagonal_step
+    center_mpq_re -= width_step  # w_diagonal_step
+    center_mpq_im -= height_step  # h_diagonal_step
   elif direction == 'W':
     center_mpq_re -= width_step
   elif direction == 'NW':
-    center_mpq_re -= w_diagonal_step
-    center_mpq_im += h_diagonal_step
+    center_mpq_re -= width_step  # w_diagonal_step
+    center_mpq_im += height_step  # h_diagonal_step
   else:
     raise Error(f'invalid direction: {direction!r}')
   print_comm(f'[yellow]MODEL: move [bold]{best.sector}/{direction}-wards[/][/] (in {tmr})')

@@ -58,7 +58,7 @@ _MPQ_ONE: gmpy2.mpq = gmpy2.mpq('1')
 _MPQ_SQRT_TWO_NOT_EXACT: gmpy2.mpq = gmpy2.mpq('99/70')  # good enough for our purposes
 _MPQ_TWO: gmpy2.mpq = gmpy2.mpq('2')
 # constant to divide frame size when zooming one step
-DEFAULT_MPQ_ZOOM: gmpy2.mpq = gmpy2.mpq('5/3')  # 1.67
+DEFAULT_MPQ_ZOOM: gmpy2.mpq = gmpy2.mpq('2')  # 2x
 # fraction of frame size to move when moving in a cardinal direction
 DEFAULT_STEP_DIRECT: int = 3
 DEFAULT_MPQ_STEP_DIRECT: gmpy2.mpq = gmpy2.mpq(f'1/{DEFAULT_STEP_DIRECT}')
