@@ -624,6 +624,7 @@ class ZoomParameters(frame.SerializingFractalObject):
     # reproduce the zoom run with full precision
     frm: frame.Frame = self.img.frm
     max_denominator: int
+    max_error_dim: gmpy2.mpq = _MPQ_ZERO
     with timer.Timer('frame generation'):
       # float magnification tracking: avoids 30k-bit precision mpfr computation in every loop step;
       # frm.magnification[1] is only used to compute max_denominator for limit_denominator, so
@@ -681,6 +682,7 @@ class ZoomParameters(frame.SerializingFractalObject):
             f'and {float(gmpy2.mpq(100) * error_y):.6f}% '
             'different in height, which is above the tolerated error threshold. This is a bug!'
           )
+        max_error_dim = max(max_error_dim, error_x, error_y)
     # done adding frames, final check: directly compute the actual magnification achieved
     # to make sure the accumulated error is within the tolerated threshold
     actual_mag: gmpy2.mpfr = cast(
@@ -689,23 +691,30 @@ class ZoomParameters(frame.SerializingFractalObject):
     if (mag_error := abs(actual_mag - self.mag) / self.mag) > MAX_TOLERATED_TOTAL_MAG_ERROR:
       raise Error(
         'the actual magnification achieved by zooming in the frame is '
-        f'{float(actual_mag):.4f}, which is {100.0 * float(mag_error):.4f}% different '
-        f'from the intended {self.mag} ({float(self.mag):.4f}). This means the gmpy2.mpq needs '
+        f'{float(actual_mag):.6f}, which is {100.0 * float(mag_error):e}% different '
+        f'from the intended {self.mag} ({float(self.mag):.6f}). This means the gmpy2.mpq needs '
         'more precision for conversion. This is a bug!'
       )
+    logging.info(
+      f'Generated {len(all_frames)} REGULAR Frames for the zoom, '
+      f'max frame error {100.0 * float(max_error_dim):e}%, '
+      f'final magnification error {100.0 * float(mag_error):e}% '
+      f'(actual {float(actual_mag):.6f} vs intended {float(self.mag):.6f})'
+    )
     # we finished the frame generation, now we pick them special ones
     # we don't care about the number of frames, we care about a fixed zoom magnitude
+    n_marker_steps: int = int(
+      cast('gmpy2.mpz', max(math.floor(self.mag / MAGNITUDE_PER_FRAME_MARKER), 1))
+    )
+    if n_marker_steps <= 1 or self.n_frames < 5:  # noqa: PLR2004
+      # if we only have 2 or fewer markers (1 step), just use the first and last frames as
+      # markers; same thing for few frames: [1st, X, Y, Z, last] is the smallest degenerate
+      # case where it is worth having a "marker", frame Y, and return [1st, Y, last]
+      logging.info('No new marker frames needed, will use [first, last]')
+      return (all_frames, [all_frames[0], all_frames[-1]])
+    # we will need more markers; start from the first and find the "ideal" stops
     with timer.Timer('marker generation'):
-      n_marker_steps: gmpy2.mpz = cast(
-        'gmpy2.mpz', max(math.floor(self.mag / MAGNITUDE_PER_FRAME_MARKER), 1)
-      )
-      if n_marker_steps <= 1 or self.n_frames < 5:  # noqa: PLR2004
-        # if we only have 2 or fewer markers (1 step), just use the first and last frames as
-        # markers; same thing for few frames: [1st, X, Y, Z, last] is the smallest degenerate
-        # case where it is worth having a "marker", frame Y, and return [1st, Y, last]
-        return (all_frames, [all_frames[0], all_frames[-1]])
-      # we will need more markers; start from the first and find the "ideal" stops
-      marker_mag: gmpy2.mpq = self.mag / n_marker_steps
+      marker_mag: gmpy2.mpq = self.mag / gmpy2.mpq(n_marker_steps)
       marker_mag = gmpy2.mpq(
         gmpy2.exp10(marker_mag)
       )  # mpq -> mpfr -> mpq unavoidable, unfortunately
@@ -721,7 +730,7 @@ class ZoomParameters(frame.SerializingFractalObject):
       idx: int
       delta_log10: float
       max_min_mag_float: float = 0.0
-      for i in range(int(n_marker_steps)):
+      for i in range(n_marker_steps):
         # advance ideal marker magnification analytically (no growing-denominator mpq computation)
         ideal_marker_mag_log10 += marker_mag_step_log10
         # find the actual frame closest to the ideal magnification using O(log n) bisect search
@@ -760,8 +769,12 @@ class ZoomParameters(frame.SerializingFractalObject):
     if max_min_mag_float > MAX_TOLERATED_MARKER_MAG_ERROR:
       raise Error(
         f'Marker frames are not close enough to the ideal frames; bug! report. '
-        f'Maximum deviation in mag2 is {100.0 * max_min_mag_float:.4f}%, which is a bug! report'
+        f'Maximum deviation in mag2 is {100.0 * max_min_mag_float:.6f}%, which is a bug! report'
       )
+    logging.info(
+      f'Generated {len(marker_frames) - 2} non-trivial MARKER Frames for the zoom, '
+      f'max frame deviation from ideal {100.0 * float(max_min_mag_float):.6f}%'
+    )
     return (all_frames, marker_frames)
 
 
@@ -1660,7 +1673,7 @@ def _ImageNormalizeAndValidate(img_bytes: bytes, width: int, height: int) -> PIL
 
 
 def WriteAnimatedGIF(
-  frames: list[bytes],
+  frames: abc.Iterable[bytes],
   path: pathlib.Path,
   width: int,
   height: int,
@@ -1673,7 +1686,9 @@ def WriteAnimatedGIF(
   """Write PIL Image frames to an animated GIF.
 
   Args:
-    frames (list[bytes]): An iterable of PIL Image frames to include in the GIF.
+    frames (abc.Iterable[bytes]): An iterable (or generator) of PIL Image frames to include in
+        the GIF. Frames are consumed lazily one at a time, so they do not need to all fit in
+        memory at once.
     path (pathlib.Path): The file path to save the GIF.
     width (int): The width of the GIF frames.
     height (int): The height of the GIF frames.
@@ -1691,8 +1706,6 @@ def WriteAnimatedGIF(
   # check inputs
   if not (MIN_FRAMES <= n_frames <= MAX_FRAMES):
     raise Error(f'n_frames must be between {MIN_FRAMES} and {MAX_FRAMES}, got {n_frames}')
-  if not frames or len(frames) != n_frames:
-    raise Error('frames list does not match the expected number of frames')
   if not (frame.MIN_IMAGE_SIZE <= width <= frame.MAX_IMAGE_SIZE) or not (
     frame.MIN_IMAGE_SIZE <= height <= frame.MAX_IMAGE_SIZE
   ):
@@ -1707,14 +1720,27 @@ def WriteAnimatedGIF(
   fps: float = n_frames / duration
   if not (MIN_FPS <= fps <= MAX_FPS):
     raise Error(f'FPS={fps:.2f} must be between {MIN_FPS:.2f} and {MAX_FPS:.2f}')
-  # save the whole GIF, normalizing each frame
-  img0: PILImage.Image = _ImageNormalizeAndValidate(frames[0], width, height)
+  # pull the first frame from the iterator; remaining frames are consumed lazily via a generator
+  frames_iter: abc.Iterator[bytes] = iter(frames)
+  try:
+    first_frame: bytes = next(frames_iter)
+  except StopIteration:
+    raise Error('frames iterable is empty')  # noqa: B904
+  frame_count: list[int] = [1]  # mutable container so the nested generator can mutate it
+
+  def _RemainingFrames() -> abc.Iterator[PILImage.Image]:
+    for frm in frames_iter:
+      frame_count[0] += 1
+      yield _ImageNormalizeAndValidate(frm, width, height)
+
+  # save the whole GIF, normalizing each frame; PIL will iterate _RemainingFrames() lazily to save
+  img0: PILImage.Image = _ImageNormalizeAndValidate(first_frame, width, height)
   img0.save(
     # https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif
     path,
     save_all=True,
     # append without repeating the first frame, which is already saved as img0
-    append_images=[_ImageNormalizeAndValidate(f, width, height) for f in frames[1:]],
+    append_images=_RemainingFrames(),
     duration=round(1000.0 * duration / n_frames),  # duration in milliseconds per frame
     loop=loop,
     disposal=1,  # 1 == do not dispose, overwrite; more efficient b/c we don't have any transparency
@@ -1723,6 +1749,9 @@ def WriteAnimatedGIF(
     # GIF comment field can store arbitrary bytes, we use it to store JSON metadata
     comment=json.dumps(meta).encode('utf-8') if meta is not None else None,
   )
+  # done, check that the frame count matches n_frames
+  if frame_count[0] != n_frames:
+    raise Error(f'frames generator produced {frame_count[0]} frames, expected {n_frames}')
 
 
 def WriteVideoMP4(
@@ -1738,7 +1767,9 @@ def WriteVideoMP4(
   """Write PIL Image frames to an MP4 video using H.264, the most broadly compatible video format.
 
   Args:
-    frames (abc.Iterable[bytes]): An iterable of PIL Image frames to include in the video.
+    frames (abc.Iterable[bytes]): An iterable (or generator) of PIL Image frames to include in
+        the video. Frames are consumed lazily one at a time, so they do not need to all fit in
+        memory at once.
     path (pathlib.Path): The file path to save the video.
     width (int): The width of the video frames.
     height (int): The height of the video frames.

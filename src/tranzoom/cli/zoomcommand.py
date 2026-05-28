@@ -273,7 +273,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   )
   all_frames: list[frame.Frame]
   all_markers: list[frame.Frame]
-  all_frames, all_markers = zoom_params.Frames()  # last thing that gould go boom!
+  all_frames, all_markers = zoom_params.Frames()  # last thing that could go boom!
   # we should be good to go, all options check out; log and warn if needed
   config.console.print(
     f'\n{params.width} x {params.height} {render.escaped_pal.value!r} '
