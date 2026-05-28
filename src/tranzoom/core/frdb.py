@@ -297,7 +297,8 @@ class FractalDatabase:
           it will save as a compressed file; NOTE: if you provide an AES key, the DB will always be
           compressed regardless of this option
       format_json (bool): (default True) Whether to format the JSON output with indentation
-          for readability.
+          for readability; NOTE: if an AES key is provided, this is always treated as False
+          (compact JSON) to avoid leaking whitespace patterns before encryption.
 
     Raises:
       Error: if another instance of FractalDatabase is already open
@@ -310,7 +311,7 @@ class FractalDatabase:
     self._key: aes.AESKey | None = aes_key
     self._safe_save: bool = safe_save
     self._compress_save: bool = compress_save or (aes_key is not None)  # always compress if encrypt
-    self._format_json: bool = format_json
+    self._format_json: bool = format_json and (aes_key is None)  # never pretty-print if encrypting
     self._db: _DBType = _DBTypeFactory()  # always populate the variable for safety and sanity
     self._closed: bool = False  # True once Close() / __exit__ has been called
     self._open = timer.Timer('FractalDatabase', emit_log=False)

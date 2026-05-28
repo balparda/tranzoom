@@ -172,6 +172,8 @@ Starting with version 1.4.0, tranZoom can render animated GIF and MP4 zoom anima
 
 Starting with version 1.5.0, the fractal renderer uses **smooth coloring**: each exterior pixel stores both an integer escape count `n` and a fractional value `nu ∈ [0, 1)` derived from the normalized iteration count formula, packed into 8 bytes per pixel. This eliminates discrete color bands and produces smooth gradients at all zoom depths. The database now caches both the raw computed pixel data and the rendered PNGs, so revisiting a frame or re-rendering with a new palette is fast — the expensive fractal computation is only performed once.
 
+The tool can save all computations to a local DB. If allowed, it will use these saved computations to save time in any new computation. This DB can be encrypted.
+
 ### What this tool is not
 
 - Not a real-time / interactive fractal explorer (rendering is intentionally CPU-intensive for correctness at depth)
@@ -394,6 +396,7 @@ Available subgroup / command combinations:
 | `--iterm`/`--no-iterm` | Print image inline in iTerm2 (macOS + iTerm2 only) | off |
 | `--use-db`/`--no-use-db` | Enable/disable the fractal DB for this invocation; overrides the `use_db` config setting | config value / False |
 | `--readonly-db`/`--no-readonly-db` | Open the DB in read-only mode (reads allowed, no writes or saves) | `--no-readonly-db` |
+| `--pass` | DB encryption password; omit for no encryption; `--pass ""` prompts securely (hidden input); `--pass "pwd"` passes inline (visible in shell history) | None (no encryption) |
 | `--palette` | Color palette for exterior (escaped) pixels; one of `sahara`, `lava`, `electric`, `sunset`, `aurora`, `plasma`, `forest`, `coral`, `gold`, `toxic`, `iris`, `ember`, `rgrayscale`, `grayscale` | `sahara` |
 | `--set-palette` | Color palette for interior Set points (used only when `--set` is given) | `rgrayscale` |
 | `--set` | Algorithm for interior Set point coloring; one of `min`, `max`, `angle`, `imaginary`; omit to keep interior black | None |

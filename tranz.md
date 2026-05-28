@@ -37,6 +37,23 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                     be readable; default is False, a larger, readable   │
 │                                                                                                     file; this option can also be loaded from the disk  │
 │                                                                                                     config, but if given should override the config     │
+│ --pass                                           TEXT                                               DB password to encrypt the local DB and computation │
+│                                                                                                     data; do NOT provide it for no encryption           │
+│                                                                                                     (DEFAULT); provide it empty ("") for terminal       │
+│                                                                                                     password input, i.e., `--pass ""` will prompt the   │
+│                                                                                                     user for a password, and this is safer because the  │
+│                                                                                                     password will not show in the shell history; your   │
+│                                                                                                     third option is to provide the password directly in │
+│                                                                                                     the CLI, i.e., `--pass "my.password"`, but this is  │
+│                                                                                                     not recommended unless you are calling the CLI from │
+│                                                                                                     a script and have other means to protect the        │
+│                                                                                                     password, because the password will be visible in   │
+│                                                                                                     the shell history and process list; the password    │
+│                                                                                                     provided by CLI or by user input will never be      │
+│                                                                                                     saved/stored anywhere, not even in memory; NOTE: if │
+│                                                                                                     you encrypt your data, it WILL be compressed, i.e., │
+│                                                                                                     the `--db-compression` option will be ignored and   │
+│                                                                                                     treated as True                                     │
 │ --out                 -o                         DIRECTORY                                          The local output root directory path, ex:           │
 │                                                                                                     "~/foo/bar/"; if not given, the image will be saved │
 │                                                                                                     in the current working directory                    │
@@ -431,7 +448,8 @@ Usage: tranz image read [OPTIONS] IMAGE_PATH
 │ *    image_path      FILE  The local input file path, ex: "~/foo/bar/file.png"                                                                │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --help          Show this message and exit.                                                                                                             │
+│ --create-clean-copy    --no-create-clean-copy                                                                            │
+│ --help                                             Show this message and exit.                                                                          │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 

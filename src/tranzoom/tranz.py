@@ -145,7 +145,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   # password
   aes_key: aes.AESKey | None = None
   if password is not None:
-    # we will have some sort os password...
+    # we will have some sort of password...
     while not password.strip():
       # in this case we know the user want to give it as input!
       password = console.input(

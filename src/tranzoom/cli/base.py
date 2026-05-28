@@ -183,8 +183,8 @@ DB_PASSWORD_OPTION: typer.models.OptionInfo = typer.Option(
     '`--pass "my.password"`, but this is not recommended unless you are calling the CLI '
     'from a script and have other means to protect the password, because the password will '
     'be visible in the shell history and process list; '
-    'the password provided by CLI or by user input will never be saved/stored anywhere, '
-    'not even in memory; NOTE: if you encrypt your data, it WILL be compressed, i.e., '
+    'the password provided by CLI or by user input will never be persisted to disk or logs; '
+    'NOTE: if you encrypt your data, it WILL be compressed, i.e., '
     'the `--db-compression` option will be ignored and treated as True'
   ),
 )

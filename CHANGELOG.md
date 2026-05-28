@@ -39,6 +39,7 @@ This project follows a pragmatic versioning approach:
 - Added
   - **`--readonly-db/--no-readonly-db` global flag** (`tranz.py`, `base.py`): new CLI flag to open the fractal DB in read-only mode (reads are allowed but no writes or saves occur); previously `db_read_only` was always `False` at the CLI level and was only settable programmatically.
   - **Marker frames for zoom animations** (`image.py`, `zoomcommand.py`, `frdb.py`): `ZoomParameters.Frames()` now returns a `tuple[list[Frame], list[Frame]]` — `(all_frames, marker_frames)` — where `marker_frames` is a subset of `all_frames` placed at regular 10× magnification intervals using an O(log n) bisect-based search; these replace the old TODO placeholder `[first, last]` and are stored in the DB via `AddZoomToDB`.
+  - **`--pass` global flag for DB encryption** (`tranz.py`, `base.py`, `frdb.py`): new CLI option to AES-encrypt the local fractal DB and computation data; omit for no encryption; `--pass ""` triggers a secure hidden-input prompt (password not visible in shell history); `--pass "pwd"` passes inline (convenient for scripts, but visible in process list); when encryption is active, compression is always enabled regardless of `--db-compression`; opening an encrypted DB without `--pass` now raises a descriptive error instead of a cryptic decode failure.
 
 - Changed
   - **`ZoomParameters.Frames()` return type** (`image.py`): changed from `list[frame.Frame]` to `tuple[list[frame.Frame], list[frame.Frame]]`; callers now receive `(all_frames, marker_frames)`.
