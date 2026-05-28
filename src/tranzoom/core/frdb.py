@@ -294,7 +294,8 @@ class FractalDatabase:
           DB file before writing, to prevent data loss from clobbering; if False, it will
           overwrite the file directly
       compress_save (bool): (default False) Whether to compress the DB file when saving; if True,
-          it will save as a compressed file
+          it will save as a compressed file; NOTE: if you provide an AES key, the DB will always be
+          compressed regardless of this option
       format_json (bool): (default True) Whether to format the JSON output with indentation
           for readability.
 
@@ -308,7 +309,7 @@ class FractalDatabase:
     self._read_only: bool = read_only
     self._key: aes.AESKey | None = aes_key
     self._safe_save: bool = safe_save
-    self._compress_save: bool = compress_save
+    self._compress_save: bool = compress_save or (aes_key is not None)  # always compress if encrypt
     self._format_json: bool = format_json
     self._db: _DBType = _DBTypeFactory()  # always populate the variable for safety and sanity
     self._closed: bool = False  # True once Close() / __exit__ has been called
@@ -321,21 +322,37 @@ class FractalDatabase:
       FractalDatabase._CONTEXT_LOCK.release()  # don't leak the lock if init fails
       self._closed = True
       raise
+    logging.info(
+      f'FractalDatabase initialized: {self.label}, {self._use_db=}, {self._read_only=}, '
+      f'{"ENCRYPTED, " if self._key else ""}{self._safe_save=}, '
+      f'{self._compress_save=}, {self._format_json=}'
+    )
 
   def _InitLoad(self) -> None:
-    """Load the database from disk (or create a new one). Called only from __init__()."""
+    """Load the database from disk (or create a new one). Called only from __init__().
+
+    Raises:
+      Error: if the DB file is possibly encrypted and no AES key is provided
+      UnicodeDecodeError: on error
+
+    """
     if not self._use_db:
       logging.warning('use_db is False: will not load DB and will work as if DB does not exist!')
       return
     with _DB_DISK_LOCK:  # ensure thread-safe load operations
       if self._path.exists():
-        self._db = cast(
-          '_DBType',
-          self._config.DeSerialize(
-            config_name=_DB_FILE_NAME, decryption_key=self._key, unpickler=key.UnpickleJSON
-          ),
-        )
-        logging.info(f'Loaded DB from "{self._path}": {self.label}')
+        try:
+          self._db = cast(
+            '_DBType',
+            self._config.DeSerialize(
+              config_name=_DB_FILE_NAME, decryption_key=self._key, unpickler=key.UnpickleJSON
+            ),
+          )
+          logging.info(f'Loaded DB from "{self._path}": {self.label}')
+        except UnicodeDecodeError as err:
+          if 'invalid start byte' in str(err):
+            raise Error('This is possibly an ENCRYPTED DB file: use option `--pass`?') from err
+          raise
       else:
         logging.warning(f'DB file not found, will work in "{self._config.dir}", {self.label}')
     if self._read_only:

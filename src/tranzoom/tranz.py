@@ -12,6 +12,7 @@ import typer
 from rich import console as rich_console
 from transai import transai
 from transcrypto.cli import clibase
+from transcrypto.core import aes
 from transcrypto.utils import config as app_config
 from transcrypto.utils import logging as cli_logging
 
@@ -101,6 +102,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   readonly_db: bool = base.READONLY_DB_OPTION,  # type: ignore[assignment]
   db_path: pathlib.Path | None = base.DB_PATH_OPTION,  # type: ignore[assignment]
   db_compress: bool | None = base.USE_DB_COMPRESSION_OPTION,  # type: ignore[assignment]
+  password: str | None = base.DB_PASSWORD_OPTION,  # type: ignore[assignment]
   img_output_path: pathlib.Path | None = base.IMAGE_PATH_OUTPUT_OPTION,  # type: ignore[assignment]
   img_path_prefix: str | None = base.IMAGE_PREFIX_OPTION,  # type: ignore[assignment]
   img_use_date: bool = base.IMAGE_INCLUDE_DATE_OPTION,  # type: ignore[assignment]
@@ -140,6 +142,19 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   appconfig: app_config.AppConfig = app_config.InitConfig(  # this always has the path
     __app__, 'config.bin', fixed_dir=None if db_path is None else db_path.expanduser().resolve()
   )
+  # password
+  aes_key: aes.AESKey | None = None
+  if password is not None:
+    # we will have some sort os password...
+    while not password.strip():
+      # in this case we know the user want to give it as input!
+      password = console.input(
+        '[bold magenta]Enter DB password (input will be hidden):[/] ', password=True
+      ).strip()
+    aes_key = aes.AESKey.FromStaticPassword(password)
+    password = '<wipe>'  # noqa: S105  # just to overwrite the variable for safety
+    del password  # be nice and delete the password variable immediately
+  # create structure
   tzc: base.TranZoomConfig = base.TranZoomConfig(
     console=console,
     verbose=verbose,
@@ -153,6 +168,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     use_db=False,  # sentinel only: will load from config below!
     db_read_only=readonly_db,
     db_compress=False,  # sentinel only: will load from config below!
+    aes_key=aes_key,
     pal=pal,
     set_pal=set_pal,
     set_points=set_points,

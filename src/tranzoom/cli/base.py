@@ -14,6 +14,7 @@ import click
 import gmpy2
 import typer
 from transcrypto.cli import clibase
+from transcrypto.core import aes
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
@@ -167,6 +168,24 @@ USE_DB_COMPRESSION_OPTION: typer.models.OptionInfo = typer.Option(
     'False means do not use it and file will be readable; '
     'default is False, a larger, readable file; '
     'this option can also be loaded from the disk config, but if given should override the config'
+  ),
+)
+DB_PASSWORD_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '--pass',
+  help=(
+    'DB password to encrypt the local DB and computation data; '
+    'do NOT provide it for no encryption (DEFAULT); '
+    'provide it empty ("") for terminal password input, i.e., '
+    '`--pass ""` will prompt the user for a password, and this is safer because the '
+    'password will not show in the shell history; '
+    'your third option is to provide the password directly in the CLI, i.e., '
+    '`--pass "my.password"`, but this is not recommended unless you are calling the CLI '
+    'from a script and have other means to protect the password, because the password will '
+    'be visible in the shell history and process list; '
+    'the password provided by CLI or by user input will never be saved/stored anywhere, '
+    'not even in memory; NOTE: if you encrypt your data, it WILL be compressed, i.e., '
+    'the `--db-compression` option will be ignored and treated as True'
   ),
 )
 IMAGE_FORCE_REDO_OPTION: typer.models.OptionInfo = typer.Option(
@@ -627,6 +646,7 @@ class TranZoomConfig(clibase.CLIConfig):
   use_db: bool
   db_read_only: bool
   db_compress: bool
+  aes_key: aes.AESKey | None
   pal: palette.Palette
   set_pal: palette.Palette
   set_points: frame.SetHighlightAlgorithm | None
@@ -666,12 +686,14 @@ class TranZoomConfig(clibase.CLIConfig):
       frdb.FractalDatabase: an instance of the fractal database ready to be used
 
     """
+    compress: bool = self.db_compress or (self.aes_key is not None)  # always compress on encrypt
     return frdb.FractalDatabase(
       self.appconfig,
       use_db=self.use_db,
       read_only=self.db_read_only,
-      compress_save=self.db_compress,  # either compress unreadable or not compress readable
-      format_json=not self.db_compress,
+      aes_key=self.aes_key,
+      compress_save=compress,  # either compress unreadable or not compress readable
+      format_json=not compress,
     )
 
   def GetConfig(self) -> ConfigType:

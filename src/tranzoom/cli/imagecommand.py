@@ -181,6 +181,7 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
   *,
   ctx: click.Context,
   image_path: pathlib.Path = base.IMAGE_PATH_INPUT_ARGUMENT,  # type: ignore[assignment]
+  create_clean_copy: bool = False,  # TODO: add command "clean" to create a clean copy of the image without metadata, for sharing
 ) -> None:
   config: base.TranZoomConfig = ctx.obj
   # read image
