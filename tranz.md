@@ -20,6 +20,10 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                     means do not use it; default is False; this option  │
 │                                                                                                     can also be loaded from the disk config, but if     │
 │                                                                                                     given should override the config                    │
+│ --readonly-db             --no-readonly-db                                                          Use local DB in readonly mode? True means DB may be │
+│                                                                                                     read from but not altered; default is False, i.e.,  │
+│                                                                                                     fully functional read+write DB                      │
+│                                                                                                                                │
 │ --db-path             -d                         DIRECTORY                                          The local DB root directory path, ex: "~/foo/bar/"; │
 │                                                                                                     if not given (DEFAULT), the DB will be saved in the │
 │                                                                                                     current app config directory, i.e.: on MacOS this   │
