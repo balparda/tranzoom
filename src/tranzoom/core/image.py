@@ -603,7 +603,7 @@ class ZoomParameters(frame.SerializingFractalObject):
       raise Error(f'ZoomParameters {params.sha!r} does not match expected {check_hash!r}')
     return params
 
-  def Frames(self) -> tuple[list[frame.Frame], list[frame.Frame]]:  # noqa: C901, PLR0914
+  def Frames(self) -> tuple[list[frame.Frame], list[frame.Frame]]:  # noqa: C901, PLR0912, PLR0914, PLR0915
     """Get the Frames. Could be a property, but is a method to remind this is an expensive-ish call.
 
     Returns:
@@ -624,50 +624,63 @@ class ZoomParameters(frame.SerializingFractalObject):
     # reproduce the zoom run with full precision
     frm: frame.Frame = self.img.frm
     max_denominator: int
-    for i in range(self.n_steps):
-      # keep frm full precision and iterate
-      frm = frame.Frame.FromCenter(
-        frm.fractal,
-        *frm.center,
-        frm.size[0] / mpq_mag,  # these mpq will get HUGE: the reason we keep them in check below
-        height=frm.size[1] / mpq_mag,  # these mpq will get HUGE
-        point_re=frm.point_re,
-        point_im=frm.point_im,
-      )
-      if i and not i % 10:
-        # we have to keep the mpq in check, otherwise they will get too big
-        max_denominator = 10_000_000 * (10 ** math.ceil(frm.magnification[1]))
+    with timer.Timer('frame generation'):
+      # float magnification tracking: avoids 30k-bit precision mpfr computation in every loop step;
+      # frm.magnification[1] is only used to compute max_denominator for limit_denominator, so
+      # a float approximation is precise enough (error is << MAX_TOLERATED_FRAME_MAG_ERROR)
+      mag_log10: float = self.img.frm.magnification[1]  # log10 magnification of the initial frame
+      mag_step: float = float(self.mag_per_step)  # log10 magnification increment per step
+      cur_mag_log10: float  # current step's approximate log10 magnification, updated each iteration
+      for i in range(self.n_steps):
+        # compute the current expected log10 magnification analytically (cheap float operation)
+        cur_mag_log10 = mag_log10 + (i + 1) * mag_step
+        # keep frm full precision and iterate
         frm = frame.Frame.FromCenter(
           frm.fractal,
           *frm.center,
-          frm.size[0].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
-          height=frm.size[1].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+          frm.size[0] / mpq_mag,  # these mpq will get HUGE: the reason we keep them in check below
+          height=frm.size[1] / mpq_mag,  # these mpq will get HUGE
           point_re=frm.point_re,
           point_im=frm.point_im,
         )
-      # make a less aggressive version of the zoom
-      max_denominator = 100 * (10 ** math.ceil(frm.magnification[1]))
-      reduced_frm = frame.Frame.FromCenter(
-        frm.fractal,
-        *frm.center,
-        frm.size[0].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
-        height=frm.size[1].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
-        point_re=frm.point_re,
-        point_im=frm.point_im,
-      )
-      all_frames.append(reduced_frm)
-      # test error
-      dx, dy = frm.size
-      rdx, rdy = reduced_frm.size
-      error_x: gmpy2.mpq = abs(dx - rdx) / dx
-      error_y: gmpy2.mpq = abs(dy - rdy) / dy
-      if error_x > MAX_TOLERATED_FRAME_MAG_ERROR or error_y > MAX_TOLERATED_FRAME_MAG_ERROR:
-        raise Error(
-          f'Frame {i + 2} has size {frm.size} but reduced frame has size {reduced_frm.size}, '
-          f'which is {float(gmpy2.mpq(100) * error_x):.6f}% different in width '
-          f'and {float(gmpy2.mpq(100) * error_y):.6f}% '
-          'different in height, which is above the tolerated error threshold. This is a bug!'
+        if i and not i % 10:
+          # we have to keep the mpq in check; use precomputed float mag (avoids 30k-bit mpfr call)
+          max_denominator = 10_000_000 * (10 ** math.ceil(cur_mag_log10 + 1e-9))
+          dx, dy = frm.size  # cache to avoid calling the property twice
+          frm = frame.Frame.FromCenter(
+            frm.fractal,
+            *frm.center,
+            dx.limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+            height=dy.limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+            point_re=frm.point_re,
+            point_im=frm.point_im,
+          )
+        # make a less aggressive version of the zoom; 1e-9: if the true value is exactly an integer
+        # (ex: 5) float accumulation in mag_log10 + (i+1) * mag_step can produce 4.9999999999999982
+        # instead, causing math.ceil to return 4 rather than 5, making max_denominator 10x too
+        # small, so 1e-9 before ceil means "within a billionth of an integer rounds up to it"
+        max_denominator = 100 * (10 ** math.ceil(cur_mag_log10 + 1e-9))
+        dx, dy = frm.size  # cache once: used for limit_denominator below and error check below
+        reduced_frm = frame.Frame.FromCenter(
+          frm.fractal,
+          *frm.center,
+          dx.limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+          height=dy.limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+          point_re=frm.point_re,
+          point_im=frm.point_im,
         )
+        all_frames.append(reduced_frm)
+        # test error (dx, dy already cached above)
+        rdx, rdy = reduced_frm.size
+        error_x: gmpy2.mpq = abs(dx - rdx) / dx
+        error_y: gmpy2.mpq = abs(dy - rdy) / dy
+        if error_x > MAX_TOLERATED_FRAME_MAG_ERROR or error_y > MAX_TOLERATED_FRAME_MAG_ERROR:
+          raise Error(
+            f'Frame {i + 2} has size {frm.size} but reduced frame has size {reduced_frm.size}, '
+            f'which is {float(gmpy2.mpq(100) * error_x):.6f}% different in width '
+            f'and {float(gmpy2.mpq(100) * error_y):.6f}% '
+            'different in height, which is above the tolerated error threshold. This is a bug!'
+          )
     # done adding frames, final check: directly compute the actual magnification achieved
     # to make sure the accumulated error is within the tolerated threshold
     actual_mag: gmpy2.mpfr = cast(
@@ -682,57 +695,72 @@ class ZoomParameters(frame.SerializingFractalObject):
       )
     # we finished the frame generation, now we pick them special ones
     # we don't care about the number of frames, we care about a fixed zoom magnitude
-    n_marker_steps: gmpy2.mpz = cast(
-      'gmpy2.mpz', max(math.floor(self.mag / MAGNITUDE_PER_FRAME_MARKER), 1)
-    )
-    if n_marker_steps <= 1 or self.n_frames < 5:  # noqa: PLR2004
-      # if we only have 2 or fewer markers (1 step), just use the first and last frames as markers;
-      # same thing for few frames: [1st, X, Y, Z, last] is the smallest degenerate case where
-      # it is worth having a "marker", frame Y, and return [1st, Y, last]
-      return (all_frames, [all_frames[0], all_frames[-1]])
-    # we will need more markers; start from the first and find the "ideal" stops
-    marker_mag: gmpy2.mpq = self.mag / n_marker_steps
-    marker_mag = gmpy2.mpq(gmpy2.exp10(marker_mag))  # mpq -> mpfr -> mpq unavoidable, unfortunately
-    frm = all_frames[0]  # start with initial frame, keep as-is
-    marker_frames: list[frame.Frame] = [frm]
-    last_idx: int = 0
-    idx: int
-    min_mag: gmpy2.mpq
-    max_min_mag: gmpy2.mpq = _MPQ_ZERO
-    for i in range(int(n_marker_steps)):
-      # first compute the "ideal" frame for this marker, by applying the ideal zoom
-      frm = frame.Frame.FromCenter(
-        frm.fractal,
-        *frm.center,
-        frm.size[0] / marker_mag,  # these mpq will get HUGE
-        height=frm.size[1] / marker_mag,  # these mpq will get HUGE
-        point_re=frm.point_re,
-        point_im=frm.point_im,
+    with timer.Timer('marker generation'):
+      n_marker_steps: gmpy2.mpz = cast(
+        'gmpy2.mpz', max(math.floor(self.mag / MAGNITUDE_PER_FRAME_MARKER), 1)
       )
-      # then we find the actual frame in all_frames that is closest to this ideal frame
-      min_mag, idx = min((abs(f.mag2 - frm.mag2), j) for j, f in enumerate(all_frames[last_idx:]))
-      max_min_mag = max(max_min_mag, min_mag / frm.mag2)  # keep track of the maximum relative error
-      # test that the frames are in the expected order and we are not going backwards
-      new_marker: frame.Frame = all_frames[last_idx + idx]
-      if not idx:
-        raise Error(
-          f'Marker frame {i + 1} is closer to last marker index {last_idx}. This is a bug!'
-        )
-      # make sure we don't have duplicates; add it
-      if new_marker in marker_frames:
-        raise Error(f'Duplicate marker frame found; bug! report. Marker frame: {new_marker}')
-      marker_frames.append(new_marker)
-      last_idx += idx
+      if n_marker_steps <= 1 or self.n_frames < 5:  # noqa: PLR2004
+        # if we only have 2 or fewer markers (1 step), just use the first and last frames as
+        # markers; same thing for few frames: [1st, X, Y, Z, last] is the smallest degenerate
+        # case where it is worth having a "marker", frame Y, and return [1st, Y, last]
+        return (all_frames, [all_frames[0], all_frames[-1]])
+      # we will need more markers; start from the first and find the "ideal" stops
+      marker_mag: gmpy2.mpq = self.mag / n_marker_steps
+      marker_mag = gmpy2.mpq(
+        gmpy2.exp10(marker_mag)
+      )  # mpq -> mpfr -> mpq unavoidable, unfortunately
+      # precompute analytical frame magnifications for O(log n) bisect-based marker search;
+      # float precision is sufficient since MAX_TOLERATED_MARKER_MAG_ERROR tolerance is 6%
+      all_mag_log10: list[float] = [mag_log10 + j * mag_step for j in range(len(all_frames))]
+      ideal_marker_mag_log10: float = mag_log10  # tracks the ideal marker magnification
+      # log10(exp10(x)) = x exactly, so use the underlying value rather than gmpy2.log10(marker_mag)
+      marker_mag_step_log10: float = float(self.mag) / float(n_marker_steps)
+      frm = all_frames[0]  # start with initial frame, keep as-is
+      marker_frames: list[frame.Frame] = [frm]
+      last_idx: int = 0
+      idx: int
+      delta_log10: float
+      max_min_mag_float: float = 0.0
+      for i in range(int(n_marker_steps)):
+        # advance ideal marker magnification analytically (no growing-denominator mpq computation)
+        ideal_marker_mag_log10 += marker_mag_step_log10
+        # find the actual frame closest to the ideal magnification using O(log n) bisect search
+        insert_pos: int = bisect.bisect_left(all_mag_log10, ideal_marker_mag_log10, last_idx)
+        if insert_pos >= len(all_frames):
+          idx = len(all_frames) - 1
+        elif insert_pos == last_idx or abs(
+          all_mag_log10[insert_pos] - ideal_marker_mag_log10
+        ) <= abs(
+          all_mag_log10[insert_pos - 1] - ideal_marker_mag_log10
+        ):  # short-circuit: when insert_pos == last_idx, insert_pos-1 is not evaluated
+          idx = insert_pos
+        else:
+          idx = insert_pos - 1
+        # track maximum relative error in mag2 space: |f.mag2 - ideal.mag2| / ideal.mag2
+        # float equivalent: |10^(2*(f_log10 - ideal_log10)) - 1| (same formula, just in log space)
+        delta_log10 = all_mag_log10[idx] - ideal_marker_mag_log10
+        max_min_mag_float = max(max_min_mag_float, abs(10.0 ** (2.0 * delta_log10) - 1.0))
+        # test that the frames are in the expected order and we are not going backwards
+        new_marker: frame.Frame = all_frames[idx]
+        if idx == last_idx:
+          raise Error(
+            f'Marker frame {i + 1} is closer to last marker index {last_idx}. This is a bug!'
+          )
+        # make sure we don't have duplicates; add it
+        if new_marker in marker_frames:
+          raise Error(f'Duplicate marker frame found; bug! report. Marker frame: {new_marker}')
+        marker_frames.append(new_marker)
+        last_idx = idx
     # done; check we arrived at the last frame and error is acceptable; if so, all is good
     if marker_frames[-1] != all_frames[-1]:
       raise Error(
         'Last marker frame is not the same as the last frame; bug! report. '
         f'Last marker frame: {marker_frames[-1]}, last frame: {all_frames[-1]}'
       )
-    if max_min_mag > MAX_TOLERATED_MARKER_MAG_ERROR:
+    if max_min_mag_float > MAX_TOLERATED_MARKER_MAG_ERROR:
       raise Error(
         f'Marker frames are not close enough to the ideal frames; bug! report. '
-        f'Maximum deviation in mag2 is {100.0 * float(max_min_mag)}%, which is a bug! report'
+        f'Maximum deviation in mag2 is {100.0 * max_min_mag_float:.4f}%, which is a bug! report'
       )
     return (all_frames, marker_frames)
 
