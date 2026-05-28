@@ -133,6 +133,14 @@ USE_DB_OPTION: typer.models.OptionInfo = typer.Option(
     'this option can also be loaded from the disk config, but if given should override the config'
   ),
 )
+READONLY_DB_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--readonly-db/--no-readonly-db',
+  help=(
+    'Use local DB in readonly mode? True means DB may be read from but not altered; '
+    'default is False, i.e., fully functional read+write DB'
+  ),
+)
 DB_PATH_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '-d',
@@ -616,6 +624,7 @@ class TranZoomConfig(clibase.CLIConfig):
   img_use_hash: bool
   img_path_prefix: str | None
   img_force_redo: bool
+  use_db: bool
   db_read_only: bool
   db_compress: bool
   pal: palette.Palette
@@ -659,6 +668,7 @@ class TranZoomConfig(clibase.CLIConfig):
     """
     return frdb.FractalDatabase(
       self.appconfig,
+      use_db=self.use_db,
       read_only=self.db_read_only,
       compress_save=self.db_compress,  # either compress unreadable or not compress readable
       format_json=not self.db_compress,

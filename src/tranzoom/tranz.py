@@ -97,7 +97,8 @@ def Main(  # documentation is help/epilog/args # noqa: D103
       'Defaults to having colors.'  # state default because None default means docs don't show it
     ),
   ),
-  db: bool | None = base.USE_DB_OPTION,  # type: ignore[assignment]
+  use_db: bool | None = base.USE_DB_OPTION,  # type: ignore[assignment]
+  readonly_db: bool = base.READONLY_DB_OPTION,  # type: ignore[assignment]
   db_path: pathlib.Path | None = base.DB_PATH_OPTION,  # type: ignore[assignment]
   db_compress: bool | None = base.USE_DB_COMPRESSION_OPTION,  # type: ignore[assignment]
   img_output_path: pathlib.Path | None = base.IMAGE_PATH_OUTPUT_OPTION,  # type: ignore[assignment]
@@ -149,7 +150,8 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     img_use_date=img_use_date,
     img_use_hash=img_use_hash,
     img_force_redo=img_force_redo,
-    db_read_only=False,  # sentinel only: will load from config below!
+    use_db=False,  # sentinel only: will load from config below!
+    db_read_only=readonly_db,
     db_compress=False,  # sentinel only: will load from config below!
     pal=pal,
     set_pal=set_pal,
@@ -174,7 +176,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   ctx.obj = dataclasses.replace(
     tzc,
     # config values should have "None" to mean override the config!
-    db_read_only=(not cnf['use_db']) if db is None else db,  # INVERT!
+    use_db=(cnf['use_db']) if use_db is None else use_db,
     db_compress=cnf['db_compression'] if db_compress is None else db_compress,
   )
   # even though this is a convenient place to print(), beware that this runs even when

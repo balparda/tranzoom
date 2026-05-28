@@ -272,6 +272,7 @@ class FractalDatabase:
     self,
     appconfig: app_config.AppConfig,
     *,
+    use_db: bool = True,
     read_only: bool = False,
     aes_key: aes.AESKey | None = None,
     safe_save: bool = True,
@@ -282,6 +283,8 @@ class FractalDatabase:
 
     Args:
       appconfig (app_config.AppConfig): AppConfig object for configuration and directory management.
+      use_db (bool): Whether to use the database functionality; if False, the DB will behave as if
+          it does not exist
       read_only (bool): If True, the database will be opened in read-only mode; default is
           False, meaning it can be read and written to; if True, any attempt to write to the DB
           will raise an error.
@@ -301,12 +304,13 @@ class FractalDatabase:
     """
     self._config: app_config.AppConfig = appconfig
     self._path: pathlib.Path = self._config.dir / _DB_FILE_NAME
+    self._use_db: bool = use_db
     self._read_only: bool = read_only
     self._key: aes.AESKey | None = aes_key
     self._safe_save: bool = safe_save
     self._compress_save: bool = compress_save
     self._format_json: bool = format_json
-    self._db: _DBType
+    self._db: _DBType = _DBTypeFactory()  # always populate the variable for safety and sanity
     self._closed: bool = False  # True once Close() / __exit__ has been called
     self._open = timer.Timer('FractalDatabase', emit_log=False)
     if not FractalDatabase._CONTEXT_LOCK.acquire(blocking=False):
@@ -320,6 +324,9 @@ class FractalDatabase:
 
   def _InitLoad(self) -> None:
     """Load the database from disk (or create a new one). Called only from __init__()."""
+    if not self._use_db:
+      logging.warning('use_db is False: will not load DB and will work as if DB does not exist!')
+      return
     with _DB_DISK_LOCK:  # ensure thread-safe load operations
       if self._path.exists():
         self._db = cast(
@@ -330,7 +337,6 @@ class FractalDatabase:
         )
         logging.info(f'Loaded DB from "{self._path}": {self.label}')
       else:
-        self._db = _DBTypeFactory()
         logging.warning(f'DB file not found, will work in "{self._config.dir}", {self.label}')
     if self._read_only:
       logging.warning('ATTENTION: Database opened in read-only mode, changes will not be saved!')
@@ -384,6 +390,9 @@ class FractalDatabase:
       logging.warning('FractalDatabase already closed, ignoring redundant close call')
       return
     self._closed = True
+    if not self._use_db:
+      logging.warning('use_db is False: no DB to close, skipping save')
+      return
     logging.info(f'Database was open for {self._open}')
     try:
       if save:
@@ -408,8 +417,8 @@ class FractalDatabase:
       Error: if safe_save is enabled and the existing DB on disk differs from the loaded DB
 
     """
-    if self._read_only:
-      logging.warning('Database in read-only mode: will *NOT* save! (would have saved now)')
+    if self._read_only or not self._use_db:
+      logging.warning('DB in read-only mode or use_db is False: will *NOT* save! (would have now)')
       return
     with _DB_DISK_LOCK:  # ensure thread-safe save operations
       # check on previous save
@@ -468,8 +477,8 @@ class FractalDatabase:
     """
     path: str = f'img_{params.sha}.Data'
     # trivial case first
-    if self._read_only:
-      logging.warning(f'Read-only mode: will *NOT* save {params} to "{path}"')
+    if self._read_only or not self._use_db:
+      logging.warning(f'Read-only mode or use_db is False: will *NOT* save {params} to "{path}"')
       return (timer.Now(), None)
     # we will actually save
     self._config.Serialize(
@@ -482,7 +491,7 @@ class FractalDatabase:
     logging.info(f'Saved image data {params} to "{path}"')
     return (timer.Now(), path)
 
-  def LoadImageData(self, path: str) -> image.Image:
+  def LoadImageData(self, path: str) -> image.Image | None:
     """Load image data from disk.
 
     Args:
@@ -490,9 +499,12 @@ class FractalDatabase:
         managed by the DB, not an arbitrary path; the actual path on disk is self._config.dir / path
 
     Returns:
-      image.Image: the loaded image data
+      image.Image | None: the loaded image data, or None only if use_db is False
 
     """
+    if not self._use_db:
+      logging.debug('use_db is False: skipping loading image computation')
+      return None
     return self._config.DeSerialize(config_name=path, decryption_key=self._key, silent=True)
 
   def FindImage(
@@ -524,6 +536,9 @@ class FractalDatabase:
     """
     # build the core key for this image
     ck: ImageCoreKey = CoreKeyFromData(params, render)
+    if not self._use_db:
+      logging.debug('use_db is False: skipping image lookup')
+      return (params, ck, None, None, None)
     # first check: do we know this computation? it could be a sentinel with depth=1000
     if params.depth == frame.MIN_ITER and ck['cp'] in self._db['sentinel_cps_idx']:
       # this is a sentinel
@@ -578,12 +593,15 @@ class FractalDatabase:
       ZoomData | None: the ZoomData for the given zoom parameters, or None if not found
 
     """
+    if not self._use_db:
+      logging.debug('use_db is False: skipping zoom lookup')
+      return None
     # videos are keyed directly by zoom.sha; one hash -> one ZoomData entry (no indirection)
     return self._db['videos'].get(zoom.sha)
 
   def AddComputationToDB(
     self, params: frame.ComputationParameters, img_tm: int, img_path: str | None
-  ) -> tuple[FrameData, ComputationData]:
+  ) -> tuple[FrameData | None, ComputationData | None]:
     """Add a computation to the database, along with its associated frame if not already present.
 
     Args:
@@ -593,9 +611,13 @@ class FractalDatabase:
           this is a relative path managed by the DB, not an arbitrary
 
     Returns:
-      tuple[FrameData, ComputationData]: the FrameData and ComputationData objects corresponding
+      tuple[FrameData | None, ComputationData | None]: the FrameData and ComputationData objects
+          corresponding; will ONLY return None if use_db is False
 
     """
+    if not self._use_db:
+      logging.info('use_db is False: skipping add computation to DB')
+      return (None, None)
     # add frame
     frm_hash: str = params.frm.sha
     frm: FrameData
@@ -642,7 +664,7 @@ class FractalDatabase:
     ck: ImageCoreKey,
     img_hash: str,
     path: str,
-  ) -> ImageData:
+  ) -> ImageData | None:
     """Add a render to the DB, along with associated frame, computation, indexes if not present.
 
     Args:
@@ -653,12 +675,16 @@ class FractalDatabase:
       path (str): the path to the image PNG file, as stored in the DB; this is absolute disk path
 
     Returns:
-      ImageData: the ImageData object corresponding to the added render
+      ImageData | None: the ImageData object corresponding to the added render; will ONLY return
+          None if use_db is False
 
     Raises:
       Error: on error, mostly inconsistent DB, not missing data
 
     """
+    if not self._use_db:
+      logging.info('use_db is False: skipping add render to DB')
+      return None
     # get frame and computation
     frm_hash: str = params.frm.sha
     if frm_hash not in self._db['frames']:
@@ -718,6 +744,10 @@ class FractalDatabase:
       markers (list[frame.Frame]): the marker frames that compose the video, subset of all_frames
 
     """
+    if not self._use_db:
+      logging.info('use_db is False: skipping add zoom to DB')
+      return
+    # videos are keyed directly by zoom.sha; one hash -> one ZoomData entry (no indirection)
     zoom_hash: str = zoom.sha
     if zoom_hash in self._db['videos']:
       # we have an entry: we assume it is mostly correct, but update the path
@@ -757,6 +787,8 @@ class FractalDatabase:
     force: bool = False,
   ) -> tuple[frame.ComputationParameters, image.Image | None, bytes, str, pathlib.Path]:
     """Compute a fractal image and return the result unsaved; the shared rendering primitive.
+
+    This operates even if use_db is False and read_only is True, it just won't use/save cache...
 
     This is the shared image computation primitive used by all rendering paths (static images,
     AI-guided zoom, manual zoom, and animations). It does NOT save the image to disk — the
@@ -852,7 +884,7 @@ class FractalDatabase:
     if render_data is not None:
       # we have done a render with these parameters before
       path: pathlib.Path
-      if paths := ExistingPathsFilter(render_data['rendered_paths']):
+      if self._use_db and (paths := ExistingPathsFilter(render_data['rendered_paths'])):
         # best case: we have the image PNG on disk already
         path = pathlib.Path(paths[0])  # take the first existing path, we know we have at least one
         print_comm(
@@ -861,7 +893,7 @@ class FractalDatabase:
         )
         if not force:
           img_hash = render_data['data_hash']
-          img_data = path.read_bytes()
+          img_data = path.read_bytes()  # this is why we guard against self._use_db/force
           if not require_img_obj or (require_img_obj and img is not None):
             # we can end this: we have the image PNG on disk and img is as good as necessary
             # print inline in iTerm2 if requested
@@ -891,7 +923,7 @@ class FractalDatabase:
         )
         # save img in DB & disk
         img_tm, img_path = self.SaveImageData(params, img)  # disk only
-        _, cp_data = self.AddComputationToDB(params, img_tm, img_path)  # DB only
+        self.AddComputationToDB(params, img_tm, img_path)  # DB only; returns None if use_db==False
     # we could possibly already have the data from the disk?...
     if img_data and img_hash and not force:
       # we can skip the render and just return the data we have on disk
@@ -923,7 +955,7 @@ class FractalDatabase:
           img_data = image.DrawThirdsInfoOverlay(img_data)
         else:
           raise Error(f'Unsupported overlay type: {render.overlay!r}')
-      # add to DB
+      # add to DB; remember render_data could be None if use_db==False
       render_data = self.AddRenderToDB(params, render, ck, img_hash, str(full_path(img_hash)))
     # log
     print_comm(
