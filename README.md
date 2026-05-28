@@ -392,6 +392,8 @@ Available subgroup / command combinations:
 | `--hash`/`--no-hash` | Include 20-char SHA256 hash in filename | `--hash` |
 | `--force`/`--no-force` | Force re-computation and re-rendering even when matching DB cache entries exist | `--no-force` |
 | `--iterm`/`--no-iterm` | Print image inline in iTerm2 (macOS + iTerm2 only) | off |
+| `--use-db`/`--no-use-db` | Enable/disable the fractal DB for this invocation; overrides the `use_db` config setting | config value / False |
+| `--readonly-db`/`--no-readonly-db` | Open the DB in read-only mode (reads allowed, no writes or saves) | `--no-readonly-db` |
 | `--palette` | Color palette for exterior (escaped) pixels; one of `sahara`, `lava`, `electric`, `sunset`, `aurora`, `plasma`, `forest`, `coral`, `gold`, `toxic`, `iris`, `ember`, `rgrayscale`, `grayscale` | `sahara` |
 | `--set-palette` | Color palette for interior Set points (used only when `--set` is given) | `rgrayscale` |
 | `--set` | Algorithm for interior Set point coloring; one of `min`, `max`, `angle`, `imaginary`; omit to keep interior black | None |
@@ -627,6 +629,8 @@ poetry run tranz [global flags] zoom [-w WIDTH] [-h HEIGHT] [-s SIZE] [-f FRACTA
 Renders a straight zoom-in animation from a starting frame to a target magnification and saves it as an animated GIF or MP4 file. Specify any two of `--duration`, `--frames`, and `--fps` to constrain the third; the command validates that all three resulting values are within allowed bounds.
 
 The zoom progression is geometrically uniform: each successive frame is scaled by a fixed rational factor computed so that the product of all per-frame zoom steps equals exactly the requested total magnification. Zoom metadata such as initial frame size, zoom step, FPS, duration, frame count, and loop count is stored with the final animated output under `tranZoom:zoom:*` PNG text chunks; if you save intermediate PNG frames, they are written as regular tranZoom still images.
+
+A set of **marker frames** is automatically selected from the full frame sequence at regular 10× magnification intervals. These are stored in the DB alongside all frames and can be used as chapter/seek points when browsing zoom animations.
 
 Positional arguments:
 

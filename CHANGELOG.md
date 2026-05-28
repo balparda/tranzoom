@@ -37,13 +37,19 @@ This project follows a pragmatic versioning approach:
 ## 1.6.0 - 2026-06-TBD
 
 - Added
-  - TBD
+  - **`--readonly-db/--no-readonly-db` global flag** (`tranz.py`, `base.py`): new CLI flag to open the fractal DB in read-only mode (reads are allowed but no writes or saves occur); previously `db_read_only` was always `False` at the CLI level and was only settable programmatically.
+  - **Marker frames for zoom animations** (`image.py`, `zoomcommand.py`, `frdb.py`): `ZoomParameters.Frames()` now returns a `tuple[list[Frame], list[Frame]]` — `(all_frames, marker_frames)` — where `marker_frames` is a subset of `all_frames` placed at regular 10× magnification intervals using an O(log n) bisect-based search; these replace the old TODO placeholder `[first, last]` and are stored in the DB via `AddZoomToDB`.
 
 - Changed
-  - TBD
+  - **`ZoomParameters.Frames()` return type** (`image.py`): changed from `list[frame.Frame]` to `tuple[list[frame.Frame], list[frame.Frame]]`; callers now receive `(all_frames, marker_frames)`.
+  - **Frame generation performance optimization** (`image.py`): the frame loop now tracks magnification using a cheap float approximation instead of an mpfr call at every iteration; `limit_denominator` is applied only every 10 steps on the internal high-precision tracking frame (with a larger max_denominator), and once per step on the output reduced frame; cumulative error logging added; generation is now sub-second even for very large frame counts.
+  - **`WriteAnimatedGIF` accepts lazy iterables** (`image.py`): the `frames` parameter type changed from `list[bytes]` to `abc.Iterable[bytes]`; frames are consumed lazily one at a time so they do not all need to fit in memory; the old up-front length check is replaced by a post-generation frame-count validation.
+  - **`use_db` threaded into `FractalDatabase`** (`frdb.py`, `base.py`, `tranz.py`): `FractalDatabase.__init__()` now accepts a `use_db: bool` parameter (default `True`); when `False`, the DB behaves as if it does not exist — no load, no save, and all lookup/add operations are silently skipped — allowing tranZoom to run fully without any DB overhead.
+  - **`FractalDatabase.LoadImageData`** (`frdb.py`): return type widened to `image.Image | None`; returns `None` when `use_db` is `False`.
+  - **`FractalDatabase.AddComputationToDB` and `AddRenderToDB`** (`frdb.py`): return types widened to include `None`; return `None` when `use_db` is `False`.
 
 - Fixed
-  - TBD
+  - N/A
 
 ## 1.5.2 - 2026-06-27
 
