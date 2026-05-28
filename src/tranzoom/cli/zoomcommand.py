@@ -272,7 +272,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     loop=loop,
   )
   all_frames: list[frame.Frame]
-  all_markers: list[frame.Frame]
+  all_markers: list[tuple[int, frame.Frame]]
   all_frames, all_markers = zoom_params.Frames()  # last thing that could go boom!
   # we should be good to go, all options check out; log and warn if needed
   config.console.print(
@@ -305,7 +305,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     success: bool = False
     video_hash: str | None = None
     video_path: pathlib.Path | None = None
-    tmr: timer.Timer | None = None
+    markers_tmr: timer.Timer | None = None
+    frames_tmr: timer.Timer | None = None
     try:
       # see if we have a cache of this zoom
       zoom_data: frdb.ZoomData | None = db.FindZoom(zoom_params)
@@ -330,10 +331,48 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       img_path: pathlib.Path | None = None
       img_data: bytes
       data_hash: str
-      all_img_bytes: list[bytes] = []
-      all_hash: list[str] = []
-      with timer.Timer(emit_log=False) as tmr:
+      all_img_bytes: dict[int, bytes] = {}
+      all_hash: dict[int, str] = {}
+      # MARKERS: produce marker frames FIRST
+      with timer.Timer(emit_log=False) as markers_tmr:
+        for i, (idx, frm) in enumerate(all_markers):
+          config.console.print(f'[yellow]Marker {i + 1} / {len(all_markers)}[/]')
+          # we have the marker, now feed it to the producer
+          params, img, img_data, data_hash, img_path = db.CoreComputeImage(
+            dataclasses.replace(
+              params, frm=frm, depth=frame.MIN_ITER
+            ),  # send frm, mark as sentinel
+            render,
+            out,
+            add_serial=idx + 1,
+            tm=timestamp,
+            max_threads=config.max_threads,
+            iterm=config.iterm,
+            print_comm=config.console.print,
+            require_img_obj=True,
+            force=config.img_force_redo,
+          )
+          # check we got something
+          if not img or not img_path:
+            raise base.Error('No image produced for marker! should never happen; report bug')
+          # save the image to disk if requested
+          if save_frames:
+            img_path.write_bytes(img_data)
+            config.console.print(f'Saved to "{img_path}"\n')
+          all_img_bytes[idx] = img_data
+          all_hash[idx] = data_hash
+      # check we got something; also appease type checker
+      if not img:
+        raise base.Error('No image produced for animation! should never happen; report bug')
+      # we have all the markers, now we can compute the smoothing?
+      # TODO: the smoothing?
+      # produce the regular frames now
+      with timer.Timer(emit_log=False) as frames_tmr:
         for i, frm in enumerate(all_frames):
+          if (i, frm) in all_markers:
+            # already produced as marker, skip
+            config.console.print(f'[cyan]Frame {i + 1} / {frames}[/] -> [green]Marker: DONE[/]\n')
+            continue
           config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
           # we have the frame, now feed it to the producer
           params, img, img_data, data_hash, img_path = db.CoreComputeImage(
@@ -357,14 +396,12 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           if save_frames:
             img_path.write_bytes(img_data)
             config.console.print(f'Saved to "{img_path}"\n')
-          all_img_bytes.append(img_data)
-          all_hash.append(data_hash)
-        # check we got something; also appease type checker
-        if not img:
-          raise base.Error('No image produced for animation! should never happen; report bug')
+          all_img_bytes[i] = img_data
+          all_hash[i] = data_hash
       # video loop is done; compute hash and so the path
       video_hash = hashes.Hash256(
-        ('|'.join(all_hash)).encode('ascii')  # stable if all images are the same
+        # stable if the image data and order does not change
+        ('|'.join(all_hash[i] for i in range(zoom_params.n_frames))).encode('ascii')
       ).hex()
       # computation is done
       video_path = image.MakeImagePath(
@@ -402,23 +439,23 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       # save the final animation
       if anim_type == image.AnimationType.GIF:
         image.WriteAnimatedGIF(
-          all_img_bytes,
+          (all_img_bytes[i] for i in range(zoom_params.n_frames)),
           video_path,
           zoom_params.img.width,
           zoom_params.img.height,
-          frames,
-          duration,
+          zoom_params.n_frames,
+          float(zoom_params.n_seconds),
           meta=meta,
-          loop=loop,
+          loop=zoom_params.loop,
         )
       elif anim_type == image.AnimationType.MP4:
         image.WriteVideoMP4(
-          all_img_bytes,
+          (all_img_bytes[i] for i in range(zoom_params.n_frames)),
           video_path,
           zoom_params.img.width,
           zoom_params.img.height,
-          frames,
-          duration,
+          zoom_params.n_frames,
+          float(zoom_params.n_seconds),
           meta=meta,
         )
       else:
@@ -436,7 +473,10 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       success = True
     finally:
       if success and video_hash and video_path:
-        config.console.print(f'Success: {anim_type.value.upper()} {video_hash!r} in {tmr or "-"}')
+        config.console.print(
+          f'Success: {anim_type.value.upper()} {video_hash!r} in '
+          f'{markers_tmr or "-"} + {frames_tmr or "-"}'
+        )
         config.console.print(f'Saved {anim_type.value.upper()} to "{video_path}"\n')
         # iterm
         if config.iterm and anim_type != image.AnimationType.MP4:  # iTerm2 does not support MP4

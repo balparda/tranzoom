@@ -616,12 +616,13 @@ class ZoomParameters(frame.SerializingFractalObject):
       raise Error(f'ZoomParameters {params.sha!r} does not match expected {check_hash!r}')
     return params
 
-  def Frames(self) -> tuple[list[frame.Frame], list[frame.Frame]]:  # noqa: C901, PLR0912, PLR0914, PLR0915
+  def Frames(self) -> tuple[list[frame.Frame], list[tuple[int, frame.Frame]]]:  # noqa: C901, PLR0912, PLR0914, PLR0915
     """Get the Frames. Could be a property, but is a method to remind this is an expensive-ish call.
 
     Returns:
-      tuple[list[frame.Frame], list[frame.Frame]]: The (frames, marker_frames) for this animation,
-          where marker_frames is a strict subset of frames
+      tuple[list[frame.Frame], list[tuple[int, frame.Frame]]]: The (frames, marker_frames) for
+          this animation, where marker_frames is a strict subset of frames and is a list
+          of sorted (index, frame) pairs for frames that were picked
 
     Raises:
       Error: if the frames cannot be generated within the tolerated error threshold.
@@ -724,7 +725,7 @@ class ZoomParameters(frame.SerializingFractalObject):
       # markers; same thing for few frames: [1st, X, Y, Z, last] is the smallest degenerate
       # case where it is worth having a "marker", frame Y, and return [1st, Y, last]
       logging.info('No new marker frames needed, will use [first, last]')
-      return (all_frames, [all_frames[0], all_frames[-1]])
+      return (all_frames, [(0, all_frames[0]), (len(all_frames) - 1, all_frames[-1])])
     # we will need more markers; start from the first and find the "ideal" stops
     with timer.Timer('marker generation'):
       marker_mag: gmpy2.mpq = self.mag / gmpy2.mpq(n_marker_steps)
@@ -738,7 +739,7 @@ class ZoomParameters(frame.SerializingFractalObject):
       # log10(exp10(x)) = x exactly, so use the underlying value rather than gmpy2.log10(marker_mag)
       marker_mag_step_log10: float = float(self.mag) / float(n_marker_steps)
       frm = all_frames[0]  # start with initial frame, keep as-is
-      marker_frames: list[frame.Frame] = [frm]
+      marker_frames: list[tuple[int, frame.Frame]] = [(0, frm)]  # start with the first frame
       last_idx: int = 0
       idx: int
       delta_log10: float
@@ -769,16 +770,18 @@ class ZoomParameters(frame.SerializingFractalObject):
             f'Marker frame {i + 1} is closer to last marker index {last_idx}. This is a bug!'
           )
         # make sure we don't have duplicates; add it
-        if new_marker in marker_frames:
+        if (idx, new_marker) in marker_frames:
           raise Error(f'Duplicate marker frame found; bug! report. Marker frame: {new_marker}')
-        marker_frames.append(new_marker)
+        marker_frames.append((idx, new_marker))
         last_idx = idx
     # done; check we arrived at the last frame and error is acceptable; if so, all is good
-    if marker_frames[-1] != all_frames[-1]:
+    if marker_frames[-1] != (len(all_frames) - 1, all_frames[-1]):
       raise Error(
         'Last marker frame is not the same as the last frame; bug! report. '
         f'Last marker frame: {marker_frames[-1]}, last frame: {all_frames[-1]}'
       )
+    if any(1 for j, f in marker_frames if all_frames[j] != f):
+      raise Error('Inconsistent marker frame hashes do not match frames list; Report bug!')
     if max_min_mag_float > MAX_TOLERATED_MARKER_MAG_ERROR:
       raise Error(
         f'Marker frames are not close enough to the ideal frames; bug! report. '

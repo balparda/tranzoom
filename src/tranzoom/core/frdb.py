@@ -159,8 +159,8 @@ class ZoomData(TypedDict):
     rendered_path (str | None): (CACHE) path to video/GIF file; None if not saved
     frames (list[str]): ("CHILDREN") list of Frame hashes -> grandfather Frames; ordered by
         magnification ascending; len >=3
-    markers (list[str]): ("CHILDREN") subset of frames entry: key Frame(s) for color
-        normalization; len >=2 (first & last)
+    markers (list[tuple[int, str]]): ("CHILDREN") subset of frames entry: key Frame(s) for color
+        normalization; (idx, Frame) and idx is the index in the frames list; len >=2 (first & last)
 
   Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
   Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
@@ -180,7 +180,7 @@ class ZoomData(TypedDict):
   # "CHILDREN" would be the individual frames/images that compose the video;
   # we compute this from core data, so this could be "CACHE" too...
   frames: list[str]  # Frame hashes; ordered by magnification ascending; len >=3
-  markers: list[str]  # subset of frames entry: key Frame(s); len >=2 (first & last)
+  markers: list[tuple[int, str]]  # subset of frames entry: key Frame(s); len >=2 (first & last)
 
 
 class _DBType(TypedDict):
@@ -753,7 +753,7 @@ class FractalDatabase:
     tm: int,
     path: str,
     all_frames: list[frame.Frame],
-    markers: list[frame.Frame],
+    markers: list[tuple[int, frame.Frame]],
   ) -> None:
     """Add a zoom (video/GIF) to the DB.
 
@@ -765,7 +765,11 @@ class FractalDatabase:
       path (str): the path to the video/GIF file, as stored in the DB; this is absolute disk path
       all_frames (list[frame.Frame]): the list of all frames that compose the video, ordered by
           magnification ascending (video order)
-      markers (list[frame.Frame]): the marker frames that compose the video, subset of all_frames
+      markers (list[tuple[int, frame.Frame]]): the marker frames that compose the video, a
+          subset of all_frames
+
+    Raises:
+      Error: on error, mostly inconsistent DB, not missing data
 
     """
     if not self._use_db:
@@ -780,7 +784,7 @@ class FractalDatabase:
       logging.info(f'AddZoomToDB: updated existing zoom {zoom_hash!r} in DB, path {path!r}')
     else:
       # new entry
-      self._db['videos'][zoom_hash] = ZoomData(
+      zd: ZoomData = ZoomData(
         zoom=zoom.json,
         fps=float(zoom.fps),
         step_mag=float(zoom.scalar_magnification_per_step),
@@ -788,8 +792,11 @@ class FractalDatabase:
         tm=tm,
         rendered_path=path,
         frames=[f.sha for f in all_frames],
-        markers=[f.sha for f in markers],
+        markers=[(j, f.sha) for j, f in markers],
       )
+      if any(1 for j, f in zd['markers'] if zd['frames'][j] != f):
+        raise Error('Inconsistent DB: marker frame hashes do not match frames list; Report bug!')
+      self._db['videos'][zoom_hash] = zd
       logging.info(
         f'AddZoomToDB: new zoom {zoom_hash!r} added to DB, '
         f'{len(all_frames)} frames, {len(markers)} markers, path {path!r}'
