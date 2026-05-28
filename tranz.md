@@ -50,9 +50,9 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                     password, because the password will be visible in   │
 │                                                                                                     the shell history and process list; the password    │
 │                                                                                                     provided by CLI or by user input will never be      │
-│                                                                                                     saved/stored anywhere, not even in memory; NOTE: if │
-│                                                                                                     you encrypt your data, it WILL be compressed, i.e., │
-│                                                                                                     the `--db-compression` option will be ignored and   │
+│                                                                                                     persisted to disk or logs; NOTE: if you encrypt     │
+│                                                                                                     your data, it WILL be compressed, i.e., the         │
+│                                                                                                     `--db-compression` option will be ignored and       │
 │                                                                                                     treated as True                                     │
 │ --out                 -o                         DIRECTORY                                          The local output root directory path, ex:           │
 │                                                                                                     "~/foo/bar/"; if not given, the image will be saved │
@@ -342,7 +342,40 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
 │ mandel  Generate a Mandelbrot image.                                                                                                                    │
 │ julia   Generate a Julia image.                                                                                                                         │
 │ read    Read a TranZoom fractal image.                                                                                                                  │
+│ clean   Read a TranZoom fractal image and create a clean copy (without metadata).                                                                       │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+### `tranz image clean` Sub-Command
+
+```text
+Usage: tranz image clean [OPTIONS] IMAGE_PATH                                                                                                             
+                                                                                                                                                           
+ Read a TranZoom fractal image and create a clean copy (without metadata).                                                                                 
+                                                                                                                                                           
+╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ *    image_path      FILE  The local input file path, ex: "~/foo/bar/file.png"                                                                │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --hash    --no-hash                            If True, will keep the hashes in the image metadata; if False, hashes will be removed; we believe hashes │
+│                                                cannot leak relevant information, so: default is True                                                    │
+│                                                                                                                                          │
+│ --path    --no-path                            If True, will clean the path of the image to a generic "fractal-<HASH>.png/jpg", where the HASH is       │
+│                                                randomly generated and means nothing, it is there to avoid file name clash; if False, the path will not  │
+│                                                be cleaned; we believe paths to be generally safe, so: default is False                                  │
+│                                                                                                                                       │
+│ --out                    Output format for the cleaned image; possible values: 'jpeg', 'jpg', 'png', 'gif', 'mp4'; default is     │
+│                                                "jpeg": save as JPEG because (1) if you are cleaning you want to share, and JPEG is share-friendly, and  │
+│                                                (2) some small amount of loss introduces randomness that can help with privacy                           │
+│                                                                                                                                          │
+│ --help                                         Show this message and exit.                                                                              │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Examples:                                                                                                                                                 
+                                                                                                                                                           
+ $ poetry run tranz image read /path/to/image.png                                                                                                          
+ 1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...                                                                                                       
+ ...
 ```
 
 ### `tranz image julia` Sub-Command
@@ -448,8 +481,7 @@ Usage: tranz image read [OPTIONS] IMAGE_PATH
 │ *    image_path      FILE  The local input file path, ex: "~/foo/bar/file.png"                                                                │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --create-clean-copy    --no-create-clean-copy                                                                            │
-│ --help                                             Show this message and exit.                                                                          │
+│ --help          Show this message and exit.                                                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 

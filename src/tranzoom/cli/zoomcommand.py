@@ -396,6 +396,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           image.META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str(
             zoom_params.scalar_magnification_per_step
           ),
+          image.META_ZOOM_HASH_KEY: zoom_params.sha,
         }
       )
       # save the final animation

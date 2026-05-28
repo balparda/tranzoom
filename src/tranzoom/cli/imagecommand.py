@@ -18,6 +18,8 @@ import click
 import gmpy2
 import typer
 from transcrypto.cli import clibase
+from transcrypto.core import hashes
+from transcrypto.utils import saferandom
 
 from tranzoom import tranz
 from tranzoom.cli import base
@@ -181,17 +183,18 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
   *,
   ctx: click.Context,
   image_path: pathlib.Path = base.IMAGE_PATH_INPUT_ARGUMENT,  # type: ignore[assignment]
-  create_clean_copy: bool = False,  # TODO: add command "clean" to create a clean copy of the image without metadata, for sharing
 ) -> None:
   config: base.TranZoomConfig = ctx.obj
   # read image
   image_path = image_path.expanduser().resolve()
+  if not image_path.exists() or not image_path.is_file():
+    raise base.Error(f'Image not found: {image_path}')
   image_data: bytes = image_path.read_bytes()
   w, h, png_hash, info = image.GetBasicDataFromImage(image_data)
   # print header
   config.console.print()
   config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')
-  config.console.print(f'[green]{w}x{h}[/green] (wxh) / [cyan]{png_hash}[/cyan]')
+  config.console.print(f'[green]{w} x {h}[/green] (wxh) / [cyan]{png_hash}[/cyan]')
   config.console.print()
   # expand JSON, if needed
   if image.META_LLM_RESULT_JSON_KEY in info:
@@ -203,3 +206,74 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
   if config.iterm:
     image.PrintITerm2(image_data)
     config.console.print()
+
+
+@image_app.command(
+  'clean',
+  help='Read a TranZoom fractal image and create a clean copy (without metadata).',
+  epilog=(
+    'Examples:\n\n\n\n'  # TODO: do
+    '$ poetry run tranz image read /path/to/image.png\n\n'
+    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
+    '...'
+  ),
+)
+@clibase.CLIErrorGuard
+def Clean(  # documentation is help/epilog/args  # noqa: D103
+  *,
+  ctx: click.Context,
+  image_path: pathlib.Path = base.IMAGE_PATH_INPUT_ARGUMENT,  # type: ignore[assignment]
+  leave_hashes: bool = base.CLEANUP_LEAVE_HASHES_OPTION,  # type: ignore[assignment]
+  clean_path: bool = base.CLEANUP_CLEAN_PATH_OPTION,  # type: ignore[assignment]
+  output_format: base.CleanupOutputFormat = base.CLEANUP_OUTPUT_FORMAT_OPTION,  # type: ignore[assignment]
+) -> None:
+  # check output format
+  if output_format in {base.CleanupOutputFormat.JPEG, base.CleanupOutputFormat.JPG}:
+    jpeg = True
+    output_format = base.CleanupOutputFormat.JPG  # normalize
+  elif output_format == base.CleanupOutputFormat.PNG:
+    jpeg = False
+  else:
+    raise base.Error('Only JPEG and PNG are supported for cleaning for now...')
+  config: base.TranZoomConfig = ctx.obj
+  # read image
+  image_path = image_path.expanduser().resolve()
+  if not image_path.exists() or not image_path.is_file():
+    raise base.Error(f'Image not found: {image_path}')
+  if image_path.suffix.lower() in {'.gif', '.mp4'}:
+    # TODO: support animated GIFs by cleaning each frame and reassembling
+    raise base.Error('Animated GIFs are not supported for cleaning for now...')
+  image_data: bytes = image_path.read_bytes()
+  w, h, png_hash, info = image.GetBasicDataFromImage(image_data)
+  # print header
+  config.console.print()
+  config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')
+  config.console.print(f'[green]{w} x {h}[/green] (wxh) / [cyan]{png_hash}[/cyan]')
+  config.console.print()
+  # convert bytes, keep hash meta if we were asked to do so
+  config.console.print('  Format: ' + ('[green]JPG[/]' if jpeg else '[yellow]PNG[/]'))
+  config.console.print('  Hashes: ' + ('[yellow]IN META[/]' if leave_hashes else '[green]CLEAN[/]'))
+  new_data: bytes = {False: image.CleanSavePNG, True: image.CleanSaveJPG}[jpeg](
+    image_data,
+    extra_meta={k: str(info[k]) for k in image.META_SAFE_HASHES if k in info}
+    if leave_hashes
+    else None,
+  )
+  # make output path, save, and print info about the new image
+  random_hash: str = hashes.Hash512(saferandom.RandBytes(100)).hex()[:16]
+  config.console.print('    Name: ' + ('[green]CLEAN[/]' if clean_path else '[yellow]UNTOUCHED[/]'))
+  new_path: pathlib.Path = (
+    image_path.with_name(f'fractal-{random_hash}.jpg' if jpeg else f'fractal-{random_hash}.png')
+    if clean_path
+    else image_path.with_suffix('.clean.jpg' if jpeg else '.clean.png')
+  )
+  new_path.write_bytes(new_data)
+  config.console.print(f'    Path: [cyan]{str(new_path)!r}[/]')
+  # done
+  config.console.print()
+  # iterm
+  if config.iterm:
+    image.PrintITerm2(new_data)
+    config.console.print()
+  config.console.print('[bold][green]Done cleaning image[/][/]')
+  config.console.print()

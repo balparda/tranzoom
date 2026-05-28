@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import dataclasses
+import enum
 import logging
 import pathlib
 from collections import abc
@@ -28,6 +29,19 @@ class Error(ai.Error, click.ClickException):
 
 class UsageError(Error, click.UsageError):
   """Base CLI/click usage exception."""
+
+
+# CLI enumerations
+
+
+class CleanupOutputFormat(enum.Enum):
+  """Output format for the cleanup command."""
+
+  JPEG = 'jpeg'
+  JPG = 'jpg'
+  PNG = 'png'
+  GIF = 'gif'
+  MP4 = 'mp4'
 
 
 # gmpy2.mpq constants
@@ -585,6 +599,39 @@ CONFIG_SETTABLE_KEYS: dict[str, type] = {
   'use_db': bool,
   'db_compression': bool,
 }
+
+# Cleanup Options
+CLEANUP_LEAVE_HASHES_OPTION: typer.models.OptionInfo = typer.Option(
+  True,
+  '--hash/--no-hash',
+  help=(
+    'If True, will keep the hashes in the image metadata; '
+    'if False, hashes will be removed; we believe hashes cannot leak relevant information, so: '
+    'default is True'
+  ),
+)
+CLEANUP_CLEAN_PATH_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--path/--no-path',
+  help=(
+    'If True, will clean the path of the image to a generic "fractal-<HASH>.png/jpg", '
+    'where the HASH is randomly generated and means nothing, it is there to avoid file name clash; '
+    'if False, the path will not be cleaned; we believe paths to be generally safe, so: '
+    'default is False'
+  ),
+)
+CLEANUP_OUTPUT_FORMAT_OPTION: typer.models.OptionInfo = typer.Option(
+  CleanupOutputFormat.JPEG,
+  '--out',
+  help=(
+    f'Output format for the cleaned image; possible values: '
+    f'{", ".join(repr(f.value) for f in CleanupOutputFormat)}; '
+    f'default is "{CleanupOutputFormat.JPEG.value}": save as JPEG because (1) if you are '
+    'cleaning you want to share, and JPEG is share-friendly, and (2) some small amount of loss '
+    'introduces randomness that can help with privacy'
+  ),
+)
+
 
 # Config Options
 CONFIG_KEY_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(

@@ -41,12 +41,33 @@ from tranzoom.core import frame, palette
 # actual image/mathematical data;
 # keys use a "tranZoom:" (_app) namespace to avoid collisions with other metadata
 # all are converted to str for storage in PNG metadata, but the original types are indicated below
+META_FRACTAL_KEY: str = f'{_app}:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal
+META_TOP_RE_KEY: str = f'{_app}:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
+META_TOP_IM_KEY: str = f'{_app}:frame:top_im'  # gmpy2.mpq
+META_BOTTOM_RE_KEY: str = f'{_app}:frame:bottom_re'  # gmpy2.mpq
+META_BOTTOM_IM_KEY: str = f'{_app}:frame:bottom_im'  # gmpy2.mpq
+META_CENTER_RE_KEY: str = f'{_app}:frame:center_re'  # gmpy2.mpq
+META_CENTER_IM_KEY: str = f'{_app}:frame:center_im'  # gmpy2.mpq
+META_WIDTH_RE_KEY: str = f'{_app}:frame:width_re'  # gmpy2.mpq
+META_HEIGHT_IM_KEY: str = f'{_app}:frame:height_im'  # gmpy2.mpq
+META_PRECISION_KEY: str = f'{_app}:frame:precision'  # int, in bits
+META_MAGNIFICATION_ORDER_KEY: str = f'{_app}:frame:magnification_order'  # float
+META_FRAME_HASH_KEY: str = f'{_app}:frame:hash'  # str, like "abcdef1234567890", a SHA256
+META_COMPUTATION_WIDTH_KEY: str = f'{_app}:computation:width'  # int, in pixels
+META_COMPUTATION_HEIGHT_KEY: str = f'{_app}:computation:height'  # int, in pixels
+META_COMPUTATION_SEARCH_DEPTH_KEY: str = f'{_app}:computation:depth'  # int
+META_COMPUTATION_COLOR_SET_KEY: str = f'{_app}:computation:color_set'  # SetHighlightAlgo./"none"
+META_COMPUTATION_HASH_KEY: str = f'{_app}:computation:hash'  # str, like "abcdef1234567890" a SHA256
+META_RENDER_PALETTE_KEY: str = f'{_app}:render:palette'  # str, ex "sunset", one of palette.Palette
+META_RENDER_SET_PALETTE_KEY: str = f'{_app}:render:set_palette'  # str, interior Set palette name
+META_RENDER_OVERLAY_KEY: str = f'{_app}:render:overlay'  # image.OverlayType or "none"
+META_RENDER_MARK_RE_KEY: str = f'{_app}:render:mark_re'  # gmpy2.mpq
+META_RENDER_MARK_IM_KEY: str = f'{_app}:render:mark_im'  # gmpy2.mpq
+META_RENDER_MARK_COLOR_KEY: str = f'{_app}:render:mark_color'  # Color.name.lower() / "none"=no mark
+META_RENDER_MARK_WIDTH_KEY: str = f'{_app}:render:mark_width'  # int
+META_RENDER_HASH_KEY: str = f'{_app}:render:hash'  # str, like "abcdef1234567890", a SHA256
 META_IMAGE_ANIMATION_KEY: str = f'{_app}:image:animation'  # AnimationType or "none" if static image
-META_IMAGE_WIDTH_KEY: str = f'{_app}:image:width'  # int, in pixels
-META_IMAGE_HEIGHT_KEY: str = f'{_app}:image:height'  # int, in pixels
 META_IMAGE_HASH_KEY: str = f'{_app}:image:hash'  # str, like "abcdef1234567890", a SHA256
-META_ITER_SEARCH_DEPTH_KEY: str = f'{_app}:image:depth'  # int
-META_IMAGE_COLOR_SET_KEY: str = f'{_app}:image:color_set'  # frame.SetHighlightAlgorithm or "none"
 META_IMAGE_EXT_COUNT_KEY: str = f'{_app}:image:exterior:count'  # int; count escaped
 META_IMAGE_EXT_N_MIN_KEY: str = f'{_app}:image:exterior:n:min'  # int; min iter
 META_IMAGE_EXT_N_MAX_KEY: str = f'{_app}:image:exterior:n:max'  # int; max iter
@@ -61,13 +82,6 @@ META_IMAGE_SET_NU_MIN_KEY: str = f'{_app}:image:set:nu:min'  # float
 META_IMAGE_SET_NU_MAX_KEY: str = f'{_app}:image:set:nu:max'  # float
 META_IMAGE_SET_BUCKET_MIN_KEY: str = f'{_app}:image:set:bucket:min'  # int
 META_IMAGE_SET_BUCKET_MAX_KEY: str = f'{_app}:image:set:bucket:max'  # int
-META_RENDER_PALETTE_KEY: str = f'{_app}:render:palette'  # str, ex "sunset", one of palette.Palette
-META_RENDER_SET_PALETTE_KEY: str = f'{_app}:render:set_palette'  # str, interior Set palette name
-META_RENDER_OVERLAY_KEY: str = f'{_app}:render:overlay'  # image.OverlayType or "none"
-META_RENDER_MARK_RE_KEY: str = f'{_app}:render:mark_re'  # gmpy2.mpq
-META_RENDER_MARK_IM_KEY: str = f'{_app}:render:mark_im'  # gmpy2.mpq
-META_RENDER_MARK_COLOR_KEY: str = f'{_app}:render:mark_color'  # Color.name.lower() / "none"=no mark
-META_RENDER_MARK_WIDTH_KEY: str = f'{_app}:render:mark_width'  # int
 META_IMAGE_STATS_MAX_LO_KEY: str = f'{_app}:image:stats:max_lo'  # gmpy2.mpfr
 META_IMAGE_STATS_MAX_HI_KEY: str = f'{_app}:image:stats:max_hi'  # gmpy2.mpfr
 META_IMAGE_STATS_MIN_LO_KEY: str = f'{_app}:image:stats:min_lo'  # gmpy2.mpfr
@@ -76,17 +90,6 @@ META_IMAGE_STATS_ANG_LO_KEY: str = f'{_app}:image:stats:ang_lo'  # gmpy2.mpfr
 META_IMAGE_STATS_ANG_HI_KEY: str = f'{_app}:image:stats:ang_hi'  # gmpy2.mpfr
 META_IMAGE_STATS_IMAG_LO_KEY: str = f'{_app}:image:stats:imag_lo'  # gmpy2.mpfr
 META_IMAGE_STATS_IMAG_HI_KEY: str = f'{_app}:image:stats:imag_hi'  # gmpy2.mpfr
-META_FRACTAL_KEY: str = f'{_app}:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal
-META_TOP_RE_KEY: str = f'{_app}:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
-META_TOP_IM_KEY: str = f'{_app}:frame:top_im'  # gmpy2.mpq
-META_BOTTOM_RE_KEY: str = f'{_app}:frame:bottom_re'  # gmpy2.mpq
-META_BOTTOM_IM_KEY: str = f'{_app}:frame:bottom_im'  # gmpy2.mpq
-META_CENTER_RE_KEY: str = f'{_app}:frame:center_re'  # gmpy2.mpq
-META_CENTER_IM_KEY: str = f'{_app}:frame:center_im'  # gmpy2.mpq
-META_WIDTH_RE_KEY: str = f'{_app}:frame:width_re'  # gmpy2.mpq
-META_HEIGHT_IM_KEY: str = f'{_app}:frame:height_im'  # gmpy2.mpq
-META_PRECISION_KEY: str = f'{_app}:frame:precision'  # int, in bits
-META_MAGNIFICATION_ORDER_KEY: str = f'{_app}:frame:magnification_order'  # float
 # extra keys added to some images only
 # images with exterior points (almost all!)
 META_IMAGE_EXT_HISTOGRAM_LINEAR_KEY: str = f'{_app}:image:exterior:hist:linear'  # str
@@ -113,6 +116,7 @@ META_ZOOM_STEPS_KEY: str = f'{_app}:zoom:frame:steps'  # int
 META_ZOOM_FPS_KEY: str = f'{_app}:zoom:frame:fps'  # gmpy2.mpq
 META_ZOOM_MAGNITUDE_PER_STEP_KEY: str = f'{_app}:zoom:frame:magnitude_per_step'  # gmpy2.mpq
 META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str = f'{_app}:zoom:frame:magnification_per_step'  # gmpy2.mpq
+META_ZOOM_HASH_KEY: str = f'{_app}:zoom:hash'  # str, like "abcdef1234567890", a SHA256
 # LLM extra keys
 META_LLM_MODEL_KEY: str = f'{_app}:llm:model'  # str (META_LLM_MODEL_VALUE_HUMAN or "HUMAN")
 META_LLM_TEMPERATURE_KEY: str = f'{_app}:llm:temperature'  # float
@@ -126,6 +130,16 @@ META_LLM_RESULT_JSON_KEY: str = f'{_app}:llm:result:json'  # JSON with evaluatio
 META_LLM_ZOOM_COUNT_KEY: str = f'{_app}:llm:zoom:count'  # int; zoom iteration depth
 # special values
 META_LLM_MODEL_VALUE_HUMAN: str = 'HUMAN'  # used if evaluation is done by flesh-and-blood human
+
+# these hashes are relatively safe to leave in a private image (`tranz config clean` command),
+# they would have to be brute-forced, and for any non-trivial Frame/zoom will be nigh impossible
+META_SAFE_HASHES: set[str] = {
+  META_FRAME_HASH_KEY,  # this depends on coordinates, hard for any non-trivial Frame
+  META_COMPUTATION_HASH_KEY,  # this depends on coordinates, hard for any non-trivial Frame
+  META_ZOOM_HASH_KEY,  # this depends on coordinates, hard for any non-trivial Frame
+  META_RENDER_HASH_KEY,  # this is easy to brute-force, but it's only the render parameters, useless
+  META_IMAGE_HASH_KEY,  # this is a data-driven hash (depends on rendered bytes) and is 100% safe
+}
 
 # pre-compiled constants for encoding/decoding
 _PACK_IF = struct.Struct('>if')  # signed int32 + float32
@@ -187,10 +201,9 @@ class OverlayType(enum.Enum):
 
 
 DEFAULT_ANIMATION_TYPE: AnimationType = AnimationType.GIF
-
+JPEG_QUALITY: int = 95  # quality for JPEG output; ignored for PNG which is lossless
 
 # color constants
-
 
 DEFAULT_MARK_COLOR: Color = Color.RED
 DEFAULT_MARK_WIDTH: int = 1
@@ -1040,10 +1053,13 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
   img_meta: dict[str, str] = {
     # image parameters
     META_IMAGE_ANIMATION_KEY: 'none',  # this is a static image for now, not an animation
-    META_IMAGE_WIDTH_KEY: str(img.params.size[0]),
-    META_IMAGE_HEIGHT_KEY: str(img.params.size[1]),
+    META_COMPUTATION_WIDTH_KEY: str(img.params.size[0]),
+    META_COMPUTATION_HEIGHT_KEY: str(img.params.size[1]),
     META_IMAGE_HASH_KEY: data_hash,
-    META_IMAGE_COLOR_SET_KEY: str(img.params.set_points.value) if img.params.set_points else 'none',
+    META_COMPUTATION_COLOR_SET_KEY: str(img.params.set_points.value)
+    if img.params.set_points
+    else 'none',
+    META_COMPUTATION_HASH_KEY: img.params.sha,
     META_RENDER_PALETTE_KEY: render.escaped_pal.value,
     META_RENDER_SET_PALETTE_KEY: render.set_pal.value if render.set_pal else 'none',
     META_RENDER_OVERLAY_KEY: render.overlay.value if render.overlay else 'none',
@@ -1051,6 +1067,7 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
     META_RENDER_MARK_IM_KEY: str(render.mark_im),
     META_RENDER_MARK_COLOR_KEY: render.mark_color.name.lower() if render.mark_color else 'none',
     META_RENDER_MARK_WIDTH_KEY: str(render.mark_width),  # int
+    META_RENDER_HASH_KEY: render.sha,
     # frame
     META_FRACTAL_KEY: frm.fractal.value,
     # frame as corners
@@ -1066,8 +1083,9 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
     # precision and magnification
     META_PRECISION_KEY: str(img.params.precision),
     META_MAGNIFICATION_ORDER_KEY: str(frm.magnification[1]),
+    META_FRAME_HASH_KEY: frm.sha,
     # escape iteration in the image
-    META_ITER_SEARCH_DEPTH_KEY: str(img.params.depth),
+    META_COMPUTATION_SEARCH_DEPTH_KEY: str(img.params.depth),
     # histogram / min-max counts
     META_IMAGE_EXT_COUNT_KEY: str(img.ext_hist.count),
     META_IMAGE_EXT_N_MIN_KEY: str(img.ext_hist.min_value),
@@ -1436,6 +1454,53 @@ def SaveWithMeta(img: PILImage.Image, *, extra_meta: dict[str, str] | None = Non
   output = io.BytesIO()
   img.save(output, format='PNG', pnginfo=png_meta)
   return output.getvalue()
+
+
+def CleanSavePNG(img_data: bytes, *, extra_meta: dict[str, str] | None = None) -> bytes:
+  """Save a PNG bytes to a clean copy PNG bytes, including only metadata given in `meta`, if any.
+
+  Args:
+    img_data (bytes): The original PNG image data as bytes.
+    extra_meta (dict[str, str] | None): Optional metadata to include in the PNG.
+
+  Returns:
+    bytes: The PNG image data as bytes.
+
+  """
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    # keep only meta that was explicitly given
+    png_meta = PngImagePlugin.PngInfo()
+    if extra_meta:
+      for k, v in extra_meta.items():
+        png_meta.add_text(k, v)
+    # save to PNG bytes, return
+    output = io.BytesIO()
+    img.save(output, format='PNG', pnginfo=png_meta)
+    return output.getvalue()
+
+
+def CleanSaveJPG(img_data: bytes, *, extra_meta: dict[str, str] | None = None) -> bytes:
+  """Save a PNG bytes to a clean copy JPG bytes, including only metadata given in `meta`, if any.
+
+  Args:
+    img_data (bytes): The original PNG image data as bytes.
+    extra_meta (dict[str, str] | None): Optional metadata to include in the JPG.
+
+  Returns:
+    bytes: The JPG image data as bytes.
+
+  """
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    # save to JPG bytes, return
+    output = io.BytesIO()
+    img.save(
+      output,
+      format='JPEG',
+      quality=JPEG_QUALITY,
+      optimize=True,
+      info=extra_meta or {},  # keep only meta that was explicitly given
+    )
+    return output.getvalue()
 
 
 def AddEvaluationMetaToImage(
