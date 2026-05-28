@@ -27,8 +27,8 @@ from typing import cast
 import gmpy2
 import imageio
 import numpy as np
+from PIL import ExifTags, ImageDraw, ImageFont, PngImagePlugin
 from PIL import Image as PILImage
-from PIL import ImageDraw, ImageFont, PngImagePlugin
 from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
@@ -1490,15 +1490,20 @@ def CleanSaveJPG(img_data: bytes, *, extra_meta: dict[str, str] | None = None) -
     bytes: The JPG image data as bytes.
 
   """
+  exif: PILImage.Exif | None = None
   with PILImage.open(io.BytesIO(img_data)) as img:
-    # save to JPG bytes, return
+    if extra_meta:
+      # store metadata as compact JSON in EXIF ImageDescription (tag 0x010E)
+      exif = PILImage.Exif()
+      # list of tags in: https://github.com/python-pillow/Pillow/blob/main/src/PIL/ExifTags.py
+      exif[ExifTags.Base.ImageDescription] = json.dumps(extra_meta, separators=(',', ':'))
     output = io.BytesIO()
     img.save(
       output,
       format='JPEG',
       quality=JPEG_QUALITY,
       optimize=True,
-      info=extra_meta or {},  # keep only meta that was explicitly given
+      exif=exif.tobytes() if exif else None,
     )
     return output.getvalue()
 

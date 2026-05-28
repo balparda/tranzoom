@@ -260,7 +260,7 @@ def Clean(  # documentation is help/epilog/args  # noqa: D103
     else None,
   )
   # make output path, save, and print info about the new image
-  random_hash: str = hashes.Hash512(saferandom.RandBytes(100)).hex()[:16]
+  random_hash: str = hashes.Hash512(saferandom.RandBytes(100)).hex()[:20]
   config.console.print('    Name: ' + ('[green]CLEAN[/]' if clean_path else '[yellow]UNTOUCHED[/]'))
   new_path: pathlib.Path = (
     image_path.with_name(f'fractal-{random_hash}.jpg' if jpeg else f'fractal-{random_hash}.png')

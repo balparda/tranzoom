@@ -56,6 +56,7 @@ Built with:
     - [`tranz image mandel` — Render a Mandelbrot image](#tranz-image-mandel--render-a-mandelbrot-image)
     - [`tranz image julia` — Render a Julia Set image](#tranz-image-julia--render-a-julia-set-image)
     - [`tranz image read` — Read a tranZoom image](#tranz-image-read--read-a-tranzoom-image)
+    - [`tranz image clean` — Create a clean copy for sharing](#tranz-image-clean--create-a-clean-copy-for-sharing)
     - [`tranz zoom ai` — AI-guided fractal zoom search](#tranz-zoom-ai--ai-guided-fractal-zoom-search)
     - [`tranz zoom manual` — Manually-guided fractal zoom](#tranz-zoom-manual--manually-guided-fractal-zoom)
     - [`tranz zoom auto` — Automated GIF/MP4 zoom animation](#tranz-zoom-auto--automated-gifmp4-zoom-animation)
@@ -374,6 +375,7 @@ Available subgroup / command combinations:
 - `tranz image mandel` — render a Mandelbrot image
 - `tranz image julia` — render a Julia Set image
 - `tranz image read` — read and inspect a tranZoom image
+- `tranz image clean` — create a clean, metadata-free copy of a tranZoom image for sharing
 - `tranz zoom ai` — AI-guided iterative zoom session
 - `tranz zoom manual` — human-guided iterative zoom session
 - `tranz zoom auto` — automated GIF/MP4 zoom animation
@@ -547,6 +549,38 @@ $ poetry run tranz image read mandel-38824cdaa58b64496ebf.png
 ```
 
 Use `--iterm` (global flag) to also display the image inline (macOS + iTerm2 only).
+
+### `tranz image clean` — Create a clean copy for sharing
+
+```sh
+poetry run tranz image clean [--hash|--no-hash] [--path|--no-path] [--out FORMAT] <IMAGE_PATH>
+```
+
+Reads an existing tranZoom PNG and saves a **clean copy** with all tranZoom metadata stripped out: safe to share without leaking fractal coordinates or computation details.
+
+Options:
+
+| Option | Description | Default |
+| --- | --- | --- |
+| `--hash`/`--no-hash` | Keep safe hashes (frame/computation/render/image hashes) in the output metadata | `--hash` (keep) |
+| `--path`/`--no-path` | Replace the filename with a random `fractal-<HEX20>.ext` to avoid leaking filenames | `--no-path` (keep name) |
+| `--out FORMAT` | Output format: `jpeg`/`jpg` (default) or `png` | `jpeg` |
+
+**Note:** For PNG output, hashes are stored as PNG tEXt chunks. For JPEG output, hashes are serialized as compact JSON and stored in the EXIF `ImageDescription` field (tag 0x010E). GIF and MP4 inputs are not currently supported. Examples:
+
+```sh
+# Clean a PNG to JPEG, keep filename shape, retain safe hashes (default behavior)
+poetry run tranz image clean /path/to/image.png
+# → /path/to/image.clean.jpg
+
+# Fully anonymous: generic random filename, no metadata at all
+poetry run tranz image clean --no-hash --path /path/to/image.png
+# → /path/to/fractal-a3f7b2c1d4e5f601.jpg
+
+# Keep as PNG so hash metadata is actually embedded
+poetry run tranz image clean --out png /path/to/image.png
+# → /path/to/image.clean.png  (with frame/computation hashes in PNG text chunks)
+```
 
 ### `tranz zoom ai` — AI-guided fractal zoom search
 

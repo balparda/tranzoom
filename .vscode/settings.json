@@ -133,6 +133,7 @@
     "docstrings",
     "ensurepath",
     "envrc",
+    "EXIF",
     "faststart",
     "filelock",
     "flakefinder",
