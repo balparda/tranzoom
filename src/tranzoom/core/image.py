@@ -1005,6 +1005,10 @@ class Image:
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
     img.save(buf, format='PNG', pnginfo=png_meta)
+    logging.debug(
+      f'AsPNG: rendered {self._params.width} x {self._params.height} '
+      f'{self._params.frm.fractal.value} PNG, hash {img_data_hash[:16]!r}'
+    )
     return (buf.getvalue(), img_data_hash)
 
 

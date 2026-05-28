@@ -550,6 +550,9 @@ class FractalDatabase:
       # update depth; remember to re-compute ck too
       params = dataclasses.replace(params, depth=cast('int', self._db['cps'][cp_hash]['depth']))
       ck = CoreKeyFromData(params, render)
+      logging.debug(
+        f'FindImage: sentinel cp_hash {ck["cp"]!r} resolved to actual cp_hash {cp_hash!r}'
+      )
       # sanity check: the new core key with updated depth should be consistent with the DB
       if ck['cp'] != cp_hash:
         raise Error(
@@ -630,6 +633,7 @@ class FractalDatabase:
         cps={},
       )
       self._db['frames'][frm_hash] = frm
+      logging.info(f'AddComputationToDB: new frame {frm_hash!r} added to DB')
     # add computation
     cp_hash: str = params.sha
     if cp_hash not in self._db['cps']:
@@ -649,6 +653,7 @@ class FractalDatabase:
         renders={},
       )
       frm['cps'][cp_hash] = cp
+      logging.info(f'AddComputationToDB: new computation {cp_hash!r} added to DB')
     # add sentinel index, if needed
     if params.depth > frame.MIN_ITER:
       # depth > 1000 means we should add to the index, so we can find this later
@@ -713,6 +718,7 @@ class FractalDatabase:
         rendered_paths=[path],
       )
       cp['renders'][render_hash] = img
+      logging.info(f'AddRenderToDB: new render {render_hash!r} added to DB, path {path!r}')
     # add path index
     self._db['img_paths_idx'][path] = ck
     # add hash index
@@ -753,6 +759,7 @@ class FractalDatabase:
       # we have an entry: we assume it is mostly correct, but update the path
       self._db['videos'][zoom_hash]['tm'] = tm  # always update timestamp
       self._db['videos'][zoom_hash]['rendered_path'] = path  # update path (in case it changed)
+      logging.info(f'AddZoomToDB: updated existing zoom {zoom_hash!r} in DB, path {path!r}')
     else:
       # new entry
       self._db['videos'][zoom_hash] = ZoomData(
@@ -764,6 +771,10 @@ class FractalDatabase:
         rendered_path=path,
         frames=[f.sha for f in all_frames],
         markers=[f.sha for f in markers],
+      )
+      logging.info(
+        f'AddZoomToDB: new zoom {zoom_hash!r} added to DB, '
+        f'{len(all_frames)} frames, {len(markers)} markers, path {path!r}'
       )
     # add path index
     self._db['video_paths_idx'][path] = zoom_hash

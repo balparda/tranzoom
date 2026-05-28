@@ -146,6 +146,10 @@ def ComputeFractal(
     img.stats = stats
   # all copied, so we can return the final image; first trigger the histogram calculation
   img.RebuildHistograms()
+  logging.info(
+    f'ComputeFractal done: {params.frm.fractal.value} {params.width}x{params.height} '
+    f'depth={params.depth}, interior={img.stats.n_interior if img.stats else "?"}'
+  )
   return (params, img)
 
 
@@ -185,6 +189,7 @@ def _FractalAdaptiveIterations(
     Error: if the estimated max_iter exceeds the adaptive limit
 
   """
+  logging.info(f'Auto-depth search for {frm.fractal.value} frame, limits: {frame.HIGH_ITERS}')
   max_iter: int = frame.MAX_ITER
   for high_iter in frame.HIGH_ITERS:
     # make the smallest image
@@ -205,6 +210,7 @@ def _FractalAdaptiveIterations(
       raise Error('Fractal stats should have been collected during rendering, but are missing')
     # do we have any exterior points that escaped? if not, we can't estimate
     if img16.ext_hist.count == 0:
+      logging.info(f'Auto-depth: {high_iter=} produced no exterior points, retrying deeper')
       continue  # no exterior points
     # we have exterior points, so we can look at the histogram sorted by escape iteration;
     # find the highest escape iteration that is less than high limit

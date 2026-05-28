@@ -118,6 +118,10 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
   """
   # capture the time
   zoom_tm: int = timer.Now()
+  logging.info(
+    f'ZoomLoop starting: {params.frm.fractal.value}, '
+    f'{max_steps or "unlimited"} step(s), {"manual" if manual else f"AI model {model!r}"}'
+  )
   if manual:
     print_comm(
       f'Run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
@@ -171,6 +175,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
             kv_cache=kv_cache,
           )
         )[0]
+        logging.info(f'AI model loaded: {model_config}')
       # main loop: runs until max_steps is reached, or Ctrl+C is pressed
       json_chat: tbase.JSONDict | None = None
       img_data: bytes
@@ -192,7 +197,12 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
             messages: list[tbase.JSONDict] = cast('list[tbase.JSONDict]', json_chat['messages'])
             if not memory:
               json_chat = None  # no memory, start fresh every time
+              logging.debug(f'Zoom step {count}: cleared AI chat history (no memory mode)')
             elif len(messages) > (2 * memory + 1):  # +1 for the system prompt
+              logging.debug(
+                f'Zoom step {count}: pruning AI chat history '
+                f'from {len(messages)} to {2 * memory + 1} messages'
+              )
               json_chat = {
                 # the pattern is: first message is the system prompt,
                 # then 'user' messages alternating with 'assistant' messages
@@ -315,6 +325,10 @@ def _MoveCenter(  # noqa: C901
     target_weight=target_weight
   )
   direction: str = _DIRECTION_MAP[best.sector]
+  logging.debug(
+    f'MoveCenter: {frm.fractal.value} frame, best sector {best.sector}/{direction}, '
+    f'fractal_score={best.fractal_score}'
+  )
   if direction == 'C':
     pass  # no movement, zoom in place
   elif direction == 'N':
