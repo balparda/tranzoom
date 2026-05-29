@@ -886,6 +886,7 @@ class FractalDatabase:
     # computation
     img: image.Image
     params, img = self.DoComputation(params, max_threads, print_comm, force=force)
+    print_comm('')
     # render
     return (
       params,
@@ -931,11 +932,11 @@ class FractalDatabase:
     # log
     set_param: str = '' if params.set_points is None else f' w/ SET {params.set_points.value!r}'
     print_comm(
-      f'\n{params.width} x {params.height} '
+      f'{params.width} x {params.height} '
       f'{params.frm.fractal.value.capitalize()}{set_param}, '
       f'10^{params.frm.magnification[1]:.3f} magnitude...'
     )
-    print_comm(str(params))
+    print_comm(f'[yellow]Compute:[/] {params}')
     # do we know about this render?
     img: image.Image | None = None
     img_path: str | None = None
@@ -959,7 +960,6 @@ class FractalDatabase:
     else:
       logging.debug('DB miss: no computation data')
     # render the image for the current frame
-    print_comm('')
     tmr: timer.Timer | None = None
     if img is None or img_path is None or img_tm is None:
       with timer.Timer(emit_log=False) as tmr:
@@ -974,7 +974,7 @@ class FractalDatabase:
         self.AddComputationToDB(params, img_tm, img_path)  # DB only; returns None if use_db==False
     # done: log and return
     print_comm(
-      f'[green]{params.frm.fractal.value.capitalize()}: DONE[/] '
+      f'[yellow]Compute:[/] [green]{params.frm.fractal.value.capitalize()}: DONE,[/] '
       f'with precision {params.precision} bits, in {str(tmr) if tmr else "-"}'
     )
     return (params, img)
@@ -1031,7 +1031,7 @@ class FractalDatabase:
         'Cannot specify set_pal without set_points; set_points is required to use set_pal'
       )
     # log
-    print_comm(str(render))
+    print_comm(f'[yellow]Render:[/] {render}')
     # create path callback missing only the hash
     full_path: abc.Callable[[str], pathlib.Path] = lambda h: image.MakeImagePath(
       out.path,
@@ -1067,12 +1067,13 @@ class FractalDatabase:
         img_hash = render_data['data_hash']
         img_data = path.read_bytes()  # this is why we guard against self._use_db/force
         # we can end this: we have the image PNG on disk and img is as good as necessary
-        print_comm(f'{render.tp.value.upper()}: {img_hash!r} in -')
+        print_comm(
+          f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE,[/] {img_hash!r} in -'
+        )
         # print inline in iTerm2 if requested
         if iterm:
           print_comm('')
           image.PrintITerm2(img_data)
-        print_comm('')
         return (img_data, img_hash, full_path(img_hash))
       # if we got here, we have the render parameters but no existing image on disk
       print_comm(
@@ -1081,8 +1082,6 @@ class FractalDatabase:
       )
     else:
       logging.debug('DB miss: no render data')
-    # render the image for the current frame
-    print_comm('')
     # we got to here, so we have to render the PNG data from the image object and add overlay/mark;
     # hash is computed from the raw PNG before any post-processing overlays
     with timer.Timer(emit_log=False) as tmr:
@@ -1107,12 +1106,13 @@ class FractalDatabase:
       # add to DB; remember render_data could be None if use_db==False
       render_data = self.AddRenderToDB(params, render, ck, img_hash, str(full_path(img_hash)))
     # log
-    print_comm(f'{render.tp.value.upper()}: {img_hash!r} in {tmr}')
+    print_comm(
+      f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE,[/] {img_hash!r} in {tmr}'
+    )
     # print inline in iTerm2 if requested
     if iterm:
       print_comm('')
       image.PrintITerm2(img_data)
-    print_comm('')
     return (img_data, img_hash, full_path(img_hash))
 
 

@@ -805,7 +805,7 @@ def MakeFrameFromCLIArgs(
     # the happy path is one line... if these coords work, we return the frame and we're done
     return frame.Frame.FromCenter(fractal, center_re, center_im, f_width, height=f_height)
   except ValueError as err:
-    if 'invalid' not in str(err).lower():
+    if 'invalid' not in str(err).lower() and 'illegal' not in str(err).lower():
       raise UsageError(f'Error: {center_re=}, {center_im=}, {f_width=}, {f_height=}') from err
     # maybe the user gave us an image path instead of coordinates? let's try to read it as image
     try:
@@ -1043,7 +1043,7 @@ def ProduceFractalImage(
   # save the image to disk if requested
   if save_image:
     full_path.write_bytes(raw_png)
-    config.console.print(f'Saved to "{full_path}"\n')
+    config.console.print(f'Saved to "{full_path}"')
   return (img, raw_png, raw_hash, render)
 
 

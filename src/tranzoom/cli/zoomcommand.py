@@ -281,7 +281,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     f', {human.HumanizedSeconds(duration)} long, at {fps:.2f} FPS, with {frames} frames, '
     f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step...'
   )
-  config.console.print(f'{zoom_params} ... {all_frames[-1]}\n')
+  config.console.print(f'[yellow]ZOOM:[/] {zoom_params} ... {all_frames[-1]}\n')
   if zoom_params.scalar_magnification_per_step > image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
     config.console.print(
       '[red]Warning: the zoom per frame is high: 10^(mag/(frames-1)) = '
@@ -358,7 +358,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           # save per-frame-normalized image to disk if requested (for individual frame inspection)
           if save_frames:
             img_path.write_bytes(img_data)
-            config.console.print(f'Saved to "{img_path}"\n')
+            config.console.print(f'Saved to "{img_path}"')
+          config.console.print()
           all_marker_imgs[idx] = img  # keep Image object for ZoomColorNorm construction below
           all_img_bytes[idx] = img_data  # will be overwritten with zoom-normalized bytes below
           all_hash[idx] = data_hash  # will be overwritten with zoom-normalized hash below
@@ -371,7 +372,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       # zoom decades, i.e., one marker every 10x zoom by default)
       zoom_norm: image.Image.ZoomColorNorm = image.Image.ZoomColorNorm.FromMarkers(all_marker_imgs)
       config.console.print(
-        f'[green]Color norm[/]: built from {len(all_marker_imgs)} marker frames\n'
+        f'[yellow]ZOOM:[/] [green]Color norm[/]: built from {len(all_marker_imgs)} marker frames\n'
       )
       # re-render all marker frames with zoom-normalized colors; replaces the independently-
       # normalized per-frame bytes in all_img_bytes with cross-frame-stable palette positions
@@ -414,7 +415,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           # save per-frame-normalized image to disk if requested (for individual frame inspection)
           if save_frames:
             img_path.write_bytes(img_data)
-            config.console.print(f'Saved to "{img_path}"\n')
+            config.console.print(f'Saved to "{img_path}"')
+          config.console.print()
           # re-render with zoom-normalized colors for animation consistency
           n_bytes: bytes
           n_hash: str

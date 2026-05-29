@@ -122,15 +122,16 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
     f'ZoomLoop starting: {params.frm.fractal.value}, '
     f'{max_steps or "unlimited"} step(s), {"manual" if manual else f"AI model {model!r}"}'
   )
+  print_comm('')
   if manual:
     print_comm(
-      f'Run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
+      f'[yellow]Run MANUAL:[/] for [bold]{max_steps or "[red]∞[/]"}[/] step(s). '
       'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
     )
     print_comm(f'{timer.TimeStr(zoom_tm)} ({zoom_tm})')
   else:
     print_comm(
-      f'Run {params} for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
+      f'[yellow]Run AI:[/] for [bold]{max_steps or "[red]∞[/]"}[/] step(s). LLM will '
       + ('include reason field. ' if reason else '[cyan]NOT[/] include reason field. ')
       + 'Press [bold][red]Ctrl+C[/][/] to stop at any time.'
     )
@@ -186,6 +187,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
       while True:
         count += 1
         # render the image for the current frame
+        print_comm('')
         params, _, img_data, _, full_path = db.CoreComputeImage(
           params, render, out, count, zoom_tm, max_threads, iterm, print_comm, force=force
         )
@@ -260,6 +262,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
           )
         )
         # implement the move command
+        print_comm('')
         params = dataclasses.replace(
           params,
           frm=_MoveCenter(

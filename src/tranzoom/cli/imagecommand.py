@@ -112,8 +112,10 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
     frame.Fractal.MANDELBROT, center_re, center_im, f_width, f_height, config.console.print
   )
   # we have the frame, now feed it to the producer
+  config.console.print()
   with config.OpenDB() as db:
     base.ProduceFractalImage(db, frm, config)
+  config.console.print()
 
 
 @image_app.command(
@@ -164,8 +166,10 @@ def Julia(  # documentation is help/epilog/args  # noqa: D103
     point_im=julia_im,
   )
   # we have the frame, now feed it to the producer
+  config.console.print()
   with config.OpenDB() as db:
     base.ProduceFractalImage(db, frm, config)
+  config.console.print()
 
 
 @image_app.command(
