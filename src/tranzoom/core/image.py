@@ -519,7 +519,7 @@ class ZoomParameters(frame.SerializingFractalObject):
     """Get the frames per second for this animation, calculated from n_frames and duration. Exact.
 
     Returns:
-      float: The frames per second for this animation.
+      gmpy2.mpq: The frames per second for this animation.
 
     """
     return gmpy2.mpq(self.n_frames) / self.n_seconds
@@ -808,13 +808,24 @@ class Image:
     """Stores a histogram for a part of an image (usually set points and escaped points).
 
     Attributes:
-      count (int): The total count of pixels in this histogram
-      min_value (int): The minimum int value in this histogram
-      max_value (int): The maximum int value in this histogram
-      linear (list[tuple[int, int]]): A sorted list of (value, count) pairs representing the
-          histogram of int values in this category, sorted by value.
-      cumulative (list[tuple[int, int]]): A sorted list of (value, cumulative_count) pairs
-          representing the cumulative int histogram, sorted by value.
+      count (int): The total count of pixels in this histogram.
+      min_value (int): The minimum integer escape value in this histogram.
+      max_value (int): The maximum integer escape value in this histogram.
+      bucket_min (int): The minimum smoothed bucket key in this histogram.
+      bucket_max (int): The maximum smoothed bucket key in this histogram.
+      min_nu (float): The minimum fractional escape part (nu) seen across all pixels.
+      max_nu (float): The maximum fractional escape part (nu) seen across all pixels.
+      linear (list[tuple[int, int]]): Sorted list of (value, count) pairs; the raw histogram.
+      d_linear (dict[int, int]): {value: count} for O(1) lookup in the raw histogram.
+      cumulative (list[tuple[int, int]]): Sorted list of (value, cumulative_count) pairs;
+          the cumulative raw histogram.
+      d_cumulative (dict[int, int]): {value: cumulative_count} for O(1) lookup.
+      bucket_linear (list[tuple[int, int]]): Sorted list of (bucket_key, count) pairs;
+          the smoothed bucket histogram.
+      d_bucket_linear (dict[int, int]): {bucket_key: count} for O(1) lookup.
+      bucket_cumulative (list[tuple[int, int]]): Sorted list of (bucket_key, cumulative_count)
+          pairs; the smoothed cumulative bucket histogram.
+      d_bucket_cumulative (dict[int, int]): {bucket_key: cumulative_count} for O(1) lookup.
 
     """
 

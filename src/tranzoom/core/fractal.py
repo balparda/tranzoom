@@ -183,7 +183,8 @@ def _FractalAdaptiveIterations(
     print_comm (Callable[[str], None]): A callable to print messages
 
   Returns:
-    int: The estimated max_iter for the full image, based on the escape histogram of the test render
+    tuple[int, image.FractalStats]: The estimated max_iter for the full image (based on the
+        escape histogram of the test render) and the FractalStats collected during the probe.
 
   Raises:
     Error: if the estimated max_iter exceeds the adaptive limit

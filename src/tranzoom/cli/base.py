@@ -756,7 +756,13 @@ class TranZoomConfig(clibase.CLIConfig):
     return _ConfigTypeFactory()
 
   def SetConfig(self, cnf: ConfigType) -> None:
-    """Set a dict of the config values, save config to disk."""
+    """Set a dict of the config values, save config to disk.
+
+    Args:
+      cnf (ConfigType): The config dict to save; will be updated with the current app_version
+          and last_save timestamp before writing.
+
+    """
     cnf.update(
       # always update these fields
       {

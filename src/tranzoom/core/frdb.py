@@ -423,7 +423,7 @@ class FractalDatabase:
     """Get a human-readable label for the database, for logging and display purposes.
 
     Returns:
-      string '#<N>@<tm>'
+      str: A human-readable label string of the form '#<N>@<tm>'.
 
     """
     return _DBLabel(self._db)

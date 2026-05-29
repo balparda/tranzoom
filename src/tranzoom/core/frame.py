@@ -159,7 +159,12 @@ class SerializingFractalObject(abstract_abc.ABC):
   @final  # this affects the HASH, let's avoid trouble...
   @property
   def binary(self) -> bytes:
-    """Get a stable binary representation of the object, for hashing and storage."""
+    """Get a stable binary representation of the object, for hashing and storage.
+
+    Returns:
+      bytes: The stable binary (UTF-8 encoded canonical JSON) representation of the object.
+
+    """
     return json.dumps(self.json, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode(
       'utf-8'
     )
