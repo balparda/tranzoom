@@ -557,7 +557,9 @@ class FractalDatabase:
         raise Error(f'Inconsistent DB: found sentinel {cp_hash=!r} but not in cps; Report bug!')
       # update depth
       params = dataclasses.replace(params, depth=cast('int', self._db['cps'][cp_hash]['depth']))
-      logging.debug(f'FindImage: sentinel resolved to actual {orig_hash=!r} -> {cp_hash=!r}')
+      logging.debug(f'sentinel resolved to actual {orig_hash=!r} -> {cp_hash=!r}')
+      if params.sha != cp_hash:
+        raise Error(f'Sentinel {orig_hash=!r} -> {cp_hash=!r} but {params.sha=!r}; Report bug!')
     # now we can check if we have the computation parameters
     if cp_hash not in self._db['cps']:
       # we don't even know the computation parameters, so we definitely don't have the image
@@ -571,7 +573,7 @@ class FractalDatabase:
       raise Error(f'Inconsistent DB: found {cp_hash=!r} in DB but not in frame data; Report bug!')
     return (params, frm_data, frm_data['cps'][cp_hash])
 
-  def FindImage(
+  def FindRender(
     self, params: frame.ComputationParameters, render: image.RenderParameters
   ) -> tuple[
     frame.ComputationParameters,
@@ -599,7 +601,7 @@ class FractalDatabase:
 
     """
     if not self._use_db:
-      logging.debug('use_db is False: skipping image lookup')
+      logging.debug('use_db is False: skipping render lookup')
       return (params, CoreKeyFromData(params, render), None, None, None)
     # check computation... and maybe have a renewed param with the correct depth
     frm_data: FrameData | None
@@ -881,8 +883,10 @@ class FractalDatabase:
       raise Error(
         'Cannot specify set_pal without set_points; set_points is required to use set_pal'
       )
+    # computation
     img: image.Image
     params, img = self.DoComputation(params, max_threads, print_comm, force=force)
+    # render
     return (
       params,
       img,
@@ -906,17 +910,9 @@ class FractalDatabase:
     *,
     force: bool = False,
   ) -> tuple[frame.ComputationParameters, image.Image]:
-    """Compute a fractal image and return the result unsaved; the shared rendering primitive.
+    """Compute a fractal, producing an image.Image.
 
     This operates even if use_db is False and read_only is True, it just won't use/save cache...
-
-    This is the shared image computation primitive used by all rendering paths (static images,
-    AI-guided zoom, manual zoom, and animations). It does NOT save the image to disk — the
-    caller decides when and how to save, allowing callers to add evaluation metadata first.
-
-    Note: the content hash is computed from the raw PNG before any post-processing overlays
-    (crosshair mark, sector grid). The saved bytes contain all overlays; the hash is used for
-    deduplication and file naming.
 
     Args:
       params (frame.ComputationParameters): The computation parameters for the frame, including
@@ -995,13 +991,9 @@ class FractalDatabase:
     *,
     force: bool = False,
   ) -> tuple[bytes, str, pathlib.Path]:
-    """Compute a fractal image and return the result unsaved; the shared rendering primitive.
+    """Take an image.Image and do the fractal rendering.
 
     This operates even if use_db is False and read_only is True, it just won't use/save cache...
-
-    This is the shared image computation primitive used by all rendering paths (static images,
-    AI-guided zoom, manual zoom, and animations). It does NOT save the image to disk — the
-    caller decides when and how to save, allowing callers to add evaluation metadata first.
 
     Note: the content hash is computed from the raw PNG before any post-processing overlays
     (crosshair mark, sector grid). The saved bytes contain all overlays; the hash is used for
@@ -1056,7 +1048,7 @@ class FractalDatabase:
     img_data: bytes
     render_data: ImageData | None
     params: frame.ComputationParameters
-    params, ck, _, _, render_data = self.FindImage(img.params, render)
+    params, ck, _, _, render_data = self.FindRender(img.params, render)
     if params != img.params:
       raise Error('Render computation parameters do not match image parameters; Report bug!')
     # look at the actual render
