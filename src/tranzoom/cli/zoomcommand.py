@@ -312,6 +312,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     frames_tmr: timer.Timer | None = None
     render_tmr: timer.Timer | None = None
     video_path: pathlib.Path | None = None
+    p_bar: tqdm.tqdm[NoReturn] | None = None
     try:
       # see if we have a cache of this zoom
       zoom_data: frdb.ZoomData | None = db.FindZoom(zoom_params)
@@ -387,7 +388,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       del all_marker_imgs  # free memory
       # create metadata
       meta: dict[str, str] = image.MakeImageMeta(
-        all_img_obj[len(all_frames) - 1], render, 'N/A'
+        all_img_obj[zoom_params.n_frames - 1], render, 'N/A'
       )  # TODO: change 1st
       # add video-specific metadata
       meta[image.META_IMAGE_ANIMATION_KEY] = anim_type.value.lower()
@@ -412,8 +413,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       )
       # make the rendering progress bar
       config.console.print(f'[yellow]Render:[/] {render}')
-      p_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
-        total=len(all_frames),
+      p_bar = tqdm.tqdm(
+        total=zoom_params.n_frames,
         desc='Render',
         unit='fr',
         dynamic_ncols=True,
@@ -449,7 +450,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           img_path.write_bytes(img_data)
           config.console.print(f'Saved frame {i + 1} to {str(img_path)!r}')
         # update progress bar, return data
-        p_bar.update(1)
+        if p_bar:
+          p_bar.update(1)
         return img_data
 
       # save the final animation, first to a temporary path because we do not have the hash...
@@ -480,6 +482,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           raise base.UsageError(f'Unsupported animation type: {anim_type}')
         # we are done, close the progress bar
         p_bar.close()
+        p_bar = None
         # we can finally compute the hash
         video_hash = hashes.Hash256(
           # stable if the image data and order does not change
@@ -501,6 +504,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       # done
       success = True
     finally:
+      if p_bar:
+        p_bar.close()  # type: ignore[unreachable]
       if success and video_hash and video_path:
         config.console.print(
           f'Success: {anim_type.value.upper()} {video_hash!r} in '
