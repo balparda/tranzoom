@@ -269,7 +269,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   zoom_params: image.ZoomParameters = image.ZoomParameters(
     tp=anim_type,
     img=params,  # zoom is created with the sentinel value (if on AUTO) and does NOT update!
-    render=render,
+    render=render,  # notice this render does not have prev/next markers!
     mag=gmpy2.mpq(dest_magnification_10),
     n_frames=frames,
     duration=round(duration * image.VIDEO_DURATION_STORE_SCALE),
@@ -387,9 +387,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       all_img_obj.update(all_marker_imgs)
       del all_marker_imgs  # free memory
       # create metadata
-      meta: dict[str, str] = image.MakeImageMeta(
-        all_img_obj[zoom_params.n_frames - 1], render, 'N/A'
-      )  # TODO: change 1st
+      meta: dict[str, str] = image.MakeImageMeta(all_img_obj[0], render, 'N/A')
       # add video-specific metadata
       meta[image.META_IMAGE_ANIMATION_KEY] = anim_type.value.lower()
       meta.update(
@@ -427,19 +425,23 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
         img_data: bytes
         data_hash: str
         img_path: pathlib.Path
+        p: int
+        n: int
+        zn: image.Image.FrameColorNorm
         # get image
         img_obj: image.Image = all_img_obj[i]
         # render
+        p, n, zn = zoom_norm.ForFrame(i)
         img_data, data_hash, img_path = db.DoRender(
           img_obj,
-          render,
+          dataclasses.replace(render, prev_marker=all_frames[p], next_marker=all_frames[n]),
           out,
           add_serial=i + 1,
           tm=timestamp,
           iterm=False,  # disable, we want silence
           print_comm=config.console.print,
           force=config.img_force_redo,
-          zoom_norm=zoom_norm.ForFrame(i),
+          zoom_norm=zn,
           silent=True,  # we will have a progress bar
           no_meta=True,  # do not include metadata for individual frames
         )

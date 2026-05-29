@@ -54,7 +54,7 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 # this indicates that the mathematical computation or the setting of colors has changed;
 # this should NOT change over metadata changes, as it is computed from raw pixel data
 SEAHORSE_TAIL_HASH: str = 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9'
-SEAHORSE_ANIMATED_HASH: str = '0c3d798e4af4d57d7185ae4b954509dea45282bb3c29798605d3d3e5f3c3651b'
+SEAHORSE_ANIMATED_HASH: str = 'cfcd4250757a16c4d4c9d4594693ad0f02588796d0ddb328bbea6e889478e406'
 SUZANA_WAVE_HASH: str = '8f06e7bcd0ea14dff1b6fc3c829cdc295367695fea882e2cf9e25bb1a6dfb5fc'
 # this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 

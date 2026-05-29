@@ -338,8 +338,10 @@ class RenderParameters(frame.SerializingFractalObject):
   mark_color: Color | None = None  # if None, no mark will be drawn
   mark_width: int = DEFAULT_MARK_WIDTH
   overlay: OverlayType | None = None  # overlay is independent of mark!
+  prev_marker: frame.Frame | None = None  # for zoom
+  next_marker: frame.Frame | None = None  # for zoom
 
-  def __post_init__(self) -> None:
+  def __post_init__(self) -> None:  # noqa: C901, PLR0912
     """Check parameters for validity.
 
     Raises:
@@ -379,6 +381,17 @@ class RenderParameters(frame.SerializingFractalObject):
       r, g, b = self.mark_color.value
       if not (0 <= r <= 255 and 0 <= g <= 255 and 0 <= b <= 255):  # noqa: PLR2004
         raise Error(f'Mark color RGB values must be between 0 and 255, got {self.mark_color}')
+    # check prev/next markers are valid if provided
+    if not self.prev_marker and self.next_marker:
+      raise Error('next_marker provided without prev_marker')
+    if self.prev_marker and not self.next_marker:
+      raise Error('prev_marker provided without next_marker')
+    if (
+      self.prev_marker
+      and self.next_marker
+      and (self.prev_marker.fractal != self.next_marker.fractal)
+    ):
+      raise Error('prev/next_marker fractal types do not match')
 
   def __str__(self) -> str:
     """Get string representation of the RenderParameters.
@@ -408,10 +421,15 @@ class RenderParameters(frame.SerializingFractalObject):
       )
     )
     overlay: str = '' if self.overlay is None else f' + [OVERLAY: {self.overlay.name}]'
+    markers: str = (
+      ''
+      if self.prev_marker is None or self.next_marker is None
+      else f' + [P:{self.prev_marker.sha[:10]}, N:{self.next_marker.sha[:10]}]'
+    )
     return (
       '{'
       f'[{self.tp.name.upper()}, {self.escaped_pal.name}, '
-      f'{self.set_pal.name if self.set_pal else "none"}]{mark}{overlay}'
+      f'{self.set_pal.name if self.set_pal else "none"}]{mark}{overlay}{markers}'
       '}'
     )
 
@@ -437,6 +455,8 @@ class RenderParameters(frame.SerializingFractalObject):
       'mark_color': self.mark_color.name.lower() if self.mark_color else None,
       'mark_width': self.mark_width,
       'overlay': self.overlay.value if self.overlay else None,
+      'prev_marker': self.prev_marker.json if self.prev_marker else None,
+      'next_marker': self.next_marker.json if self.next_marker else None,
     }
 
   @staticmethod
@@ -468,6 +488,12 @@ class RenderParameters(frame.SerializingFractalObject):
         ),
         mark_width=int(str(data['mark_width'])),
         overlay=OverlayType(data['overlay']) if data['overlay'] is not None else None,
+        prev_marker=frame.Frame.FromJson(cast('tbase.JSONDict', data['prev_marker']))
+        if data['prev_marker']
+        else None,
+        next_marker=frame.Frame.FromJson(cast('tbase.JSONDict', data['next_marker']))
+        if data['next_marker']
+        else None,
       )
     except (KeyError, ValueError, TypeError, Error) as err:
       raise Error(f'Invalid RenderParameters JSON data: {err}') from err
@@ -1094,7 +1120,7 @@ class Image:
         marker_list.append((idx, img.ext_hist, img.int_hist))
       return Image.ZoomColorNorm(markers=marker_list)
 
-    def ForFrame(self, frame_idx: int) -> Image.FrameColorNorm:
+    def ForFrame(self, frame_idx: int) -> tuple[int, int, Image.FrameColorNorm]:
       """Get the interpolated color normalization for a given frame index.
 
       Finds the two surrounding marker frames and computes the linear blend weight alpha based
@@ -1105,7 +1131,10 @@ class Image:
         frame_idx (int): The frame index to get color normalization for.
 
       Returns:
-        FrameColorNorm: The interpolated color normalization for the given frame.
+        tuple[int, int, Image.FrameColorNorm]: tuple of:
+          - The index of the previous marker frame.
+          - The index of the next marker frame.
+          - The interpolated color normalization for the given frame.
 
       """
       marker_indexes: list[int] = [m[0] for m in self.markers]
@@ -1122,12 +1151,16 @@ class Image:
       prev_idx, prev_ext, prev_int = self.markers[pos]
       next_idx, next_ext, next_int = self.markers[pos + 1]
       alpha: float = 0.0 if next_idx == prev_idx else (frame_idx - prev_idx) / (next_idx - prev_idx)
-      return Image.FrameColorNorm(
-        prev_ext=prev_ext,
-        next_ext=next_ext,
-        prev_int=prev_int,
-        next_int=next_int,
-        alpha=alpha,
+      return (
+        prev_idx,
+        next_idx,
+        Image.FrameColorNorm(
+          prev_ext=prev_ext,
+          next_ext=next_ext,
+          prev_int=prev_int,
+          next_int=next_int,
+          alpha=alpha,
+        ),
       )
 
   def __init__(self, params: frame.ComputationParameters) -> None:
