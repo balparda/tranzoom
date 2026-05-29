@@ -81,10 +81,6 @@ DEFAULT_JULIA_HEIGHT: str = '2.2'
 
 # TODO: image to store: on set/non-escaped the actual final value of the tracked constant;
 #     and if we store the mpfr on a dict for example, we will have space for more info in the array
-# TODO: with all the frames in place (DB) and richer images and "nu" we can start video smoothing;
-#     a class for video objects with all the frames
-# TODO: before rendering video, decide on marker frames every X magnitude, make them first,
-#     use them to compute colors and then smooth colors between maker frames smoothly
 
 
 class Error(tbase.Error):

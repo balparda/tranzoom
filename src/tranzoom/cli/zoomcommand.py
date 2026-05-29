@@ -333,6 +333,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       data_hash: str
       all_img_bytes: dict[int, bytes] = {}
       all_hash: dict[int, str] = {}
+      all_marker_imgs: dict[int, image.Image] = {}  # Image objects for ZoomColorNorm (see below)
       # MARKERS: produce marker frames FIRST
       with timer.Timer(emit_log=False) as markers_tmr:
         for i, (idx, frm) in enumerate(all_markers):
@@ -355,17 +356,37 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           # check we got something
           if not img or not img_path:
             raise base.Error('No image produced for marker! should never happen; report bug')
-          # save the image to disk if requested
+          # save per-frame-normalized image to disk if requested (for individual frame inspection)
           if save_frames:
             img_path.write_bytes(img_data)
             config.console.print(f'Saved to "{img_path}"\n')
-          all_img_bytes[idx] = img_data
-          all_hash[idx] = data_hash
+          all_marker_imgs[idx] = img  # keep Image object for ZoomColorNorm construction below
+          all_img_bytes[idx] = img_data  # will be overwritten with zoom-normalized bytes below
+          all_hash[idx] = data_hash  # will be overwritten with zoom-normalized hash below
       # check we got something; also appease type checker
-      if not img:
-        raise base.Error('No image produced for animation! should never happen; report bug')
-      # we have all the markers, now we can compute the smoothing?
-      # TODO: the smoothing?
+      if not img or not all_marker_imgs:
+        raise base.Error('No marker images produced for animation! should never happen; report bug')
+      # build ZoomColorNorm from the marker images: anchors color normalization so the same
+      # escape-iteration value maps to a consistent palette position across the whole animation,
+      # eliminating wild per-frame palette shifts (one color anchor per MAGNITUDE_PER_FRAME_MARKER
+      # zoom decades, i.e., one marker every 10x zoom by default)
+      zoom_norm: image.Image.ZoomColorNorm = image.Image.ZoomColorNorm.FromMarkers(all_marker_imgs)
+      config.console.print(
+        f'[green]Color norm[/]: built from {len(all_marker_imgs)} marker frames\n'
+      )
+      # re-render all marker frames with zoom-normalized colors; replaces the independently-
+      # normalized per-frame bytes in all_img_bytes with cross-frame-stable palette positions
+      # TODO: this re-render has to stop - ask bottom layers to not render then!
+      m_img: image.Image
+      m_bytes: bytes
+      m_hash: str
+      for m_idx, _ in all_markers:
+        m_img = all_marker_imgs[m_idx]
+        m_bytes, m_hash = m_img.AsPNG(render, zoom_norm=zoom_norm.ForFrame(m_idx))
+        all_img_bytes[m_idx] = m_bytes
+        all_hash[m_idx] = m_hash
+      # the last frame is always a marker; use its Image object for the final metadata below
+      img = all_marker_imgs[all_markers[-1][0]]
       # produce the regular frames now
       with timer.Timer(emit_log=False) as frames_tmr:
         for i, frm in enumerate(all_frames):
@@ -392,12 +413,16 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           # check we got something
           if not img or not img_path:
             raise base.Error('No image produced for frame! should never happen; report bug')
-          # save the image to disk if requested
+          # save per-frame-normalized image to disk if requested (for individual frame inspection)
           if save_frames:
             img_path.write_bytes(img_data)
             config.console.print(f'Saved to "{img_path}"\n')
-          all_img_bytes[i] = img_data
-          all_hash[i] = data_hash
+          # re-render with zoom-normalized colors for animation consistency
+          n_bytes: bytes
+          n_hash: str
+          n_bytes, n_hash = img.AsPNG(render, zoom_norm=zoom_norm.ForFrame(i))
+          all_img_bytes[i] = n_bytes
+          all_hash[i] = n_hash
       # video loop is done; compute hash and so the path
       video_hash = hashes.Hash256(
         # stable if the image data and order does not change

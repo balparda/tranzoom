@@ -265,11 +265,6 @@ class FractalStats:
   imag_hi: gmpy2.mpfr  # max(all sac values for interior points)
 
 
-# TODO: more stable animations
-# instead of rendering each frame independently, we can have a class that knows about the
-# whole intended journey and can have a special AsPixels() that normalizes once against all images
-
-
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class ImageOutputConfig:
   """Groups all parameters that control how output images are named and saved on disk.
@@ -878,6 +873,172 @@ class Image:
         return _ALMOST_ONE
       return t
 
+  @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+  class FrameColorNorm:
+    """Interpolated color normalization for a single animation frame between two marker frames.
+
+    Smoothly blends between the two surrounding marker frames' histogram normalizations so that
+    the same raw escape-iteration value maps to a consistent (and smoothly transitioning) palette
+    position across the entire animation journey. This eliminates the wild per-frame color shifts
+    that arise when each frame independently histogram-equalizes its own escape iteration data.
+
+    At a marker frame, alpha is exactly 0.0 (frame IS the lower/prev marker) or 1.0 (frame IS the
+    upper/next marker), so the coloring is identical to the marker's own per-frame normalization.
+    Between marker frames, alpha is linearly interpolated for a smooth cross-fade.
+
+    See ZoomColorNorm for construction and usage.
+    """
+
+    prev_ext: Image.Histogram  # exterior histogram of the preceding marker frame
+    next_ext: Image.Histogram  # exterior histogram of the following marker frame
+    prev_int: Image.Histogram  # interior histogram of the preceding marker frame
+    next_int: Image.Histogram  # interior histogram of the following marker frame
+    alpha: float  # blend weight in [0.0, 1.0]: 0.0 = use prev only, 1.0 = use next only
+
+    def InterpolateExt(self, n: int, nu: float) -> float:
+      """Get the cross-frame-stable blended palette position for an exterior (escaped) pixel.
+
+      Args:
+        n (int): The escape iteration count for the pixel.
+        nu (float): The fractional escape iteration for smooth coloring.
+
+      Returns:
+        float: Blended palette position in [0, 1).
+
+      """
+      if self.alpha <= 0.0:
+        return self.prev_ext.InterpolateBucket(n, nu)
+      if self.alpha >= 1.0:
+        return self.next_ext.InterpolateBucket(n, nu)
+      t_prev: float = self.prev_ext.InterpolateBucket(n, nu)
+      t_next: float = self.next_ext.InterpolateBucket(n, nu)
+      return t_prev + self.alpha * (t_next - t_prev)
+
+    def InterpolateInt(self, key: int) -> float:
+      """Get the cross-frame-stable blended palette position for an interior (Set) pixel.
+
+      Args:
+        key (int): The positive interior key (the negated stored escape value: -escaped_at).
+
+      Returns:
+        float: Blended palette position in [0, 1).
+
+      """
+      t_prev: float = (
+        (self.prev_int.d_cumulative.get(key, 0) - 1) / self.prev_int.count
+        if self.prev_int.count > 0
+        else 0.0
+      )
+      if self.alpha <= 0.0:
+        return max(0.0, min(_ALMOST_ONE, t_prev))
+      t_next: float = (
+        (self.next_int.d_cumulative.get(key, 0) - 1) / self.next_int.count
+        if self.next_int.count > 0
+        else 0.0
+      )
+      if self.alpha >= 1.0:
+        return max(0.0, min(_ALMOST_ONE, t_next))
+      return max(0.0, min(_ALMOST_ONE, t_prev + self.alpha * (t_next - t_prev)))
+
+  @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+  class ZoomColorNorm:
+    """Anchors color normalization for all frames in a zoom animation using marker frames.
+
+    Marker frames are computed first at deterministic, evenly-spaced zoom-magnitude intervals
+    (one marker every MAGNITUDE_PER_FRAME_MARKER decades of zoom). For any non-marker frame
+    between two adjacent markers, this class interpolates linearly between the two markers'
+    histogram normalizations. The result: the same raw escape-iteration value maps to a
+    consistent (and smoothly cross-fading) palette position throughout the entire animation,
+    eliminating the wild per-frame color shifts that arise from independent histogram equalization.
+
+    Typical usage in zoomcommand.Auto() (abbreviated):
+      1. Compute all marker frames, collecting {frame_idx: Image} in all_marker_imgs.
+      2. Build: zoom_norm = ZoomColorNorm.FromMarkers(all_marker_imgs)
+      3. Re-render every frame: img.AsPNG(render, zoom_norm=zoom_norm.ForFrame(frame_idx))
+    """
+
+    # sorted list of (frame_idx, ext_hist, int_hist)
+    markers: list[tuple[int, Image.Histogram, Image.Histogram]]
+
+    def __post_init__(self) -> None:
+      """Check parameters for validity.
+
+      Raises:
+        Error: if any parameter is invalid.
+
+      """
+      if len(self.markers) < 2:  # noqa: PLR2004
+        raise Error(f'ZoomColorNorm requires at least 2 markers, got {len(self.markers)}')
+      for j in range(1, len(self.markers)):
+        if self.markers[j][0] <= self.markers[j - 1][0]:
+          raise Error(
+            f'ZoomColorNorm markers must be strictly sorted by frame index; '
+            f'got indices [{self.markers[j - 1][0]}, {self.markers[j][0]}]'
+          )
+
+    @staticmethod
+    def FromMarkers(marker_imgs: dict[int, Image]) -> Image.ZoomColorNorm:
+      """Build a ZoomColorNorm from a dict of {frame_idx: Image} for the marker frames.
+
+      Args:
+        marker_imgs (dict[int, Image]): The marker images keyed by frame index. Every Image
+            must have valid escape data; histograms will be built here if not yet present.
+
+      Returns:
+        ZoomColorNorm: The constructed ZoomColorNorm.
+
+      Raises:
+        Error: if fewer than 2 markers are provided or histograms cannot be built.
+
+      """
+      # build the marker list; iterating once so mypy can narrow ext_hist / int_hist to non-None
+      marker_list: list[tuple[int, Image.Histogram, Image.Histogram]] = []
+      img: Image
+      for idx in sorted(marker_imgs):
+        img = marker_imgs[idx]
+        if not img.ext_hist or not img.int_hist:
+          img.RebuildHistograms()
+        if not img.ext_hist or not img.int_hist:
+          raise Error(f'Failed to build histograms for marker frame {idx}')
+        marker_list.append((idx, img.ext_hist, img.int_hist))
+      return Image.ZoomColorNorm(markers=marker_list)
+
+    def ForFrame(self, frame_idx: int) -> Image.FrameColorNorm:
+      """Get the interpolated color normalization for a given frame index.
+
+      Finds the two surrounding marker frames and computes the linear blend weight alpha based
+      on the frame's position within the marker interval. At a marker frame exactly, alpha is
+      0.0 (frame IS the lower/prev marker) or 1.0 (frame IS the upper/next marker).
+
+      Args:
+        frame_idx (int): The frame index to get color normalization for.
+
+      Returns:
+        FrameColorNorm: The interpolated color normalization for the given frame.
+
+      """
+      marker_indexes: list[int] = [m[0] for m in self.markers]
+      # find the position of frame_idx in the sorted marker index list
+      pos: int = bisect.bisect_right(marker_indexes, frame_idx) - 1
+      # clamp to valid interval (only possible if frame_idx is outside the marker range, a bug)
+      pos = max(0, min(pos, len(self.markers) - 2))
+      prev_idx: int
+      prev_ext: Image.Histogram
+      prev_int: Image.Histogram
+      next_idx: int
+      next_ext: Image.Histogram
+      next_int: Image.Histogram
+      prev_idx, prev_ext, prev_int = self.markers[pos]
+      next_idx, next_ext, next_int = self.markers[pos + 1]
+      alpha: float = 0.0 if next_idx == prev_idx else (frame_idx - prev_idx) / (next_idx - prev_idx)
+      return Image.FrameColorNorm(
+        prev_ext=prev_ext,
+        next_ext=next_ext,
+        prev_int=prev_int,
+        next_int=next_int,
+        alpha=alpha,
+      )
+
   def __init__(self, params: frame.ComputationParameters) -> None:
     """Construct image.
 
@@ -939,7 +1100,7 @@ class Image:
     self.ext_hist = _BuildCumulative(exterior_points)  # ext generator
     self.int_hist = _BuildCumulative(interior_points)  # int generator
 
-  def AsPixels(self, render: RenderParameters) -> bytes:
+  def AsPixels(self, render: RenderParameters, *, zoom_norm: FrameColorNorm | None = None) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
     Exterior points (escaped) are colored by mapping their escape iteration through a cumulative
@@ -952,8 +1113,14 @@ class Image:
     equalization approach, applied to their stored |z| magnitude (the negative of the stored
     escape value), so the full `set_pal` range is used across the Set interior.
 
+    When `zoom_norm` is provided (animation rendering), the histogram-equalized position is
+    computed by blending between the two surrounding marker frames' histograms instead of using
+    this frame's own histogram. This keeps colors stable across the entire animation journey.
+
     Args:
       render (RenderParameters): The render parameters to use for generating the PNG metadata.
+      zoom_norm (FrameColorNorm | None): Optional cross-frame color normalization for animation
+          rendering. If None (default), each frame's own histogram is used (per-frame equalized).
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
@@ -976,40 +1143,52 @@ class Image:
         f'Invalid/Inconsistent {self.ext_hist.min_value=} or '
         f'{self._params.depth=}+{frame.SMOOTH_EXTRA_ITERS} < {self.ext_hist.max_value=}'
       )
-    # map each pixel to an RGB color
+    # map each pixel to an RGB color; zoom_norm (if given) blends between adjacent marker
+    # histograms for cross-frame consistency instead of using this frame's own histogram
     escaped_at: int
     f_nu: float
     pixels = bytearray(self._params.width * self._params.height * 3)
     for i, enc_escaped_at in enumerate(self.escape):
       escaped_at, f_nu = Decode64ToIntFloat(enc_escaped_at)
       if escaped_at >= 0 and self.ext_hist.count > 0:
-        # exterior point: histogram-equalized position in pal
-        rgb: tuple[int, int, int] = _PixelPalette(
-          self.ext_hist.InterpolateBucket(escaped_at, f_nu), render.escaped_pal
+        # exterior point: histogram-equalized position in palette
+        t_ext: float = (
+          zoom_norm.InterpolateExt(escaped_at, f_nu)
+          if zoom_norm is not None
+          else self.ext_hist.InterpolateBucket(escaped_at, f_nu)
         )
+        rgb: tuple[int, int, int] = _PixelPalette(t_ext, render.escaped_pal)
       elif self._params.set_points and self.int_hist.count > 0 and escaped_at < 0:
         # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
-        t_set: float = (self.int_hist.d_cumulative[-escaped_at] - 1) / self.int_hist.count
         if render.set_pal is None:
           raise Error('set_pal must be specified in RenderParameters when set_points is True')
+        t_set: float = (
+          zoom_norm.InterpolateInt(-escaped_at)
+          if zoom_norm is not None
+          else (self.int_hist.d_cumulative[-escaped_at] - 1) / self.int_hist.count
+        )
         rgb = _PixelPalette(t_set, render.set_pal)
       else:
         rgb = (0, 0, 0)  # black: interior point (default) or all-interior image
       pixels[i * 3], pixels[i * 3 + 1], pixels[i * 3 + 2] = rgb
     return bytes(pixels)
 
-  def AsPNG(self, render: RenderParameters) -> tuple[bytes, str]:
+  def AsPNG(
+    self, render: RenderParameters, *, zoom_norm: FrameColorNorm | None = None
+  ) -> tuple[bytes, str]:
     """Convert the image to PNG bytes and return it with its internal data hash.
 
     Args:
       render (RenderParameters): The render parameters to use for generating the PNG metadata.
+      zoom_norm (FrameColorNorm | None): Optional cross-frame color normalization; passed
+          through to AsPixels(). Use for animation frames to keep colors stable across zoom.
 
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
 
     """
     # convert the raw pixel data to a PNG using PIL
-    raw_img: bytes = self.AsPixels(render)
+    raw_img: bytes = self.AsPixels(render, zoom_norm=zoom_norm)
     img_data_hash: str = hashes.Hash256(raw_img).hex()
     img: PILImage.Image = PILImage.frombytes(
       'RGB', (self._params.width, self._params.height), raw_img
