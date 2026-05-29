@@ -981,7 +981,6 @@ def ProduceFractalImage(
   tm: int | None = None,
   add_serial: int | None = None,
   save_image: bool = True,
-  require_img_obj: bool = True,
 ) -> tuple[image.Image | None, bytes, str, image.RenderParameters]:
   """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
 
@@ -998,8 +997,6 @@ def ProduceFractalImage(
         5-digit number between the date and hash.
     save_image (bool): If True, will save the final image to disk; if False, the image will
         not be saved; default is True.
-    require_img_obj (bool): If True, will require the image.Image object to be returned by the
-        method; if False, the image.Image object may be None; default is True
 
   Returns:
     tuple[image.Image, bytes, str, image.RenderParameters]: A tuple of
@@ -1035,7 +1032,6 @@ def ProduceFractalImage(
     max_threads=config.max_threads,
     iterm=config.iterm,
     print_comm=config.console.print,
-    require_img_obj=require_img_obj,
     force=config.img_force_redo,
   )
   # save the image to disk if requested

@@ -350,7 +350,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
             max_threads=config.max_threads,
             iterm=config.iterm,
             print_comm=config.console.print,
-            require_img_obj=True,
             force=config.img_force_redo,
           )
           # check we got something
@@ -407,7 +406,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
             max_threads=config.max_threads,
             iterm=config.iterm,
             print_comm=config.console.print,
-            require_img_obj=True,
             force=config.img_force_redo,
           )
           # check we got something
