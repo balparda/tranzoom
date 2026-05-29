@@ -32,7 +32,7 @@ def BuildImageThirdsPrompts(
     frm (frame.Frame): The current frame for the fractal zoom search.
     reason (bool): Whether to include the reasoning field in the prompts
     target_search (str | None): Optional string describing the targeted search query;
-        if None, targeted search is inactive
+        if None, targeted search is inactive; default is None
 
   Returns:
     tuple[str, str]: A tuple of (setup_prompt, image_prompt)

@@ -244,7 +244,26 @@ _MPQ_VIDEO_DURATION_STORE_SCALE: gmpy2.mpq = gmpy2.mpq(str(VIDEO_DURATION_STORE_
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class FractalStats:
-  """Defines Mandelbrot stats values, collected over the sample run."""
+  """Defines Mandelbrot stats values, collected over the sample run.
+
+  Attributes:
+    n_px (int): Total number of pixels in the image.
+    n_interior (int): Number of interior (Set) points in the image; pixels with escape
+        iteration < 0.
+    max_lo (gmpy2.mpfr): min(all max(|z|)) for interior points; lower bound of the max |z|
+        magnitudes.
+    max_hi (gmpy2.mpfr): max(all max(|z|)) for interior points; upper bound of the max |z|
+        magnitudes.
+    min_lo (gmpy2.mpfr): min(all min(|z|)) for interior points; lower bound of the min |z|
+        magnitudes.
+    min_hi (gmpy2.mpfr): max(all min(|z|)) for interior points; upper bound of the min |z|
+        magnitudes.
+    ang_lo (gmpy2.mpfr): Minimum angle for interior (Set) points, in [0, 1].
+    ang_hi (gmpy2.mpfr): Maximum angle for interior (Set) points, in [0, 1].
+    imag_lo (gmpy2.mpfr): Minimum imaginary weight average for interior (Set) points, in [0, 1].
+    imag_hi (gmpy2.mpfr): Maximum imaginary weight average for interior (Set) points, in [0, 1].
+
+  """
 
   # these 2 stats are always collected
   n_px: int  # total number of pixels in the image
@@ -271,6 +290,13 @@ class ImageOutputConfig:
 
   This is a runtime-only config object — not part of the mathematical/DB representation.
   It is NOT a SerializingFractalObject: it carries no mathematical meaning and is never hashed.
+
+  Attributes:
+    path (pathlib.Path | None): Output directory; None means the current working directory.
+    use_date (bool): If True, a YYYYMMDDhhmmss timestamp is included in the file name.
+    use_hash (bool): If True, the content hash is included in the file name.
+    prefix (str): File name prefix, e.g., 'mandel' or 'julia'.
+
   """
 
   path: pathlib.Path | None  # output directory; None means current working directory
@@ -281,7 +307,27 @@ class ImageOutputConfig:
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class RenderParameters(frame.SerializingFractalObject):
-  """Defines a transformation from math to image."""
+  """Defines a transformation from math to image.
+
+  ATTENTION: changing any attribute changes the object SHA-256 hash.
+
+  Attributes:
+    tp (FileType): Output file type; default is FileType.PNG.
+    escaped_pal (palette.Palette): Color palette for escaped (exterior) points;
+        default is palette.DEFAULT_PALETTE.
+    set_pal (palette.Palette | None): Color palette for interior Set points; None means no
+        Set palette (requires a non-Set computation); default is None.
+    mark_re (gmpy2.mpq): Real part of the optional crosshair mark coordinate;
+        default is 0; unused when mark_color is None.
+    mark_im (gmpy2.mpq): Imaginary part of the optional crosshair mark coordinate;
+        default is 0; unused when mark_color is None.
+    mark_color (Color | None): Color of the crosshair mark overlay; None means no mark is
+        drawn; default is None.
+    mark_width (int): Crosshair mark line width in pixels; default is DEFAULT_MARK_WIDTH.
+    overlay (OverlayType | None): Optional numbered sector grid overlay; None means no
+        overlay; default is None.
+
+  """
 
   # ATTENTION: changing anything here changes the HASH!!
   tp: FileType = FileType.PNG
@@ -433,7 +479,23 @@ class RenderParameters(frame.SerializingFractalObject):
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class ZoomParameters(frame.SerializingFractalObject):
-  """Defines the zoom parameters for video planning and rendering."""
+  """Defines the zoom parameters for video planning and rendering.
+
+  ATTENTION: changing any attribute changes the object SHA-256 hash.
+
+  Attributes:
+    tp (AnimationType): The animation output type ('gif' or 'mp4').
+    img (frame.ComputationParameters): The initial frame computation parameters; the same
+        parameters are used for all frames in the animation.
+    render (RenderParameters): The render parameters applied to all frames in the animation.
+    mag (gmpy2.mpq): The destination magnification (as a log10 magnitude order).
+    n_frames (int): The total number of frames in the animation.
+    duration (int): The animation duration stored as
+        round(seconds * VIDEO_DURATION_STORE_SCALE), to avoid float precision issues.
+    loop (int): Number of loops for GIF animations; 0 means infinite loop;
+        ignored for non-GIF types; default is 0.
+
+  """
 
   # ATTENTION: changing anything here changes the HASH!!
   tp: AnimationType  # 'gif' or 'mp4'
@@ -793,13 +855,17 @@ class Image:
   """A fractal image. Encapsulates the image operations.
 
   Attributes:
-    escape (ImageInt32Array): An array storing the escape data for each pixel;
+    escape (ImageUInt64Array): An array storing the escape data for each pixel;
         this is not the color, but the raw data that will be converted to color later;
         the length of this array is equal to the total number of pixels in the image;
         the pixel at coordinates (x, y) is stored at index (y * width + x) in the array.
     stats (FractalStats | None): Optional stats about the fractal, collected during rendering;
         DO NOT COUNT on this being present unless this was a sample 16.16 render
-        (see fractal._FractalAdaptiveIterations) where the stats are collected
+        (see fractal._FractalAdaptiveIterations) where the stats are collected.
+    ext_hist (Image.Histogram | None): Histogram for exterior (escaped) pixels; None until
+        RebuildHistograms() is called.
+    int_hist (Image.Histogram | None): Histogram for interior (Set) pixels, with values
+        stored as positive integers; None until RebuildHistograms() is called.
 
   """
 
@@ -898,6 +964,15 @@ class Image:
     Between marker frames, alpha is linearly interpolated for a smooth cross-fade.
 
     See ZoomColorNorm for construction and usage.
+
+    Attributes:
+      prev_ext (Image.Histogram): Exterior (escaped) histogram of the preceding marker frame.
+      next_ext (Image.Histogram): Exterior (escaped) histogram of the following marker frame.
+      prev_int (Image.Histogram): Interior (Set) histogram of the preceding marker frame.
+      next_int (Image.Histogram): Interior (Set) histogram of the following marker frame.
+      alpha (float): Blend weight in [0.0, 1.0]; 0.0 means use prev only, 1.0 means use next
+          only; linearly interpolated between adjacent marker frames.
+
     """
 
     prev_ext: Image.Histogram  # exterior histogram of the preceding marker frame
@@ -966,6 +1041,11 @@ class Image:
       1. Compute all marker frames, collecting {frame_idx: Image} in all_marker_imgs.
       2. Build: zoom_norm = ZoomColorNorm.FromMarkers(all_marker_imgs)
       3. Re-render every frame: img.AsPNG(render, zoom_norm=zoom_norm.ForFrame(frame_idx))
+
+    Attributes:
+      markers (list[tuple[int, Image.Histogram, Image.Histogram]]): Sorted list of
+          (frame_idx, ext_hist, int_hist) tuples for each marker frame.
+
     """
 
     # sorted list of (frame_idx, ext_hist, int_hist)
@@ -1594,8 +1674,8 @@ def DrawCrossOverlay(
     img_data (bytes): The PNG image data as bytes.
     x (int): The x-coordinate of the center of the cross.
     y (int): The y-coordinate of the center of the cross.
-    col (Color): The color of the cross.
-    lw (int): The line width of the cross.
+    col (Color): The color of the cross; default is DEFAULT_MARK_COLOR.
+    lw (int): The line width of the cross in pixels; default is DEFAULT_MARK_WIDTH.
 
   Returns:
     bytes: The modified PNG image data with the overlay drawn.
@@ -1625,7 +1705,8 @@ def SaveWithMeta(img: PILImage.Image, *, extra_meta: dict[str, str] | None = Non
 
   Args:
     img (PILImage.Image): The PIL image to save.
-    extra_meta (dict[str, str] | None): Optional additional metadata to include in the PNG.
+    extra_meta (dict[str, str] | None): Optional additional metadata to include in the PNG;
+        default is None.
 
   Returns:
     bytes: The PNG image data as bytes.
@@ -1789,7 +1870,7 @@ def _PixelPalette(
   Args:
     t (float): Normalized position in [0, 1) derived from histogram equalization.
     pal (Palette): The palette to use.
-    cycles (int): How many times to cycle through the palette across [0, 1)
+    cycles (int): How many times to cycle through the palette across [0, 1); default is 1.
 
   Returns:
     tuple[int, int, int]: The interpolated RGB color.

@@ -238,7 +238,18 @@ def _FractalAdaptiveIterations(
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class _FractalTaskInput:
-  """Defines a Mandelbrot task."""
+  """Defines the input for a single Mandelbrot/Julia computation task.
+
+  Attributes:
+    params (frame.ComputationParameters): The full computation parameters for this task,
+        including the frame, image dimensions, depth, and optional set points algorithm.
+    progress_bar (bool): If True, this task should render a progress bar during computation.
+    n_task (int): The 1-based index of this task among the total tasks.
+    total_tasks (int): The total number of tasks in the computation batch.
+    stats (image.FractalStats | None): Optional pre-collected stats from a sample run;
+        if None, no sample-run stats are attached; default is None.
+
+  """
 
   params: frame.ComputationParameters
   progress_bar: bool
@@ -260,7 +271,14 @@ class _FractalTaskInput:
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class _FractalTaskOutput:
-  """Defines a Mandelbrot task output."""
+  """Defines the output of a single Mandelbrot/Julia computation task.
+
+  Attributes:
+    img (image.Image): The completed fractal image produced by this task.
+    n_task (int): The 1-based index of this task among the total tasks.
+    total_tasks (int): The total number of tasks in the computation batch.
+
+  """
 
   img: image.Image
   n_task: int

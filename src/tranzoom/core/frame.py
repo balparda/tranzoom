@@ -185,10 +185,24 @@ class SerializingFractalObject(abstract_abc.ABC):
 class Frame(SerializingFractalObject):
   """Defines a rectangular region of the complex plane, with arbitrary precision. Exact.
 
+  ATTENTION: changing any attribute changes the object SHA-256 hash.
+
   An optional point coordinate is included. This is used for Julia, and ignored for Mandelbrot.
   This point is not required to be inside the rectangle; it is just an additional coordinate
   that can be used for various purposes, such as marking a specific location in the image or
   providing additional data like for the Julia fractal.
+
+  Attributes:
+    fractal (Fractal): The type of fractal this frame belongs to.
+    top_re (gmpy2.mpq): Real part of the top-left corner of the rectangle.
+    top_im (gmpy2.mpq): Imaginary part of the top-left corner of the rectangle.
+    bottom_re (gmpy2.mpq): Real part of the bottom-right corner of the rectangle.
+    bottom_im (gmpy2.mpq): Imaginary part of the bottom-right corner of the rectangle.
+    point_re (gmpy2.mpq): Real part of the optional point coordinate; default is 0;
+        used for Julia (the orbit point), ignored for Mandelbrot.
+    point_im (gmpy2.mpq): Imaginary part of the optional point coordinate; default is 0;
+        used for Julia (the orbit point), ignored for Mandelbrot.
+
   """
 
   # ATTENTION: changing anything here changes the HASH!!
@@ -561,7 +575,20 @@ DEFAULT_FRAMES: dict[Fractal, Frame] = {
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class ComputationParameters(SerializingFractalObject):
-  """Arguments that determine a fractal computation completely (computation, not rendering)."""
+  """Arguments that determine a fractal computation completely (computation, not rendering).
+
+  ATTENTION: changing any attribute changes the object SHA-256 hash.
+
+  Attributes:
+    frm (Frame): The rectangular region of the complex plane to compute.
+    width (int): The image width in pixels.
+    height (int): The image height in pixels.
+    depth (int): The maximum number of Mandelbrot/Julia iterations to compute; default is
+        MIN_ITER, which triggers automatic depth calculation at render time.
+    set_points (SetHighlightAlgorithm | None): Optional interior Set highlight algorithm;
+        if not None, interior (non-escaped) points are additionally tracked; default is None.
+
+  """
 
   # ATTENTION: changing anything here changes the HASH!!
   frm: Frame
