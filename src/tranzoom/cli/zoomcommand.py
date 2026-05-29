@@ -11,10 +11,14 @@ from __future__ import annotations
 
 import dataclasses
 import pathlib
+import shutil
+import tempfile
 from collections import abc
+from typing import NoReturn
 
 import click
 import gmpy2
+import tqdm
 import typer
 from transcrypto.cli import clibase
 from transcrypto.core import hashes
@@ -304,9 +308,10 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   with config.OpenDB() as db:
     success: bool = False
     video_hash: str | None = None
-    video_path: pathlib.Path | None = None
     markers_tmr: timer.Timer | None = None
     frames_tmr: timer.Timer | None = None
+    render_tmr: timer.Timer | None = None
+    video_path: pathlib.Path | None = None
     try:
       # see if we have a cache of this zoom
       zoom_data: frdb.ZoomData | None = db.FindZoom(zoom_params)
@@ -328,41 +333,24 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           return
       # main zoom loop, go for frames iterations, producing the image and then zooming in the frame
       img: image.Image | None = None
-      img_path: pathlib.Path | None = None
-      img_data: bytes
-      data_hash: str
-      all_img_bytes: dict[int, bytes] = {}
-      all_hash: dict[int, str] = {}
+      all_img_obj: dict[int, image.Image] = {}
       all_marker_imgs: dict[int, image.Image] = {}  # Image objects for ZoomColorNorm (see below)
       # MARKERS: produce marker frames FIRST
       with timer.Timer(emit_log=False) as markers_tmr:
         for i, (idx, frm) in enumerate(all_markers):
           config.console.print(f'[yellow]Marker {i + 1} / {len(all_markers)}[/]')
           # we have the marker, now feed it to the producer
-          params, img, img_data, data_hash, img_path = db.CoreComputeImage(
+          params, img = db.DoComputation(
             dataclasses.replace(
               params, frm=frm, depth=frame.MIN_ITER
             ),  # send frm, mark as sentinel
-            render,
-            out,
-            add_serial=idx + 1,
-            tm=timestamp,
             max_threads=config.max_threads,
-            iterm=config.iterm,
             print_comm=config.console.print,
             force=config.img_force_redo,
           )
-          # check we got something
-          if not img or not img_path:
-            raise base.Error('No image produced for marker! should never happen; report bug')
-          # save per-frame-normalized image to disk if requested (for individual frame inspection)
-          if save_frames:
-            img_path.write_bytes(img_data)
-            config.console.print(f'Saved to "{img_path}"')
+          # save
           config.console.print()
           all_marker_imgs[idx] = img  # keep Image object for ZoomColorNorm construction below
-          all_img_bytes[idx] = img_data  # will be overwritten with zoom-normalized bytes below
-          all_hash[idx] = data_hash  # will be overwritten with zoom-normalized hash below
       # check we got something; also appease type checker
       if not img or not all_marker_imgs:
         raise base.Error('No marker images produced for animation! should never happen; report bug')
@@ -374,19 +362,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       config.console.print(
         f'[yellow]ZOOM:[/] [green]Color norm[/]: built from {len(all_marker_imgs)} marker frames\n'
       )
-      # re-render all marker frames with zoom-normalized colors; replaces the independently-
-      # normalized per-frame bytes in all_img_bytes with cross-frame-stable palette positions
-      # TODO: this re-render has to stop - ask bottom layers to not render then!
-      m_img: image.Image
-      m_bytes: bytes
-      m_hash: str
-      for m_idx, _ in all_markers:
-        m_img = all_marker_imgs[m_idx]
-        m_bytes, m_hash = m_img.AsPNG(render, zoom_norm=zoom_norm.ForFrame(m_idx))
-        all_img_bytes[m_idx] = m_bytes
-        all_hash[m_idx] = m_hash
-      # the last frame is always a marker; use its Image object for the final metadata below
-      img = all_marker_imgs[all_markers[-1][0]]
       # produce the regular frames now
       with timer.Timer(emit_log=False) as frames_tmr:
         for i, frm in enumerate(all_frames):
@@ -396,50 +371,24 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
             continue
           config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
           # we have the frame, now feed it to the producer
-          params, img, img_data, data_hash, img_path = db.CoreComputeImage(
+          params, img = db.DoComputation(
             dataclasses.replace(
               params, frm=frm, depth=frame.MIN_ITER
             ),  # send frm, mark as sentinel
-            render,
-            out,
-            add_serial=i + 1,
-            tm=timestamp,
             max_threads=config.max_threads,
-            iterm=config.iterm,
             print_comm=config.console.print,
             force=config.img_force_redo,
           )
-          # check we got something
-          if not img or not img_path:
-            raise base.Error('No image produced for frame! should never happen; report bug')
-          # save per-frame-normalized image to disk if requested (for individual frame inspection)
-          if save_frames:
-            img_path.write_bytes(img_data)
-            config.console.print(f'Saved to "{img_path}"')
+          # save
           config.console.print()
-          # re-render with zoom-normalized colors for animation consistency
-          n_bytes: bytes
-          n_hash: str
-          n_bytes, n_hash = img.AsPNG(render, zoom_norm=zoom_norm.ForFrame(i))
-          all_img_bytes[i] = n_bytes
-          all_hash[i] = n_hash
-      # video loop is done; compute hash and so the path
-      video_hash = hashes.Hash256(
-        # stable if the image data and order does not change
-        ('|'.join(all_hash[i] for i in range(zoom_params.n_frames))).encode('ascii')
-      ).hex()
-      # computation is done
-      video_path = image.MakeImagePath(
-        config.img_output_path,
-        config.img_use_date,
-        config.img_use_hash,
-        config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
-        video_hash,
-        tm=timestamp,
-        suffix=anim_type.value,
-      )
+          all_img_obj[i] = img
+      # update the main dict with the marker frames: this way we have all frames in one dict
+      all_img_obj.update(all_marker_imgs)
+      del all_marker_imgs  # free memory
       # create metadata
-      meta: dict[str, str] = image.MakeImageMeta(img, render, video_hash)  # using LAST FRAME!
+      meta: dict[str, str] = image.MakeImageMeta(
+        all_img_obj[len(all_frames) - 1], render, 'N/A'
+      )  # TODO: change 1st
       # add video-specific metadata
       meta[image.META_IMAGE_ANIMATION_KEY] = anim_type.value.lower()
       meta.update(
@@ -461,31 +410,86 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           image.META_ZOOM_HASH_KEY: zoom_params.sha,
         }
       )
-      # save the final animation
-      if anim_type == image.AnimationType.GIF:
-        image.WriteAnimatedGIF(
-          (all_img_bytes[i] for i in range(zoom_params.n_frames)),
-          video_path,
-          zoom_params.img.width,
-          zoom_params.img.height,
-          zoom_params.n_frames,
-          float(zoom_params.n_seconds),
-          meta=meta,
-          loop=zoom_params.loop,
+      # make the rendering progress bar
+      config.console.print(f'[yellow]Render:[/] {render}')
+      p_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
+        total=len(all_frames),
+        desc='Render',
+        unit='fr',
+        dynamic_ncols=True,
+        smoothing=0.1,
+        colour='yellow',
+      )
+      all_hash: dict[int, str] = {}
+
+      def _RenderFrame(i: int) -> bytes:
+        img_data: bytes
+        data_hash: str
+        img_path: pathlib.Path
+        # get image
+        img_obj: image.Image = all_img_obj[i]
+        # render
+        img_data, data_hash, img_path = db.DoRender(
+          img_obj,
+          render,
+          out,
+          add_serial=i + 1,
+          tm=timestamp,
+          iterm=False,  # disable, we want silence
+          print_comm=config.console.print,
+          force=config.img_force_redo,
+          zoom_norm=zoom_norm.ForFrame(i),
+          silent=True,  # we will have a progress bar
+          no_meta=True,  # do not include metadata for individual frames
         )
-      elif anim_type == image.AnimationType.MP4:
-        image.WriteVideoMP4(
-          (all_img_bytes[i] for i in range(zoom_params.n_frames)),
-          video_path,
-          zoom_params.img.width,
-          zoom_params.img.height,
-          zoom_params.n_frames,
-          float(zoom_params.n_seconds),
-          meta=meta,
-        )
-      else:
-        raise base.UsageError(f'Unsupported animation type: {anim_type}')
-      # add to DB
+        # save hash
+        all_hash[i] = data_hash
+        # save per-frame-normalized image to disk if requested (for individual frame inspection)
+        if save_frames:
+          img_path.write_bytes(img_data)
+          config.console.print(f'Saved frame {i + 1} to {str(img_path)!r}')
+        # update progress bar, return data
+        p_bar.update(1)
+        return img_data
+
+      # save the final animation, first to a temporary path because we do not have the hash...
+      with tempfile.TemporaryDirectory() as tmpdir, timer.Timer(emit_log=False) as render_tmr:
+        tmp_path: pathlib.Path = pathlib.Path(tmpdir) / f'temp_video.{zoom_params.tp.value.lower()}'
+        if anim_type == image.AnimationType.GIF:
+          image.WriteAnimatedGIF(
+            (_RenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
+            tmp_path,
+            zoom_params.img.width,
+            zoom_params.img.height,
+            zoom_params.n_frames,
+            float(zoom_params.n_seconds),
+            meta=meta,
+            loop=zoom_params.loop,
+          )
+        elif anim_type == image.AnimationType.MP4:
+          image.WriteVideoMP4(
+            (_RenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
+            tmp_path,
+            zoom_params.img.width,
+            zoom_params.img.height,
+            zoom_params.n_frames,
+            float(zoom_params.n_seconds),
+            meta=meta,
+          )
+        else:
+          raise base.UsageError(f'Unsupported animation type: {anim_type}')
+        # we are done, close the progress bar
+        p_bar.close()
+        # we can finally compute the hash
+        video_hash = hashes.Hash256(
+          # stable if the image data and order does not change
+          ('|'.join(all_hash[i] for i in range(zoom_params.n_frames))).encode('ascii')
+        ).hex()
+        # move the file!
+        video_path = full_path(video_hash)
+        shutil.move(str(tmp_path), str(video_path))
+        config.console.print('[yellow]Render:[/] [green]DONE[/]\n')
+      # we just freed the temporary directory; add to DB
       db.AddZoomToDB(
         zoom_params,
         video_hash,
@@ -500,7 +504,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       if success and video_hash and video_path:
         config.console.print(
           f'Success: {anim_type.value.upper()} {video_hash!r} in '
-          f'{markers_tmr or "-"} + {frames_tmr or "-"}'
+          f'{markers_tmr or "-"} (markers) + {frames_tmr or "-"} (frames) + '
+          f'{render_tmr or "-"} (render)'
         )
         config.console.print(f'Saved {anim_type.value.upper()} to "{video_path}"\n')
         # iterm

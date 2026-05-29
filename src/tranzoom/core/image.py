@@ -1265,7 +1265,11 @@ class Image:
     return bytes(pixels)
 
   def AsPNG(
-    self, render: RenderParameters, *, zoom_norm: FrameColorNorm | None = None
+    self,
+    render: RenderParameters,
+    *,
+    zoom_norm: FrameColorNorm | None = None,
+    no_meta: bool = False,
   ) -> tuple[bytes, str]:
     """Convert the image to PNG bytes and return it with its internal data hash.
 
@@ -1273,6 +1277,8 @@ class Image:
       render (RenderParameters): The render parameters to use for generating the PNG metadata.
       zoom_norm (FrameColorNorm | None): Optional cross-frame color normalization; passed
           through to AsPixels(). Use for animation frames to keep colors stable across zoom.
+      no_meta (bool): If True, do not include metadata in the PNG; mainly for video frames where
+          metadata is not needed and adds overhead. Default is False (include metadata).
 
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
@@ -1285,9 +1291,11 @@ class Image:
       'RGB', (self._params.width, self._params.height), raw_img
     )
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranZoom:" (_app) namespace
-    png_meta = PngImagePlugin.PngInfo()
-    for k, v in MakeImageMeta(self, render, img_data_hash).items():
-      png_meta.add_text(k, v)
+    png_meta: PngImagePlugin.PngInfo | None = None
+    if not no_meta:
+      png_meta = PngImagePlugin.PngInfo()
+      for k, v in MakeImageMeta(self, render, img_data_hash).items():
+        png_meta.add_text(k, v)
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
     img.save(buf, format='PNG', pnginfo=png_meta)

@@ -990,6 +990,9 @@ class FractalDatabase:
     print_comm: abc.Callable[[str], None],
     *,
     force: bool = False,
+    zoom_norm: image.Image.FrameColorNorm | None = None,
+    silent: bool = False,
+    no_meta: bool = False,
   ) -> tuple[bytes, str, pathlib.Path]:
     """Take an image.Image and do the fractal rendering.
 
@@ -1012,6 +1015,13 @@ class FractalDatabase:
       iterm (bool): If True, print the image inline in iTerm2 after rendering.
       print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
       force (bool): If True, will force re-computation of the image even if it is found in the DB
+      zoom_norm (image.Image.FrameColorNorm | None): Optional color normalization parameters to use
+          for zoom rendering; if None, the default normalization is used; this is only used for
+          zoom rendering, and is ignored for static image rendering
+      silent (bool): If True, will suppress all printing output from this function; if False, will
+          redirect output to logging.info logs; default is False
+      no_meta (bool): If True, do not include metadata in the PNG; mainly for video frames where
+          metadata is not needed and adds overhead. Default is False (include metadata).
 
     Returns:
       tuple[bytes, str, pathlib.Path]: A tuple:
@@ -1023,6 +1033,7 @@ class FractalDatabase:
       Error: on error
 
     """
+    print_comm = logging.info if silent else print_comm
     # check parameters
     if (render.set_pal is not None and img.params.set_points is None) or (
       render.set_pal is None and img.params.set_points is not None
@@ -1085,7 +1096,9 @@ class FractalDatabase:
     # we got to here, so we have to render the PNG data from the image object and add overlay/mark;
     # hash is computed from the raw PNG before any post-processing overlays
     with timer.Timer(emit_log=False) as tmr:
-      img_data, img_hash = img.AsPNG(render)
+      img_data, img_hash = img.AsPNG(  # <<== this is the actual render!
+        render, zoom_norm=zoom_norm, no_meta=no_meta
+      )
       # draw crosshair mark if specified in render parameters
       if render.mark_color is not None:
         _, mark_pixel = params.CoordToPixel(render.mark_re, render.mark_im)
