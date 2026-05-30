@@ -40,7 +40,10 @@ image_app = typer.Typer(
     'poetry run tranz image julia "/path/to/julia_point_image.png" "" '
     '"/path/to/frame_image.png"\n\n'
     '# --- TranZoom Fractal Image Data Reading / Visualization ---\n'
-    'poetry run tranz image read /path/to/image.png'
+    'poetry run tranz image read /path/to/image.png\n\n'
+    '# --- TranZoom Fractal Image Data Cleaning ---\n'
+    'poetry run tranz image clean /path/to/image.png\n'
+    'poetry run tranz image clean /path/to/image.png --no-hash --no-path'
   ),
 )
 tranz.app.add_typer(image_app, name='image')
@@ -216,10 +219,11 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
   'clean',
   help='Read a TranZoom fractal image and create a clean copy (without metadata).',
   epilog=(
-    'Examples:\n\n\n\n'  # TODO: do
-    '$ poetry run tranz image read /path/to/image.png\n\n'
-    '1024x1024 Mandelbrot in frame [(-3/4, 0) @ 5/2] ...\n\n'
-    '...'
+    'Examples:\n\n\n\n'
+    '$ poetry run tranz image clean /path/to/image.png\n\n'
+    '<save image.clean.jpg with only (private and safe) hash meta, the rest clean>\n\n\n\n'
+    '$ poetry run tranz image clean /path/to/image.png --no-hash --no-path\n\n'
+    '<save fractal-[RANDOM-HASH].jpg with no meta at all, and anonymized pathname>'
   ),
 )
 @clibase.CLIErrorGuard

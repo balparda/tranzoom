@@ -39,7 +39,7 @@ class CleanupOutputFormat(enum.Enum):
 
   JPEG = 'jpeg'
   JPG = 'jpg'
-  PNG = 'png'
+  PNG = 'png'  # TODO: support formats: gif/mp4 videos
 
 
 # gmpy2.mpq constants
