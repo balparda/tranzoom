@@ -410,6 +410,7 @@ class FractalDatabase:
     self._closed = True
     if not self._use_db:
       logging.warning('use_db is False: no DB to close, skipping save')
+      FractalDatabase._CONTEXT_LOCK.release()
       return
     logging.info(f'Database was open for {self._open}')
     try:
