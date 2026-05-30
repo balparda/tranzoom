@@ -245,8 +245,8 @@ def Clean(  # documentation is help/epilog/args  # noqa: D103
   if not image_path.exists() or not image_path.is_file():
     raise base.Error(f'Image not found: {image_path}')
   if image_path.suffix.lower() in {'.gif', '.mp4'}:
-    # TODO: support animated GIFs by cleaning each frame and reassembling
-    raise base.Error('Animated GIFs are not supported for cleaning for now...')
+    # TODO: support animated GIFs/MP4s by cleaning each frame and reassembling
+    raise base.Error('Animated GIFs and MP4 videos are not supported for cleaning for now...')
   image_data: bytes = image_path.read_bytes()
   w, h, png_hash, info = image.GetBasicDataFromImage(image_data)
   # print header
