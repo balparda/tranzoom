@@ -316,14 +316,15 @@ Render the [full Mandelbrot set](#full--default-1) (default, 1024×1024):
 ```sh
 $ poetry run tranz --no-date image mandel
 
-1024 x 1024 'sahara' Mandelbrot, 10^0.000 magnitude...
-{[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]} + {[PNG, SAHARA, none]}
-
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 349184.33px/s]
+1024 x 1024 Mandelbrot, 10^0.000 magnitude...
+Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 348730.70px/s]
 Picked depth 1000, histogram {2: 20, 3: 64, 4: 40, ...: 68, 35: 2, 57: 2, 222: 2}, 58/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 404475.61px/s]
-PNG: '0d4139e11c83f741bfc38ad7192d1c2a77decd85bb0fa512bd7ed6d291af0e02', precision 140 bits, in 3.708 s + 1.227 s
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 408219.37px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, in 3.669 s
 
+Render: {[PNG, SAHARA, none]}
+Render: PNG: DONE, '0d4139e11c83f741bfc38ad7192d1c2a77decd85bb0fa512bd7ed6d291af0e02' in 1.194 s
 Saved to "mandel-0d4139e11c83f741bfc3.png"
 ```
 
@@ -718,14 +719,15 @@ Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) w
 ```sh
 $ poetry run tranz --no-date image mandel
 
-1024 x 1024 'sahara' Mandelbrot, 10^0.000 magnitude...
-{[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]} + {[PNG, SAHARA, none]}
-
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 349184.33px/s]
+1024 x 1024 Mandelbrot, 10^0.000 magnitude...
+Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 348730.70px/s]
 Picked depth 1000, histogram {2: 20, 3: 64, 4: 40, ...: 68, 35: 2, 57: 2, 222: 2}, 58/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 404475.61px/s]
-PNG: '0d4139e11c83f741bfc38ad7192d1c2a77decd85bb0fa512bd7ed6d291af0e02', precision 140 bits, in 3.708 s + 1.227 s
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 408219.37px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, in 3.669 s
 
+Render: {[PNG, SAHARA, none]}
+Render: PNG: DONE, '0d4139e11c83f741bfc38ad7192d1c2a77decd85bb0fa512bd7ed6d291af0e02' in 1.194 s
 Saved to "mandel-0d4139e11c83f741bfc3.png"
 ```
 
@@ -740,14 +742,15 @@ You can also extract details from the set points (the traditionally black part o
 ```sh
 $ poetry run tranz --set imaginary --set-palette "lava" --palette "rgrayscale" --no-date image mandel
 
-1024 x 1024 'rgrayscale' Mandelbrot w/ SET 'imaginary', 10^0.000 magnitude...
-{[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO] : imaginary} + {[PNG, GRAYSCALE_REVERSE, LAVA]}
-
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 303.86px/s]
+1024 x 1024 Mandelbrot w/ SET 'imaginary', 10^0.000 magnitude...
+Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO] : imaginary}
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 306.23px/s]
 Picked depth 1000, histogram {2: 20, 3: 64, 4: 40, ...: 68, 35: 2, 57: 2, 222: 2}, 58/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:19<00:00, 52597.29px/s]
-PNG: 'bcee34eba7a442b179aa5eb5e3015b14f523d79173ff2f08f70cd532a21f2e9b', precision 140 bits, in 22.293 s + 1.390 s
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:19<00:00, 52453.34px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, in 22.697 s
 
+Render: {[PNG, GRAYSCALE_REVERSE, LAVA]}
+Render: PNG: DONE, 'bcee34eba7a442b179aa5eb5e3015b14f523d79173ff2f08f70cd532a21f2e9b' in 1.399 s
 Saved to "mandel-bcee34eba7a442b179aa.png"
 ```
 
@@ -762,14 +765,15 @@ Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mande
 ```sh
 $ poetry run tranz --no-date image mandel " -0.74303" "0.126433" "0.01611"
 
-1024 x 1024 'sahara' Mandelbrot, 10^2.191 magnitude...
-{[MANDELBROT: (-74303/100000, 126433/1000000) ± 1611/100000] : [1024, 1024, AUTO]} + {[PNG, SAHARA, none]}
-
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 2093.76px/s]
+1024 x 1024 Mandelbrot, 10^2.191 magnitude...
+Compute: {[MANDELBROT: (-74303/100000, 126433/1000000) ± 1611/100000] : [1024, 1024, AUTO]}
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 2117.77px/s]
 Picked depth 9277, histogram {24: 2, 25: 12, 26: 11, ...: 162, 2264: 1, 3215: 1, 6185: 1}, 66/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:46<00:00, 22575.20px/s]
-PNG: 'a08eaf11d2fdcd542bf4e1f22ba8f981b42a6f62f96d443d4e1bb027c9653033', precision 140 bits, in 47.954 s + 1.726 s
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:45<00:00, 23210.03px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, in 46.673 s
 
+Render: {[PNG, SAHARA, none]}
+Render: PNG: DONE, 'a08eaf11d2fdcd542bf4e1f22ba8f981b42a6f62f96d443d4e1bb027c9653033' in 1.500 s
 Saved to "mandel-a08eaf11d2fdcd542bf4.png"
 ```
 
@@ -784,14 +788,15 @@ Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tai
 ```sh
 $ poetry run tranz --set imaginary --no-date image mandel " -0.7436499" "0.13188204" "0.00073801"
 
-1024 x 1024 'sahara' Mandelbrot w/ SET 'imaginary', 10^3.530 magnitude...
-{[MANDELBROT: (-7436499/10000000, 3297051/25000000) ± 73801/100000000] : [1024, 1024, AUTO] : imaginary} + {[PNG, SAHARA, GRAYSCALE_REVERSE]}
-
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 56175.67px/s]
+1024 x 1024 Mandelbrot w/ SET 'imaginary', 10^3.530 magnitude...
+Compute: {[MANDELBROT: (-7436499/10000000, 3297051/25000000) ± 73801/100000000] : [1024, 1024, AUTO] : imaginary}
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 55270.59px/s]
 Picked depth 1000, histogram {37: 8, 38: 11, 39: 14, ...: 220, 415: 1, 465: 1, 650: 1}, 0/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:09<00:00, 108059.99px/s]
-PNG: 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9', precision 140 bits, in 10.977 s + 1.982 s
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:09<00:00, 113376.25px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, in 10.427 s
 
+Render: {[PNG, SAHARA, GRAYSCALE_REVERSE]}
+Render: PNG: DONE, 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9' in 1.764 s
 Saved to "mandel-e4fad99036a41cc87ad0.png"
 ```
 
@@ -808,32 +813,37 @@ You can easily make animations!
 ```sh
 $ poetry run tranz --no-date zoom -s 220 --mark "(-5578776469/7500000000,8244620127/62500000000)" auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4
 
-ZOOM: 220x220 10^1.00 magnitude animation, 4.000 s long, at 10.00 FPS, with 40 frames, 106.08% per step...
-
-Frame 1 / 40
-
 220 x 220 'sahara' 'Mandelbrot' 10^1.0000 magnitude ZOOM, 4.000 s long, at 10.00 FPS, with 40 frames, 106.0818%/step...
-<GIF: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]} -> {[PNG, SAHARA, none] + [MARK: red/1 @
+ZOOM: <GIF: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]} -> {[PNG, SAHARA, none] + [MARK: red/1 @
 (-5578776469/7500000000, 8244620127/62500000000)]} / (mag:1, n:40, d:4, fps:10, l:0)> ... [MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ±
-73801/1000000000]
+395/5352231]
 
-Frame 1 / 40
-
-220 x 220 'sahara' Mandelbrot, 10^3.530 magnitude...
-{[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]} + {[PNG, SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}
-
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 64531.63px/s]
+Marker 1 / 2
+220 x 220 Mandelbrot, 10^3.530 magnitude...
+Compute: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]}
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 59038.97px/s]
 Picked depth 1000, histogram {36: 14, 37: 20, 38: 21, ...: 198, 439: 1, 478: 1, 639: 1}, 0/256 set points
-Img: 100%|█████████████████████████████████████████████| 48400/48400 [00:00<00:00, 150094.72px/s]
-Marking coordinate (-5578776469/7500000000, 8244620127/62500000000) with 'red' crosshair @(110, 110)/1px
-PNG: '72d624682db7ac75105322d7e048ef06ae288e2ba68842ad0f64a7674d86997a', precision 140 bits, in 798.344 ms + 84.691 ms
+Img: 100%|█████████████████████████████████████████████| 48400/48400 [00:00<00:00, 150980.62px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, in 798.080 ms
+
+Marker 2 / 2
+[... builds marker 2...]
+
+ZOOM: Color norm: built from 2 marker frames
+
+Frame 1 / 40 -> Marker: DONE
 
 Frame 2 / 40
+[...builds frames 2 to 39 (number 40 was done as a marker)]
 
-[...]
+Frame 40 / 40 -> Marker: DONE
 
-Success: GIF 'ba053970ecbd96a3d9f77caac43af8ffc1c8a0f4d22fe9150744308471898281' in 44.062 s
-Saved GIF to "mandel-ba053970ecbd96a3d9f7.gif"
+Render: {[PNG, SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}
+Render: 100%|█████████████████████████████████████████████| 40/40 [00:04<00:00,  9.14fr/s]
+Render: DONE
+
+Success: GIF 'cfcd4250757a16c4d4c9d4594693ad0f02588796d0ddb328bbea6e889478e406' in 2.135 s (markers) + 37.533 s (frames) + 4.748 s (render)
+Saved GIF to "mandel-cfcd4250757a16c4d4c9.gif"
 ```
 
 To make that an MP4, just add `--anim mp4` to the command.
@@ -847,14 +857,15 @@ Render a "Julia Suzana" at `-s/--size` 1024, one of the possible [Julia Set](htt
 ```sh
 $ poetry run tranz --no-date --palette electric image -s 1024 julia
 
-838 x 1024 'electric' Julia, 10^0.000 magnitude...
-{[JULIA: (0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)] : [838, 1024, AUTO]} + {[PNG, ELECTRIC, none]}
-
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 149.06px/s]
+838 x 1024 Julia, 10^0.000 magnitude...
+Compute: {[JULIA: (0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)] : [838, 1024, AUTO]}
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 149.84px/s]
 Picked depth 1000, histogram {2: 12, 3: 16, 4: 34, ...: 64, 41: 2, 44: 2, 45: 2}, 124/256 set points
-Img: 100%|█████████████████████████████████████████████| 858112/858112 [00:28<00:00, 30216.45px/s]
-PNG: 'b97d669ec0da38ab23929cf73a3fc4a46d79f4e8ab4ef0faca8480fd551685a6', precision 140 bits, in 31.172 s + 757.723 ms
+Img: 100%|█████████████████████████████████████████████| 858112/858112 [00:27<00:00, 30680.64px/s]
+Compute: Julia: DONE, with precision 140 bits, in 30.583 s
 
+Render: {[PNG, ELECTRIC, none]}
+Render: PNG: DONE, 'b97d669ec0da38ab23929cf73a3fc4a46d79f4e8ab4ef0faca8480fd551685a6' in 728.322 ms
 Saved to "julia-b97d669ec0da38ab2392.png"
 ```
 
@@ -867,14 +878,15 @@ Render a "Julia Suzana Wave" at `-s/--size` 1024:
 ```sh
 $ poetry run tranz --palette electric --set max --set-palette sunset --no-date image -s 512 julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
 
-512 x 377 'electric' Julia w/ SET 'max', 10^2.630 magnitude...
-{[JULIA: (-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)] : [512, 377, AUTO] : max} + {[PNG, ELECTRIC, SUNSET]}
-
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 135.13px/s]
+512 x 377 Julia w/ SET 'max', 10^2.630 magnitude...
+Compute: {[JULIA: (-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)] : [512, 377, AUTO] : max}
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 136.34px/s]
 Picked depth 1819, histogram {43: 2, 44: 14, 45: 14, ...: 98, 147: 1, 208: 1, 1213: 1}, 125/256 set points
-Img: 100%|█████████████████████████████████████████████| 193024/193024 [00:11<00:00, 16855.96px/s]
-PNG: '8f06e7bcd0ea14dff1b6fc3c829cdc295367695fea882e2cf9e25bb1a6dfb5fc', precision 140 bits, in 14.614 s + 266.961 ms
+Img: 100%|█████████████████████████████████████████████| 193024/193024 [00:11<00:00, 17306.11px/s]
+Compute: Julia: DONE, with precision 140 bits, in 13.973 s
 
+Render: {[PNG, ELECTRIC, SUNSET]}
+Render: PNG: DONE, '8f06e7bcd0ea14dff1b6fc3c829cdc295367695fea882e2cf9e25bb1a6dfb5fc' in 265.904 ms
 Saved to "julia-8f06e7bcd0ea14dff1b6.png"
 ```
 
