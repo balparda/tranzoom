@@ -81,10 +81,6 @@ DEFAULT_JULIA_HEIGHT: str = '2.2'
 
 # TODO: image to store: on set/non-escaped the actual final value of the tracked constant;
 #     and if we store the mpfr on a dict for example, we will have space for more info in the array
-# TODO: with all the frames in place (DB) and richer images and "nu" we can start video smoothing;
-#     a class for video objects with all the frames
-# TODO: before rendering video, decide on marker frames every X magnitude, make them first,
-#     use them to compute colors and then smooth colors between maker frames smoothly
 
 
 class Error(tbase.Error):
@@ -163,7 +159,12 @@ class SerializingFractalObject(abstract_abc.ABC):
   @final  # this affects the HASH, let's avoid trouble...
   @property
   def binary(self) -> bytes:
-    """Get a stable binary representation of the object, for hashing and storage."""
+    """Get a stable binary representation of the object, for hashing and storage.
+
+    Returns:
+      bytes: The stable binary (UTF-8 encoded canonical JSON) representation of the object.
+
+    """
     return json.dumps(self.json, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode(
       'utf-8'
     )
@@ -184,10 +185,24 @@ class SerializingFractalObject(abstract_abc.ABC):
 class Frame(SerializingFractalObject):
   """Defines a rectangular region of the complex plane, with arbitrary precision. Exact.
 
+  ATTENTION: changing any attribute changes the object SHA-256 hash.
+
   An optional point coordinate is included. This is used for Julia, and ignored for Mandelbrot.
   This point is not required to be inside the rectangle; it is just an additional coordinate
   that can be used for various purposes, such as marking a specific location in the image or
   providing additional data like for the Julia fractal.
+
+  Attributes:
+    fractal (Fractal): The type of fractal this frame belongs to.
+    top_re (gmpy2.mpq): Real part of the top-left corner of the rectangle.
+    top_im (gmpy2.mpq): Imaginary part of the top-left corner of the rectangle.
+    bottom_re (gmpy2.mpq): Real part of the bottom-right corner of the rectangle.
+    bottom_im (gmpy2.mpq): Imaginary part of the bottom-right corner of the rectangle.
+    point_re (gmpy2.mpq): Real part of the optional point coordinate; default is 0;
+        used for Julia (the orbit point), ignored for Mandelbrot.
+    point_im (gmpy2.mpq): Imaginary part of the optional point coordinate; default is 0;
+        used for Julia (the orbit point), ignored for Mandelbrot.
+
   """
 
   # ATTENTION: changing anything here changes the HASH!!
@@ -560,7 +575,20 @@ DEFAULT_FRAMES: dict[Fractal, Frame] = {
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class ComputationParameters(SerializingFractalObject):
-  """Arguments that determine a fractal computation completely (computation, not rendering)."""
+  """Arguments that determine a fractal computation completely (computation, not rendering).
+
+  ATTENTION: changing any attribute changes the object SHA-256 hash.
+
+  Attributes:
+    frm (Frame): The rectangular region of the complex plane to compute.
+    width (int): The image width in pixels.
+    height (int): The image height in pixels.
+    depth (int): The maximum number of Mandelbrot/Julia iterations to compute; default is
+        MIN_ITER, which triggers automatic depth calculation at render time.
+    set_points (SetHighlightAlgorithm | None): Optional interior Set highlight algorithm;
+        if not None, interior (non-escaped) points are additionally tracked; default is None.
+
+  """
 
   # ATTENTION: changing anything here changes the HASH!!
   frm: Frame

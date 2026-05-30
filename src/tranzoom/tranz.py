@@ -12,6 +12,7 @@ import typer
 from rich import console as rich_console
 from transai import transai
 from transcrypto.cli import clibase
+from transcrypto.core import aes
 from transcrypto.utils import config as app_config
 from transcrypto.utils import logging as cli_logging
 
@@ -40,6 +41,9 @@ app = typer.Typer(
     '"/path/to/frame_image.png"\n\n\n\n'
     '# --- TranZoom Fractal Image Data Reading / Visualization ---\n\n'
     'poetry run tranz image read /path/to/image.png\n\n\n\n'
+    '# --- TranZoom Fractal Image Data Cleaning ---\n\n'
+    'poetry run tranz image clean /path/to/image.png\n\n'
+    'poetry run tranz image clean /path/to/image.png --no-hash --no-path\n\n\n\n'
     '# --- LLM-Guided Fractal Zoom ---\n\n'
     'poetry run tranz zoom ai\n\n'
     'poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai '
@@ -97,9 +101,11 @@ def Main(  # documentation is help/epilog/args # noqa: D103
       'Defaults to having colors.'  # state default because None default means docs don't show it
     ),
   ),
-  db: bool | None = base.USE_DB_OPTION,  # type: ignore[assignment]
+  use_db: bool | None = base.USE_DB_OPTION,  # type: ignore[assignment]
+  readonly_db: bool = base.READONLY_DB_OPTION,  # type: ignore[assignment]
   db_path: pathlib.Path | None = base.DB_PATH_OPTION,  # type: ignore[assignment]
   db_compress: bool | None = base.USE_DB_COMPRESSION_OPTION,  # type: ignore[assignment]
+  password: str | None = base.DB_PASSWORD_OPTION,  # type: ignore[assignment]
   img_output_path: pathlib.Path | None = base.IMAGE_PATH_OUTPUT_OPTION,  # type: ignore[assignment]
   img_path_prefix: str | None = base.IMAGE_PREFIX_OPTION,  # type: ignore[assignment]
   img_use_date: bool = base.IMAGE_INCLUDE_DATE_OPTION,  # type: ignore[assignment]
@@ -139,6 +145,19 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   appconfig: app_config.AppConfig = app_config.InitConfig(  # this always has the path
     __app__, 'config.bin', fixed_dir=None if db_path is None else db_path.expanduser().resolve()
   )
+  # password
+  aes_key: aes.AESKey | None = None
+  if password is not None:
+    # we will have some sort of password...
+    while not password.strip():
+      # in this case we know the user want to give it as input!
+      password = console.input(
+        '[bold magenta]Enter DB password (input will be hidden):[/] ', password=True
+      ).strip()
+    aes_key = aes.AESKey.FromStaticPassword(password)
+    password = '<wipe>'  # noqa: S105  # just to overwrite the variable for safety
+    del password  # be nice and delete the password variable immediately
+  # create structure
   tzc: base.TranZoomConfig = base.TranZoomConfig(
     console=console,
     verbose=verbose,
@@ -149,8 +168,10 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     img_use_date=img_use_date,
     img_use_hash=img_use_hash,
     img_force_redo=img_force_redo,
-    db_read_only=False,  # sentinel only: will load from config below!
+    use_db=False,  # sentinel only: will load from config below!
+    db_read_only=readonly_db,
     db_compress=False,  # sentinel only: will load from config below!
+    aes_key=aes_key,
     pal=pal,
     set_pal=set_pal,
     set_points=set_points,
@@ -174,7 +195,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   ctx.obj = dataclasses.replace(
     tzc,
     # config values should have "None" to mean override the config!
-    db_read_only=(not cnf['use_db']) if db is None else db,  # INVERT!
+    use_db=(cnf['use_db']) if use_db is None else use_db,
     db_compress=cnf['db_compression'] if db_compress is None else db_compress,
   )
   # even though this is a convenient place to print(), beware that this runs even when

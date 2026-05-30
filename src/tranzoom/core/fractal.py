@@ -146,6 +146,10 @@ def ComputeFractal(
     img.stats = stats
   # all copied, so we can return the final image; first trigger the histogram calculation
   img.RebuildHistograms()
+  logging.info(
+    f'ComputeFractal done: {params.frm.fractal.value} {params.width}x{params.height} '
+    f'depth={params.depth}, interior={img.stats.n_interior if img.stats else "?"}'
+  )
   return (params, img)
 
 
@@ -179,12 +183,14 @@ def _FractalAdaptiveIterations(
     print_comm (Callable[[str], None]): A callable to print messages
 
   Returns:
-    int: The estimated max_iter for the full image, based on the escape histogram of the test render
+    tuple[int, image.FractalStats]: The estimated max_iter for the full image (based on the
+        escape histogram of the test render) and the FractalStats collected during the probe.
 
   Raises:
     Error: if the estimated max_iter exceeds the adaptive limit
 
   """
+  logging.info(f'Auto-depth search for {frm.fractal.value} frame, limits: {frame.HIGH_ITERS}')
   max_iter: int = frame.MAX_ITER
   for high_iter in frame.HIGH_ITERS:
     # make the smallest image
@@ -205,6 +211,7 @@ def _FractalAdaptiveIterations(
       raise Error('Fractal stats should have been collected during rendering, but are missing')
     # do we have any exterior points that escaped? if not, we can't estimate
     if img16.ext_hist.count == 0:
+      logging.info(f'Auto-depth: {high_iter=} produced no exterior points, retrying deeper')
       continue  # no exterior points
     # we have exterior points, so we can look at the histogram sorted by escape iteration;
     # find the highest escape iteration that is less than high limit
@@ -231,7 +238,18 @@ def _FractalAdaptiveIterations(
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class _FractalTaskInput:
-  """Defines a Mandelbrot task."""
+  """Defines the input for a single Mandelbrot/Julia computation task.
+
+  Attributes:
+    params (frame.ComputationParameters): The full computation parameters for this task,
+        including the frame, image dimensions, depth, and optional set points algorithm.
+    progress_bar (bool): If True, this task should render a progress bar during computation.
+    n_task (int): The 1-based index of this task among the total tasks.
+    total_tasks (int): The total number of tasks in the computation batch.
+    stats (image.FractalStats | None): Optional pre-collected stats from a sample run;
+        if None, no sample-run stats are attached; default is None.
+
+  """
 
   params: frame.ComputationParameters
   progress_bar: bool
@@ -253,7 +271,14 @@ class _FractalTaskInput:
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class _FractalTaskOutput:
-  """Defines a Mandelbrot task output."""
+  """Defines the output of a single Mandelbrot/Julia computation task.
+
+  Attributes:
+    img (image.Image): The completed fractal image produced by this task.
+    n_task (int): The 1-based index of this task among the total tasks.
+    total_tasks (int): The total number of tasks in the computation batch.
+
+  """
 
   img: image.Image
   n_task: int

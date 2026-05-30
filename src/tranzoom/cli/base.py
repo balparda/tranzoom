@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import dataclasses
+import enum
 import logging
 import pathlib
 from collections import abc
@@ -14,6 +15,7 @@ import click
 import gmpy2
 import typer
 from transcrypto.cli import clibase
+from transcrypto.core import aes
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
@@ -29,6 +31,17 @@ class UsageError(Error, click.UsageError):
   """Base CLI/click usage exception."""
 
 
+# CLI enumerations
+
+
+class CleanupOutputFormat(enum.Enum):
+  """Output format for the cleanup command."""
+
+  JPEG = 'jpeg'
+  JPG = 'jpg'
+  PNG = 'png'  # TODO: support formats: gif/mp4 videos
+
+
 # gmpy2.mpq constants
 _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 
@@ -39,7 +52,7 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 # this indicates that the mathematical computation or the setting of colors has changed;
 # this should NOT change over metadata changes, as it is computed from raw pixel data
 SEAHORSE_TAIL_HASH: str = 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9'
-SEAHORSE_ANIMATED_HASH: str = 'ba053970ecbd96a3d9f77caac43af8ffc1c8a0f4d22fe9150744308471898281'
+SEAHORSE_ANIMATED_HASH: str = 'cfcd4250757a16c4d4c9d4594693ad0f02588796d0ddb328bbea6e889478e406'
 SUZANA_WAVE_HASH: str = '8f06e7bcd0ea14dff1b6fc3c829cdc295367695fea882e2cf9e25bb1a6dfb5fc'
 # this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 
@@ -133,6 +146,14 @@ USE_DB_OPTION: typer.models.OptionInfo = typer.Option(
     'this option can also be loaded from the disk config, but if given should override the config'
   ),
 )
+READONLY_DB_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--readonly-db/--no-readonly-db',
+  help=(
+    'Use local DB in readonly mode? True means DB may be read from but not altered; '
+    'default is False, i.e., fully functional read+write DB'
+  ),
+)
 DB_PATH_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '-d',
@@ -159,6 +180,24 @@ USE_DB_COMPRESSION_OPTION: typer.models.OptionInfo = typer.Option(
     'False means do not use it and file will be readable; '
     'default is False, a larger, readable file; '
     'this option can also be loaded from the disk config, but if given should override the config'
+  ),
+)
+DB_PASSWORD_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '--pass',
+  help=(
+    'DB password to encrypt the local DB and computation data; '
+    'do NOT provide it for no encryption (DEFAULT); '
+    'provide it empty ("") for terminal password input, i.e., '
+    '`--pass ""` will prompt the user for a password, and this is safer because the '
+    'password will not show in the shell history; '
+    'your third option is to provide the password directly in the CLI, i.e., '
+    '`--pass "my.password"`, but this is not recommended unless you are calling the CLI '
+    'from a script and have other means to protect the password, because the password will '
+    'be visible in the shell history and process list; '
+    'the password provided by CLI or by user input will never be persisted to disk or logs; '
+    'NOTE: if you encrypt your data, it WILL be compressed, i.e., '
+    'the `--db-compression` option will be ignored and treated as True'
   ),
 )
 IMAGE_FORCE_REDO_OPTION: typer.models.OptionInfo = typer.Option(
@@ -559,6 +598,39 @@ CONFIG_SETTABLE_KEYS: dict[str, type] = {
   'db_compression': bool,
 }
 
+# Cleanup Options
+CLEANUP_LEAVE_HASHES_OPTION: typer.models.OptionInfo = typer.Option(
+  True,
+  '--hash/--no-hash',
+  help=(
+    'If True, will keep the hashes in the image metadata; '
+    'if False, hashes will be removed; we believe hashes cannot leak relevant information, so: '
+    'default is True'
+  ),
+)
+CLEANUP_CLEAN_PATH_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--path/--no-path',
+  help=(
+    'If True, will clean the path of the image to a generic "fractal-<HASH>.png/jpg", '
+    'where the HASH is randomly generated and means nothing, it is there to avoid file name clash; '
+    'if False, the path will not be cleaned; we believe paths to be generally safe, so: '
+    'default is False'
+  ),
+)
+CLEANUP_OUTPUT_FORMAT_OPTION: typer.models.OptionInfo = typer.Option(
+  CleanupOutputFormat.JPEG,
+  '--out',
+  help=(
+    f'Output format for the cleaned image; possible values: '
+    f'{", ".join(repr(f.value) for f in CleanupOutputFormat)}; '
+    f'default is "{CleanupOutputFormat.JPEG.value}": save as JPEG because (1) if you are '
+    'cleaning you want to share, and JPEG is share-friendly, and (2) some small amount of loss '
+    'introduces randomness that can help with privacy'
+  ),
+)
+
+
 # Config Options
 CONFIG_KEY_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
   ...,
@@ -616,8 +688,10 @@ class TranZoomConfig(clibase.CLIConfig):
   img_use_hash: bool
   img_path_prefix: str | None
   img_force_redo: bool
+  use_db: bool
   db_read_only: bool
   db_compress: bool
+  aes_key: aes.AESKey | None
   pal: palette.Palette
   set_pal: palette.Palette
   set_points: frame.SetHighlightAlgorithm | None
@@ -657,11 +731,14 @@ class TranZoomConfig(clibase.CLIConfig):
       frdb.FractalDatabase: an instance of the fractal database ready to be used
 
     """
+    compress: bool = self.db_compress or (self.aes_key is not None)  # always compress on encrypt
     return frdb.FractalDatabase(
       self.appconfig,
+      use_db=self.use_db,
       read_only=self.db_read_only,
-      compress_save=self.db_compress,  # either compress unreadable or not compress readable
-      format_json=not self.db_compress,
+      aes_key=self.aes_key,
+      compress_save=compress,  # either compress unreadable or not compress readable
+      format_json=not compress,
     )
 
   def GetConfig(self) -> ConfigType:
@@ -677,7 +754,13 @@ class TranZoomConfig(clibase.CLIConfig):
     return _ConfigTypeFactory()
 
   def SetConfig(self, cnf: ConfigType) -> None:
-    """Set a dict of the config values, save config to disk."""
+    """Set a dict of the config values, save config to disk.
+
+    Args:
+      cnf (ConfigType): The config dict to save; will be updated with the current app_version
+          and last_save timestamp before writing.
+
+    """
     cnf.update(
       # always update these fields
       {
@@ -720,7 +803,7 @@ def MakeFrameFromCLIArgs(
     # the happy path is one line... if these coords work, we return the frame and we're done
     return frame.Frame.FromCenter(fractal, center_re, center_im, f_width, height=f_height)
   except ValueError as err:
-    if 'invalid' not in str(err).lower():
+    if 'invalid' not in str(err).lower() and 'illegal' not in str(err).lower():
       raise UsageError(f'Error: {center_re=}, {center_im=}, {f_width=}, {f_height=}') from err
     # maybe the user gave us an image path instead of coordinates? let's try to read it as image
     try:
@@ -902,7 +985,6 @@ def ProduceFractalImage(
   tm: int | None = None,
   add_serial: int | None = None,
   save_image: bool = True,
-  require_img_obj: bool = True,
 ) -> tuple[image.Image | None, bytes, str, image.RenderParameters]:
   """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
 
@@ -919,8 +1001,6 @@ def ProduceFractalImage(
         5-digit number between the date and hash.
     save_image (bool): If True, will save the final image to disk; if False, the image will
         not be saved; default is True.
-    require_img_obj (bool): If True, will require the image.Image object to be returned by the
-        method; if False, the image.Image object may be None; default is True
 
   Returns:
     tuple[image.Image, bytes, str, image.RenderParameters]: A tuple of
@@ -956,13 +1036,12 @@ def ProduceFractalImage(
     max_threads=config.max_threads,
     iterm=config.iterm,
     print_comm=config.console.print,
-    require_img_obj=require_img_obj,
     force=config.img_force_redo,
   )
   # save the image to disk if requested
   if save_image:
     full_path.write_bytes(raw_png)
-    config.console.print(f'Saved to "{full_path}"\n')
+    config.console.print(f'Saved to "{full_path}"')
   return (img, raw_png, raw_hash, render)
 
 

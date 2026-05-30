@@ -20,6 +20,10 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                     means do not use it; default is False; this option  │
 │                                                                                                     can also be loaded from the disk config, but if     │
 │                                                                                                     given should override the config                    │
+│ --readonly-db             --no-readonly-db                                                          Use local DB in readonly mode? True means DB may be │
+│                                                                                                     read from but not altered; default is False, i.e.,  │
+│                                                                                                     fully functional read+write DB                      │
+│                                                                                                                                │
 │ --db-path             -d                         DIRECTORY                                          The local DB root directory path, ex: "~/foo/bar/"; │
 │                                                                                                     if not given (DEFAULT), the DB will be saved in the │
 │                                                                                                     current app config directory, i.e.: on MacOS this   │
@@ -33,6 +37,23 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                     be readable; default is False, a larger, readable   │
 │                                                                                                     file; this option can also be loaded from the disk  │
 │                                                                                                     config, but if given should override the config     │
+│ --pass                                           TEXT                                               DB password to encrypt the local DB and computation │
+│                                                                                                     data; do NOT provide it for no encryption           │
+│                                                                                                     (DEFAULT); provide it empty ("") for terminal       │
+│                                                                                                     password input, i.e., `--pass ""` will prompt the   │
+│                                                                                                     user for a password, and this is safer because the  │
+│                                                                                                     password will not show in the shell history; your   │
+│                                                                                                     third option is to provide the password directly in │
+│                                                                                                     the CLI, i.e., `--pass "my.password"`, but this is  │
+│                                                                                                     not recommended unless you are calling the CLI from │
+│                                                                                                     a script and have other means to protect the        │
+│                                                                                                     password, because the password will be visible in   │
+│                                                                                                     the shell history and process list; the password    │
+│                                                                                                     provided by CLI or by user input will never be      │
+│                                                                                                     persisted to disk or logs; NOTE: if you encrypt     │
+│                                                                                                     your data, it WILL be compressed, i.e., the         │
+│                                                                                                     `--db-compression` option will be ignored and       │
+│                                                                                                     treated as True                                     │
 │ --out                 -o                         DIRECTORY                                          The local output root directory path, ex:           │
 │                                                                                                     "~/foo/bar/"; if not given, the image will be saved │
 │                                                                                                     in the current working directory                    │
@@ -169,6 +190,10 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
  # --- TranZoom Fractal Image Data Reading / Visualization ---                                                                                             
  poetry run tranz image read /path/to/image.png                                                                                                            
                                                                                                                                                            
+ # --- TranZoom Fractal Image Data Cleaning ---                                                                                                            
+ poetry run tranz image clean /path/to/image.png                                                                                                           
+ poetry run tranz image clean /path/to/image.png --no-hash --no-path                                                                                       
+                                                                                                                                                           
  # --- LLM-Guided Fractal Zoom ---                                                                                                                         
  poetry run tranz zoom ai                                                                                                                                  
  poetry run tranz -m "qwen3-vl-32b-instruct@q8_0" -x 0.7 zoom -n 10 ai " -0.7436499" "0.13188204" "0.00073801"                                             
@@ -295,6 +320,10 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
  # --- TranZoom Fractal Image Data Reading / Visualization ---                                                                                             
  poetry run tranz image read /path/to/image.png                                                                                                            
                                                                                                                                                            
+ # --- TranZoom Fractal Image Data Cleaning ---                                                                                                            
+ poetry run tranz image clean /path/to/image.png                                                                                                           
+ poetry run tranz image clean /path/to/image.png --no-hash --no-path                                                                                       
+                                                                                                                                                           
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --width       -w      INTEGER RANGE [16<=x<=16384]         Width of the image; 16 ≤ w ≤ 16384; default is 1024                           │
 │ --height      -h      INTEGER RANGE [16<=x<=16384]         Height of the image; 16 ≤ h ≤ 16384; default is 1024                          │
@@ -321,7 +350,42 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
 │ mandel  Generate a Mandelbrot image.                                                                                                                    │
 │ julia   Generate a Julia image.                                                                                                                         │
 │ read    Read a TranZoom fractal image.                                                                                                                  │
+│ clean   Read a TranZoom fractal image and create a clean copy (without metadata).                                                                       │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+### `tranz image clean` Sub-Command
+
+```text
+Usage: tranz image clean [OPTIONS] IMAGE_PATH                                                                                                             
+                                                                                                                                                           
+ Read a TranZoom fractal image and create a clean copy (without metadata).                                                                                 
+                                                                                                                                                           
+╭─ Arguments ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ *    image_path      FILE  The local input file path, ex: "~/foo/bar/file.png"                                                                │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --hash    --no-hash                    If True, will keep the hashes in the image metadata; if False, hashes will be removed; we believe hashes cannot  │
+│                                        leak relevant information, so: default is True                                                                   │
+│                                                                                                                                          │
+│ --path    --no-path                    If True, will clean the path of the image to a generic "fractal-<HASH>.png/jpg", where the HASH is randomly      │
+│                                        generated and means nothing, it is there to avoid file name clash; if False, the path will not be cleaned; we    │
+│                                        believe paths to be generally safe, so: default is False                                                         │
+│                                                                                                                                       │
+│ --out                    Output format for the cleaned image; possible values: 'jpeg', 'jpg', 'png'; default is "jpeg": save as JPEG      │
+│                                        because (1) if you are cleaning you want to share, and JPEG is share-friendly, and (2) some small amount of loss │
+│                                        introduces randomness that can help with privacy                                                                 │
+│                                                                                                                                          │
+│ --help                                 Show this message and exit.                                                                                      │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                           
+ Examples:                                                                                                                                                 
+                                                                                                                                                           
+ $ poetry run tranz image clean /path/to/image.png                                                                                                         
+ <save image.clean.jpg with only (private and safe) hash meta, the rest clean>                                                                             
+                                                                                                                                                           
+ $ poetry run tranz image clean /path/to/image.png --no-hash --no-path                                                                                     
+ <save fractal-[RANDOM-HASH].jpg with no meta at all, and anonymized pathname>
 ```
 
 ### `tranz image julia` Sub-Command

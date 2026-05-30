@@ -97,12 +97,16 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:frame:bottom_im': '26302607/200000000',
       'tranZoom:frame:magnification_order': '3.529877762139788',
       'tranZoom:frame:precision': '140',
+      'tranZoom:frame:hash': 'dfaf6f8a553a24347bf23ab41baf4263121041caf9d551975dfe108e22a31e08',
+      'tranZoom:computation:width': '1024',
+      'tranZoom:computation:height': '1024',
+      'tranZoom:computation:depth': '1000',
+      'tranZoom:computation:color_set': 'imaginary',
+      'tranZoom:computation:hash': (
+        '5a8b09433a0e24301bf49a50d03bf71147f106fb6644f86132dd69bcf1a7a619'
+      ),
       'tranZoom:image:animation': 'none',
-      'tranZoom:image:width': '1024',
-      'tranZoom:image:height': '1024',
-      'tranZoom:image:color_set': 'imaginary',
       'tranZoom:image:hash': base.SEAHORSE_TAIL_HASH,
-      'tranZoom:image:depth': '1000',
       'tranZoom:image:exterior:count': '1048376',
       'tranZoom:image:exterior:n:min': '37',
       'tranZoom:image:exterior:n:max': '1000',
@@ -155,6 +159,7 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:render:mark_re': '0',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_width': '1',
+      'tranZoom:render:hash': 'd28c88818cb8926c7e151d2e9d475cad85223349d22acf382decc4fb61915029',
     }
 
 
@@ -210,41 +215,45 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:frame:fractal': 'mandelbrot',
       'tranZoom:frame:center_re': '-5578776469/7500000000',
       'tranZoom:frame:center_im': '8244620127/62500000000',
-      'tranZoom:frame:top_re': '-22316212891/30000000000',
-      'tranZoom:frame:top_im': '32987705633/250000000000',
-      'tranZoom:frame:bottom_re': '-22313998861/30000000000',
-      'tranZoom:frame:bottom_im': '32969255383/250000000000',
-      'tranZoom:frame:width_re': '73801/1000000000',
-      'tranZoom:frame:height_im': '73801/1000000000',
-      'tranZoom:frame:magnification_order': '4.529877762139788',
+      'tranZoom:frame:top_re': '-9953460536484113/13380577500000000',
+      'tranZoom:frame:top_im': '44139455176953337/334514437500000000',
+      'tranZoom:frame:bottom_re': '-3317491012161371/4460192500000000',
+      'tranZoom:frame:bottom_im': '44114767676953337/334514437500000000',
+      'tranZoom:frame:width_re': '395/5352231',
+      'tranZoom:frame:height_im': '395/5352231',
+      'tranZoom:frame:magnification_order': '4.5298777621738715',
       'tranZoom:frame:precision': '140',
+      'tranZoom:frame:hash': 'fb78ce2042c8e7f2cc0a314e0faf09ec9b3423131461a2ac250491f7a17ff83b',
+      'tranZoom:computation:width': '220',
+      'tranZoom:computation:height': '220',
+      'tranZoom:computation:depth': '1518',
+      'tranZoom:computation:color_set': 'none',
+      'tranZoom:computation:hash': (
+        'b78c5bc40b52633696533b9594f728d894fa44442f8a77150396a3c3b8c63cdd'
+      ),
       'tranZoom:image:animation': 'gif',
-      'tranZoom:image:width': '220',
-      'tranZoom:image:height': '220',
-      'tranZoom:image:color_set': 'none',
       'tranZoom:image:hash': base.SEAHORSE_ANIMATED_HASH,
-      'tranZoom:image:depth': '1423',
-      'tranZoom:image:exterior:count': '48397',
+      'tranZoom:image:exterior:count': '48399',
       'tranZoom:image:exterior:n:min': '98',
-      'tranZoom:image:exterior:n:max': '1336',
-      'tranZoom:image:exterior:nu:min': '4.646779416361824e-06',
+      'tranZoom:image:exterior:n:max': '1400',
+      'tranZoom:image:exterior:nu:min': '1.1549895134521648e-05',
       'tranZoom:image:exterior:nu:max': '0.9999839663505554',
       'tranZoom:image:exterior:bucket:min': '202433',
-      'tranZoom:image:exterior:bucket:max': '2737985',
+      'tranZoom:image:exterior:bucket:max': '2867813',
       'tranZoom:image:exterior:hist:linear': (
-        '{98: 2, 99: 6, 100: 5, ...: 48381, 1276: 1, 1278: 1, 1336: 1}'
+        '{98: 2, 99: 6, 100: 5, ...: 48383, 1317: 1, 1345: 1, 1400: 1}'
       ),
       'tranZoom:image:exterior:hist:linear:cumulative': (
-        '{98: 2, 99: 8, 100: 13, ...: 32226103, 1276: 48395, 1278: 48396, 1336: 48397}'
+        '{98: 2, 99: 8, 100: 13, ...: 32414206, 1317: 48397, 1345: 48398, 1400: 48399}'
       ),
       'tranZoom:image:exterior:hist:bucket': (
-        '{202433: 1, 202682: 1, 202820: 1, ...: 48391, 2614704: 1, 2619173: 1, 2737985: 1}'
+        '{202433: 1, 202682: 1, 202820: 1, ...: 48393, 2697670: 1, 2754588: 1, 2867813: 1}'
       ),
       'tranZoom:image:exterior:hist:bucket:cumulative': (
-        '{202433: 1, 202682: 2, 202820: 3, ...: 1137706770, 2614704: 48395, '
-        '2619173: 48396, 2737985: 48397}'
+        '{202433: 1, 202682: 2, 202820: 3, ...: 1137830172, 2697670: 48397, '
+        '2754588: 48398, 2867813: 48399}'
       ),
-      'tranZoom:image:set:count': '3',
+      'tranZoom:image:set:count': '1',
       'tranZoom:image:set:n:min': '100000000',
       'tranZoom:image:set:n:max': '100000000',
       'tranZoom:image:set:nu:min': '0.0',
@@ -258,6 +267,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:render:mark_re': '-5578776469/7500000000',
       'tranZoom:render:mark_im': '8244620127/62500000000',
       'tranZoom:render:mark_width': '1',
+      'tranZoom:render:hash': '2e88ea6a9e35f8b66f61f0073446b911935c828c57a7355d49e34d967479178a',
       'tranZoom:zoom:type': 'gif',
       'tranZoom:zoom:frame:initial:width_re': '73801/100000000',
       'tranZoom:zoom:frame:initial:height_im': '73801/100000000',
@@ -269,6 +279,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:zoom:frame:steps': '39',
       'tranZoom:zoom:frame:magnitude_per_step': '1/39',
       'tranZoom:zoom:frame:magnification_per_step': '4777501148913803/4503599627370496',
+      'tranZoom:zoom:hash': 'e3e0d784d4694b805efb2aa52548605cff720a3ddc3c19f48e3a713785f2eb62',
     }
 
 
@@ -334,12 +345,16 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:frame:bottom_im': '6547/10000',
       'tranZoom:frame:magnification_order': '2.630018147449685',
       'tranZoom:frame:precision': '140',
+      'tranZoom:frame:hash': '8faa5c419732c9444c77bfd61cad10e2a6a84681a541a2ef3a88b979fdca51e6',
+      'tranZoom:computation:width': '512',
+      'tranZoom:computation:height': '377',
+      'tranZoom:computation:depth': '1819',
+      'tranZoom:computation:color_set': 'max',
+      'tranZoom:computation:hash': (
+        '096853172953a47c23baee6382f164c720392ad7ecb0266d2edada47fc280081'
+      ),
       'tranZoom:image:animation': 'none',
-      'tranZoom:image:width': '512',
-      'tranZoom:image:height': '377',
-      'tranZoom:image:color_set': 'max',
       'tranZoom:image:hash': base.SUZANA_WAVE_HASH,
-      'tranZoom:image:depth': '1819',
       'tranZoom:image:exterior:count': '106710',
       'tranZoom:image:exterior:n:min': '43',
       'tranZoom:image:exterior:n:max': '1813',
@@ -391,4 +406,5 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:render:mark_re': '0',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_width': '1',
+      'tranZoom:render:hash': '27958fa5ac62470c6aef718044291a41e5deab55ddbf82ebf5dc3d898cdd2bad',
     }

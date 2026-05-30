@@ -19,16 +19,19 @@ import logging
 import math
 import pathlib
 import struct
+import subprocess  # noqa: S404
 import sys
+import tempfile
 import time
 from collections import abc
 from typing import cast
 
 import gmpy2
 import imageio
+import imageio_ffmpeg  # type: ignore
 import numpy as np
+from PIL import ExifTags, ImageDraw, ImageFont, PngImagePlugin
 from PIL import Image as PILImage
-from PIL import ImageDraw, ImageFont, PngImagePlugin
 from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
@@ -41,12 +44,33 @@ from tranzoom.core import frame, palette
 # actual image/mathematical data;
 # keys use a "tranZoom:" (_app) namespace to avoid collisions with other metadata
 # all are converted to str for storage in PNG metadata, but the original types are indicated below
+META_FRACTAL_KEY: str = f'{_app}:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal
+META_TOP_RE_KEY: str = f'{_app}:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
+META_TOP_IM_KEY: str = f'{_app}:frame:top_im'  # gmpy2.mpq
+META_BOTTOM_RE_KEY: str = f'{_app}:frame:bottom_re'  # gmpy2.mpq
+META_BOTTOM_IM_KEY: str = f'{_app}:frame:bottom_im'  # gmpy2.mpq
+META_CENTER_RE_KEY: str = f'{_app}:frame:center_re'  # gmpy2.mpq
+META_CENTER_IM_KEY: str = f'{_app}:frame:center_im'  # gmpy2.mpq
+META_WIDTH_RE_KEY: str = f'{_app}:frame:width_re'  # gmpy2.mpq
+META_HEIGHT_IM_KEY: str = f'{_app}:frame:height_im'  # gmpy2.mpq
+META_PRECISION_KEY: str = f'{_app}:frame:precision'  # int, in bits
+META_MAGNIFICATION_ORDER_KEY: str = f'{_app}:frame:magnification_order'  # float
+META_FRAME_HASH_KEY: str = f'{_app}:frame:hash'  # str, like "abcdef1234567890", a SHA256
+META_COMPUTATION_WIDTH_KEY: str = f'{_app}:computation:width'  # int, in pixels
+META_COMPUTATION_HEIGHT_KEY: str = f'{_app}:computation:height'  # int, in pixels
+META_COMPUTATION_SEARCH_DEPTH_KEY: str = f'{_app}:computation:depth'  # int
+META_COMPUTATION_COLOR_SET_KEY: str = f'{_app}:computation:color_set'  # SetHighlightAlgo./"none"
+META_COMPUTATION_HASH_KEY: str = f'{_app}:computation:hash'  # str, like "abcdef1234567890" a SHA256
+META_RENDER_PALETTE_KEY: str = f'{_app}:render:palette'  # str, ex "sunset", one of palette.Palette
+META_RENDER_SET_PALETTE_KEY: str = f'{_app}:render:set_palette'  # str, interior Set palette name
+META_RENDER_OVERLAY_KEY: str = f'{_app}:render:overlay'  # image.OverlayType or "none"
+META_RENDER_MARK_RE_KEY: str = f'{_app}:render:mark_re'  # gmpy2.mpq
+META_RENDER_MARK_IM_KEY: str = f'{_app}:render:mark_im'  # gmpy2.mpq
+META_RENDER_MARK_COLOR_KEY: str = f'{_app}:render:mark_color'  # Color.name.lower() / "none"=no mark
+META_RENDER_MARK_WIDTH_KEY: str = f'{_app}:render:mark_width'  # int
+META_RENDER_HASH_KEY: str = f'{_app}:render:hash'  # str, like "abcdef1234567890", a SHA256
 META_IMAGE_ANIMATION_KEY: str = f'{_app}:image:animation'  # AnimationType or "none" if static image
-META_IMAGE_WIDTH_KEY: str = f'{_app}:image:width'  # int, in pixels
-META_IMAGE_HEIGHT_KEY: str = f'{_app}:image:height'  # int, in pixels
 META_IMAGE_HASH_KEY: str = f'{_app}:image:hash'  # str, like "abcdef1234567890", a SHA256
-META_ITER_SEARCH_DEPTH_KEY: str = f'{_app}:image:depth'  # int
-META_IMAGE_COLOR_SET_KEY: str = f'{_app}:image:color_set'  # frame.SetHighlightAlgorithm or "none"
 META_IMAGE_EXT_COUNT_KEY: str = f'{_app}:image:exterior:count'  # int; count escaped
 META_IMAGE_EXT_N_MIN_KEY: str = f'{_app}:image:exterior:n:min'  # int; min iter
 META_IMAGE_EXT_N_MAX_KEY: str = f'{_app}:image:exterior:n:max'  # int; max iter
@@ -61,13 +85,6 @@ META_IMAGE_SET_NU_MIN_KEY: str = f'{_app}:image:set:nu:min'  # float
 META_IMAGE_SET_NU_MAX_KEY: str = f'{_app}:image:set:nu:max'  # float
 META_IMAGE_SET_BUCKET_MIN_KEY: str = f'{_app}:image:set:bucket:min'  # int
 META_IMAGE_SET_BUCKET_MAX_KEY: str = f'{_app}:image:set:bucket:max'  # int
-META_RENDER_PALETTE_KEY: str = f'{_app}:render:palette'  # str, ex "sunset", one of palette.Palette
-META_RENDER_SET_PALETTE_KEY: str = f'{_app}:render:set_palette'  # str, interior Set palette name
-META_RENDER_OVERLAY_KEY: str = f'{_app}:render:overlay'  # image.OverlayType or "none"
-META_RENDER_MARK_RE_KEY: str = f'{_app}:render:mark_re'  # gmpy2.mpq
-META_RENDER_MARK_IM_KEY: str = f'{_app}:render:mark_im'  # gmpy2.mpq
-META_RENDER_MARK_COLOR_KEY: str = f'{_app}:render:mark_color'  # Color.name.lower() / "none"=no mark
-META_RENDER_MARK_WIDTH_KEY: str = f'{_app}:render:mark_width'  # int
 META_IMAGE_STATS_MAX_LO_KEY: str = f'{_app}:image:stats:max_lo'  # gmpy2.mpfr
 META_IMAGE_STATS_MAX_HI_KEY: str = f'{_app}:image:stats:max_hi'  # gmpy2.mpfr
 META_IMAGE_STATS_MIN_LO_KEY: str = f'{_app}:image:stats:min_lo'  # gmpy2.mpfr
@@ -76,17 +93,6 @@ META_IMAGE_STATS_ANG_LO_KEY: str = f'{_app}:image:stats:ang_lo'  # gmpy2.mpfr
 META_IMAGE_STATS_ANG_HI_KEY: str = f'{_app}:image:stats:ang_hi'  # gmpy2.mpfr
 META_IMAGE_STATS_IMAG_LO_KEY: str = f'{_app}:image:stats:imag_lo'  # gmpy2.mpfr
 META_IMAGE_STATS_IMAG_HI_KEY: str = f'{_app}:image:stats:imag_hi'  # gmpy2.mpfr
-META_FRACTAL_KEY: str = f'{_app}:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal
-META_TOP_RE_KEY: str = f'{_app}:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
-META_TOP_IM_KEY: str = f'{_app}:frame:top_im'  # gmpy2.mpq
-META_BOTTOM_RE_KEY: str = f'{_app}:frame:bottom_re'  # gmpy2.mpq
-META_BOTTOM_IM_KEY: str = f'{_app}:frame:bottom_im'  # gmpy2.mpq
-META_CENTER_RE_KEY: str = f'{_app}:frame:center_re'  # gmpy2.mpq
-META_CENTER_IM_KEY: str = f'{_app}:frame:center_im'  # gmpy2.mpq
-META_WIDTH_RE_KEY: str = f'{_app}:frame:width_re'  # gmpy2.mpq
-META_HEIGHT_IM_KEY: str = f'{_app}:frame:height_im'  # gmpy2.mpq
-META_PRECISION_KEY: str = f'{_app}:frame:precision'  # int, in bits
-META_MAGNIFICATION_ORDER_KEY: str = f'{_app}:frame:magnification_order'  # float
 # extra keys added to some images only
 # images with exterior points (almost all!)
 META_IMAGE_EXT_HISTOGRAM_LINEAR_KEY: str = f'{_app}:image:exterior:hist:linear'  # str
@@ -113,6 +119,7 @@ META_ZOOM_STEPS_KEY: str = f'{_app}:zoom:frame:steps'  # int
 META_ZOOM_FPS_KEY: str = f'{_app}:zoom:frame:fps'  # gmpy2.mpq
 META_ZOOM_MAGNITUDE_PER_STEP_KEY: str = f'{_app}:zoom:frame:magnitude_per_step'  # gmpy2.mpq
 META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str = f'{_app}:zoom:frame:magnification_per_step'  # gmpy2.mpq
+META_ZOOM_HASH_KEY: str = f'{_app}:zoom:hash'  # str, like "abcdef1234567890", a SHA256
 # LLM extra keys
 META_LLM_MODEL_KEY: str = f'{_app}:llm:model'  # str (META_LLM_MODEL_VALUE_HUMAN or "HUMAN")
 META_LLM_TEMPERATURE_KEY: str = f'{_app}:llm:temperature'  # float
@@ -126,6 +133,16 @@ META_LLM_RESULT_JSON_KEY: str = f'{_app}:llm:result:json'  # JSON with evaluatio
 META_LLM_ZOOM_COUNT_KEY: str = f'{_app}:llm:zoom:count'  # int; zoom iteration depth
 # special values
 META_LLM_MODEL_VALUE_HUMAN: str = 'HUMAN'  # used if evaluation is done by flesh-and-blood human
+
+# these hashes are relatively safe to leave in a private image (`tranz config clean` command),
+# they would have to be brute-forced, and for any non-trivial Frame/zoom will be nigh impossible
+META_SAFE_HASHES: set[str] = {
+  META_FRAME_HASH_KEY,  # this depends on coordinates, hard for any non-trivial Frame
+  META_COMPUTATION_HASH_KEY,  # this depends on coordinates, hard for any non-trivial Frame
+  META_ZOOM_HASH_KEY,  # this depends on coordinates, hard for any non-trivial Frame
+  META_RENDER_HASH_KEY,  # this is easy to brute-force, but it's only the render parameters, useless
+  META_IMAGE_HASH_KEY,  # this is a data-driven hash (depends on rendered bytes) and is 100% safe
+}
 
 # pre-compiled constants for encoding/decoding
 _PACK_IF = struct.Struct('>if')  # signed int32 + float32
@@ -187,10 +204,9 @@ class OverlayType(enum.Enum):
 
 
 DEFAULT_ANIMATION_TYPE: AnimationType = AnimationType.GIF
-
+JPEG_QUALITY: int = 95  # quality for JPEG output; ignored for PNG which is lossless
 
 # color constants
-
 
 DEFAULT_MARK_COLOR: Color = Color.RED
 DEFAULT_MARK_WIDTH: int = 1
@@ -215,6 +231,8 @@ DEFAULT_LOOP: int = 0  # 0 means infinite loop for GIFs
 THRESHOLD_JUMPY_ZOOM_PER_FRAME: float = 1.25  # if zoom per frame is above this warn about jumpiness
 MAX_TOLERATED_FRAME_MAG_ERROR: float = 0.00002  # 0.002% - max error Frame vs. reduced mpq Frame
 MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.0001  # 0.01% - max total cumulative error of total zoom
+MAGNITUDE_PER_FRAME_MARKER: gmpy2.mpq = gmpy2.mpq('1')  # one marker every 10x zoom
+MAX_TOLERATED_MARKER_MAG_ERROR: float = 0.06  # 6% max error for marker frames
 
 
 # gmpy2.mpfr constants
@@ -229,7 +247,26 @@ _MPQ_VIDEO_DURATION_STORE_SCALE: gmpy2.mpq = gmpy2.mpq(str(VIDEO_DURATION_STORE_
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class FractalStats:
-  """Defines Mandelbrot stats values, collected over the sample run."""
+  """Defines Mandelbrot stats values, collected over the sample run.
+
+  Attributes:
+    n_px (int): Total number of pixels in the image.
+    n_interior (int): Number of interior (Set) points in the image; pixels with escape
+        iteration < 0.
+    max_lo (gmpy2.mpfr): min(all max(|z|)) for interior points; lower bound of the max |z|
+        magnitudes.
+    max_hi (gmpy2.mpfr): max(all max(|z|)) for interior points; upper bound of the max |z|
+        magnitudes.
+    min_lo (gmpy2.mpfr): min(all min(|z|)) for interior points; lower bound of the min |z|
+        magnitudes.
+    min_hi (gmpy2.mpfr): max(all min(|z|)) for interior points; upper bound of the min |z|
+        magnitudes.
+    ang_lo (gmpy2.mpfr): Minimum angle for interior (Set) points, in [0, 1].
+    ang_hi (gmpy2.mpfr): Maximum angle for interior (Set) points, in [0, 1].
+    imag_lo (gmpy2.mpfr): Minimum imaginary weight average for interior (Set) points, in [0, 1].
+    imag_hi (gmpy2.mpfr): Maximum imaginary weight average for interior (Set) points, in [0, 1].
+
+  """
 
   # these 2 stats are always collected
   n_px: int  # total number of pixels in the image
@@ -250,17 +287,19 @@ class FractalStats:
   imag_hi: gmpy2.mpfr  # max(all sac values for interior points)
 
 
-# TODO: more stable animations
-# instead of rendering each frame independently, we can have a class that knows about the
-# whole intended journey and can have a special AsPixels() that normalizes once against all images
-
-
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class ImageOutputConfig:
   """Groups all parameters that control how output images are named and saved on disk.
 
   This is a runtime-only config object — not part of the mathematical/DB representation.
   It is NOT a SerializingFractalObject: it carries no mathematical meaning and is never hashed.
+
+  Attributes:
+    path (pathlib.Path | None): Output directory; None means the current working directory.
+    use_date (bool): If True, a YYYYMMDDhhmmss timestamp is included in the file name.
+    use_hash (bool): If True, the content hash is included in the file name.
+    prefix (str): File name prefix, e.g., 'mandel' or 'julia'.
+
   """
 
   path: pathlib.Path | None  # output directory; None means current working directory
@@ -271,7 +310,27 @@ class ImageOutputConfig:
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class RenderParameters(frame.SerializingFractalObject):
-  """Defines a transformation from math to image."""
+  """Defines a transformation from math to image.
+
+  ATTENTION: changing any attribute changes the object SHA-256 hash.
+
+  Attributes:
+    tp (FileType): Output file type; default is FileType.PNG.
+    escaped_pal (palette.Palette): Color palette for escaped (exterior) points;
+        default is palette.DEFAULT_PALETTE.
+    set_pal (palette.Palette | None): Color palette for interior Set points; None means no
+        Set palette (requires a non-Set computation); default is None.
+    mark_re (gmpy2.mpq): Real part of the optional crosshair mark coordinate;
+        default is 0; unused when mark_color is None.
+    mark_im (gmpy2.mpq): Imaginary part of the optional crosshair mark coordinate;
+        default is 0; unused when mark_color is None.
+    mark_color (Color | None): Color of the crosshair mark overlay; None means no mark is
+        drawn; default is None.
+    mark_width (int): Crosshair mark line width in pixels; default is DEFAULT_MARK_WIDTH.
+    overlay (OverlayType | None): Optional numbered sector grid overlay; None means no
+        overlay; default is None.
+
+  """
 
   # ATTENTION: changing anything here changes the HASH!!
   tp: FileType = FileType.PNG
@@ -282,8 +341,10 @@ class RenderParameters(frame.SerializingFractalObject):
   mark_color: Color | None = None  # if None, no mark will be drawn
   mark_width: int = DEFAULT_MARK_WIDTH
   overlay: OverlayType | None = None  # overlay is independent of mark!
+  prev_marker: frame.Frame | None = None  # for zoom
+  next_marker: frame.Frame | None = None  # for zoom
 
-  def __post_init__(self) -> None:
+  def __post_init__(self) -> None:  # noqa: C901, PLR0912
     """Check parameters for validity.
 
     Raises:
@@ -323,6 +384,17 @@ class RenderParameters(frame.SerializingFractalObject):
       r, g, b = self.mark_color.value
       if not (0 <= r <= 255 and 0 <= g <= 255 and 0 <= b <= 255):  # noqa: PLR2004
         raise Error(f'Mark color RGB values must be between 0 and 255, got {self.mark_color}')
+    # check prev/next markers are valid if provided
+    if not self.prev_marker and self.next_marker:
+      raise Error('next_marker provided without prev_marker')
+    if self.prev_marker and not self.next_marker:
+      raise Error('prev_marker provided without next_marker')
+    if (
+      self.prev_marker
+      and self.next_marker
+      and (self.prev_marker.fractal != self.next_marker.fractal)
+    ):
+      raise Error('prev/next_marker fractal types do not match')
 
   def __str__(self) -> str:
     """Get string representation of the RenderParameters.
@@ -352,10 +424,15 @@ class RenderParameters(frame.SerializingFractalObject):
       )
     )
     overlay: str = '' if self.overlay is None else f' + [OVERLAY: {self.overlay.name}]'
+    markers: str = (
+      ''
+      if self.prev_marker is None or self.next_marker is None
+      else f' + [P:{self.prev_marker.sha[:10]}, N:{self.next_marker.sha[:10]}]'
+    )
     return (
       '{'
       f'[{self.tp.name.upper()}, {self.escaped_pal.name}, '
-      f'{self.set_pal.name if self.set_pal else "none"}]{mark}{overlay}'
+      f'{self.set_pal.name if self.set_pal else "none"}]{mark}{overlay}{markers}'
       '}'
     )
 
@@ -381,6 +458,8 @@ class RenderParameters(frame.SerializingFractalObject):
       'mark_color': self.mark_color.name.lower() if self.mark_color else None,
       'mark_width': self.mark_width,
       'overlay': self.overlay.value if self.overlay else None,
+      'prev_marker': self.prev_marker.json if self.prev_marker else None,
+      'next_marker': self.next_marker.json if self.next_marker else None,
     }
 
   @staticmethod
@@ -412,6 +491,12 @@ class RenderParameters(frame.SerializingFractalObject):
         ),
         mark_width=int(str(data['mark_width'])),
         overlay=OverlayType(data['overlay']) if data['overlay'] is not None else None,
+        prev_marker=frame.Frame.FromJson(cast('tbase.JSONDict', data['prev_marker']))
+        if data['prev_marker']
+        else None,
+        next_marker=frame.Frame.FromJson(cast('tbase.JSONDict', data['next_marker']))
+        if data['next_marker']
+        else None,
       )
     except (KeyError, ValueError, TypeError, Error) as err:
       raise Error(f'Invalid RenderParameters JSON data: {err}') from err
@@ -423,7 +508,23 @@ class RenderParameters(frame.SerializingFractalObject):
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class ZoomParameters(frame.SerializingFractalObject):
-  """Defines the zoom parameters for video planning and rendering."""
+  """Defines the zoom parameters for video planning and rendering.
+
+  ATTENTION: changing any attribute changes the object SHA-256 hash.
+
+  Attributes:
+    tp (AnimationType): The animation output type ('gif' or 'mp4').
+    img (frame.ComputationParameters): The initial frame computation parameters; the same
+        parameters are used for all frames in the animation.
+    render (RenderParameters): The render parameters applied to all frames in the animation.
+    mag (gmpy2.mpq): The destination magnification (as a log10 magnitude order).
+    n_frames (int): The total number of frames in the animation.
+    duration (int): The animation duration stored as
+        round(seconds * VIDEO_DURATION_STORE_SCALE), to avoid float precision issues.
+    loop (int): Number of loops for GIF animations; 0 means infinite loop;
+        ignored for non-GIF types; default is 0.
+
+  """
 
   # ATTENTION: changing anything here changes the HASH!!
   tp: AnimationType  # 'gif' or 'mp4'
@@ -509,7 +610,7 @@ class ZoomParameters(frame.SerializingFractalObject):
     """Get the frames per second for this animation, calculated from n_frames and duration. Exact.
 
     Returns:
-      float: The frames per second for this animation.
+      gmpy2.mpq: The frames per second for this animation.
 
     """
     return gmpy2.mpq(self.n_frames) / self.n_seconds
@@ -601,11 +702,13 @@ class ZoomParameters(frame.SerializingFractalObject):
       raise Error(f'ZoomParameters {params.sha!r} does not match expected {check_hash!r}')
     return params
 
-  def Frames(self) -> list[frame.Frame]:
+  def Frames(self) -> tuple[list[frame.Frame], list[tuple[int, frame.Frame]]]:  # noqa: C901, PLR0912, PLR0914, PLR0915
     """Get the Frames. Could be a property, but is a method to remind this is an expensive-ish call.
 
     Returns:
-      list[frame.Frame]: The frames for this animation.
+      tuple[list[frame.Frame], list[tuple[int, frame.Frame]]]: The (frames, marker_frames) for
+          this animation, where marker_frames is a strict subset of frames and is a list
+          of sorted (index, frame) pairs for frames that were picked
 
     Raises:
       Error: if the frames cannot be generated within the tolerated error threshold.
@@ -620,39 +723,66 @@ class ZoomParameters(frame.SerializingFractalObject):
     all_frames: list[frame.Frame] = [self.img.frm]  # start with initial frame, keep as-is
     # reproduce the zoom run with full precision
     frm: frame.Frame = self.img.frm
-    for i in range(self.n_steps):
-      # keep frm full precision and iterate
-      frm = frame.Frame.FromCenter(
-        frm.fractal,
-        *frm.center,
-        frm.size[0] / mpq_mag,  # these mpq will get HUGE: the reason we keep them in check below
-        height=frm.size[1] / mpq_mag,  # these mpq will get HUGE
-        point_re=frm.point_re,
-        point_im=frm.point_im,
-      )
-      # make a less aggressive version of the zoom
-      max_denominator: int = 10_000 * (10 ** math.ceil(frm.magnification[1]))
-      reduced_frm = frame.Frame.FromCenter(
-        frm.fractal,
-        *frm.center,
-        frm.size[0].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
-        height=frm.size[1].limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
-        point_re=frm.point_re,
-        point_im=frm.point_im,
-      )
-      all_frames.append(reduced_frm)
-      # test error
-      dx, dy = frm.size
-      rdx, rdy = reduced_frm.size
-      error_x: gmpy2.mpq = abs(dx - rdx) / dx
-      error_y: gmpy2.mpq = abs(dy - rdy) / dy
-      if error_x > MAX_TOLERATED_FRAME_MAG_ERROR or error_y > MAX_TOLERATED_FRAME_MAG_ERROR:
-        raise Error(
-          f'Frame {i + 2} has size {frm.size} but reduced frame has size {reduced_frm.size}, '
-          f'which is {float(gmpy2.mpq(100) * error_x):.6f}% different in width '
-          f'and {float(gmpy2.mpq(100) * error_y):.6f}% '
-          'different in height, which is above the tolerated error threshold. This is a bug!'
+    max_denominator: int
+    max_error_dim: gmpy2.mpq = _MPQ_ZERO
+    with timer.Timer('frame generation'):
+      # float magnification tracking: avoids 30k-bit precision mpfr computation in every loop step;
+      # frm.magnification[1] is only used to compute max_denominator for limit_denominator, so
+      # a float approximation is precise enough (error is << MAX_TOLERATED_FRAME_MAG_ERROR)
+      mag_log10: float = self.img.frm.magnification[1]  # log10 magnification of the initial frame
+      mag_step: float = float(self.mag_per_step)  # log10 magnification increment per step
+      cur_mag_log10: float  # current step's approximate log10 magnification, updated each iteration
+      for i in range(self.n_steps):
+        # compute the current expected log10 magnification analytically (cheap float operation)
+        cur_mag_log10 = mag_log10 + (i + 1) * mag_step
+        # keep frm full precision and iterate
+        frm = frame.Frame.FromCenter(
+          frm.fractal,
+          *frm.center,
+          frm.size[0] / mpq_mag,  # these mpq will get HUGE: the reason we keep them in check below
+          height=frm.size[1] / mpq_mag,  # these mpq will get HUGE
+          point_re=frm.point_re,
+          point_im=frm.point_im,
         )
+        if i and not i % 10:
+          # we have to keep the mpq in check; use precomputed float mag (avoids 30k-bit mpfr call)
+          max_denominator = 10_000_000 * (10 ** math.ceil(cur_mag_log10 + 1e-9))
+          dx, dy = frm.size  # cache to avoid calling the property twice
+          frm = frame.Frame.FromCenter(
+            frm.fractal,
+            *frm.center,
+            dx.limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+            height=dy.limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+            point_re=frm.point_re,
+            point_im=frm.point_im,
+          )
+        # make a less aggressive version of the zoom; 1e-9: if the true value is exactly an integer
+        # (ex: 5) float accumulation in mag_log10 + (i+1) * mag_step can produce 4.9999999999999982
+        # instead, causing math.ceil to return 4 rather than 5, making max_denominator 10x too
+        # small, so 1e-9 before ceil means "within a billionth of an integer rounds up to it"
+        max_denominator = 100 * (10 ** math.ceil(cur_mag_log10 + 1e-9))
+        dx, dy = frm.size  # cache once: used for limit_denominator below and error check below
+        reduced_frm = frame.Frame.FromCenter(
+          frm.fractal,
+          *frm.center,
+          dx.limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+          height=dy.limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+          point_re=frm.point_re,
+          point_im=frm.point_im,
+        )
+        all_frames.append(reduced_frm)
+        # test error (dx, dy already cached above)
+        rdx, rdy = reduced_frm.size
+        error_x: gmpy2.mpq = abs(dx - rdx) / dx
+        error_y: gmpy2.mpq = abs(dy - rdy) / dy
+        if error_x > MAX_TOLERATED_FRAME_MAG_ERROR or error_y > MAX_TOLERATED_FRAME_MAG_ERROR:
+          raise Error(
+            f'Frame {i + 2} has size {frm.size} but reduced frame has size {reduced_frm.size}, '
+            f'which is {float(gmpy2.mpq(100) * error_x):.6f}% different in width '
+            f'and {float(gmpy2.mpq(100) * error_y):.6f}% '
+            'different in height, which is above the tolerated error threshold. This is a bug!'
+          )
+        max_error_dim = max(max_error_dim, error_x, error_y)
     # done adding frames, final check: directly compute the actual magnification achieved
     # to make sure the accumulated error is within the tolerated threshold
     actual_mag: gmpy2.mpfr = cast(
@@ -661,24 +791,110 @@ class ZoomParameters(frame.SerializingFractalObject):
     if (mag_error := abs(actual_mag - self.mag) / self.mag) > MAX_TOLERATED_TOTAL_MAG_ERROR:
       raise Error(
         'the actual magnification achieved by zooming in the frame is '
-        f'{float(actual_mag):.4f}, which is {100.0 * float(mag_error):.4f}% different '
-        f'from the intended {self.mag} ({float(self.mag):.4f}). This means the gmpy2.mpq needs '
+        f'{float(actual_mag):.6f}, which is {100.0 * float(mag_error):e}% different '
+        f'from the intended {self.mag} ({float(self.mag):.6f}). This means the gmpy2.mpq needs '
         'more precision for conversion. This is a bug!'
       )
-    return all_frames
+    logging.info(
+      f'Generated {len(all_frames)} REGULAR Frames for the zoom, '
+      f'max frame error {100.0 * float(max_error_dim):e}%, '
+      f'final magnification error {100.0 * float(mag_error):e}% '
+      f'(actual {float(actual_mag):.6f} vs intended {float(self.mag):.6f})'
+    )
+    # we finished the frame generation, now we pick them special ones
+    # we don't care about the number of frames, we care about a fixed zoom magnitude
+    n_marker_steps: int = int(
+      cast('gmpy2.mpz', max(math.floor(self.mag / MAGNITUDE_PER_FRAME_MARKER), 1))
+    )
+    if n_marker_steps <= 1 or self.n_frames < 5:  # noqa: PLR2004
+      # if we only have 2 or fewer markers (1 step), just use the first and last frames as
+      # markers; same thing for few frames: [1st, X, Y, Z, last] is the smallest degenerate
+      # case where it is worth having a "marker", frame Y, and return [1st, Y, last]
+      logging.info('No new marker frames needed, will use [first, last]')
+      return (all_frames, [(0, all_frames[0]), (len(all_frames) - 1, all_frames[-1])])
+    # we will need more markers; start from the first and find the "ideal" stops
+    with timer.Timer('marker generation'):
+      marker_mag: gmpy2.mpq = self.mag / gmpy2.mpq(n_marker_steps)
+      marker_mag = gmpy2.mpq(
+        gmpy2.exp10(marker_mag)
+      )  # mpq -> mpfr -> mpq unavoidable, unfortunately
+      # precompute analytical frame magnifications for O(log n) bisect-based marker search;
+      # float precision is sufficient since MAX_TOLERATED_MARKER_MAG_ERROR tolerance is 6%
+      all_mag_log10: list[float] = [mag_log10 + j * mag_step for j in range(len(all_frames))]
+      ideal_marker_mag_log10: float = mag_log10  # tracks the ideal marker magnification
+      # log10(exp10(x)) = x exactly, so use the underlying value rather than gmpy2.log10(marker_mag)
+      marker_mag_step_log10: float = float(self.mag) / float(n_marker_steps)
+      frm = all_frames[0]  # start with initial frame, keep as-is
+      marker_frames: list[tuple[int, frame.Frame]] = [(0, frm)]  # start with the first frame
+      last_idx: int = 0
+      idx: int
+      delta_log10: float
+      max_min_mag_float: float = 0.0
+      for i in range(n_marker_steps):
+        # advance ideal marker magnification analytically (no growing-denominator mpq computation)
+        ideal_marker_mag_log10 += marker_mag_step_log10
+        # find the actual frame closest to the ideal magnification using O(log n) bisect search
+        insert_pos: int = bisect.bisect_left(all_mag_log10, ideal_marker_mag_log10, last_idx)
+        if insert_pos >= len(all_frames):
+          idx = len(all_frames) - 1
+        elif insert_pos == last_idx or abs(
+          all_mag_log10[insert_pos] - ideal_marker_mag_log10
+        ) <= abs(
+          all_mag_log10[insert_pos - 1] - ideal_marker_mag_log10
+        ):  # short-circuit: when insert_pos == last_idx, insert_pos-1 is not evaluated
+          idx = insert_pos
+        else:
+          idx = insert_pos - 1
+        # track maximum relative error in mag2 space: |f.mag2 - ideal.mag2| / ideal.mag2
+        # float equivalent: |10^(2*(f_log10 - ideal_log10)) - 1| (same formula, just in log space)
+        delta_log10 = all_mag_log10[idx] - ideal_marker_mag_log10
+        max_min_mag_float = max(max_min_mag_float, abs(10.0 ** (2.0 * delta_log10) - 1.0))
+        # test that the frames are in the expected order and we are not going backwards
+        new_marker: frame.Frame = all_frames[idx]
+        if idx == last_idx:
+          raise Error(
+            f'Marker frame {i + 1} is closer to last marker index {last_idx}. This is a bug!'
+          )
+        # make sure we don't have duplicates; add it
+        if (idx, new_marker) in marker_frames:
+          raise Error(f'Duplicate marker frame found; bug! report. Marker frame: {new_marker}')
+        marker_frames.append((idx, new_marker))
+        last_idx = idx
+    # done; check we arrived at the last frame and error is acceptable; if so, all is good
+    if marker_frames[-1] != (len(all_frames) - 1, all_frames[-1]):
+      raise Error(
+        'Last marker frame is not the same as the last frame; bug! report. '
+        f'Last marker frame: {marker_frames[-1]}, last frame: {all_frames[-1]}'
+      )
+    if any(1 for j, f in marker_frames if all_frames[j] != f):
+      raise Error('Inconsistent marker frame hashes do not match frames list; Report bug!')
+    if max_min_mag_float > MAX_TOLERATED_MARKER_MAG_ERROR:
+      raise Error(
+        f'Marker frames are not close enough to the ideal frames; bug! report. '
+        f'Maximum deviation in mag2 is {100.0 * max_min_mag_float:.6f}%, which is a bug! report'
+      )
+    logging.info(
+      f'Generated {len(marker_frames) - 2} non-trivial MARKER Frames for the zoom, '
+      f'max frame deviation from ideal {100.0 * float(max_min_mag_float):.6f}%'
+    )
+    return (all_frames, marker_frames)
 
 
 class Image:
   """A fractal image. Encapsulates the image operations.
 
   Attributes:
-    escape (ImageInt32Array): An array storing the escape data for each pixel;
+    escape (ImageUInt64Array): An array storing the escape data for each pixel;
         this is not the color, but the raw data that will be converted to color later;
         the length of this array is equal to the total number of pixels in the image;
         the pixel at coordinates (x, y) is stored at index (y * width + x) in the array.
     stats (FractalStats | None): Optional stats about the fractal, collected during rendering;
         DO NOT COUNT on this being present unless this was a sample 16.16 render
-        (see fractal._FractalAdaptiveIterations) where the stats are collected
+        (see fractal._FractalAdaptiveIterations) where the stats are collected.
+    ext_hist (Image.Histogram | None): Histogram for exterior (escaped) pixels; None until
+        RebuildHistograms() is called.
+    int_hist (Image.Histogram | None): Histogram for interior (Set) pixels, with values
+        stored as positive integers; None until RebuildHistograms() is called.
 
   """
 
@@ -687,13 +903,24 @@ class Image:
     """Stores a histogram for a part of an image (usually set points and escaped points).
 
     Attributes:
-      count (int): The total count of pixels in this histogram
-      min_value (int): The minimum int value in this histogram
-      max_value (int): The maximum int value in this histogram
-      linear (list[tuple[int, int]]): A sorted list of (value, count) pairs representing the
-          histogram of int values in this category, sorted by value.
-      cumulative (list[tuple[int, int]]): A sorted list of (value, cumulative_count) pairs
-          representing the cumulative int histogram, sorted by value.
+      count (int): The total count of pixels in this histogram.
+      min_value (int): The minimum integer escape value in this histogram.
+      max_value (int): The maximum integer escape value in this histogram.
+      bucket_min (int): The minimum smoothed bucket key in this histogram.
+      bucket_max (int): The maximum smoothed bucket key in this histogram.
+      min_nu (float): The minimum fractional escape part (nu) seen across all pixels.
+      max_nu (float): The maximum fractional escape part (nu) seen across all pixels.
+      linear (list[tuple[int, int]]): Sorted list of (value, count) pairs; the raw histogram.
+      d_linear (dict[int, int]): {value: count} for O(1) lookup in the raw histogram.
+      cumulative (list[tuple[int, int]]): Sorted list of (value, cumulative_count) pairs;
+          the cumulative raw histogram.
+      d_cumulative (dict[int, int]): {value: cumulative_count} for O(1) lookup.
+      bucket_linear (list[tuple[int, int]]): Sorted list of (bucket_key, count) pairs;
+          the smoothed bucket histogram.
+      d_bucket_linear (dict[int, int]): {bucket_key: count} for O(1) lookup.
+      bucket_cumulative (list[tuple[int, int]]): Sorted list of (bucket_key, cumulative_count)
+          pairs; the smoothed cumulative bucket histogram.
+      d_bucket_cumulative (dict[int, int]): {bucket_key: cumulative_count} for O(1) lookup.
 
     """
 
@@ -751,6 +978,193 @@ class Image:
       if t >= 1.0:
         return _ALMOST_ONE
       return t
+
+  @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+  class FrameColorNorm:
+    """Interpolated color normalization for a single animation frame between two marker frames.
+
+    Smoothly blends between the two surrounding marker frames' histogram normalizations so that
+    the same raw escape-iteration value maps to a consistent (and smoothly transitioning) palette
+    position across the entire animation journey. This eliminates the wild per-frame color shifts
+    that arise when each frame independently histogram-equalizes its own escape iteration data.
+
+    At a marker frame, alpha is exactly 0.0 (frame IS the lower/prev marker) or 1.0 (frame IS the
+    upper/next marker), so the coloring is identical to the marker's own per-frame normalization.
+    Between marker frames, alpha is linearly interpolated for a smooth cross-fade.
+
+    See ZoomColorNorm for construction and usage.
+
+    Attributes:
+      prev_ext (Image.Histogram): Exterior (escaped) histogram of the preceding marker frame.
+      next_ext (Image.Histogram): Exterior (escaped) histogram of the following marker frame.
+      prev_int (Image.Histogram): Interior (Set) histogram of the preceding marker frame.
+      next_int (Image.Histogram): Interior (Set) histogram of the following marker frame.
+      alpha (float): Blend weight in [0.0, 1.0]; 0.0 means use prev only, 1.0 means use next
+          only; linearly interpolated between adjacent marker frames.
+
+    """
+
+    prev_ext: Image.Histogram  # exterior histogram of the preceding marker frame
+    next_ext: Image.Histogram  # exterior histogram of the following marker frame
+    prev_int: Image.Histogram  # interior histogram of the preceding marker frame
+    next_int: Image.Histogram  # interior histogram of the following marker frame
+    alpha: float  # blend weight in [0.0, 1.0]: 0.0 = use prev only, 1.0 = use next only
+
+    def InterpolateExt(self, n: int, nu: float) -> float:
+      """Get the cross-frame-stable blended palette position for an exterior (escaped) pixel.
+
+      Args:
+        n (int): The escape iteration count for the pixel.
+        nu (float): The fractional escape iteration for smooth coloring.
+
+      Returns:
+        float: Blended palette position in [0, 1).
+
+      """
+      if self.alpha <= 0.0:
+        return self.prev_ext.InterpolateBucket(n, nu)
+      if self.alpha >= 1.0:
+        return self.next_ext.InterpolateBucket(n, nu)
+      t_prev: float = self.prev_ext.InterpolateBucket(n, nu)
+      t_next: float = self.next_ext.InterpolateBucket(n, nu)
+      return t_prev + self.alpha * (t_next - t_prev)
+
+    def InterpolateInt(self, key: int) -> float:
+      """Get the cross-frame-stable blended palette position for an interior (Set) pixel.
+
+      Args:
+        key (int): The positive interior key (the negated stored escape value: -escaped_at).
+
+      Returns:
+        float: Blended palette position in [0, 1).
+
+      """
+      t_prev: float = (
+        (self.prev_int.d_cumulative.get(key, 0) - 1) / self.prev_int.count
+        if self.prev_int.count > 0
+        else 0.0
+      )
+      if self.alpha <= 0.0:
+        return max(0.0, min(_ALMOST_ONE, t_prev))
+      t_next: float = (
+        (self.next_int.d_cumulative.get(key, 0) - 1) / self.next_int.count
+        if self.next_int.count > 0
+        else 0.0
+      )
+      if self.alpha >= 1.0:
+        return max(0.0, min(_ALMOST_ONE, t_next))
+      return max(0.0, min(_ALMOST_ONE, t_prev + self.alpha * (t_next - t_prev)))
+
+  @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+  class ZoomColorNorm:
+    """Anchors color normalization for all frames in a zoom animation using marker frames.
+
+    Marker frames are computed first at deterministic, evenly-spaced zoom-magnitude intervals
+    (one marker every MAGNITUDE_PER_FRAME_MARKER decades of zoom). For any non-marker frame
+    between two adjacent markers, this class interpolates linearly between the two markers'
+    histogram normalizations. The result: the same raw escape-iteration value maps to a
+    consistent (and smoothly cross-fading) palette position throughout the entire animation,
+    eliminating the wild per-frame color shifts that arise from independent histogram equalization.
+
+    Typical usage in zoomcommand.Auto() (abbreviated):
+      1. Compute all marker frames, collecting {frame_idx: Image} in all_marker_imgs.
+      2. Build: zoom_norm = ZoomColorNorm.FromMarkers(all_marker_imgs)
+      3. Re-render every frame: img.AsPNG(render, zoom_norm=zoom_norm.ForFrame(frame_idx))
+
+    Attributes:
+      markers (list[tuple[int, Image.Histogram, Image.Histogram]]): Sorted list of
+          (frame_idx, ext_hist, int_hist) tuples for each marker frame.
+
+    """
+
+    # sorted list of (frame_idx, ext_hist, int_hist)
+    markers: list[tuple[int, Image.Histogram, Image.Histogram]]
+
+    def __post_init__(self) -> None:
+      """Check parameters for validity.
+
+      Raises:
+        Error: if any parameter is invalid.
+
+      """
+      if len(self.markers) < 2:  # noqa: PLR2004
+        raise Error(f'ZoomColorNorm requires at least 2 markers, got {len(self.markers)}')
+      for j in range(1, len(self.markers)):
+        if self.markers[j][0] <= self.markers[j - 1][0]:
+          raise Error(
+            f'ZoomColorNorm markers must be strictly sorted by frame index; '
+            f'got indices [{self.markers[j - 1][0]}, {self.markers[j][0]}]'
+          )
+
+    @staticmethod
+    def FromMarkers(marker_imgs: dict[int, Image]) -> Image.ZoomColorNorm:
+      """Build a ZoomColorNorm from a dict of {frame_idx: Image} for the marker frames.
+
+      Args:
+        marker_imgs (dict[int, Image]): The marker images keyed by frame index. Every Image
+            must have valid escape data; histograms will be built here if not yet present.
+
+      Returns:
+        ZoomColorNorm: The constructed ZoomColorNorm.
+
+      Raises:
+        Error: if fewer than 2 markers are provided or histograms cannot be built.
+
+      """
+      # build the marker list; iterating once so mypy can narrow ext_hist / int_hist to non-None
+      marker_list: list[tuple[int, Image.Histogram, Image.Histogram]] = []
+      img: Image
+      for idx in sorted(marker_imgs):
+        img = marker_imgs[idx]
+        if not img.ext_hist or not img.int_hist:
+          img.RebuildHistograms()
+        if not img.ext_hist or not img.int_hist:
+          raise Error(f'Failed to build histograms for marker frame {idx}')
+        marker_list.append((idx, img.ext_hist, img.int_hist))
+      return Image.ZoomColorNorm(markers=marker_list)
+
+    def ForFrame(self, frame_idx: int) -> tuple[int, int, Image.FrameColorNorm]:
+      """Get the interpolated color normalization for a given frame index.
+
+      Finds the two surrounding marker frames and computes the linear blend weight alpha based
+      on the frame's position within the marker interval. At a marker frame exactly, alpha is
+      0.0 (frame IS the lower/prev marker) or 1.0 (frame IS the upper/next marker).
+
+      Args:
+        frame_idx (int): The frame index to get color normalization for.
+
+      Returns:
+        tuple[int, int, Image.FrameColorNorm]: tuple of:
+          - The index of the previous marker frame.
+          - The index of the next marker frame.
+          - The interpolated color normalization for the given frame.
+
+      """
+      marker_indexes: list[int] = [m[0] for m in self.markers]
+      # find the position of frame_idx in the sorted marker index list
+      pos: int = bisect.bisect_right(marker_indexes, frame_idx) - 1
+      # clamp to valid interval (only possible if frame_idx is outside the marker range, a bug)
+      pos = max(0, min(pos, len(self.markers) - 2))
+      prev_idx: int
+      prev_ext: Image.Histogram
+      prev_int: Image.Histogram
+      next_idx: int
+      next_ext: Image.Histogram
+      next_int: Image.Histogram
+      prev_idx, prev_ext, prev_int = self.markers[pos]
+      next_idx, next_ext, next_int = self.markers[pos + 1]
+      alpha: float = 0.0 if next_idx == prev_idx else (frame_idx - prev_idx) / (next_idx - prev_idx)
+      return (
+        prev_idx,
+        next_idx,
+        Image.FrameColorNorm(
+          prev_ext=prev_ext,
+          next_ext=next_ext,
+          prev_int=prev_int,
+          next_int=next_int,
+          alpha=alpha,
+        ),
+      )
 
   def __init__(self, params: frame.ComputationParameters) -> None:
     """Construct image.
@@ -813,7 +1227,7 @@ class Image:
     self.ext_hist = _BuildCumulative(exterior_points)  # ext generator
     self.int_hist = _BuildCumulative(interior_points)  # int generator
 
-  def AsPixels(self, render: RenderParameters) -> bytes:
+  def AsPixels(self, render: RenderParameters, *, zoom_norm: FrameColorNorm | None = None) -> bytes:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
     Exterior points (escaped) are colored by mapping their escape iteration through a cumulative
@@ -826,8 +1240,14 @@ class Image:
     equalization approach, applied to their stored |z| magnitude (the negative of the stored
     escape value), so the full `set_pal` range is used across the Set interior.
 
+    When `zoom_norm` is provided (animation rendering), the histogram-equalized position is
+    computed by blending between the two surrounding marker frames' histograms instead of using
+    this frame's own histogram. This keeps colors stable across the entire animation journey.
+
     Args:
       render (RenderParameters): The render parameters to use for generating the PNG metadata.
+      zoom_norm (FrameColorNorm | None): Optional cross-frame color normalization for animation
+          rendering. If None (default), each frame's own histogram is used (per-frame equalized).
 
     Returns:
       bytes: Raw pixel data in RGB format (3 bytes per pixel).
@@ -850,51 +1270,75 @@ class Image:
         f'Invalid/Inconsistent {self.ext_hist.min_value=} or '
         f'{self._params.depth=}+{frame.SMOOTH_EXTRA_ITERS} < {self.ext_hist.max_value=}'
       )
-    # map each pixel to an RGB color
+    # map each pixel to an RGB color; zoom_norm (if given) blends between adjacent marker
+    # histograms for cross-frame consistency instead of using this frame's own histogram
     escaped_at: int
     f_nu: float
     pixels = bytearray(self._params.width * self._params.height * 3)
     for i, enc_escaped_at in enumerate(self.escape):
       escaped_at, f_nu = Decode64ToIntFloat(enc_escaped_at)
       if escaped_at >= 0 and self.ext_hist.count > 0:
-        # exterior point: histogram-equalized position in pal
-        rgb: tuple[int, int, int] = _PixelPalette(
-          self.ext_hist.InterpolateBucket(escaped_at, f_nu), render.escaped_pal
+        # exterior point: histogram-equalized position in palette
+        t_ext: float = (
+          zoom_norm.InterpolateExt(escaped_at, f_nu)
+          if zoom_norm is not None
+          else self.ext_hist.InterpolateBucket(escaped_at, f_nu)
         )
+        rgb: tuple[int, int, int] = _PixelPalette(t_ext, render.escaped_pal)
       elif self._params.set_points and self.int_hist.count > 0 and escaped_at < 0:
         # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
-        t_set: float = (self.int_hist.d_cumulative[-escaped_at] - 1) / self.int_hist.count
         if render.set_pal is None:
           raise Error('set_pal must be specified in RenderParameters when set_points is True')
+        t_set: float = (
+          zoom_norm.InterpolateInt(-escaped_at)
+          if zoom_norm is not None
+          else (self.int_hist.d_cumulative[-escaped_at] - 1) / self.int_hist.count
+        )
         rgb = _PixelPalette(t_set, render.set_pal)
       else:
         rgb = (0, 0, 0)  # black: interior point (default) or all-interior image
       pixels[i * 3], pixels[i * 3 + 1], pixels[i * 3 + 2] = rgb
     return bytes(pixels)
 
-  def AsPNG(self, render: RenderParameters) -> tuple[bytes, str]:
+  def AsPNG(
+    self,
+    render: RenderParameters,
+    *,
+    zoom_norm: FrameColorNorm | None = None,
+    no_meta: bool = False,
+  ) -> tuple[bytes, str]:
     """Convert the image to PNG bytes and return it with its internal data hash.
 
     Args:
       render (RenderParameters): The render parameters to use for generating the PNG metadata.
+      zoom_norm (FrameColorNorm | None): Optional cross-frame color normalization; passed
+          through to AsPixels(). Use for animation frames to keep colors stable across zoom.
+      no_meta (bool): If True, do not include metadata in the PNG; mainly for video frames where
+          metadata is not needed and adds overhead. Default is False (include metadata).
 
     Returns:
       tuple[bytes, str]: PNG image data and its internal data hash.
 
     """
     # convert the raw pixel data to a PNG using PIL
-    raw_img: bytes = self.AsPixels(render)
+    raw_img: bytes = self.AsPixels(render, zoom_norm=zoom_norm)
     img_data_hash: str = hashes.Hash256(raw_img).hex()
     img: PILImage.Image = PILImage.frombytes(
       'RGB', (self._params.width, self._params.height), raw_img
     )
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranZoom:" (_app) namespace
-    png_meta = PngImagePlugin.PngInfo()
-    for k, v in MakeImageMeta(self, render, img_data_hash).items():
-      png_meta.add_text(k, v)
+    png_meta: PngImagePlugin.PngInfo | None = None
+    if not no_meta:
+      png_meta = PngImagePlugin.PngInfo()
+      for k, v in MakeImageMeta(self, render, img_data_hash).items():
+        png_meta.add_text(k, v)
     # save to PNG bytes, hash and return
     buf = io.BytesIO()
     img.save(buf, format='PNG', pnginfo=png_meta)
+    logging.debug(
+      f'AsPNG: rendered {self._params.width} x {self._params.height} '
+      f'{self._params.frm.fractal.value} PNG, hash {img_data_hash[:16]!r}'
+    )
     return (buf.getvalue(), img_data_hash)
 
 
@@ -926,10 +1370,13 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
   img_meta: dict[str, str] = {
     # image parameters
     META_IMAGE_ANIMATION_KEY: 'none',  # this is a static image for now, not an animation
-    META_IMAGE_WIDTH_KEY: str(img.params.size[0]),
-    META_IMAGE_HEIGHT_KEY: str(img.params.size[1]),
+    META_COMPUTATION_WIDTH_KEY: str(img.params.size[0]),
+    META_COMPUTATION_HEIGHT_KEY: str(img.params.size[1]),
     META_IMAGE_HASH_KEY: data_hash,
-    META_IMAGE_COLOR_SET_KEY: str(img.params.set_points.value) if img.params.set_points else 'none',
+    META_COMPUTATION_COLOR_SET_KEY: str(img.params.set_points.value)
+    if img.params.set_points
+    else 'none',
+    META_COMPUTATION_HASH_KEY: img.params.sha,
     META_RENDER_PALETTE_KEY: render.escaped_pal.value,
     META_RENDER_SET_PALETTE_KEY: render.set_pal.value if render.set_pal else 'none',
     META_RENDER_OVERLAY_KEY: render.overlay.value if render.overlay else 'none',
@@ -937,6 +1384,7 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
     META_RENDER_MARK_IM_KEY: str(render.mark_im),
     META_RENDER_MARK_COLOR_KEY: render.mark_color.name.lower() if render.mark_color else 'none',
     META_RENDER_MARK_WIDTH_KEY: str(render.mark_width),  # int
+    META_RENDER_HASH_KEY: render.sha,
     # frame
     META_FRACTAL_KEY: frm.fractal.value,
     # frame as corners
@@ -952,8 +1400,9 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
     # precision and magnification
     META_PRECISION_KEY: str(img.params.precision),
     META_MAGNIFICATION_ORDER_KEY: str(frm.magnification[1]),
+    META_FRAME_HASH_KEY: frm.sha,
     # escape iteration in the image
-    META_ITER_SEARCH_DEPTH_KEY: str(img.params.depth),
+    META_COMPUTATION_SEARCH_DEPTH_KEY: str(img.params.depth),
     # histogram / min-max counts
     META_IMAGE_EXT_COUNT_KEY: str(img.ext_hist.count),
     META_IMAGE_EXT_N_MIN_KEY: str(img.ext_hist.min_value),
@@ -1093,11 +1542,11 @@ def MakeImagePath(
   )
 
 
-def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:
-  """Get basic data from a PNG image, including format, size, hash, and metadata text.
+def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:  # noqa: C901, PLR0912, PLR0915
+  """Get basic data from an image (PNG, GIF, or MP4), including format, size, hash, and metadata.
 
   Args:
-    img_bytes (bytes): The PNG image data as bytes.
+    img_bytes (bytes): The image data as bytes (PNG, GIF, or MP4).
 
   Returns:
     tuple[int, int, str, tbase.JSONDict]: (width, height, hash, metadata) where:
@@ -1110,13 +1559,79 @@ def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDi
     Error: If the image format is unsupported or if there are issues processing the image.
 
   """
+  # MP4: has an 'ftyp' ISO base media box at bytes 4-8; PILImage.open() raises on MP4, so we
+  # must detect and handle it before reaching PIL
+  raw_hash: str
+  width: int
+  height: int
+  if len(img_bytes) >= 8 and img_bytes[4:8] == b'ftyp':  # noqa: PLR2004
+    with tempfile.NamedTemporaryFile(suffix='.mp4') as tmp:
+      tmp.write(img_bytes)
+      tmp.flush()
+      tmp_path = pathlib.Path(tmp.name)
+      # get width/height via imageio (reliable); get_meta_data() does NOT expose container tags
+      reader = imageio.get_reader(  # pyright: ignore[reportUnknownMemberType]
+        tmp_path,
+        format='ffmpeg',  # type: ignore[arg-type]
+      )
+      width, height = cast('tuple[int, int]', reader.get_meta_data().get('size', (0, 0)))  # type: ignore[union-attr]
+      reader.close()
+      # read container tags (including our JSON comment) via ffmpeg -f ffmetadata;
+      # this is the only way to access format.tags since imageio doesn't expose them
+      proc = subprocess.run(  # noqa: S603
+        [
+          imageio_ffmpeg.get_ffmpeg_exe(),
+          '-v',
+          'quiet',
+          '-i',
+          str(tmp_path),
+          '-f',
+          'ffmetadata',
+          'pipe:1',
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+      )
+    if width < 1 or height < 1:
+      raise Error(f'Invalid MP4 frame size {width} x {height}')
+    if proc.returncode != 0:
+      raise Error(f'ffmpeg failed reading MP4 metadata: {proc.stderr.strip()!r}')
+    # parse ffmetadata format: key=value lines; comments start with ';', sections with '['
+    mp4_tags: dict[str, str] = {}
+    tag_k: str
+    tag_v: str
+    for line in proc.stdout.splitlines():
+      if line.startswith((';', '[')) or '=' not in line:
+        continue
+      tag_k, tag_v = line.split('=', 1)
+      mp4_tags[tag_k] = tag_v
+    # metadata was stored by WriteVideoMP4 as a single JSON string in the 'comment' field
+    # (mirrors how GIF stores metadata in its comment field)
+    mp4_meta: tbase.JSONDict = {}
+    raw_hash = ''
+    if 'comment' in mp4_tags:
+      try:
+        mp4_meta = json.loads(mp4_tags['comment'])
+        if META_IMAGE_HASH_KEY in mp4_meta:
+          raw_hash = str(mp4_meta[META_IMAGE_HASH_KEY])
+        else:
+          logging.error('DO NOT trust this MP4 hash')
+      except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError):
+        logging.error('MP4 comment metadata not valid JSON, ignoring; DO NOT trust this MP4 hash')  # noqa: TRY400
+    if not raw_hash:
+      logging.error(
+        'MP4 missing %r in metadata; falling back to file hash (DO NOT trust)', META_IMAGE_HASH_KEY
+      )
+      raw_hash = hashes.Hash256(img_bytes).hex()
+    return (width, height, raw_hash, mp4_meta)
   with PILImage.open(io.BytesIO(img_bytes)) as img:
     # get the internal data we need (size and hash)
-    width: int = img.width
-    height: int = img.height
+    width = img.width
+    height = img.height
     if width < 1 or height < 1:
-      raise Error(f'Invalid image size {width}x{height}')
-    raw_hash: str = hashes.Hash256(img.convert('RGB').tobytes()).hex()  # not 'RGBA'!!
+      raise Error(f'Invalid image size {width} x {height}')
+    raw_hash = hashes.Hash256(img.convert('RGB').tobytes()).hex()  # not 'RGBA'!!
     # extract metadata from PNG
     pil_info: tbase.JSONDict = img.info  # type: ignore[assignment]
     # make sure format is known and do any format-specific operations
@@ -1137,7 +1652,7 @@ def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDi
           logging.error('GIF image has comment metadata but it is not valid JSON, ignoring it')  # noqa: TRY400
           logging.error('DO NOT trust this GIF hash')  # noqa: TRY400
     elif img_format == FileType.MP4.value.upper():
-      raise NotImplementedError('MP4 format is not supported yet')
+      raise Error('MP4 format reached PIL unexpectedly; file bytes may not be a valid MP4')
     else:
       raise Error(f'Unsupported image format {img.format!r}, expected PNG')
   return (width, height, raw_hash, pil_info)
@@ -1269,8 +1784,8 @@ def DrawCrossOverlay(
     img_data (bytes): The PNG image data as bytes.
     x (int): The x-coordinate of the center of the cross.
     y (int): The y-coordinate of the center of the cross.
-    col (Color): The color of the cross.
-    lw (int): The line width of the cross.
+    col (Color): The color of the cross; default is DEFAULT_MARK_COLOR.
+    lw (int): The line width of the cross in pixels; default is DEFAULT_MARK_WIDTH.
 
   Returns:
     bytes: The modified PNG image data with the overlay drawn.
@@ -1300,7 +1815,8 @@ def SaveWithMeta(img: PILImage.Image, *, extra_meta: dict[str, str] | None = Non
 
   Args:
     img (PILImage.Image): The PIL image to save.
-    extra_meta (dict[str, str] | None): Optional additional metadata to include in the PNG.
+    extra_meta (dict[str, str] | None): Optional additional metadata to include in the PNG;
+        default is None.
 
   Returns:
     bytes: The PNG image data as bytes.
@@ -1322,6 +1838,58 @@ def SaveWithMeta(img: PILImage.Image, *, extra_meta: dict[str, str] | None = Non
   output = io.BytesIO()
   img.save(output, format='PNG', pnginfo=png_meta)
   return output.getvalue()
+
+
+def CleanSavePNG(img_data: bytes, *, extra_meta: dict[str, str] | None = None) -> bytes:
+  """Save a PNG bytes to a clean copy PNG bytes, including only metadata given in `meta`, if any.
+
+  Args:
+    img_data (bytes): The original PNG image data as bytes.
+    extra_meta (dict[str, str] | None): Optional metadata to include in the PNG.
+
+  Returns:
+    bytes: The PNG image data as bytes.
+
+  """
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    # keep only meta that was explicitly given
+    png_meta = PngImagePlugin.PngInfo()
+    if extra_meta:
+      for k, v in extra_meta.items():
+        png_meta.add_text(k, v)
+    # save to PNG bytes, return
+    output = io.BytesIO()
+    img.save(output, format='PNG', pnginfo=png_meta)
+    return output.getvalue()
+
+
+def CleanSaveJPG(img_data: bytes, *, extra_meta: dict[str, str] | None = None) -> bytes:
+  """Save a PNG bytes to a clean copy JPG bytes, including only metadata given in `meta`, if any.
+
+  Args:
+    img_data (bytes): The original PNG image data as bytes.
+    extra_meta (dict[str, str] | None): Optional metadata to include in the JPG.
+
+  Returns:
+    bytes: The JPG image data as bytes.
+
+  """
+  exif: PILImage.Exif | None = None
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    if extra_meta:
+      # store metadata as compact JSON in EXIF ImageDescription (tag 0x010E)
+      exif = PILImage.Exif()
+      # list of tags in: https://github.com/python-pillow/Pillow/blob/main/src/PIL/ExifTags.py
+      exif[ExifTags.Base.ImageDescription] = json.dumps(extra_meta, separators=(',', ':'))
+    output = io.BytesIO()
+    img.save(
+      output,
+      format='JPEG',
+      quality=JPEG_QUALITY,
+      optimize=True,
+      exif=exif.tobytes() if exif else None,
+    )
+    return output.getvalue()
 
 
 def AddEvaluationMetaToImage(
@@ -1412,7 +1980,7 @@ def _PixelPalette(
   Args:
     t (float): Normalized position in [0, 1) derived from histogram equalization.
     pal (Palette): The palette to use.
-    cycles (int): How many times to cycle through the palette across [0, 1)
+    cycles (int): How many times to cycle through the palette across [0, 1); default is 1.
 
   Returns:
     tuple[int, int, int]: The interpolated RGB color.
@@ -1563,7 +2131,7 @@ def _ImageNormalizeAndValidate(img_bytes: bytes, width: int, height: int) -> PIL
 
 
 def WriteAnimatedGIF(
-  frames: list[bytes],
+  frames: abc.Iterable[bytes],
   path: pathlib.Path,
   width: int,
   height: int,
@@ -1576,7 +2144,9 @@ def WriteAnimatedGIF(
   """Write PIL Image frames to an animated GIF.
 
   Args:
-    frames (list[bytes]): An iterable of PIL Image frames to include in the GIF.
+    frames (abc.Iterable[bytes]): An iterable (or generator) of PIL Image frames to include in
+        the GIF. Frames are consumed lazily one at a time, so they do not need to all fit in
+        memory at once.
     path (pathlib.Path): The file path to save the GIF.
     width (int): The width of the GIF frames.
     height (int): The height of the GIF frames.
@@ -1594,8 +2164,6 @@ def WriteAnimatedGIF(
   # check inputs
   if not (MIN_FRAMES <= n_frames <= MAX_FRAMES):
     raise Error(f'n_frames must be between {MIN_FRAMES} and {MAX_FRAMES}, got {n_frames}')
-  if not frames or len(frames) != n_frames:
-    raise Error('frames list does not match the expected number of frames')
   if not (frame.MIN_IMAGE_SIZE <= width <= frame.MAX_IMAGE_SIZE) or not (
     frame.MIN_IMAGE_SIZE <= height <= frame.MAX_IMAGE_SIZE
   ):
@@ -1610,14 +2178,27 @@ def WriteAnimatedGIF(
   fps: float = n_frames / duration
   if not (MIN_FPS <= fps <= MAX_FPS):
     raise Error(f'FPS={fps:.2f} must be between {MIN_FPS:.2f} and {MAX_FPS:.2f}')
-  # save the whole GIF, normalizing each frame
-  img0: PILImage.Image = _ImageNormalizeAndValidate(frames[0], width, height)
+  # pull the first frame from the iterator; remaining frames are consumed lazily via a generator
+  frames_iter: abc.Iterator[bytes] = iter(frames)
+  try:
+    first_frame: bytes = next(frames_iter)
+  except StopIteration:
+    raise Error('frames iterable is empty')  # noqa: B904
+  frame_count: list[int] = [1]  # mutable container so the nested generator can mutate it
+
+  def _RemainingFrames() -> abc.Iterator[PILImage.Image]:
+    for frm in frames_iter:
+      frame_count[0] += 1
+      yield _ImageNormalizeAndValidate(frm, width, height)
+
+  # save the whole GIF, normalizing each frame; PIL will iterate _RemainingFrames() lazily to save
+  img0: PILImage.Image = _ImageNormalizeAndValidate(first_frame, width, height)
   img0.save(
     # https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif
     path,
     save_all=True,
     # append without repeating the first frame, which is already saved as img0
-    append_images=[_ImageNormalizeAndValidate(f, width, height) for f in frames[1:]],
+    append_images=_RemainingFrames(),
     duration=round(1000.0 * duration / n_frames),  # duration in milliseconds per frame
     loop=loop,
     disposal=1,  # 1 == do not dispose, overwrite; more efficient b/c we don't have any transparency
@@ -1626,6 +2207,60 @@ def WriteAnimatedGIF(
     # GIF comment field can store arbitrary bytes, we use it to store JSON metadata
     comment=json.dumps(meta).encode('utf-8') if meta is not None else None,
   )
+  # done, check that the frame count matches n_frames
+  if frame_count[0] != n_frames:
+    raise Error(f'frames generator produced {frame_count[0]} frames, expected {n_frames}')
+
+
+def ReWriteAnimatedGIFMeta(
+  old_path: pathlib.Path,
+  new_path: pathlib.Path,
+  meta: dict[str, str] | None,
+  loop: int = 0,  # 0 == infinite loop
+) -> None:
+  """Read old_path GIF and re-write to new_path with the same frames and new metadata.
+
+  We more-or-less assume the file was written with WriteAnimatedGIF().
+
+  Args:
+    old_path (pathlib.Path): The file path of the original GIF to read.
+    new_path (pathlib.Path): The file path to save the modified GIF.
+    meta (dict[str, str] | None): Optional metadata to include in the new GIF; default None
+    loop (int): The number of times to loop the GIF (0 for infinite loop). Default is 0 which
+        means infinite loop.
+
+  Raises:
+    Error: on error
+
+  """
+  # open the original GIF; keep it open so the lazy generator can seek through remaining frames
+  with PILImage.open(old_path) as img:
+    n_frames: int = getattr(img, 'n_frames', 1)
+    if n_frames < 1:
+      raise Error(f'GIF file has no frames: {old_path}')
+    # read the first frame; duration is assumed uniform since WriteAnimatedGIF() uses a single value
+    img.seek(0)
+    first_frame: PILImage.Image = img.copy()
+    frame_duration: int = int(img.info.get('duration', 100))  # ms per frame, assumed uniform
+
+    def _RemainingFrames() -> abc.Iterator[PILImage.Image]:
+      # yield frame copies one at a time so we never hold more than one extra frame in memory
+      for i in range(1, n_frames):
+        img.seek(i)
+        yield img.copy()
+
+    # re-save streaming frames lazily; PIL processes each frame before the generator advances
+    first_frame.save(
+      # https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif
+      new_path,
+      save_all=True,
+      append_images=_RemainingFrames(),
+      duration=frame_duration,  # uniform per-frame duration in milliseconds
+      loop=loop,
+      disposal=1,  # 1 == do not dispose, overwrite
+      optimize=True,
+      comment=json.dumps(meta).encode('utf-8') if meta is not None else None,
+    )
 
 
 def WriteVideoMP4(
@@ -1641,7 +2276,9 @@ def WriteVideoMP4(
   """Write PIL Image frames to an MP4 video using H.264, the most broadly compatible video format.
 
   Args:
-    frames (abc.Iterable[bytes]): An iterable of PIL Image frames to include in the video.
+    frames (abc.Iterable[bytes]): An iterable (or generator) of PIL Image frames to include in
+        the video. Frames are consumed lazily one at a time, so they do not need to all fit in
+        memory at once.
     path (pathlib.Path): The file path to save the video.
     width (int): The width of the video frames.
     height (int): The height of the video frames.
@@ -1675,8 +2312,9 @@ def WriteVideoMP4(
   output_params.extend(['-crf', '16'])  # good quality, lower is better
   output_params.extend(['-preset', 'slow'])  # slower presets give better compression
   if meta:
-    for k, v in meta.items():
-      output_params.extend(['-metadata', f'{k}={v}'])
+    # store all metadata as a single JSON string in the 'comment' field so it can be read back;
+    # ffmpeg -metadata key=value stores to format.tags which imageio doesn't expose on read
+    output_params.extend(['-metadata', f'comment={json.dumps(meta)}'])
   # save the whole MP4, normalizing each frame
   frame_count = 0
   with imageio.get_writer(  # pyright: ignore[reportUnknownMemberType]
@@ -1694,6 +2332,45 @@ def WriteVideoMP4(
   # done, check that the frame count matches n_frames
   if frame_count != n_frames:
     raise Error(f'frames generator produced {frame_count} frames, expected {n_frames}')
+
+
+def ReWriteVideoMP4Meta(
+  old_path: pathlib.Path, new_path: pathlib.Path, meta: dict[str, str] | None
+) -> None:
+  """Read old_path MP4 and re-write to new_path with the same frames and new metadata.
+
+  We more-or-less assume the file was written with WriteVideoMP4().
+
+  Args:
+    old_path (pathlib.Path): The file path of the original MP4 to read.
+    new_path (pathlib.Path): The file path to save the modified MP4.
+    meta (dict[str, str] | None): Optional metadata to include in the new MP4; default None
+
+  """
+  # open the original MP4 and read the fps from its metadata
+  reader = imageio.get_reader(old_path, format='ffmpeg')  # type: ignore[arg-type]
+  fps: float = float(reader.get_meta_data().get('fps', 25.0))
+  # prepare metadata output params, same settings as WriteVideoMP4
+  output_params: list[str] = []
+  output_params.extend(['-movflags', '+faststart'])  # allows start playing before fully downloaded
+  output_params.extend(['-crf', '16'])  # good quality, lower is better
+  output_params.extend(['-preset', 'slow'])  # slower presets give better compression
+  if meta:
+    # store all metadata as a single JSON string in the 'comment' field (mirrors WriteVideoMP4)
+    output_params.extend(['-metadata', f'comment={json.dumps(meta)}'])
+  # stream frames from reader directly into writer (no full in-memory buffering)
+  with imageio.get_writer(  # pyright: ignore[reportUnknownMemberType]
+    new_path,
+    fps=fps,
+    format='ffmpeg',  # type: ignore[arg-type]
+    codec='libx264',
+    pixelformat='yuv420p',
+    macro_block_size=1,
+    output_params=output_params,
+  ) as writer:
+    for frm in reader:  # type: ignore[attr-defined]
+      writer.append_data(frm)  # type: ignore[attr-defined]
+  reader.close()
 
 
 def EncodeIntFloatTo64(i: int, f: float) -> int:
