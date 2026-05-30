@@ -20,6 +20,7 @@ import math
 import pathlib
 import struct
 import sys
+import tempfile
 import time
 from collections import abc
 from typing import cast
@@ -1540,10 +1541,10 @@ def MakeImagePath(
 
 
 def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:
-  """Get basic data from a PNG image, including format, size, hash, and metadata text.
+  """Get basic data from an image (PNG, GIF, or MP4), including format, size, hash, and metadata.
 
   Args:
-    img_bytes (bytes): The PNG image data as bytes.
+    img_bytes (bytes): The image data as bytes (PNG, GIF, or MP4).
 
   Returns:
     tuple[int, int, str, tbase.JSONDict]: (width, height, hash, metadata) where:
@@ -1556,13 +1557,41 @@ def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDi
     Error: If the image format is unsupported or if there are issues processing the image.
 
   """
+  # MP4: has an 'ftyp' ISO base media box at bytes 4-8; PILImage.open() raises on MP4, so we
+  # must detect and handle it before reaching PIL
+  raw_hash: str
+  if len(img_bytes) >= 8 and img_bytes[4:8] == b'ftyp':
+    with tempfile.NamedTemporaryFile(suffix='.mp4') as tmp:
+      tmp.write(img_bytes)
+      tmp.flush()
+      reader = imageio.get_reader(  # pyright: ignore[reportUnknownMemberType]
+        pathlib.Path(tmp.name), format='ffmpeg'
+      )
+      raw_meta = reader.get_meta_data()  # type: ignore[union-attr]
+      w, h = cast('tuple[int, int]', raw_meta.get('size', (0, 0)))
+      reader.close()
+    if w < 1 or h < 1:
+      raise Error(f'Invalid MP4 frame size {w} x {h}')
+    # custom metadata was stored as individual key-value pairs via ffmpeg -metadata output_params;
+    # imageio-ffmpeg exposes them in get_meta_data() at the top level
+    mp4_meta: tbase.JSONDict = {
+      k: v for k, v in raw_meta.items() if isinstance(k, str) and k.startswith(f'{_app}:')
+    }
+    # prefer the stored image hash from metadata; recomputing from frames is too expensive
+    raw_hash = str(mp4_meta.get(META_IMAGE_HASH_KEY, ''))
+    if not raw_hash:
+      logging.error(
+        'MP4 missing %r in metadata; falling back to file hash (DO NOT trust)', META_IMAGE_HASH_KEY
+      )
+      raw_hash = hashes.Hash256(img_bytes).hex()
+    return (w, h, raw_hash, mp4_meta)
   with PILImage.open(io.BytesIO(img_bytes)) as img:
     # get the internal data we need (size and hash)
     width: int = img.width
     height: int = img.height
     if width < 1 or height < 1:
-      raise Error(f'Invalid image size {width}x{height}')
-    raw_hash: str = hashes.Hash256(img.convert('RGB').tobytes()).hex()  # not 'RGBA'!!
+      raise Error(f'Invalid image size {width} x {height}')
+    raw_hash = hashes.Hash256(img.convert('RGB').tobytes()).hex()  # not 'RGBA'!!
     # extract metadata from PNG
     pil_info: tbase.JSONDict = img.info  # type: ignore[assignment]
     # make sure format is known and do any format-specific operations
@@ -1583,7 +1612,7 @@ def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDi
           logging.error('GIF image has comment metadata but it is not valid JSON, ignoring it')  # noqa: TRY400
           logging.error('DO NOT trust this GIF hash')  # noqa: TRY400
     elif img_format == FileType.MP4.value.upper():
-      raise NotImplementedError('MP4 format is not supported yet')
+      raise Error('MP4 format reached PIL unexpectedly; file bytes may not be a valid MP4')
     else:
       raise Error(f'Unsupported image format {img.format!r}, expected PNG')
   return (width, height, raw_hash, pil_info)
@@ -2143,6 +2172,57 @@ def WriteAnimatedGIF(
     raise Error(f'frames generator produced {frame_count[0]} frames, expected {n_frames}')
 
 
+def ReWriteAnimatedGIFMeta(
+  old_path: pathlib.Path,
+  new_path: pathlib.Path,
+  meta: dict[str, str] | None,
+  loop: int = 0,  # 0 == infinite loop
+) -> None:
+  """Read old_path GIF and re-write to new_path with the same frames and new metadata.
+
+  We more-or-less assume the file was written with WriteAnimatedGIF().
+
+  Args:
+    old_path (pathlib.Path): The file path of the original GIF to read.
+    new_path (pathlib.Path): The file path to save the modified GIF.
+    meta (dict[str, str] | None): Optional metadata to include in the new GIF; default None
+    loop (int): The number of times to loop the GIF (0 for infinite loop). Default is 0 which
+        means infinite loop.
+
+  Raises:
+    Error: on error
+
+  """
+  # open the original GIF; keep it open so the lazy generator can seek through remaining frames
+  with PILImage.open(old_path) as img:
+    n_frames: int = getattr(img, 'n_frames', 1)
+    if n_frames < 1:
+      raise Error(f'GIF file has no frames: {old_path}')
+    # read the first frame; duration is assumed uniform since WriteAnimatedGIF() uses a single value
+    img.seek(0)
+    first_frame: PILImage.Image = img.copy()
+    frame_duration: int = int(img.info.get('duration', 100))  # ms per frame, assumed uniform
+
+    def _RemainingFrames() -> abc.Iterator[PILImage.Image]:
+      # yield frame copies one at a time so we never hold more than one extra frame in memory
+      for i in range(1, n_frames):
+        img.seek(i)
+        yield img.copy()
+
+    # re-save streaming frames lazily; PIL processes each frame before the generator advances
+    first_frame.save(
+      # https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif
+      new_path,
+      save_all=True,
+      append_images=_RemainingFrames(),
+      duration=frame_duration,  # uniform per-frame duration in milliseconds
+      loop=loop,
+      disposal=1,  # 1 == do not dispose, overwrite
+      optimize=True,
+      comment=json.dumps(meta).encode('utf-8') if meta is not None else None,
+    )
+
+
 def WriteVideoMP4(
   frames: abc.Iterable[bytes],
   path: pathlib.Path,
@@ -2211,6 +2291,45 @@ def WriteVideoMP4(
   # done, check that the frame count matches n_frames
   if frame_count != n_frames:
     raise Error(f'frames generator produced {frame_count} frames, expected {n_frames}')
+
+
+def ReWriteVideoMP4Meta(
+  old_path: pathlib.Path, new_path: pathlib.Path, meta: dict[str, str] | None
+) -> None:
+  """Read old_path MP4 and re-write to new_path with the same frames and new metadata.
+
+  We more-or-less assume the file was written with WriteVideoMP4().
+
+  Args:
+    old_path (pathlib.Path): The file path of the original MP4 to read.
+    new_path (pathlib.Path): The file path to save the modified MP4.
+    meta (dict[str, str] | None): Optional metadata to include in the new MP4; default None
+
+  """
+  # open the original MP4 and read the fps from its metadata
+  reader = imageio.get_reader(old_path, format='ffmpeg')  # type: ignore[arg-type]
+  fps: float = float(reader.get_meta_data().get('fps', 25.0))
+  # prepare metadata output params, same settings as WriteVideoMP4
+  output_params: list[str] = []
+  output_params.extend(['-movflags', '+faststart'])  # allows start playing before fully downloaded
+  output_params.extend(['-crf', '16'])  # good quality, lower is better
+  output_params.extend(['-preset', 'slow'])  # slower presets give better compression
+  if meta:
+    for k, v in meta.items():
+      output_params.extend(['-metadata', f'{k}={v}'])
+  # stream frames from reader directly into writer (no full in-memory buffering)
+  with imageio.get_writer(  # pyright: ignore[reportUnknownMemberType]
+    new_path,
+    fps=fps,
+    format='ffmpeg',  # type: ignore[arg-type]
+    codec='libx264',
+    pixelformat='yuv420p',
+    macro_block_size=1,
+    output_params=output_params,
+  ) as writer:
+    for frm in reader:  # type: ignore[attr-defined]
+      writer.append_data(frm)  # type: ignore[attr-defined]
+  reader.close()
 
 
 def EncodeIntFloatTo64(i: int, f: float) -> int:

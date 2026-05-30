@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import dataclasses
 import pathlib
-import shutil
 import tempfile
 from collections import abc
 from typing import NoReturn
@@ -260,6 +259,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       'Please provide exactly 2 of the 3 options: `--duration`, `--frames` and `--fps`; '
       f'got {duration=}, {frames=} and {fps=}'
     )
+  # TODO: split this monster method
   # build parameters
   frm: frame.Frame = base.MakeFrameFromConfig(config, center_re, center_im, f_width, f_height)
   params: frame.ComputationParameters = base.MakeComputationParameters(frm, config)
@@ -304,90 +304,172 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     tm=timestamp,
     suffix=anim_type.value.lower(),
   )
+
+  def _SaveLogAndITerm(img_p: pathlib.Path) -> None:
+    """To be called before return."""
+    # log
+    config.console.print(f'Saved {zoom_params.tp.value.upper()} to "{img_p}"\n')
+    # iterm
+    if config.iterm and zoom_params.tp != image.AnimationType.MP4:  # iTerm2 does not support MP4
+      image.PrintITerm2(img_p.read_bytes())
+      config.console.print()
+
   # DB
+  img: image.Image
+  all_img_obj: dict[int, image.Image] = {}
   with config.OpenDB() as db:
-    success: bool = False
-    video_hash: str | None = None
-    markers_tmr: timer.Timer | None = None
-    frames_tmr: timer.Timer | None = None
-    render_tmr: timer.Timer | None = None
-    video_path: pathlib.Path | None = None
-    p_bar: tqdm.tqdm[NoReturn] | None = None
-    try:
-      # see if we have a cache of this zoom
-      zoom_data: frdb.ZoomData | None = db.FindZoom(zoom_params)
-      if zoom_data:
-        video_hash = zoom_data['data_hash']
-        old_path: pathlib.Path | None = (
-          pathlib.Path(zoom_data['rendered_path']) if zoom_data['rendered_path'] else None
-        )
-        if old_path and old_path.exists() and old_path.is_file():
-          # we do have the video!
-          config.console.print(
-            f'[red]DB render[/], {video_hash!r}@{timer.TimeStr(zoom_data["tm"])} -> "{old_path}"\n'
-          )
-          video_path = full_path(video_hash)
-          if video_path != old_path:
-            video_data: bytes = old_path.read_bytes()
-            video_path.write_bytes(video_data)
-          success = True
-          return
-      # main zoom loop, go for frames iterations, producing the image and then zooming in the frame
-      img: image.Image | None = None
-      all_img_obj: dict[int, image.Image] = {}
-      all_marker_imgs: dict[int, image.Image] = {}  # Image objects for ZoomColorNorm (see below)
-      # MARKERS: produce marker frames FIRST
-      with timer.Timer(emit_log=False) as markers_tmr:
-        for i, (idx, frm) in enumerate(all_markers):
-          config.console.print(f'[yellow]Marker {i + 1} / {len(all_markers)}[/]')
-          # we have the marker, now feed it to the producer
-          params, img = db.DoComputation(
-            dataclasses.replace(
-              params, frm=frm, depth=frame.MIN_ITER
-            ),  # send frm, mark as sentinel
-            max_threads=config.max_threads,
-            print_comm=config.console.print,
-            force=config.img_force_redo,
-          )
-          # save
-          config.console.print()
-          all_marker_imgs[idx] = img  # keep Image object for ZoomColorNorm construction below
-      # check we got something; also appease type checker
-      if not img or not all_marker_imgs:
-        raise base.Error('No marker images produced for animation! should never happen; report bug')
-      # build ZoomColorNorm from the marker images: anchors color normalization so the same
-      # escape-iteration value maps to a consistent palette position across the whole animation,
-      # eliminating wild per-frame palette shifts (one color anchor per MAGNITUDE_PER_FRAME_MARKER
-      # zoom decades, i.e., one marker every 10x zoom by default)
-      zoom_norm: image.Image.ZoomColorNorm = image.Image.ZoomColorNorm.FromMarkers(all_marker_imgs)
-      config.console.print(
-        f'[yellow]ZOOM:[/] [green]Color norm[/]: built from {len(all_marker_imgs)} marker frames\n'
+    video_hash: str
+    video_path: pathlib.Path
+    # see if we have a cache of this zoom
+    zoom_data: frdb.ZoomData | None = db.FindZoom(zoom_params)
+    if zoom_data:
+      video_hash = zoom_data['data_hash']
+      old_path: pathlib.Path | None = (
+        pathlib.Path(zoom_data['rendered_path']) if zoom_data['rendered_path'] else None
       )
-      # produce the regular frames now
-      with timer.Timer(emit_log=False) as frames_tmr:
-        for i, frm in enumerate(all_frames):
-          if (i, frm) in all_markers:
-            # already produced as marker, skip
-            config.console.print(f'[cyan]Frame {i + 1} / {frames}[/] -> [green]Marker: DONE[/]\n')
-            continue
-          config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
-          # we have the frame, now feed it to the producer
-          params, img = db.DoComputation(
-            dataclasses.replace(
-              params, frm=frm, depth=frame.MIN_ITER
-            ),  # send frm, mark as sentinel
-            max_threads=config.max_threads,
+      if old_path and old_path.exists() and old_path.is_file():
+        # we do have the video!
+        config.console.print(
+          f'[red]DB render[/], {video_hash!r}@{timer.TimeStr(zoom_data["tm"])} -> "{old_path}"\n'
+        )
+        video_path = full_path(video_hash)
+        if video_path != old_path:
+          video_data: bytes = old_path.read_bytes()
+          video_path.write_bytes(video_data)
+        # log and shortcircuit
+        config.console.print(f'Success: {anim_type.value.upper()} {video_hash!r} from disk cache')
+        _SaveLogAndITerm(video_path)
+        return
+    # main zoom loop, go for frames iterations, producing the image and then zooming in the frame
+    all_marker_imgs: dict[int, image.Image] = {}  # Image objects for ZoomColorNorm (see below)
+    # MARKERS: produce marker frames FIRST
+    with timer.Timer(emit_log=False) as markers_tmr:
+      for i, (idx, frm) in enumerate(all_markers):
+        config.console.print(f'[yellow]Marker {i + 1} / {len(all_markers)}[/]')
+        # we have the marker, now feed it to the producer
+        params, img = db.DoComputation(
+          dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER),  # send frm, mark as sentinel
+          max_threads=config.max_threads,
+          print_comm=config.console.print,
+          force=config.img_force_redo,
+        )
+        # save
+        config.console.print()
+        all_marker_imgs[idx] = img  # keep Image object for ZoomColorNorm construction below
+    # build ZoomColorNorm from the marker images: anchors color normalization so the same
+    # escape-iteration value maps to a consistent palette position across the whole animation,
+    # eliminating wild per-frame palette shifts (one color anchor per MAGNITUDE_PER_FRAME_MARKER
+    # zoom decades, i.e., one marker every 10x zoom by default)
+    zoom_norm: image.Image.ZoomColorNorm = image.Image.ZoomColorNorm.FromMarkers(all_marker_imgs)
+    config.console.print(
+      f'[yellow]ZOOM:[/] [green]Color norm[/]: built from {len(all_marker_imgs)} marker frames\n'
+    )
+    # produce the regular frames now
+    with timer.Timer(emit_log=False) as frames_tmr:
+      for i, frm in enumerate(all_frames):
+        if (i, frm) in all_markers:
+          # already produced as marker, skip
+          config.console.print(f'[cyan]Frame {i + 1} / {frames}[/] -> [green]Marker: DONE[/]\n')
+          continue
+        config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
+        # we have the frame, now feed it to the producer
+        params, img = db.DoComputation(
+          dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER),  # send frm, mark as sentinel
+          max_threads=config.max_threads,
+          print_comm=config.console.print,
+          force=config.img_force_redo,
+        )
+        # save
+        config.console.print()
+        all_img_obj[i] = img
+    # update the main dict with the marker frames: this way we have all frames in one dict
+    all_img_obj.update(all_marker_imgs)
+    del all_marker_imgs  # free memory
+    # save the final animation, first to a temporary path because we do not have the hash yet...
+    with tempfile.TemporaryDirectory() as tmpdir, timer.Timer(emit_log=False) as render_tmr:
+      # make the rendering progress bar
+      config.console.print(f'[yellow]Render:[/] {render}')
+      p_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
+        total=zoom_params.n_frames,
+        desc='Render',
+        unit='fr',
+        dynamic_ncols=True,
+        smoothing=0.1,
+        colour='yellow',
+      )
+      try:
+
+        def _RenderFrame(i: int) -> bytes:
+          img_data: bytes
+          data_hash: str
+          img_path: pathlib.Path
+          p: int
+          n: int
+          zn: image.Image.FrameColorNorm
+          # get image
+          img_obj: image.Image = all_img_obj[i]
+          # render
+          p, n, zn = zoom_norm.ForFrame(i)
+          img_data, data_hash, img_path = db.DoRender(
+            img_obj,
+            dataclasses.replace(render, prev_marker=all_frames[p], next_marker=all_frames[n]),
+            out,
+            add_serial=i + 1,
+            tm=timestamp,
+            iterm=False,  # disable, we want silence
             print_comm=config.console.print,
             force=config.img_force_redo,
+            zoom_norm=zn,
+            silent=True,  # we will have a progress bar
+            no_meta=True,  # do not include metadata for individual frames
           )
-          # save
-          config.console.print()
-          all_img_obj[i] = img
-      # update the main dict with the marker frames: this way we have all frames in one dict
-      all_img_obj.update(all_marker_imgs)
-      del all_marker_imgs  # free memory
+          # save hash
+          all_hash[i] = data_hash
+          # save per-frame-normalized image to disk if requested (for individual frame inspection)
+          if save_frames:
+            img_path.write_bytes(img_data)
+            config.console.print(f'Saved frame {i + 1} to {str(img_path)!r}')
+          # update progress bar, return data
+          if p_bar:
+            p_bar.update(1)
+          return img_data
+
+        all_hash: dict[int, str] = {}
+        tmp_path: pathlib.Path = pathlib.Path(tmpdir) / f'temp_video.{zoom_params.tp.value.lower()}'
+        if anim_type == image.AnimationType.GIF:
+          image.WriteAnimatedGIF(
+            (_RenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
+            tmp_path,
+            zoom_params.img.width,
+            zoom_params.img.height,
+            zoom_params.n_frames,
+            float(zoom_params.n_seconds),
+            loop=zoom_params.loop,
+          )
+        elif anim_type == image.AnimationType.MP4:
+          image.WriteVideoMP4(
+            (_RenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
+            tmp_path,
+            zoom_params.img.width,
+            zoom_params.img.height,
+            zoom_params.n_frames,
+            float(zoom_params.n_seconds),
+          )
+        else:
+          raise base.UsageError(f'Unsupported animation type: {anim_type}')
+      finally:
+        # we are done, close the progress bar, free memory
+        p_bar.close()
+        img = all_img_obj[0]  # NOTE: keep the first image alive for metadata
+        del all_img_obj  # this should help free all generated images from memory
+      # we can finally compute the hash
+      video_hash = hashes.Hash256(
+        # stable if the image data and order does not change
+        ('|'.join(all_hash[i] for i in range(zoom_params.n_frames))).encode('ascii')
+      ).hex()
       # create metadata
-      meta: dict[str, str] = image.MakeImageMeta(all_img_obj[0], render, 'N/A')
+      meta: dict[str, str] = image.MakeImageMeta(img, render, video_hash)
+      del img  # now the 1st image can go too
       # add video-specific metadata
       meta[image.META_IMAGE_ANIMATION_KEY] = anim_type.value.lower()
       meta.update(
@@ -409,113 +491,26 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           image.META_ZOOM_HASH_KEY: zoom_params.sha,
         }
       )
-      # make the rendering progress bar
-      config.console.print(f'[yellow]Render:[/] {render}')
-      p_bar = tqdm.tqdm(
-        total=zoom_params.n_frames,
-        desc='Render',
-        unit='fr',
-        dynamic_ncols=True,
-        smoothing=0.1,
-        colour='yellow',
-      )
-      all_hash: dict[int, str] = {}
-
-      def _RenderFrame(i: int) -> bytes:
-        img_data: bytes
-        data_hash: str
-        img_path: pathlib.Path
-        p: int
-        n: int
-        zn: image.Image.FrameColorNorm
-        # get image
-        img_obj: image.Image = all_img_obj[i]
-        # render
-        p, n, zn = zoom_norm.ForFrame(i)
-        img_data, data_hash, img_path = db.DoRender(
-          img_obj,
-          dataclasses.replace(render, prev_marker=all_frames[p], next_marker=all_frames[n]),
-          out,
-          add_serial=i + 1,
-          tm=timestamp,
-          iterm=False,  # disable, we want silence
-          print_comm=config.console.print,
-          force=config.img_force_redo,
-          zoom_norm=zn,
-          silent=True,  # we will have a progress bar
-          no_meta=True,  # do not include metadata for individual frames
-        )
-        # save hash
-        all_hash[i] = data_hash
-        # save per-frame-normalized image to disk if requested (for individual frame inspection)
-        if save_frames:
-          img_path.write_bytes(img_data)
-          config.console.print(f'Saved frame {i + 1} to {str(img_path)!r}')
-        # update progress bar, return data
-        if p_bar:
-          p_bar.update(1)
-        return img_data
-
-      # save the final animation, first to a temporary path because we do not have the hash...
-      with tempfile.TemporaryDirectory() as tmpdir, timer.Timer(emit_log=False) as render_tmr:
-        tmp_path: pathlib.Path = pathlib.Path(tmpdir) / f'temp_video.{zoom_params.tp.value.lower()}'
-        if anim_type == image.AnimationType.GIF:
-          image.WriteAnimatedGIF(
-            (_RenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
-            tmp_path,
-            zoom_params.img.width,
-            zoom_params.img.height,
-            zoom_params.n_frames,
-            float(zoom_params.n_seconds),
-            meta=meta,
-            loop=zoom_params.loop,
-          )
-        elif anim_type == image.AnimationType.MP4:
-          image.WriteVideoMP4(
-            (_RenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
-            tmp_path,
-            zoom_params.img.width,
-            zoom_params.img.height,
-            zoom_params.n_frames,
-            float(zoom_params.n_seconds),
-            meta=meta,
-          )
-        else:
-          raise base.UsageError(f'Unsupported animation type: {anim_type}')
-        # we are done, close the progress bar
-        p_bar.close()
-        p_bar = None
-        # we can finally compute the hash
-        video_hash = hashes.Hash256(
-          # stable if the image data and order does not change
-          ('|'.join(all_hash[i] for i in range(zoom_params.n_frames))).encode('ascii')
-        ).hex()
-        # move the file!
-        video_path = full_path(video_hash)
-        shutil.move(str(tmp_path), str(video_path))
-        config.console.print('[yellow]Render:[/] [green]DONE[/]\n')
-      # we just freed the temporary directory; add to DB
-      db.AddZoomToDB(
-        zoom_params,
-        video_hash,
-        timestamp,
-        str(video_path),
-        all_frames,
-        all_markers,
-      )
-      # done
-      success = True
-    finally:
-      if p_bar:
-        p_bar.close()  # type: ignore[unreachable]
-      if success and video_hash and video_path:
-        config.console.print(
-          f'Success: {anim_type.value.upper()} {video_hash!r} in '
-          f'{markers_tmr or "-"} (markers) + {frames_tmr or "-"} (frames) + '
-          f'{render_tmr or "-"} (render)'
-        )
-        config.console.print(f'Saved {anim_type.value.upper()} to "{video_path}"\n')
-        # iterm
-        if config.iterm and anim_type != image.AnimationType.MP4:  # iTerm2 does not support MP4
-          image.PrintITerm2(video_path.read_bytes())
-          config.console.print()
+      # move the file!
+      video_path = full_path(video_hash)
+      {
+        image.AnimationType.GIF: image.ReWriteAnimatedGIFMeta,
+        image.AnimationType.MP4: image.ReWriteVideoMP4Meta,
+      }[zoom_params.tp](tmp_path, video_path, meta)
+    # closed temporary directory, video is saved in final destination with final metadata
+    config.console.print('[yellow]Render:[/] [green]DONE[/]\n')
+    # we just freed the temporary directory; add to DB
+    db.AddZoomToDB(
+      zoom_params,
+      video_hash,
+      timestamp,
+      str(video_path),
+      all_frames,
+      all_markers,
+    )
+  # done, close DB, final log and iTerm2
+  config.console.print(
+    f'Success: {anim_type.value.upper()} {video_hash!r} in '
+    f'{markers_tmr} (markers) + {frames_tmr} (frames) + {render_tmr} (render)'
+  )
+  _SaveLogAndITerm(video_path)
