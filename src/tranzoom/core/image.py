@@ -648,6 +648,97 @@ class ZoomParameters(frame.SerializingFractalObject):
     return gmpy2.mpq(m)
 
   @property
+  def data_sz_bytes(self) -> int:
+    """Get the size of all the image.Image data in bytes.
+
+    The basic size of holding self.n_frames images in memory at the same time.
+    This is important to know, for example for an animation.
+
+    Returns:
+      int: The size of the image data in bytes, after computed.
+
+    """
+    # all frames share the same escape_sz and hist_sz (same width/height/depth every frame);
+    # only the FractalStats size (stats_sz) depends on precision, which grows as the zoom
+    # deepens: precision grows ~ceil(mag * log2(10)) bits from initial to final frame;
+    # the stats_sz contribution is tiny vs escape+hist but we properly interpolate
+    # using the average precision over the animation
+    precision_initial: int = self.img.precision
+    # log2(10) ~= 3.32193; ceil(mag * log2(10)) gives extra bits needed for final frame
+    precision_delta: int = math.ceil(float(self.mag) * math.log2(10))
+    # clamp to valid range: 140 = _MPFR_MIN_PRECISION, 300_000 = _MPFR_MAX_PRECISION
+    precision_final: int = max(140, min(precision_initial + precision_delta, 300_000))
+    precision_avg: int = (precision_initial + precision_final) // 2
+    # stats_sz = 2*28B (Python ints) + 8 gmpy2.mpfr fields; mpfr at p bits: 56B + ceil(p/64)*8B
+    mpfr_sz_initial: int = 56 + ((precision_initial + 63) // 64) * 8
+    mpfr_sz_avg: int = 56 + ((precision_avg + 63) // 64) * 8
+    stats_sz_delta: int = 8 * (mpfr_sz_avg - mpfr_sz_initial)  # per-frame gain vs initial
+    return self.n_frames * self.img.data_sz_bytes + self.n_frames * stats_sz_delta
+
+  @property
+  def comp_memory_sz_bytes(self) -> int:
+    """Get the size of the data_sz_bytes data plus all that is needed-in memory during computation.
+
+    We have self.data_sz_bytes, and that is the memory for the intermediate storage;
+    But during computation we have lots going on, so that we can ESTIMATE the
+    memory needed for the whole computation, which is important for informing the user and
+    taking decisions.
+
+    Returns:
+      int: The size of the image data in bytes, after computed.
+
+    """
+    # precision grows from initial to final frame as the zoom deepens (or decreases for neg mag);
+    # log2(10) ~= 3.32193; ceil(mag * log2(10)) gives extra bits needed for the final frame
+    precision_initial: int = self.img.precision
+    precision_delta: int = math.ceil(float(self.mag) * math.log2(10))
+    # clamp to valid range: 140 = _MPFR_MIN_PRECISION, 300_000 = _MPFR_MAX_PRECISION
+    precision_final: int = max(140, min(precision_initial + precision_delta, 300_000))
+    precision_peak: int = max(precision_initial, precision_final)  # worst case: deepest init./final
+    # peak computation occurs at the deepest (highest-precision) frame; each of the
+    # max_concurrence parallel processes holds one Image in RAM + mpfr working scalars;
+    # mpfr field at p bits: 56B struct overhead + ceil(p/64)*8B mantissa limbs;
+    # n_working_mpfr ~25 scalar vars + one column pre-computation (width mpfr values)
+    n_working_mpfr: int = 25  # same as in frame.ComputationParameters.comp_memory_sz_bytes
+    mpfr_sz_peak: int = 56 + ((precision_peak + 63) // 64) * 8
+    per_proc_mpfr_sz_peak: int = (self.img.width + n_working_mpfr) * mpfr_sz_peak
+    max_concurrence: int = 16  # fractal.MAX_CONCURRENCE
+    # peak = all frames in RAM + single-frame computation cost at deepest (peak) precision
+    return self.data_sz_bytes + max_concurrence * (self.img.data_sz_bytes + per_proc_mpfr_sz_peak)
+
+  def animation_sz_bytes(self) -> tuple[int, int]:
+    """Estimate the size of the GIF/MP4 file in bytes, respectively.
+
+    We know how many pixels and we know how they'll be stored in the GIF/MP4 format. ESTIMATE.
+    This is important to know, for example for an animation, how much disk space will be needed
+    to hold all GIF/MP4 files for all frames.
+
+    Returns:
+      tuple[int, int]: The estimated size of the (GIF, MP4) file in bytes, respectively.
+
+    """
+    n_px: int = self.img.width * self.img.height
+    # GIF: each frame stored as 256-color palette (8-bit) + LZW compression; PIL saves with
+    # optimize=True and delta-encodes unchanged pixels as transparent (disposal=1); for fractal
+    # frames the smooth gradient interiors map well to 256-color palettes and LZW achieves
+    # moderate compression; empirically ~0.125 bytes/pixel/frame on average (8:1 vs uncompressed)
+    gif_sz: int = self.n_frames * n_px // 8
+    # MP4: H.264 (libx264) at CRF=16 (high quality, ~2x the bits of CRF=23), preset=slow
+    # (WriteVideoMP4 parameters); fractal zooms have high temporal coherence (each frame is a
+    # slightly zoomed version of the previous) which H.264 inter-frame prediction exploits very
+    # well; empirically ~0.05 bytes/pixel/frame on average (20:1 vs uncompressed RGB)
+    mp4_sz: int = self.n_frames * n_px // 20
+    # metadata: ONE JSON block per file (NOT per frame) written as the GIF comment extension
+    # or the MP4 container comment tag (json.dumps(meta) in WriteAnimatedGIF/WriteVideoMP4);
+    # contains all zoom/computation/render/frame parameters; see png_sz_bytes formula;
+    # dominant variable cost: INITIAL FRAME coordinate strings (8 mpq values each stored as
+    # "p/q" with ~precision_initial * log10(2) decimal digits per numerator and denominator);
+    # 8 coords * 2 ints * (precision_initial * 3 // 10 + 1) bytes for coordinate strings
+    precision_initial: int = self.img.precision
+    meta_sz: int = 5000 + 8 * 2 * (precision_initial * 3 // 10 + 1)
+    return (gif_sz + meta_sz, mp4_sz + meta_sz)
+
+  @property
   def json(self) -> tbase.JSONDict:
     """Get a JSON-serializable dictionary representation of the ZoomParameters.
 

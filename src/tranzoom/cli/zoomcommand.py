@@ -306,10 +306,12 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     suffix=zoom_params.tp.value.lower(),
   )
 
-  def _SaveLogAndITerm(img_p: pathlib.Path) -> None:
+  def _SaveLogAndITerm(img_p: pathlib.Path, img_sz: int) -> None:
     """To be called before return."""
     # log
-    config.console.print(f'Saved {zoom_params.tp.value.upper()} to "{img_p}"\n')
+    config.console.print(
+      f'Saved {zoom_params.tp.value.upper()} to {str(img_p)!r}, {human.HumanizedBytes(img_sz)}\n'
+    )
     # iterm
     if config.iterm and zoom_params.tp != image.AnimationType.MP4:  # iTerm2 does not support MP4
       image.PrintITerm2(img_p.read_bytes())
@@ -339,7 +341,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           video_path.write_bytes(video_data)
         # log and shortcircuit
         config.console.print(f'Success: {zoom_params.tp.value.upper()} {video_hash!r} from disk')
-        _SaveLogAndITerm(video_path)
+        _SaveLogAndITerm(video_path, video_path.stat().st_size)
         return
     # main zoom loop, go for frames iterations, producing the image and then zooming in the frame
     all_marker_imgs: dict[int, image.Image] = {}  # Image objects for ZoomColorNorm (see below)
@@ -516,4 +518,4 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     f'Success: {zoom_params.tp.value.upper()} {video_hash!r} in '
     f'{markers_tmr} (markers) + {frames_tmr} (frames) + {render_tmr} (render)'
   )
-  _SaveLogAndITerm(video_path)
+  _SaveLogAndITerm(video_path, video_path.stat().st_size)

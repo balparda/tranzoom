@@ -17,7 +17,7 @@ import typer
 from transcrypto.cli import clibase
 from transcrypto.core import aes
 from transcrypto.utils import base as tbase
-from transcrypto.utils import timer
+from transcrypto.utils import human, timer
 
 from tranzoom import __version__
 from tranzoom.core import ai, fractal, frame, frdb, image, palette
@@ -1041,7 +1041,7 @@ def ProduceFractalImage(
   # save the image to disk if requested
   if save_image:
     full_path.write_bytes(raw_png)
-    config.console.print(f'Saved to "{full_path}"')
+    config.console.print(f'Saved to {str(full_path)!r}, {human.HumanizedBytes(len(raw_png))}')
   return (img, raw_png, raw_hash, render)
 
 

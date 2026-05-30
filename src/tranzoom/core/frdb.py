@@ -15,7 +15,7 @@ from typing import Self, TypedDict, cast
 from transcrypto.core import aes, key
 from transcrypto.utils import base as tbase
 from transcrypto.utils import config as app_config
-from transcrypto.utils import timer
+from transcrypto.utils import human, timer
 
 from tranzoom import __version__
 from tranzoom.core import fractal, frame, image
@@ -1122,7 +1122,8 @@ class FractalDatabase:
       render_data = self.AddRenderToDB(params, render, ck, img_hash, str(full_path(img_hash)))
     # log
     print_comm(
-      f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE,[/] {img_hash!r} in {tmr}'
+      f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE,[/] {img_hash!r} '
+      f'in {tmr}, {human.HumanizedBytes(len(img_data))}'
     )
     # print inline in iTerm2 if requested
     if iterm:

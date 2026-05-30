@@ -662,6 +662,109 @@ class ComputationParameters(SerializingFractalObject):
     return (self.width, self.height)
 
   @property
+  def data_sz_bytes(self) -> int:
+    """Get the size of the image.Image data in bytes, based on computation parameters.
+
+    We know the sz=w*h, stored in an array of uint64, so sz * N_BYTES_UINT;
+    We know image.Image stores 2 histograms and one stats, and we can ESTIMATE that size.
+    This is important to know, for example for an animation, how much memory is needed
+    to hold all image.Image for all frames in memory at the same time.
+
+    Returns:
+      int: The size of the image data in bytes, after computed.
+
+    """
+    n_px: int = self.width * self.height
+    # (1) escape array: exact -- width*height uint64 values at N_BYTES_UINT = 8 bytes each
+    escape_sz: int = n_px * N_BYTES_UINT
+    # (2) two Image.Histogram objects (ext_hist, int_hist); each histogram holds:
+    #     - linear histogram (unique integer escape values): 2 sorted lists + 2 dicts
+    #     - bucket histogram (smooth sub-bin keys):          2 sorted lists + 2 dicts
+    #     n_lin: at most min(n_px, depth+SMOOTH_EXTRA_ITERS) distinct integer escape values
+    #     n_buck: at most min(n_px, n_lin * sub_bins) distinct smooth bucket keys;
+    #     2048 = image._HIST_SUB_BINS, written as literal to avoid circular import
+    n_lin: int = min(n_px, self.depth + SMOOTH_EXTRA_ITERS)
+    n_buck: int = min(n_px, n_lin * 2048)  # 2048 = image._HIST_SUB_BINS
+    # each histogram entry spans 4 data structures (2 sorted lists + 2 dicts):
+    #   list entry:  8-byte list slot + 56-byte (int, int) tuple + 2*28-byte Python ints ~= 120 B
+    #   dict entry:  ~60-byte hash-table slot + 2*28-byte Python ints                   ~= 116 B
+    # 4 structures per histogram * 2 histograms -> (2*120 + 2*116) * 2 ~= 944 bytes per entry
+    bytes_per_hist_entry: int = 944
+    hist_sz: int = (n_lin + n_buck) * bytes_per_hist_entry
+    # (3) FractalStats (if present): 2 Python ints + 8 gmpy2.mpfr objects;
+    #     mpfr at p bits ~= 56 bytes (Python/MPFR struct overhead) + ceil(p/64)*8 bytes (mantissa)
+    mpfr_sz: int = 56 + ((self.precision + 63) // 64) * 8
+    stats_sz: int = 2 * 28 + 8 * mpfr_sz  # 2 Python ints + 8 mpfr fields
+    return escape_sz + hist_sz + stats_sz
+
+  @property
+  def comp_memory_sz_bytes(self) -> int:
+    """Get the size of the image.Image data plus all that is needed-in memory during computation.
+
+    We have self.data_sz_bytes, and that is the memory for the final image;
+    But during computation we also have FOR EVERY THREAD one whole image.Image plus many gmpy2.mpfr
+    that can grow depending on the self.depth. So, looking at the algorithm, we can ESTIMATE the
+    memory needed for the whole computation, which is important for informing the user and
+    taking decisions.
+
+    Returns:
+      int: The size of the image data in bytes, after computed.
+
+    """
+    # max parallel rendering processes = fractal.MAX_CONCURRENCE = 16; written as literal
+    # here to avoid a circular import dependency (fractal imports frame, so frame cannot
+    # import fractal without creating a cycle)
+    max_concurrence: int = 16  # fractal.MAX_CONCURRENCE
+    # each process holds one full image.Image in RAM = data_sz_bytes
+    per_proc_image_sz: int = self.data_sz_bytes
+    # inside `with params.context:` each process maintains gmpy2.mpfr values at
+    # self.precision bits; the dominant per-process mpfr cost is:
+    #   - xs: width gmpy2.mpfr values (precomputed real-axis pixel coordinates, one per column)
+    #   - ~25 scalar mpfr working variables: zx, zy, zx2, zy2, mag_z2, cy, cx, min_z2, max_z2,
+    #       mpfr_pi, mpfr_two_pi, max_iter_p_1, and stats-tracking bounds (max_lo, max_hi,
+    #       min_lo, min_hi, ang_lo, ang_hi, imag_lo, imag_hi) plus normalization temporaries;
+    #       mpfr size grows with self.depth because self.precision adds 2*ceil(log2(depth+1))
+    #       guard bits to maintain per-pixel numerical accuracy over the iteration loop
+    n_working_mpfr: int = 25
+    mpfr_sz: int = 56 + ((self.precision + 63) // 64) * 8  # Python/MPFR overhead + mantissa limbs
+    per_proc_mpfr_sz: int = (self.width + n_working_mpfr) * mpfr_sz
+    return max_concurrence * (per_proc_image_sz + per_proc_mpfr_sz)
+
+  def png_sz_bytes(self) -> tuple[int, int]:
+    """Estimate the size of the PNG/JPG file in bytes, based on the image data.
+
+    We know how many pixels and we know how they'll be stored in the PNG/JPG format. ESTIMATE.
+    This is important to know, for example for an animation, how much disk space will be needed
+    to hold all PNG/JPG files for all frames.
+
+    Returns:
+      tuple[int, int]: The estimated size of the (PNG, JPG) file in bytes, respectively.
+
+    """
+    n_px: int = self.width * self.height
+    # metadata overhead: all frame/computation/render/image parameters stored in tEXt chunks
+    # (PNG) or EXIF comment (JPG); ~50 key-value pairs with ~5 KB fixed overhead (keys ~35
+    # chars, hash values 64 chars, int/float values 1-20 chars) plus coordinate mpq strings
+    # for the 8 frame coordinates (top_re, top_im, bottom_re, bottom_im, center_re, center_im,
+    # width_re, height_im); each mpq stored as "p/q" decimal: ~precision * log10(2) digits per int;
+    # integer approx: precision * 3 // 10; total: 8 coords * 2 ints * (precision * 3 // 10 + 1) bt
+    meta_sz: int = 5000 + 8 * 2 * (self.precision * 3 // 10 + 1)
+    # PNG stores pixels as 3-byte RGB and compresses with zlib/deflate; fractal images mix
+    # highly-compressible smooth gradient regions with poorly-compressible fractal boundaries;
+    # empirically a 1024x1024 fractal PNG is ~1 MB (see DEFAULT_IMAGE_SIZE comment above),
+    # which is ~3:1 compression of 3 MB of raw RGB data -> ~1 byte/pixel on average;
+    # the actual compression ratio varies widely by zoom depth and frame content
+    png_sz: int = n_px + meta_sz  # ~1 byte/pixel + metadata
+    # JPEG at JPEG_QUALITY=95 (image.JPEG_QUALITY, written as literal to avoid circular import)
+    # for fractal images: unlike natural photos, fractals have high-frequency content at sharp
+    # set boundaries that DCT blocks compress poorly even at high quality settings; smooth
+    # gradient exteriors compress well, but the mix results in ~2 bytes/pixel on average;
+    # this makes JPEG typically LARGER than PNG for fractals because PNG's lossless filter
+    # rows handle the smooth gradients very efficiently
+    jpg_sz: int = n_px * 2 + meta_sz  # ~2 bytes/pixel at quality 95 + metadata
+    return (png_sz, jpg_sz)
+
+  @property
   def json(self) -> tbase.JSONDict:
     """Get a JSON-serializable dictionary representation of the computation parameters.
 
