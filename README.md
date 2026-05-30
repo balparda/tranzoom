@@ -533,7 +533,7 @@ poetry run tranz image julia "/path/to/saved.png"
 poetry run tranz [--iterm] image read <IMAGE_PATH>
 ```
 
-Reads an existing tranZoom PNG and pretty-prints all embedded metadata:
+Reads an existing tranZoom image (PNG, GIF, or MP4) and pretty-prints all embedded metadata:
 
 ```sh
 $ poetry run tranz image read mandel-38824cdaa58b64496ebf.png
@@ -667,7 +667,7 @@ Renders a straight zoom-in animation from a starting frame to a target magnifica
 
 The zoom progression is geometrically uniform: each successive frame is scaled by a fixed rational factor computed so that the product of all per-frame zoom steps equals exactly the requested total magnification. Zoom metadata such as initial frame size, zoom step, FPS, duration, frame count, and loop count is stored with the final animated output under `tranZoom:zoom:*` PNG text chunks; if you save intermediate PNG frames, they are written as regular tranZoom still images.
 
-A set of **marker frames** is automatically selected from the full frame sequence at regular 10× magnification intervals. These are stored in the DB alongside all frames and can be used as chapter/seek points when browsing zoom animations.
+A set of **marker frames** is automatically selected from the full frame sequence at regular 10× magnification intervals (one per 10× zoom by default). Marker frames serve two purposes: (1) they act as chapter/seek points stored in the DB alongside all frames, and (2) they are computed *before* regular frames so that a `ZoomColorNorm` can be built from their histograms — ensuring every frame in the animation maps the same escape-iteration value to the same palette position and eliminating per-frame color flickering.
 
 Positional arguments:
 
@@ -939,15 +939,15 @@ The CLI respects the `NO_COLOR` environment variable and the `--no-color` / `--c
 | --- | --- |
 | `tranz.py` | `tranz` CLI entry point — global options, `tranz markdown` |
 | `cli/base.py` | Shared CLI options, defaults, `DEFAULT_MANDELBROT_FRAME`, `ProduceFractalImage()` |
-| `cli/imagecommand.py` | `tranz image mandel`, `tranz image julia`, and `tranz image read` command implementations |
+| `cli/imagecommand.py` | `tranz image mandel`, `tranz image julia`, `tranz image read`, and `tranz image clean` command implementations |
 | `cli/zoomcommand.py` | `tranz zoom ai`, `tranz zoom manual`, and `tranz zoom auto` command implementations |
 | `core/fractal.py` | `Mandelbrot()` and `Julia()` renderers — fractal math |
 | `core/frame.py` | `SerializingFractalObject` base class; `Frame` class, `ComputationParameters` class, `Fractal` enum, and base coordinate math |
-| `core/image.py` | `Image` class; `RenderParameters`, `ZoomParameters`, `ImageOutputConfig`; image utilities, overlays, iTerm2 printing, metadata helpers |
+| `core/image.py` | `Image` class (with inner `ZoomColorNorm` / `FrameColorNorm` for stable cross-frame color normalization); `RenderParameters`, `ZoomParameters`, `ImageOutputConfig`; image utilities, overlays, iTerm2 printing, metadata helpers; `ReWriteAnimatedGIFMeta()` / `ReWriteVideoMP4Meta()` for metadata-only rewrites; `CleanSavePNG()` / `CleanSaveJPG()` for metadata-stripped output |
 | `core/palette.py` | Palette definitions and color mapping |
 | `core/queries.py` | AI prompt templates and Pydantic models for structured LLM responses |
 | `core/ai.py` | `ZoomLoop()` — iterative AI and manual zoom session logic |
-| `core/frdb.py` | `FractalDatabase` — persistent storage for frames, computations, renders, and video entries; `CoreComputeImage()` method is the unified rendering primitive with computation and render caching; `SaveImageData`/`LoadImageData` for raw pixel cache I/O |
+| `core/frdb.py` | `FractalDatabase` — persistent storage for frames, computations, renders, and video entries; `DoComputation()` / `DoRender()` are the split rendering primitives (extracted from the old `CoreComputeImage()`), each with full DB cache support; `FindComputation()` / `FindRender()` for cache lookups; `SaveImageData`/`LoadImageData` for raw pixel cache I/O |
 | `utils/template.py` | Template for new utility modules |
 
 ### Performance characteristics
@@ -995,14 +995,14 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 │       ├── cli/
 │       │   ├── __init__.py
 │       │   ├── base.py           ⟸ shared CLI options, frame defaults, config dataclasses
-│       │   ├── imagecommand.py   ⟸ `tranz image mandel` and `tranz image read` implementations
+│       │   ├── imagecommand.py   ⟸ `tranz image mandel`, `tranz image read`, and `tranz image clean` implementations
 │       │   └── zoomcommand.py    ⟸ `tranz zoom ai`, `tranz zoom manual`, and `tranz zoom auto` implementations
 │       ├── core/
 │       │   ├── __init__.py
 │       │   ├── ai.py             ⟸ ZoomLoop() and ManualLoop() — zoom session logic
 │       │   ├── fractal.py        ⟸ Mandelbrot() renderer
 │       │   ├── frame.py          ⟸ Frame class, Fractal enum; base for computation
-|       |   ├── frdb.py           ⟸ Fractal DB/persistence objects
+|       |   ├── frdb.py           ⟸ Fractal DB/persistence objects; DoComputation()/DoRender() rendering primitives
 │       │   ├── image.py          ⟸ Image class, overlays, iTerm2, metadata helpers
 │       │   ├── palette.py        ⟸ Palette definitions
 │       │   └── queries.py        ⟸ AI prompt templates and Pydantic response models
