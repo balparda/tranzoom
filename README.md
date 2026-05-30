@@ -396,7 +396,7 @@ Available subgroup / command combinations:
 | `--hash`/`--no-hash` | Include 20-char SHA256 hash in filename | `--hash` |
 | `--force`/`--no-force` | Force re-computation and re-rendering even when matching DB cache entries exist | `--no-force` |
 | `--iterm`/`--no-iterm` | Print image inline in iTerm2 (macOS + iTerm2 only) | off |
-| `--use-db`/`--no-use-db` | Enable/disable the fractal DB for this invocation; overrides the `use_db` config setting | config value / False |
+| `--db`/`--no-db` | Enable/disable the fractal DB for this invocation; overrides the `use_db` config setting | config value / False |
 | `--readonly-db`/`--no-readonly-db` | Open the DB in read-only mode (reads allowed, no writes or saves) | `--no-readonly-db` |
 | `--pass` | DB encryption password; omit for no encryption; `--pass ""` prompts securely (hidden input); `--pass "pwd"` passes inline (visible in shell history) | None (no encryption) |
 | `--palette` | Color palette for exterior (escaped) pixels; one of `sahara`, `lava`, `electric`, `sunset`, `aurora`, `plasma`, `forest`, `coral`, `gold`, `toxic`, `iris`, `ember`, `rgrayscale`, `grayscale` | `sahara` |
