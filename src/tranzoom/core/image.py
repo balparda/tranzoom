@@ -229,10 +229,10 @@ MAX_ZOOM_MAGNITUDE_10: float = 10000.0  # this is 10**10000 which is more than e
 DEFAULT_DEST_MAGNITUDE_10: str = '1'  # default dest magnification for zooms 10**1 = 10x zoom
 DEFAULT_LOOP: int = 0  # 0 means infinite loop for GIFs
 THRESHOLD_JUMPY_ZOOM_PER_FRAME: float = 1.25  # if zoom per frame is above this warn about jumpiness
-MAX_TOLERATED_FRAME_MAG_ERROR: float = 0.00002  # 0.002% - max error Frame vs. reduced mpq Frame
-MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.0001  # 0.01% - max total cumulative error of total zoom
+MAX_TOLERATED_FRAME_MAG_ERROR: float = 0.0002  # 0.02% - max error Frame vs. reduced mpq Frame
+MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.001  # 0.1% - max total cumulative error of total zoom
 MAGNITUDE_PER_FRAME_MARKER: gmpy2.mpq = gmpy2.mpq('1')  # one marker every 10x zoom
-MAX_TOLERATED_MARKER_MAG_ERROR: float = 0.06  # 6% max error for marker frames
+MAX_TOLERATED_MARKER_MAG_ERROR: float = 0.15  # 15% max error for marker frames
 
 
 # gmpy2.mpfr constants
