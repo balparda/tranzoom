@@ -121,7 +121,7 @@ pytest = "^9.0"
 pytest-cov = "^7.1"
 pytest-flakefinder = "^1.1"
 pre-commit = "^4.6"
-ruff = "^0.15.14"
+ruff = "^0.15.15"
 typeguard = "^4.5"
 
 # project-specific dev-only

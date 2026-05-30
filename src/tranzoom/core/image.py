@@ -19,6 +19,7 @@ import logging
 import math
 import pathlib
 import struct
+import subprocess  # noqa: S404
 import sys
 import tempfile
 import time
@@ -27,6 +28,7 @@ from typing import cast
 
 import gmpy2
 import imageio
+import imageio_ffmpeg  # type: ignore
 import numpy as np
 from PIL import ExifTags, ImageDraw, ImageFont, PngImagePlugin
 from PIL import Image as PILImage
@@ -1540,7 +1542,7 @@ def MakeImagePath(
   )
 
 
-def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:
+def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:  # noqa: C901, PLR0912, PLR0915
   """Get basic data from an image (PNG, GIF, or MP4), including format, size, hash, and metadata.
 
   Args:
@@ -1560,35 +1562,73 @@ def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDi
   # MP4: has an 'ftyp' ISO base media box at bytes 4-8; PILImage.open() raises on MP4, so we
   # must detect and handle it before reaching PIL
   raw_hash: str
-  if len(img_bytes) >= 8 and img_bytes[4:8] == b'ftyp':
+  width: int
+  height: int
+  if len(img_bytes) >= 8 and img_bytes[4:8] == b'ftyp':  # noqa: PLR2004
     with tempfile.NamedTemporaryFile(suffix='.mp4') as tmp:
       tmp.write(img_bytes)
       tmp.flush()
+      tmp_path = pathlib.Path(tmp.name)
+      # get width/height via imageio (reliable); get_meta_data() does NOT expose container tags
       reader = imageio.get_reader(  # pyright: ignore[reportUnknownMemberType]
-        pathlib.Path(tmp.name), format='ffmpeg'
+        tmp_path,
+        format='ffmpeg',  # type: ignore[arg-type]
       )
-      raw_meta = reader.get_meta_data()  # type: ignore[union-attr]
-      w, h = cast('tuple[int, int]', raw_meta.get('size', (0, 0)))
+      width, height = cast('tuple[int, int]', reader.get_meta_data().get('size', (0, 0)))  # type: ignore[union-attr]
       reader.close()
-    if w < 1 or h < 1:
-      raise Error(f'Invalid MP4 frame size {w} x {h}')
-    # custom metadata was stored as individual key-value pairs via ffmpeg -metadata output_params;
-    # imageio-ffmpeg exposes them in get_meta_data() at the top level
-    mp4_meta: tbase.JSONDict = {
-      k: v for k, v in raw_meta.items() if isinstance(k, str) and k.startswith(f'{_app}:')
-    }
-    # prefer the stored image hash from metadata; recomputing from frames is too expensive
-    raw_hash = str(mp4_meta.get(META_IMAGE_HASH_KEY, ''))
+      # read container tags (including our JSON comment) via ffmpeg -f ffmetadata;
+      # this is the only way to access format.tags since imageio doesn't expose them
+      proc = subprocess.run(  # noqa: S603
+        [
+          imageio_ffmpeg.get_ffmpeg_exe(),
+          '-v',
+          'quiet',
+          '-i',
+          str(tmp_path),
+          '-f',
+          'ffmetadata',
+          'pipe:1',
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+      )
+    if width < 1 or height < 1:
+      raise Error(f'Invalid MP4 frame size {width} x {height}')
+    if proc.returncode != 0:
+      raise Error(f'ffmpeg failed reading MP4 metadata: {proc.stderr.strip()!r}')
+    # parse ffmetadata format: key=value lines; comments start with ';', sections with '['
+    mp4_tags: dict[str, str] = {}
+    tag_k: str
+    tag_v: str
+    for line in proc.stdout.splitlines():
+      if line.startswith((';', '[')) or '=' not in line:
+        continue
+      tag_k, tag_v = line.split('=', 1)
+      mp4_tags[tag_k] = tag_v
+    # metadata was stored by WriteVideoMP4 as a single JSON string in the 'comment' field
+    # (mirrors how GIF stores metadata in its comment field)
+    mp4_meta: tbase.JSONDict = {}
+    raw_hash = ''
+    if 'comment' in mp4_tags:
+      try:
+        mp4_meta = json.loads(mp4_tags['comment'])
+        if META_IMAGE_HASH_KEY in mp4_meta:
+          raw_hash = str(mp4_meta[META_IMAGE_HASH_KEY])
+        else:
+          logging.error('DO NOT trust this MP4 hash')
+      except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError):
+        logging.error('MP4 comment metadata not valid JSON, ignoring; DO NOT trust this MP4 hash')  # noqa: TRY400
     if not raw_hash:
       logging.error(
         'MP4 missing %r in metadata; falling back to file hash (DO NOT trust)', META_IMAGE_HASH_KEY
       )
       raw_hash = hashes.Hash256(img_bytes).hex()
-    return (w, h, raw_hash, mp4_meta)
+    return (width, height, raw_hash, mp4_meta)
   with PILImage.open(io.BytesIO(img_bytes)) as img:
     # get the internal data we need (size and hash)
-    width: int = img.width
-    height: int = img.height
+    width = img.width
+    height = img.height
     if width < 1 or height < 1:
       raise Error(f'Invalid image size {width} x {height}')
     raw_hash = hashes.Hash256(img.convert('RGB').tobytes()).hex()  # not 'RGBA'!!
@@ -2272,8 +2312,9 @@ def WriteVideoMP4(
   output_params.extend(['-crf', '16'])  # good quality, lower is better
   output_params.extend(['-preset', 'slow'])  # slower presets give better compression
   if meta:
-    for k, v in meta.items():
-      output_params.extend(['-metadata', f'{k}={v}'])
+    # store all metadata as a single JSON string in the 'comment' field so it can be read back;
+    # ffmpeg -metadata key=value stores to format.tags which imageio doesn't expose on read
+    output_params.extend(['-metadata', f'comment={json.dumps(meta)}'])
   # save the whole MP4, normalizing each frame
   frame_count = 0
   with imageio.get_writer(  # pyright: ignore[reportUnknownMemberType]
@@ -2315,8 +2356,8 @@ def ReWriteVideoMP4Meta(
   output_params.extend(['-crf', '16'])  # good quality, lower is better
   output_params.extend(['-preset', 'slow'])  # slower presets give better compression
   if meta:
-    for k, v in meta.items():
-      output_params.extend(['-metadata', f'{k}={v}'])
+    # store all metadata as a single JSON string in the 'comment' field (mirrors WriteVideoMP4)
+    output_params.extend(['-metadata', f'comment={json.dumps(meta)}'])
   # stream frames from reader directly into writer (no full in-memory buffering)
   with imageio.get_writer(  # pyright: ignore[reportUnknownMemberType]
     new_path,

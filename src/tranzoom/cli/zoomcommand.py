@@ -282,7 +282,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   config.console.print(
     f'\n{params.width} x {params.height} {render.escaped_pal.value!r} '
     f'{frm.fractal.value.capitalize()!r} [magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/]'
-    f', {human.HumanizedSeconds(duration)} long, at {fps:.2f} FPS, with {frames} frames, '
+    f', {human.HumanizedSeconds(float(zoom_params.n_seconds))} long, at {fps:.2f} FPS, '
+    f'with {zoom_params.n_frames} frames, '
     f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step...'
   )
   config.console.print(f'[yellow]ZOOM:[/] {zoom_params} ... {all_frames[-1]}\n')
@@ -302,7 +303,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     config.img_path_prefix or base.DEFAULT_IMAGE_PREFIX[frm.fractal],
     h,
     tm=timestamp,
-    suffix=anim_type.value.lower(),
+    suffix=zoom_params.tp.value.lower(),
   )
 
   def _SaveLogAndITerm(img_p: pathlib.Path) -> None:
@@ -337,7 +338,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           video_data: bytes = old_path.read_bytes()
           video_path.write_bytes(video_data)
         # log and shortcircuit
-        config.console.print(f'Success: {anim_type.value.upper()} {video_hash!r} from disk cache')
+        config.console.print(f'Success: {zoom_params.tp.value.upper()} {video_hash!r} from disk')
         _SaveLogAndITerm(video_path)
         return
     # main zoom loop, go for frames iterations, producing the image and then zooming in the frame
@@ -369,9 +370,11 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       for i, frm in enumerate(all_frames):
         if (i, frm) in all_markers:
           # already produced as marker, skip
-          config.console.print(f'[cyan]Frame {i + 1} / {frames}[/] -> [green]Marker: DONE[/]\n')
+          config.console.print(
+            f'[cyan]Frame {i + 1} / {zoom_params.n_frames}[/] -> [green]Marker: DONE[/]\n'
+          )
           continue
-        config.console.print(f'[yellow]Frame {i + 1} / {frames}[/]')
+        config.console.print(f'[yellow]Frame {i + 1} / {zoom_params.n_frames}[/]')
         # we have the frame, now feed it to the producer
         params, img = db.DoComputation(
           dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER),  # send frm, mark as sentinel
@@ -407,7 +410,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           n: int
           zn: image.Image.FrameColorNorm
           # get image
-          img_obj: image.Image = all_img_obj[i]
+          img_obj: image.Image = all_img_obj[i]  # noqa: F821
           # render
           p, n, zn = zoom_norm.ForFrame(i)
           img_data, data_hash, img_path = db.DoRender(
@@ -436,7 +439,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
 
         all_hash: dict[int, str] = {}
         tmp_path: pathlib.Path = pathlib.Path(tmpdir) / f'temp_video.{zoom_params.tp.value.lower()}'
-        if anim_type == image.AnimationType.GIF:
+        if zoom_params.tp == image.AnimationType.GIF:
           image.WriteAnimatedGIF(
             (_RenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
             tmp_path,
@@ -446,7 +449,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
             float(zoom_params.n_seconds),
             loop=zoom_params.loop,
           )
-        elif anim_type == image.AnimationType.MP4:
+        elif zoom_params.tp == image.AnimationType.MP4:
           image.WriteVideoMP4(
             (_RenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
             tmp_path,
@@ -456,11 +459,11 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
             float(zoom_params.n_seconds),
           )
         else:
-          raise base.UsageError(f'Unsupported animation type: {anim_type}')
+          raise base.UsageError(f'Unsupported animation type: {zoom_params.tp}')
       finally:
         # we are done, close the progress bar, free memory
         p_bar.close()
-        img = all_img_obj[0]  # NOTE: keep the first image alive for metadata
+        img = all_img_obj[zoom_params.n_frames - 1]  # NOTE: keep the last image alive for metadata
         del all_img_obj  # this should help free all generated images from memory
       # we can finally compute the hash
       video_hash = hashes.Hash256(
@@ -471,7 +474,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       meta: dict[str, str] = image.MakeImageMeta(img, render, video_hash)
       del img  # now the 1st image can go too
       # add video-specific metadata
-      meta[image.META_IMAGE_ANIMATION_KEY] = anim_type.value.lower()
+      meta[image.META_IMAGE_ANIMATION_KEY] = zoom_params.tp.value.lower()
       meta.update(
         # the extra animation keys
         {
@@ -493,10 +496,10 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       )
       # move the file!
       video_path = full_path(video_hash)
-      {
-        image.AnimationType.GIF: image.ReWriteAnimatedGIFMeta,
-        image.AnimationType.MP4: image.ReWriteVideoMP4Meta,
-      }[zoom_params.tp](tmp_path, video_path, meta)
+      if zoom_params.tp == image.AnimationType.GIF:
+        image.ReWriteAnimatedGIFMeta(tmp_path, video_path, meta)
+      elif zoom_params.tp == image.AnimationType.MP4:
+        image.ReWriteVideoMP4Meta(tmp_path, video_path, meta)
     # closed temporary directory, video is saved in final destination with final metadata
     config.console.print('[yellow]Render:[/] [green]DONE[/]\n')
     # we just freed the temporary directory; add to DB
@@ -510,7 +513,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     )
   # done, close DB, final log and iTerm2
   config.console.print(
-    f'Success: {anim_type.value.upper()} {video_hash!r} in '
+    f'Success: {zoom_params.tp.value.upper()} {video_hash!r} in '
     f'{markers_tmr} (markers) + {frames_tmr} (frames) + {render_tmr} (render)'
   )
   _SaveLogAndITerm(video_path)

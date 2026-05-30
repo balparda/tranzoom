@@ -40,9 +40,9 @@ def test_installed_cli_smoke(tmp_path: pathlib.Path) -> None:
     vpy, bin_dir, expected_version, _APP_NAMES
   )
   # basic command smoke tests
-  # _MandelbrotSeahorseTailCall(cli_paths)
+  _MandelbrotSeahorseTailCall(cli_paths)
   _AnimatedSeahorseTailCall(cli_paths)
-  # _JuliaSuzanaWaveCall(cli_paths)
+  _JuliaSuzanaWaveCall(cli_paths)
 
 
 def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
@@ -267,7 +267,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:render:mark_re': '-5578776469/7500000000',
       'tranZoom:render:mark_im': '8244620127/62500000000',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': '09b7382e678896a44f9388aad39a0cdaa6afc71145af8727ddaefa3ffc2e55ac',
+      'tranZoom:render:hash': '2e88ea6a9e35f8b66f61f0073446b911935c828c57a7355d49e34d967479178a',
       'tranZoom:zoom:type': 'gif',
       'tranZoom:zoom:frame:initial:width_re': '73801/100000000',
       'tranZoom:zoom:frame:initial:height_im': '73801/100000000',
@@ -279,7 +279,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:zoom:frame:steps': '39',
       'tranZoom:zoom:frame:magnitude_per_step': '1/39',
       'tranZoom:zoom:frame:magnification_per_step': '4777501148913803/4503599627370496',
-      'tranZoom:zoom:hash': '3410c539ffd85ccdd9f7dddfb6f65fe9e4330eb02624cff0d2aa70b102bb5beb',
+      'tranZoom:zoom:hash': 'e3e0d784d4694b805efb2aa52548605cff720a3ddc3c19f48e3a713785f2eb62',
     }
 
 
