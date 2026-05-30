@@ -575,7 +575,7 @@ poetry run tranz image clean /path/to/image.png
 
 # Fully anonymous: generic random filename, no metadata at all
 poetry run tranz image clean --no-hash --path /path/to/image.png
-# → /path/to/fractal-a3f7b2c1d4e5f601.jpg
+# → /path/to/fractal-a3f7b2c1d4e5f6019a2b.jpg
 
 # Keep as PNG so hash metadata is actually embedded
 poetry run tranz image clean --out png /path/to/image.png
