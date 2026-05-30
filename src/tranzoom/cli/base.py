@@ -40,8 +40,6 @@ class CleanupOutputFormat(enum.Enum):
   JPEG = 'jpeg'
   JPG = 'jpg'
   PNG = 'png'
-  GIF = 'gif'
-  MP4 = 'mp4'
 
 
 # gmpy2.mpq constants
