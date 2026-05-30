@@ -663,15 +663,22 @@ class ComputationParameters(SerializingFractalObject):
 
   @property
   def data_sz_bytes(self) -> int:
-    """Get the size of the image.Image data in bytes, based on computation parameters.
+    """Estimate the size in bytes of one image.Image object after computation.
 
-    We know the sz=w*h, stored in an array of uint64, so sz * N_BYTES_UINT;
-    We know image.Image stores 2 histograms and one stats, and we can ESTIMATE that size.
-    This is important to know, for example for an animation, how much memory is needed
-    to hold all image.Image for all frames in memory at the same time.
+    A rendered Image holds three main data structures whose sizes are estimated:
+
+    1. Escape array (exact): width * height uint64 values at N_BYTES_UINT bytes each.
+    2. Two Histogram objects (ext_hist, int_hist), each with a linear histogram
+       (at most depth + SMOOTH_EXTRA_ITERS distinct entries) and a bucket histogram
+       (at most n_lin * 2048 entries); ~944 bytes per entry across 4 structures.
+    3. One FractalStats object: 2 Python ints + 8 gmpy2.mpfr fields; mpfr at p bits
+       costs 56 B (struct overhead) + ceil(p/64) * 8 B (mantissa limbs).
+
+    This estimate underpins animation memory planning -- for example, how much RAM is
+    needed to hold all frames of a ZoomParameters animation simultaneously.
 
     Returns:
-      int: The size of the image data in bytes, after computed.
+      int: Estimated bytes occupied by a single rendered Image in memory.
 
     """
     n_px: int = self.width * self.height
@@ -699,16 +706,26 @@ class ComputationParameters(SerializingFractalObject):
 
   @property
   def comp_memory_sz_bytes(self) -> int:
-    """Get the size of the image.Image data plus all that is needed-in memory during computation.
+    """Estimate the peak RAM in bytes needed to render a single frame.
 
-    We have self.data_sz_bytes, and that is the memory for the final image;
-    But during computation we also have FOR EVERY THREAD one whole image.Image plus many gmpy2.mpfr
-    that can grow depending on the self.depth. So, looking at the algorithm, we can ESTIMATE the
-    memory needed for the whole computation, which is important for informing the user and
-    taking decisions.
+    Rendering one frame involves the finished Image (data_sz_bytes) plus up to
+    fractal.MAX_CONCURRENCE (= 16) parallel processes running simultaneously, each
+    holding:
+
+    - One full Image in RAM (escape array + histograms + stats = data_sz_bytes).
+    - ~25 scalar gmpy2.mpfr working variables (zx, zy, magnitude, angle, stats-tracking
+      bounds, normalization temporaries, etc.).
+    - One gmpy2.mpfr per image column (the xs pre-computation array, width values).
+
+    mpfr memory scales with self.precision: 56 B struct overhead +
+    ceil(precision/64) * 8 B mantissa limbs.  self.precision already includes the
+    guard bits required for numerical accuracy at this zoom depth.
+
+    Formula:
+      max_concurrence * (data_sz_bytes + (width + 25) * mpfr_sz)
 
     Returns:
-      int: The size of the image data in bytes, after computed.
+      int: Estimated peak bytes in RAM during a single-frame render.
 
     """
     # max parallel rendering processes = fractal.MAX_CONCURRENCE = 16; written as literal
@@ -731,14 +748,24 @@ class ComputationParameters(SerializingFractalObject):
     return max_concurrence * (per_proc_image_sz + per_proc_mpfr_sz)
 
   def png_sz_bytes(self) -> tuple[int, int]:
-    """Estimate the size of the PNG/JPG file in bytes, based on the image data.
+    """Estimate the on-disk size of the PNG and JPG output files in bytes.
 
-    We know how many pixels and we know how they'll be stored in the PNG/JPG format. ESTIMATE.
-    This is important to know, for example for an animation, how much disk space will be needed
-    to hold all PNG/JPG files for all frames.
+    Both estimates include a metadata block for all frame/computation/render parameters
+    stored as tEXt chunks (PNG) or an EXIF comment (JPG).  The dominant variable cost
+    is the 8 mpq coordinate strings, each stored as "p/q" with ~precision * log10(2)
+    decimal digits per integer:
+      meta_sz = 5000 + 8 * 2 * (precision * 3 // 10 + 1)  bytes
+
+    Pixel compression empirical estimates (calibrated: 2100x2100 fractal -> PNG=4.2 MB,
+    JPG=1.7 MB at quality 95):
+      PNG  (zlib/deflate, 3-byte RGB): ~1.0 byte/pixel  -- deflate handles smooth
+           gradient regions efficiently; fractal boundaries limit the overall ratio.
+      JPG  (JPEG quality 95):         ~0.4 bytes/pixel  -- DCT compresses the dominant
+           smooth exterior very well; the sharp fractal boundary is a small fraction of
+           total pixels, so JPEG is typically smaller than PNG for fractal images.
 
     Returns:
-      tuple[int, int]: The estimated size of the (PNG, JPG) file in bytes, respectively.
+      tuple[int, int]: Estimated file sizes as (png_bytes, jpg_bytes).
 
     """
     n_px: int = self.width * self.height
@@ -756,12 +783,12 @@ class ComputationParameters(SerializingFractalObject):
     # the actual compression ratio varies widely by zoom depth and frame content
     png_sz: int = n_px + meta_sz  # ~1 byte/pixel + metadata
     # JPEG at JPEG_QUALITY=95 (image.JPEG_QUALITY, written as literal to avoid circular import)
-    # for fractal images: unlike natural photos, fractals have high-frequency content at sharp
-    # set boundaries that DCT blocks compress poorly even at high quality settings; smooth
-    # gradient exteriors compress well, but the mix results in ~2 bytes/pixel on average;
-    # this makes JPEG typically LARGER than PNG for fractals because PNG's lossless filter
-    # rows handle the smooth gradients very efficiently
-    jpg_sz: int = n_px * 2 + meta_sz  # ~2 bytes/pixel at quality 95 + metadata
+    # for fractal images: the large smooth gradient exterior regions compress very well with
+    # DCT (they dominate most of the image area), more than offsetting the poorly-compressible
+    # fractal boundary pixels; empirically 2100x2100 fractal JPG at quality 95 is ~1.7 MB vs
+    # ~4.2 MB for the same frame as PNG, i.e. ~0.4 bytes/pixel vs ~1 byte/pixel for PNG;
+    # so JPEG is typically SMALLER than PNG for fractal images, not larger
+    jpg_sz: int = n_px * 2 // 5 + meta_sz  # ~0.4 bytes/pixel at quality 95 + metadata
     return (png_sz, jpg_sz)
 
   @property
