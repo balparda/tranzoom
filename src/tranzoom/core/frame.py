@@ -38,6 +38,12 @@ SET_INTERIOR_RESOLUTION: int = 100_000_000  # interior points max val [0..SET_IN
 MAX_ITER: int = BIT_31 - 1  # ± 2_147_483_647, max for signed array('i'), sint32
 SMOOTH_EXTRA_ITERS: int = 5  # iterations AFTER |z| > 2 to compute: eliminates color banding errors
 
+# file/memory size thresholds for warnings about large files or memory usage
+THRESHOLD_LARGE_PNG_BYTES: int = 50 * 1024 * 1024  # warn if single-frame PNG/JPG exceeds 50 MB
+THRESHOLD_LARGE_FRAME_MEMORY_BYTES: int = 20 * 1024 * 1024 * 1024  # warn if render RAM > 20 GB
+THRESHOLD_LARGE_ANIMATION_BYTES: int = 2 * 1024 * 1024 * 1024  # warn if video file estimate > 2 GB
+THRESHOLD_LARGE_ZOOM_MEMORY_BYTES: int = 32 * 1024 * 1024 * 1024  # warn if zoom render RAM > 32 GB
+
 # gmpy2.mpfr constants
 _MPFR_MIN_PRECISION: int = 140  # about 42 decimal digits
 _MPFR_BIG_PRECISION: int = 30_000  # ±10k decimal digits
@@ -663,7 +669,7 @@ class ComputationParameters(SerializingFractalObject):
 
   @property
   def data_sz_bytes(self) -> int:
-    """Estimate the size in bytes of one image.Image object after computation.
+    """Estimate the size in bytes of one image.Image object after computation. Wildly pessimistic.
 
     A rendered Image holds three main data structures whose sizes are estimated:
 
@@ -676,6 +682,8 @@ class ComputationParameters(SerializingFractalObject):
 
     This estimate underpins animation memory planning -- for example, how much RAM is
     needed to hold all frames of a ZoomParameters animation simultaneously.
+    In the end this estimate is only going to be reality on super-zooms, where the
+    histograms will grow truly large.
 
     Returns:
       int: Estimated bytes occupied by a single rendered Image in memory.

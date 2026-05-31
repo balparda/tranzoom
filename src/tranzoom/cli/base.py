@@ -1022,6 +1022,20 @@ def ProduceFractalImage(
   render: image.RenderParameters
   out: image.ImageOutputConfig
   render, out = MakeRenderParameters(params, config)
+  # warn if size estimates are large, before starting expensive computation
+  png_sz: int
+  jpg_sz: int
+  png_sz, jpg_sz = params.png_sz_bytes()
+  if max(png_sz, jpg_sz) > frame.THRESHOLD_LARGE_PNG_BYTES:
+    config.console.print(
+      f'[red]Warning: large on-disk size estimate: '
+      f'PNG ~{human.HumanizedBytes(png_sz)}, JPG ~{human.HumanizedBytes(jpg_sz)}[/]\n'
+    )
+  frame_mem: int = params.comp_memory_sz_bytes
+  if frame_mem > frame.THRESHOLD_LARGE_FRAME_MEMORY_BYTES:
+    config.console.print(
+      f'[red]Warning: large render memory estimate: ~{human.HumanizedBytes(frame_mem)}[/]\n'
+    )
   # compute the image via the unified core primitive
   img: image.Image | None
   raw_png: bytes

@@ -28,6 +28,7 @@ from tranzoom.cli import base
 from tranzoom.core import ai, frame, frdb, image
 
 _MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the fractal score
+_N_FRAMES_PER_DB_SAVE: int = 8  # how many frames to compute before saving to DB
 
 # gmpy2.mpq constants
 _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
@@ -260,7 +261,9 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       f'got {duration=}, {frames=} and {fps=}'
     )
   # TODO: split this monster method
+  # TODO: streaming option with DB so we don't have all images in memory at once
   # build parameters
+  n_frames_actually_computed: int = 0
   frm: frame.Frame = base.MakeFrameFromConfig(config, center_re, center_im, f_width, f_height)
   params: frame.ComputationParameters = base.MakeComputationParameters(frm, config)
   render: image.RenderParameters
@@ -294,6 +297,19 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step. '
       'The resulting animation may look jumpy! Please consider increasing the number of frames '
       'or reducing the total magnification.[/]\n'
+    )
+  gif_sz: int
+  mp4_sz: int
+  gif_sz, mp4_sz = zoom_params.animation_sz_bytes()
+  if max(gif_sz, mp4_sz) > frame.THRESHOLD_LARGE_ANIMATION_BYTES:
+    config.console.print(
+      f'[red]Warning: large animation file estimate: '
+      f'GIF ~{human.HumanizedBytes(gif_sz)}, MP4 ~{human.HumanizedBytes(mp4_sz)}[/]\n'
+    )
+  zoom_mem: int = zoom_params.comp_memory_sz_bytes
+  if zoom_mem > frame.THRESHOLD_LARGE_ZOOM_MEMORY_BYTES:
+    config.console.print(
+      f'[red]Warning: large zoom render memory estimate: ~{human.HumanizedBytes(zoom_mem)}[/]\n'
     )
   # create path callback missing only the hash
   full_path: abc.Callable[[str], pathlib.Path] = lambda h: image.MakeImagePath(
@@ -356,9 +372,14 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           print_comm=config.console.print,
           force=config.img_force_redo,
         )
+        n_frames_actually_computed += 1
         # save
-        config.console.print()
         all_marker_imgs[idx] = img  # keep Image object for ZoomColorNorm construction below
+        # DB checkpoint
+        if n_frames_actually_computed and not n_frames_actually_computed % _N_FRAMES_PER_DB_SAVE:
+          config.console.print('[white](DB checkpoint)[/]')
+          db.Save()  # commit to disk every N computations
+        config.console.print()
     # build ZoomColorNorm from the marker images: anchors color normalization so the same
     # escape-iteration value maps to a consistent palette position across the whole animation,
     # eliminating wild per-frame palette shifts (one color anchor per MAGNITUDE_PER_FRAME_MARKER
@@ -384,9 +405,14 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           print_comm=config.console.print,
           force=config.img_force_redo,
         )
+        n_frames_actually_computed += 1
         # save
-        config.console.print()
         all_img_obj[i] = img
+        # DB checkpoint
+        if n_frames_actually_computed and not n_frames_actually_computed % _N_FRAMES_PER_DB_SAVE:
+          config.console.print('[white](DB checkpoint)[/]')
+          db.Save()  # commit to disk every N computations
+        config.console.print()
     # update the main dict with the marker frames: this way we have all frames in one dict
     all_img_obj.update(all_marker_imgs)
     del all_marker_imgs  # free memory
