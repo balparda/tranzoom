@@ -11,7 +11,6 @@ from __future__ import annotations
 import dataclasses
 import logging
 import math
-import os
 from collections import abc
 from concurrent import futures
 from typing import NoReturn, cast
@@ -24,12 +23,6 @@ from tranzoom.core import frame, image
 # automated search for iter
 
 _ITER_SAFETY_FACTOR: float = 1.5  # we multiply the estimated iter by this to be safe
-
-# multiprocessing
-
-AVAILABLE_CPU: int = int(getattr(os, 'process_cpu_count', os.cpu_count)() or 1)
-_MAX_PRE_PROCESS_CONCURRENCE: int = 4  # for the preprocess step, we limit the concurrency
-MAX_CONCURRENCE: int = 16  # for the main rendering step, we limit the concurrency
 
 # gmpy2.mpfr constants
 _MPFR_ZERO: gmpy2.mpfr = gmpy2.mpfr('0')
@@ -75,9 +68,11 @@ def ComputeFractal(
   is_preprocess: bool = (
     params.width == frame.MIN_IMAGE_SIZE and params.height == frame.MIN_IMAGE_SIZE
   )
-  n_processes = n_processes or AVAILABLE_CPU
-  n_processes = min(n_processes, _MAX_PRE_PROCESS_CONCURRENCE) if is_preprocess else n_processes
-  n_processes = min(n_processes, MAX_CONCURRENCE, AVAILABLE_CPU)  # never exceed CPU!
+  n_processes = n_processes or frame.AVAILABLE_CPU
+  n_processes = (
+    min(n_processes, frame.MAX_PRE_PROCESS_CONCURRENCE) if is_preprocess else n_processes
+  )
+  n_processes = min(n_processes, frame.MAX_CONCURRENCE, frame.AVAILABLE_CPU)  # never exceed CPU!
   # if max_iter is MIN_ITER, we do an adaptive iteration limit calculation based on a small image;
   # BEWARE: the method call will call ComputeFractal() recursively, so skip MIN_IMAGE_SIZE
   stats: image.FractalStats | None = None

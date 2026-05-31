@@ -146,6 +146,7 @@
     "ftyp",
     "furo",
     "gencommand",
+    "getsizeof",
     "gmpy",
     "gmtime",
     "gprof",

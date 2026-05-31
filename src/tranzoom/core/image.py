@@ -651,17 +651,21 @@ class ZoomParameters(frame.SerializingFractalObject):
   def data_sz_bytes(self) -> int:
     """Estimate the total RAM in bytes needed to hold all animation frames simultaneously.
 
-    All n_frames Image objects share the same escape_sz and hist_sz (width, height, and
-    depth are constant), so those components scale linearly.  Only the FractalStats
-    component grows with precision, which increases by ~ceil(mag * log2(10)) bits from
-    the initial to the final frame as the zoom deepens.
+    All n_frames Image objects are held with histograms (needed for FrameColorNorm during
+    animation rendering), sharing the same escape_sz and hist_sz (width, height, and depth
+    are constant), so those components scale linearly.  Only the FractalStats component
+    grows with precision, which increases by ~ceil(mag * log2(10)) bits from the initial
+    to the final frame as the zoom deepens.
 
     To avoid underestimating, the stats component uses the average precision over the
     animation, linearly interpolated between precision_initial and precision_final:
       stats_sz_delta = 8 * (mpfr_sz_avg - mpfr_sz_initial)  extra bytes per frame
 
+    Uses img.mem_sz_bytes (with histograms) because frames need histograms for coloring.
+    For the per-frame on-disk size (no histograms), see img.disk_sz_bytes.
+
     Formula:
-      n_frames * img.data_sz_bytes  +  n_frames * stats_sz_delta
+      n_frames * img.mem_sz_bytes  +  n_frames * stats_sz_delta
 
     Returns:
       int: Estimated bytes to hold all n_frames Image objects simultaneously in RAM.
@@ -682,24 +686,25 @@ class ZoomParameters(frame.SerializingFractalObject):
     mpfr_sz_initial: int = 56 + ((precision_initial + 63) // 64) * 8
     mpfr_sz_avg: int = 56 + ((precision_avg + 63) // 64) * 8
     stats_sz_delta: int = 8 * (mpfr_sz_avg - mpfr_sz_initial)  # per-frame gain vs initial
-    return self.n_frames * self.img.data_sz_bytes + self.n_frames * stats_sz_delta
+    return self.n_frames * self.img.mem_sz_bytes + self.n_frames * stats_sz_delta
 
   @property
   def comp_memory_sz_bytes(self) -> int:
     """Estimate the peak RAM in bytes needed to render the full zoom animation.
 
-    Combines all-frames-in-memory storage (data_sz_bytes) with the parallel render
-    overhead at the deepest (highest-precision) frame -- the worst case for mpfr object
-    sizes.  Peak precision is max(precision_initial, precision_final), accounting for
-    both forward and reverse zooms.
+    Combines all-frames-in-memory storage (data_sz_bytes, with histograms) with the
+    parallel render overhead at the deepest (highest-precision) frame -- the worst case
+    for mpfr object sizes.  Peak precision is max(precision_initial, precision_final),
+    accounting for both forward and reverse zooms.
 
-    Each of the up to 16 parallel processes (fractal.MAX_CONCURRENCE) holds at peak:
-    - One full Image (img.data_sz_bytes at the single-frame level).
+    Each of the up to 16 parallel processes (frame.MAX_CONCURRENCE) holds at peak
+    during computation (no histograms yet -- histograms are rebuilt after computation):
+    - One Image per process (escape array + stats = img.disk_sz_bytes).
     - ~25 scalar gmpy2.mpfr working variables.
     - One gmpy2.mpfr per image column (the xs pre-computation array).
 
     Formula:
-      data_sz_bytes  +  max_concurrence * (img.data_sz_bytes + (width + 25) * mpfr_sz_peak)
+      data_sz_bytes  +  max_concurrence * (img.disk_sz_bytes + (width + 25) * mpfr_sz_peak)
 
     Returns:
       int: Estimated peak bytes in RAM at the most memory-intensive point of the render.
@@ -713,15 +718,17 @@ class ZoomParameters(frame.SerializingFractalObject):
     precision_final: int = max(140, min(precision_initial + precision_delta, 300_000))
     precision_peak: int = max(precision_initial, precision_final)  # worst case: deepest init./final
     # peak computation occurs at the deepest (highest-precision) frame; each of the
-    # max_concurrence parallel processes holds one Image in RAM + mpfr working scalars;
+    # max_concurrence parallel processes holds one Image with escape array + stats but NO
+    # histograms (histograms are rebuilt after parallel computation completes) = disk_sz_bytes;
     # mpfr field at p bits: 56B struct overhead + ceil(p/64)*8B mantissa limbs;
     # n_working_mpfr ~25 scalar vars + one column pre-computation (width mpfr values)
     n_working_mpfr: int = 25  # same as in frame.ComputationParameters.comp_memory_sz_bytes
     mpfr_sz_peak: int = 56 + ((precision_peak + 63) // 64) * 8
     per_proc_mpfr_sz_peak: int = (self.img.width + n_working_mpfr) * mpfr_sz_peak
-    max_concurrence: int = 16  # fractal.MAX_CONCURRENCE
-    # peak = all frames in RAM + single-frame computation cost at deepest (peak) precision
-    return self.data_sz_bytes + max_concurrence * (self.img.data_sz_bytes + per_proc_mpfr_sz_peak)
+    # peak = all frames in RAM (with histograms) + single-frame computation cost (no histograms)
+    return self.data_sz_bytes + frame.MAX_CONCURRENCE * (
+      self.img.disk_sz_bytes + per_proc_mpfr_sz_peak
+    )
 
   def animation_sz_bytes(self) -> tuple[int, int]:
     """Estimate the on-disk size in bytes of the output GIF and MP4 animation files.
@@ -877,7 +884,7 @@ class ZoomParameters(frame.SerializingFractalObject):
         # (ex: 5) float accumulation in mag_log10 + (i+1) * mag_step can produce 4.9999999999999982
         # instead, causing math.ceil to return 4 rather than 5, making max_denominator 10x too
         # small, so 1e-9 before ceil means "within a billionth of an integer rounds up to it"
-        max_denominator = 100 * (10 ** math.ceil(cur_mag_log10 + 1e-9))
+        max_denominator = 1000 * (10 ** math.ceil(cur_mag_log10 + 1e-9))
         dx, dy = frm.size  # cache once: used for limit_denominator below and error check below
         reduced_frm = frame.Frame.FromCenter(
           frm.fractal,
@@ -1110,6 +1117,19 @@ class Image:
 
       """
       return dict(self.bucket_cumulative)
+
+    @property
+    def self_sz(self) -> int:
+      """Get the size of the object in bytes, including nested objects.
+
+      Not guaranteed to be exact, but should be a good estimate for our purposes.
+      Not a super cheap call, don't overuse it.
+
+      Returns:
+        int: The size of the object in bytes.
+
+      """
+      return frame.DeepSize(self)
 
     def BucketCumulativeBefore(self, key: int) -> float:
       """Get the cumulative count before the given key, using binary search.
@@ -1374,6 +1394,19 @@ class Image:
 
     """
     return self._params
+
+  @property
+  def self_sz(self) -> int:
+    """Get the size of the object in bytes, including nested objects.
+
+    Not guaranteed to be exact, but should be a good estimate for our purposes.
+    Not a super cheap call, don't overuse it.
+
+    Returns:
+      int: The size of the object in bytes.
+
+    """
+    return frame.DeepSize(self)
 
   def RebuildHistograms(self) -> None:
     """Rebuild the histograms for the image based on the current escape data.

@@ -20,7 +20,7 @@ from transcrypto.utils import base as tbase
 from transcrypto.utils import human, timer
 
 from tranzoom import __version__
-from tranzoom.core import ai, fractal, frame, frdb, image, palette
+from tranzoom.core import ai, frame, frdb, image, palette
 
 
 class Error(ai.Error, click.ClickException):
@@ -434,10 +434,10 @@ MAX_THREADS_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '--threads',
   min=1,
-  max=fractal.MAX_CONCURRENCE,
+  max=frame.MAX_CONCURRENCE,
   help=(
     'Number of threads to use for rendering; default is None, which means to use all available '
-    f'CPU cores; will be limited to {fractal.MAX_CONCURRENCE} threads'
+    f'CPU cores; will be limited to {frame.MAX_CONCURRENCE} threads'
   ),
 )
 MAX_STEPS_OPTION: typer.models.OptionInfo = typer.Option(
