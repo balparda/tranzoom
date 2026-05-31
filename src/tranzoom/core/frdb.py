@@ -500,15 +500,23 @@ class FractalDatabase:
     if self._read_only or not self._use_db:
       logging.warning(f'Read-only mode or use_db is False: will *NOT* save {params} to "{path}"')
       return (timer.Now(), None)
-    # we will actually save
-    self._config.Serialize(
-      img,
-      config_name=path,
-      encryption_key=self._key,
-      compress=_IMG_DATA_COMPRESS_LEVEL,
-      silent=True,
-    )
-    logging.info(f'Saved image data {params} to "{path}"')
+    # we don't want to save histograms!
+    ext_hist: image.Image.Histogram | None = img.ext_hist
+    int_hist: image.Image.Histogram | None = img.int_hist
+    try:
+      img.ext_hist, img.int_hist = None, None
+      # we will actually save
+      self._config.Serialize(
+        img,
+        config_name=path,
+        encryption_key=self._key,
+        compress=_IMG_DATA_COMPRESS_LEVEL,
+        silent=True,
+      )
+      logging.info(f'Saved image data {params} to "{path}"')
+    finally:
+      # restore histograms in case the caller needs them after saving
+      img.ext_hist, img.int_hist = ext_hist, int_hist
     return (timer.Now(), path)
 
   def LoadImageData(self, path: str) -> image.Image | None:
@@ -525,7 +533,11 @@ class FractalDatabase:
     if not self._use_db:
       logging.debug('use_db is False: skipping loading image computation')
       return None
-    return self._config.DeSerialize(config_name=path, decryption_key=self._key, silent=True)
+    img: image.Image = self._config.DeSerialize(
+      config_name=path, decryption_key=self._key, silent=True
+    )
+    img.RebuildHistograms()  # histograms are not saved, so we need to rebuild them after loading
+    return img
 
   def FindComputation(
     self, params: frame.ComputationParameters

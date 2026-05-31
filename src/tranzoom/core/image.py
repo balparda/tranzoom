@@ -1027,16 +1027,18 @@ class Image:
       bucket_max (int): The maximum smoothed bucket key in this histogram.
       min_nu (float): The minimum fractional escape part (nu) seen across all pixels.
       max_nu (float): The maximum fractional escape part (nu) seen across all pixels.
+      d_cumulative (dict[int, int]): {value: cumulative_count} for O(1) lookup.
+      d_bucket_linear (dict[int, int]): {bucket_key: count} for O(1) lookup.
+      bucket_cumulative (list[tuple[int, int]]): Sorted list of (bucket_key, cumulative_count)
+          pairs; the smoothed cumulative bucket histogram.
+
+    Properties (computed on-the-fly):
       linear (list[tuple[int, int]]): Sorted list of (value, count) pairs; the raw histogram.
       d_linear (dict[int, int]): {value: count} for O(1) lookup in the raw histogram.
       cumulative (list[tuple[int, int]]): Sorted list of (value, cumulative_count) pairs;
           the cumulative raw histogram.
-      d_cumulative (dict[int, int]): {value: cumulative_count} for O(1) lookup.
       bucket_linear (list[tuple[int, int]]): Sorted list of (bucket_key, count) pairs;
           the smoothed bucket histogram.
-      d_bucket_linear (dict[int, int]): {bucket_key: count} for O(1) lookup.
-      bucket_cumulative (list[tuple[int, int]]): Sorted list of (bucket_key, cumulative_count)
-          pairs; the smoothed cumulative bucket histogram.
       d_bucket_cumulative (dict[int, int]): {bucket_key: cumulative_count} for O(1) lookup.
 
     """
@@ -1048,14 +1050,66 @@ class Image:
     bucket_max: int
     min_nu: float
     max_nu: float
-    linear: list[tuple[int, int]]  # sorted!
-    d_linear: dict[int, int]  # {value: count}, for O(1) lookups
-    cumulative: list[tuple[int, int]]  # sorted!
     d_cumulative: dict[int, int]  # {value: cumulative_count}, for O(1) lookups
-    bucket_linear: list[tuple[int, int]]  # sorted!
-    d_bucket_linear: dict[int, int]  # {value: count}, for O(1) lookups
+    d_bucket_linear: dict[int, int]  # {bucket_key: count}, for O(1) lookups
     bucket_cumulative: list[tuple[int, int]]  # sorted!
-    d_bucket_cumulative: dict[int, int]  # {value: cumulative_count}, for O(1) lookups
+
+    @property
+    def linear(self) -> list[tuple[int, int]]:
+      """Sorted list of (value, count) pairs; the raw histogram. Computed on-the-fly.
+
+      Returns:
+        list[tuple[int, int]]: A sorted list of (value, count) pairs representing the raw histogram.
+
+      """
+      result: list[tuple[int, int]] = []
+      prev: int = 0
+      for k, v in sorted(self.d_cumulative.items()):
+        result.append((k, v - prev))
+        prev = v
+      return result
+
+    @property
+    def d_linear(self) -> dict[int, int]:
+      """{value: count} for O(1) lookup in the raw histogram. Computed on-the-fly.
+
+      Returns:
+        dict[int, int]: A dictionary mapping escape values to their counts in the raw histogram.
+
+      """
+      return dict(self.linear)
+
+    @property
+    def cumulative(self) -> list[tuple[int, int]]:
+      """Sorted list of (value, cumulative_count) pairs. Computed on-the-fly.
+
+      Returns:
+        list[tuple[int, int]]: A sorted list of (value, cumulative_count) pairs representing
+            the cumulative raw histogram.
+
+      """
+      return sorted(self.d_cumulative.items())
+
+    @property
+    def bucket_linear(self) -> list[tuple[int, int]]:
+      """Sorted list of (bucket_key, count) pairs; the smoothed bucket histogram.
+
+      Returns:
+        list[tuple[int, int]]: A sorted list of (bucket_key, count) pairs representing
+            the smoothed bucket histogram.
+
+      """
+      return sorted(self.d_bucket_linear.items())
+
+    @property
+    def d_bucket_cumulative(self) -> dict[int, int]:
+      """{bucket_key: cumulative_count} for O(1) lookup. Computed on-the-fly.
+
+      Returns:
+        dict[int, int]: A dictionary mapping bucket keys to cumulative counts.
+
+      """
+      return dict(self.bucket_cumulative)
 
     def BucketCumulativeBefore(self, key: int) -> float:
       """Get the cumulative count before the given key, using binary search.
@@ -2164,14 +2218,9 @@ def _BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram
       bucket_max=0,
       min_nu=0.0,
       max_nu=0.0,
-      linear=[],
-      cumulative=[],
-      d_linear={},
       d_cumulative={},
-      bucket_linear=[],
-      bucket_cumulative=[],
       d_bucket_linear={},
-      d_bucket_cumulative={},
+      bucket_cumulative=[],
     )
   # build the cumulative histogram by iterating over the sorted keys of the raw histogram
   cum: int = 0
@@ -2196,14 +2245,9 @@ def _BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram
     bucket_max=max(bucket_histogram),
     min_nu=min_nu,
     max_nu=max_nu,
-    linear=s_histogram,
-    cumulative=s_cum,
-    d_linear=histogram,
     d_cumulative=dict(s_cum),
-    bucket_linear=s_bucket_histogram,
-    bucket_cumulative=s_bucket_cum,
     d_bucket_linear=bucket_histogram,
-    d_bucket_cumulative=dict(s_bucket_cum),
+    bucket_cumulative=s_bucket_cum,
   )
 
 
