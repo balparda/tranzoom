@@ -498,7 +498,7 @@ class FractalDatabase:
     path: str = f'img_{params.sha}.Data'
     # trivial case first
     if self._read_only or not self._use_db:
-      logging.warning(f'Read-only mode or use_db is False: will *NOT* save {params} to "{path}"')
+      logging.warning(f'Read-only mode or use_db is False: will *NOT* save {params} to {path!r}')
       return (timer.Now(), None)
     # we don't want to save histograms!
     ext_hist: image.Image.Histogram | None = img.ext_hist
@@ -513,7 +513,7 @@ class FractalDatabase:
         compress=_IMG_DATA_COMPRESS_LEVEL,
         silent=True,
       )
-      logging.info(f'Saved image data {params} to "{path}"')
+      logging.info(f'Saved image data {params} to {path!r}, {human.HumanizedBytes(img.self_sz)}')
     finally:
       # restore histograms in case the caller needs them after saving
       img.ext_hist, img.int_hist = ext_hist, int_hist
@@ -989,7 +989,8 @@ class FractalDatabase:
     # done: log and return
     print_comm(
       f'[yellow]Compute:[/] [green]{params.frm.fractal.value.capitalize()}: DONE,[/] '
-      f'with precision {params.precision} bits, in {str(tmr) if tmr else "-"}'
+      f'with precision {params.precision} bits, {human.HumanizedBytes(img.self_sz)}, '
+      f'in {str(tmr) if tmr else "-"}'
     )
     return (params, img)
 
