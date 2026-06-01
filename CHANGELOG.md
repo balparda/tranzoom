@@ -38,14 +38,14 @@ This project follows a pragmatic versioning approach:
 
 ## 1.6.2 - 2026-06-01
 
-- Added
-  - TBD
-
 - Changed
-  - TBD
+  - **`MIN_IMAGE_SIZE` raised from 16 to 24** (`frame.py`): the minimum image size (also used as the probe image size for adaptive depth estimation) was raised from 16 to 24; this gives a 576-pixel sample (vs. the previous 256) for a more reliable histogram during the auto-depth pre-pass, and tightens the minimum accepted image dimension in the CLI from 16 to 24 pixels.
+  - **Zoom summary includes marker count and percentage** (`zoomcommand.py`): the zoom start log line now shows the number of marker frames and their share of total frames, e.g. `with 40 frames (2 markers, 5.00%)` instead of just `with 40 frames`.
+  - **`SEAHORSE_ANIMATED_HASH` and `SUZANA_WAVE_HASH`** (`base.py`): updated to reflect the changed render output produced by the improved adaptive depth probe.
 
 - Fixed
-  - TBD
+  - **Adaptive depth probe: outlier trimming** (`fractal.py`): the auto-depth probe now skips the top `_ITER_OUTLIER_SKIP = 3` extreme-outlier pixels from the histogram tail when estimating the max escape iteration; this prevents a small number of isolated deep-escape pixels from artificially inflating the depth estimate and over-extending render time.
+  - **Memory warning suppressed in streaming mode** (`zoomcommand.py`): the "large zoom render memory" warning is no longer emitted when `--stream` is active, because streaming processes frames one at a time and does not hold the full zoom frame set in memory.
 
 ## 1.6.1 - 2026-06-01
 

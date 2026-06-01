@@ -257,7 +257,7 @@ The format is `{[Frame] : [width, height, depth] : set_algorithm}` where:
 - `depth` is either `AUTO` (meaning the engine will probe for an optimal iteration limit) or an explicit integer from `-i/--iter`
 - `set_algorithm` is the interior Set coloring algorithm name (lowercase), only shown when `--set` is given
 
-The `depth=AUTO` sentinel value (`MIN_ITER = 1000`) triggers an adaptive probe: a tiny `24×24` test image is rendered at each candidate depth in `[100k, 1M, 10M]` and the smallest depth where the escape histogram is not saturated is chosen and multiplied by a safety factor. The resolved depth replaces the `AUTO` sentinel before the full render begins, and `ComputationParameters.precision` (and `.context`) always see the final resolved depth.
+The `depth=AUTO` sentinel value (`MIN_ITER = 1000`) triggers an adaptive probe: a tiny `24×24` test image is rendered at each candidate depth in `[100k, 1M, 10M]` and the smallest depth where the escape histogram is not saturated is chosen, trimming up to 3 extreme-outlier pixels from the histogram tail to avoid isolated deep-escape values inflating the estimate, then multiplied by a 1.5× safety factor. The resolved depth replaces the `AUTO` sentinel before the full render begins, and `ComputationParameters.precision` (and `.context`) always see the final resolved depth.
 
 #### Precision
 
@@ -493,7 +493,7 @@ The command:
 
 1. Constructs a `Frame` from the given coordinates using `gmpy2.mpq` exact arithmetic
 2. Calculates the required `mpfr` precision automatically based on zoom depth
-3. When `--iter` is not given, runs an adaptive pre-pass on a tiny 24×24 render to estimate the optimal `max_iter` for the frame (with a 1.5× safety margin); otherwise uses the value supplied
+3. When `--iter` is not given, runs an adaptive pre-pass on a tiny 24×24 render to estimate the optimal `max_iter` for the frame — trimming up to 3 extreme-outlier pixels from the histogram tail before applying a 1.5× safety margin — otherwise uses the value supplied
 4. Renders all pixels in parallel using `ProcessPoolExecutor` (one process per available CPU core, up to 12), each writing an interleaved subset of rows; results are merged into the final image
 5. Each process uses the escape-time algorithm with cardioid/period-2 bulb interior shortcuts and histogram-equalized color palette
 6. Saves the PNG to `<prefix>[-<YYYYMMDDhhmmss>][-<SHA256-20>].png` in the working directory (or the path given by `-o/--out`)
