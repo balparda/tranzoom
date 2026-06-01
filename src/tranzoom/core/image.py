@@ -231,7 +231,7 @@ DEFAULT_LOOP: int = 0  # 0 means infinite loop for GIFs
 THRESHOLD_JUMPY_ZOOM_PER_FRAME: float = 1.25  # if zoom per frame is above this warn about jumpiness
 MAX_TOLERATED_FRAME_MAG_ERROR: float = 0.0002  # 0.02% - max error Frame vs. reduced mpq Frame
 MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.001  # 0.1% - max total cumulative error of total zoom
-MAGNITUDE_PER_FRAME_MARKER: gmpy2.mpq = gmpy2.mpq('1')  # one marker every 10x zoom
+MAGNITUDE_PER_FRAME_MARKER: gmpy2.mpq = gmpy2.mpq('13/14')  # one marker every ~8.5x zoom
 MAX_TOLERATED_MARKER_MAG_ERROR: float = 0.15  # 15% max error for marker frames
 
 
@@ -648,6 +648,130 @@ class ZoomParameters(frame.SerializingFractalObject):
     return gmpy2.mpq(m)
 
   @property
+  def data_sz_bytes(self) -> int:
+    """Estimate the total RAM in bytes needed to hold all animation frames simultaneously.
+
+    All n_frames Image objects are held with histograms (needed for FrameColorNorm during
+    animation rendering), sharing the same escape_sz and hist_sz (width, height, and depth
+    are constant), so those components scale linearly.  Only the FractalStats component
+    grows with precision, which increases by ~ceil(mag * log2(10)) bits from the initial
+    to the final frame as the zoom deepens.
+
+    To avoid underestimating, the stats component uses the average precision over the
+    animation, linearly interpolated between precision_initial and precision_final:
+      stats_sz_delta = 8 * (mpfr_sz_avg - mpfr_sz_initial)  extra bytes per frame
+
+    Uses img.mem_sz_bytes (with histograms) because frames need histograms for coloring.
+    For the per-frame on-disk size (no histograms), see img.disk_sz_bytes.
+
+    Formula:
+      n_frames * img.mem_sz_bytes  +  n_frames * stats_sz_delta
+
+    Returns:
+      int: Estimated bytes to hold all n_frames Image objects simultaneously in RAM.
+
+    """
+    # all frames share the same escape_sz and hist_sz (same width/height/depth every frame);
+    # only the FractalStats size (stats_sz) depends on precision, which grows as the zoom
+    # deepens: precision grows ~ceil(mag * log2(10)) bits from initial to final frame;
+    # the stats_sz contribution is tiny vs escape+hist but we properly interpolate
+    # using the average precision over the animation
+    precision_initial: int = self.img.precision
+    # log2(10) ~= 3.32193; ceil(mag * log2(10)) gives extra bits needed for final frame
+    precision_delta: int = math.ceil(float(self.mag) * math.log2(10))
+    # clamp to valid range: 140 = _MPFR_MIN_PRECISION, 300_000 = _MPFR_MAX_PRECISION
+    precision_final: int = max(140, min(precision_initial + precision_delta, 300_000))
+    precision_avg: int = (precision_initial + precision_final) // 2
+    # stats_sz = 2*28B (Python ints) + 8 gmpy2.mpfr fields; mpfr at p bits: 56B + ceil(p/64)*8B
+    mpfr_sz_initial: int = 56 + ((precision_initial + 63) // 64) * 8
+    mpfr_sz_avg: int = 56 + ((precision_avg + 63) // 64) * 8
+    stats_sz_delta: int = 8 * (mpfr_sz_avg - mpfr_sz_initial)  # per-frame gain vs initial
+    return self.n_frames * self.img.mem_sz_bytes + self.n_frames * stats_sz_delta
+
+  @property
+  def comp_memory_sz_bytes(self) -> int:
+    """Estimate the peak RAM in bytes needed to render the full zoom animation.
+
+    Combines all-frames-in-memory storage (data_sz_bytes, with histograms) with the
+    parallel render overhead at the deepest (highest-precision) frame -- the worst case
+    for mpfr object sizes.  Peak precision is max(precision_initial, precision_final),
+    accounting for both forward and reverse zooms.
+
+    Each of the up to 16 parallel processes (frame.MAX_CONCURRENCE) holds at peak
+    during computation (no histograms yet -- histograms are rebuilt after computation):
+    - One Image per process (escape array + stats = img.disk_sz_bytes).
+    - ~25 scalar gmpy2.mpfr working variables.
+    - One gmpy2.mpfr per image column (the xs pre-computation array).
+
+    Formula:
+      data_sz_bytes  +  max_concurrence * (img.disk_sz_bytes + (width + 25) * mpfr_sz_peak)
+
+    Returns:
+      int: Estimated peak bytes in RAM at the most memory-intensive point of the render.
+
+    """
+    # precision grows from initial to final frame as the zoom deepens (or decreases for neg mag);
+    # log2(10) ~= 3.32193; ceil(mag * log2(10)) gives extra bits needed for the final frame
+    precision_initial: int = self.img.precision
+    precision_delta: int = math.ceil(float(self.mag) * math.log2(10))
+    # clamp to valid range: 140 = _MPFR_MIN_PRECISION, 300_000 = _MPFR_MAX_PRECISION
+    precision_final: int = max(140, min(precision_initial + precision_delta, 300_000))
+    precision_peak: int = max(precision_initial, precision_final)  # worst case: deepest init./final
+    # peak computation occurs at the deepest (highest-precision) frame; each of the
+    # max_concurrence parallel processes holds one Image with escape array + stats but NO
+    # histograms (histograms are rebuilt after parallel computation completes) = disk_sz_bytes;
+    # mpfr field at p bits: 56B struct overhead + ceil(p/64)*8B mantissa limbs;
+    # n_working_mpfr ~25 scalar vars + one column pre-computation (width mpfr values)
+    n_working_mpfr: int = 25  # same as in frame.ComputationParameters.comp_memory_sz_bytes
+    mpfr_sz_peak: int = 56 + ((precision_peak + 63) // 64) * 8
+    per_proc_mpfr_sz_peak: int = (self.img.width + n_working_mpfr) * mpfr_sz_peak
+    # peak = all frames in RAM (with histograms) + single-frame computation cost (no histograms)
+    return self.data_sz_bytes + frame.MAX_CONCURRENCE * (
+      self.img.disk_sz_bytes + per_proc_mpfr_sz_peak
+    )
+
+  def animation_sz_bytes(self) -> tuple[int, int]:
+    """Estimate the on-disk size in bytes of the output GIF and MP4 animation files.
+
+    Both formats benefit enormously from the high temporal coherence of fractal zoom
+    animations -- each frame is a slightly zoomed version of the previous -- which
+    inter-frame prediction (H.264) and delta-transparency encoding (GIF) exploit well.
+
+    Empirical per-format estimates (bytes per pixel per frame):
+      GIF  (PIL optimize=True, 256-color palette, LZW):  n_frames * n_px / 8   (~8:1)
+      MP4  (H.264 CRF=16, preset=slow):                  n_frames * n_px / 20  (~20:1)
+
+    Metadata cost is ONE JSON block per output file (not per frame), written as a GIF
+    comment extension or MP4 container tag; the dominant variable cost is the initial
+    frame's 8 mpq coordinate strings (~precision_initial * log10(2) digits each):
+      meta_sz = 5000 + 8 * 2 * (precision_initial * 3 // 10 + 1)  bytes
+
+    Returns:
+      tuple[int, int]: Estimated file sizes as (gif_bytes, mp4_bytes).
+
+    """
+    n_px: int = self.img.width * self.img.height
+    # GIF: each frame stored as 256-color palette (8-bit) + LZW compression; PIL saves with
+    # optimize=True and delta-encodes unchanged pixels as transparent (disposal=1); for fractal
+    # frames the smooth gradient interiors map well to 256-color palettes and LZW achieves
+    # moderate compression; empirically ~0.125 bytes/pixel/frame on average (8:1 vs uncompressed)
+    gif_sz: int = self.n_frames * n_px // 8
+    # MP4: H.264 (libx264) at CRF=16 (high quality, ~2x the bits of CRF=23), preset=slow
+    # (WriteVideoMP4 parameters); fractal zooms have high temporal coherence (each frame is a
+    # slightly zoomed version of the previous) which H.264 inter-frame prediction exploits very
+    # well; empirically ~0.05 bytes/pixel/frame on average (20:1 vs uncompressed RGB)
+    mp4_sz: int = self.n_frames * n_px // 20
+    # metadata: ONE JSON block per file (NOT per frame) written as the GIF comment extension
+    # or the MP4 container comment tag (json.dumps(meta) in WriteAnimatedGIF/WriteVideoMP4);
+    # contains all zoom/computation/render/frame parameters; see png_sz_bytes formula;
+    # dominant variable cost: INITIAL FRAME coordinate strings (8 mpq values each stored as
+    # "p/q" with ~precision_initial * log10(2) decimal digits per numerator and denominator);
+    # 8 coords * 2 ints * (precision_initial * 3 // 10 + 1) bytes for coordinate strings
+    precision_initial: int = self.img.precision
+    meta_sz: int = 5000 + 8 * 2 * (precision_initial * 3 // 10 + 1)
+    return (gif_sz + meta_sz, mp4_sz + meta_sz)
+
+  @property
   def json(self) -> tbase.JSONDict:
     """Get a JSON-serializable dictionary representation of the ZoomParameters.
 
@@ -760,7 +884,7 @@ class ZoomParameters(frame.SerializingFractalObject):
         # (ex: 5) float accumulation in mag_log10 + (i+1) * mag_step can produce 4.9999999999999982
         # instead, causing math.ceil to return 4 rather than 5, making max_denominator 10x too
         # small, so 1e-9 before ceil means "within a billionth of an integer rounds up to it"
-        max_denominator = 100 * (10 ** math.ceil(cur_mag_log10 + 1e-9))
+        max_denominator = 10_000 * (10 ** math.ceil(cur_mag_log10 + 1e-9))
         dx, dy = frm.size  # cache once: used for limit_denominator below and error check below
         reduced_frm = frame.Frame.FromCenter(
           frm.fractal,
@@ -910,16 +1034,18 @@ class Image:
       bucket_max (int): The maximum smoothed bucket key in this histogram.
       min_nu (float): The minimum fractional escape part (nu) seen across all pixels.
       max_nu (float): The maximum fractional escape part (nu) seen across all pixels.
+      d_cumulative (dict[int, int]): {value: cumulative_count} for O(1) lookup.
+      d_bucket_linear (dict[int, int]): {bucket_key: count} for O(1) lookup.
+      bucket_cumulative (list[tuple[int, int]]): Sorted list of (bucket_key, cumulative_count)
+          pairs; the smoothed cumulative bucket histogram.
+
+    Properties (computed on-the-fly):
       linear (list[tuple[int, int]]): Sorted list of (value, count) pairs; the raw histogram.
       d_linear (dict[int, int]): {value: count} for O(1) lookup in the raw histogram.
       cumulative (list[tuple[int, int]]): Sorted list of (value, cumulative_count) pairs;
           the cumulative raw histogram.
-      d_cumulative (dict[int, int]): {value: cumulative_count} for O(1) lookup.
       bucket_linear (list[tuple[int, int]]): Sorted list of (bucket_key, count) pairs;
           the smoothed bucket histogram.
-      d_bucket_linear (dict[int, int]): {bucket_key: count} for O(1) lookup.
-      bucket_cumulative (list[tuple[int, int]]): Sorted list of (bucket_key, cumulative_count)
-          pairs; the smoothed cumulative bucket histogram.
       d_bucket_cumulative (dict[int, int]): {bucket_key: cumulative_count} for O(1) lookup.
 
     """
@@ -931,14 +1057,79 @@ class Image:
     bucket_max: int
     min_nu: float
     max_nu: float
-    linear: list[tuple[int, int]]  # sorted!
-    d_linear: dict[int, int]  # {value: count}, for O(1) lookups
-    cumulative: list[tuple[int, int]]  # sorted!
     d_cumulative: dict[int, int]  # {value: cumulative_count}, for O(1) lookups
-    bucket_linear: list[tuple[int, int]]  # sorted!
-    d_bucket_linear: dict[int, int]  # {value: count}, for O(1) lookups
+    d_bucket_linear: dict[int, int]  # {bucket_key: count}, for O(1) lookups
     bucket_cumulative: list[tuple[int, int]]  # sorted!
-    d_bucket_cumulative: dict[int, int]  # {value: cumulative_count}, for O(1) lookups
+
+    @property
+    def linear(self) -> list[tuple[int, int]]:
+      """Sorted list of (value, count) pairs; the raw histogram. Computed on-the-fly.
+
+      Returns:
+        list[tuple[int, int]]: A sorted list of (value, count) pairs representing the raw histogram.
+
+      """
+      result: list[tuple[int, int]] = []
+      prev: int = 0
+      for k, v in sorted(self.d_cumulative.items()):
+        result.append((k, v - prev))
+        prev = v
+      return result
+
+    @property
+    def d_linear(self) -> dict[int, int]:
+      """{value: count} for O(1) lookup in the raw histogram. Computed on-the-fly.
+
+      Returns:
+        dict[int, int]: A dictionary mapping escape values to their counts in the raw histogram.
+
+      """
+      return dict(self.linear)
+
+    @property
+    def cumulative(self) -> list[tuple[int, int]]:
+      """Sorted list of (value, cumulative_count) pairs. Computed on-the-fly.
+
+      Returns:
+        list[tuple[int, int]]: A sorted list of (value, cumulative_count) pairs representing
+            the cumulative raw histogram.
+
+      """
+      return sorted(self.d_cumulative.items())
+
+    @property
+    def bucket_linear(self) -> list[tuple[int, int]]:
+      """Sorted list of (bucket_key, count) pairs; the smoothed bucket histogram.
+
+      Returns:
+        list[tuple[int, int]]: A sorted list of (bucket_key, count) pairs representing
+            the smoothed bucket histogram.
+
+      """
+      return sorted(self.d_bucket_linear.items())
+
+    @property
+    def d_bucket_cumulative(self) -> dict[int, int]:
+      """{bucket_key: cumulative_count} for O(1) lookup. Computed on-the-fly.
+
+      Returns:
+        dict[int, int]: A dictionary mapping bucket keys to cumulative counts.
+
+      """
+      return dict(self.bucket_cumulative)
+
+    @property
+    def self_sz(self) -> int:
+      """Get the size of the object in bytes, including nested objects.
+
+      Not guaranteed to be exact, but should be a good estimate for our purposes.
+      Not a super cheap call, don't overuse it.
+
+      Returns:
+        int: The size of the object in bytes.
+
+      """
+      return frame.DeepSize(self)
 
     def BucketCumulativeBefore(self, key: int) -> float:
       """Get the cumulative count before the given key, using binary search.
@@ -1097,12 +1288,13 @@ class Image:
           )
 
     @staticmethod
-    def FromMarkers(marker_imgs: dict[int, Image]) -> Image.ZoomColorNorm:
-      """Build a ZoomColorNorm from a dict of {frame_idx: Image} for the marker frames.
+    def FromSortedMarkers(marker_imgs: abc.Iterable[tuple[int, Image]]) -> Image.ZoomColorNorm:
+      """Build a ZoomColorNorm from an iterable of (frame_idx, Image) tuples for the marker frames.
 
       Args:
-        marker_imgs (dict[int, Image]): The marker images keyed by frame index. Every Image
-            must have valid escape data; histograms will be built here if not yet present.
+        marker_imgs (abc.Iterable[tuple[int, Image]]): The marker images keyed by frame index.
+            Every Image must have valid escape data; histograms will be built here if not
+            yet present; we require these come in sorted order by frame index for a single pass
 
       Returns:
         ZoomColorNorm: The constructed ZoomColorNorm.
@@ -1113,9 +1305,9 @@ class Image:
       """
       # build the marker list; iterating once so mypy can narrow ext_hist / int_hist to non-None
       marker_list: list[tuple[int, Image.Histogram, Image.Histogram]] = []
+      idx: int
       img: Image
-      for idx in sorted(marker_imgs):
-        img = marker_imgs[idx]
+      for idx, img in marker_imgs:
         if not img.ext_hist or not img.int_hist:
           img.RebuildHistograms()
         if not img.ext_hist or not img.int_hist:
@@ -1203,6 +1395,19 @@ class Image:
 
     """
     return self._params
+
+  @property
+  def self_sz(self) -> int:
+    """Get the size of the object in bytes, including nested objects.
+
+    Not guaranteed to be exact, but should be a good estimate for our purposes.
+    Not a super cheap call, don't overuse it.
+
+    Returns:
+      int: The size of the object in bytes.
+
+    """
+    return frame.DeepSize(self)
 
   def RebuildHistograms(self) -> None:
     """Rebuild the histograms for the image based on the current escape data.
@@ -2047,14 +2252,9 @@ def _BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram
       bucket_max=0,
       min_nu=0.0,
       max_nu=0.0,
-      linear=[],
-      cumulative=[],
-      d_linear={},
       d_cumulative={},
-      bucket_linear=[],
-      bucket_cumulative=[],
       d_bucket_linear={},
-      d_bucket_cumulative={},
+      bucket_cumulative=[],
     )
   # build the cumulative histogram by iterating over the sorted keys of the raw histogram
   cum: int = 0
@@ -2079,14 +2279,9 @@ def _BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram
     bucket_max=max(bucket_histogram),
     min_nu=min_nu,
     max_nu=max_nu,
-    linear=s_histogram,
-    cumulative=s_cum,
-    d_linear=histogram,
     d_cumulative=dict(s_cum),
-    bucket_linear=s_bucket_histogram,
-    bucket_cumulative=s_bucket_cum,
     d_bucket_linear=bucket_histogram,
-    d_bucket_cumulative=dict(s_bucket_cum),
+    bucket_cumulative=s_bucket_cum,
   )
 
 

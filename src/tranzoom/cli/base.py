@@ -17,10 +17,10 @@ import typer
 from transcrypto.cli import clibase
 from transcrypto.core import aes
 from transcrypto.utils import base as tbase
-from transcrypto.utils import timer
+from transcrypto.utils import human, timer
 
 from tranzoom import __version__
-from tranzoom.core import ai, fractal, frame, frdb, image, palette
+from tranzoom.core import ai, frame, frdb, image, palette
 
 
 class Error(ai.Error, click.ClickException):
@@ -52,7 +52,7 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 # this indicates that the mathematical computation or the setting of colors has changed;
 # this should NOT change over metadata changes, as it is computed from raw pixel data
 SEAHORSE_TAIL_HASH: str = 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9'
-SEAHORSE_ANIMATED_HASH: str = 'cfcd4250757a16c4d4c9d4594693ad0f02588796d0ddb328bbea6e889478e406'
+SEAHORSE_ANIMATED_HASH: str = '0ef4d4d828a2ad99c623f699ae936d5f02b15a557428677a3773f1386e2227fa'
 SUZANA_WAVE_HASH: str = '8f06e7bcd0ea14dff1b6fc3c829cdc295367695fea882e2cf9e25bb1a6dfb5fc'
 # this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 
@@ -434,10 +434,10 @@ MAX_THREADS_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '--threads',
   min=1,
-  max=fractal.MAX_CONCURRENCE,
+  max=frame.MAX_CONCURRENCE,
   help=(
     'Number of threads to use for rendering; default is None, which means to use all available '
-    f'CPU cores; will be limited to {fractal.MAX_CONCURRENCE} threads'
+    f'CPU cores; will be limited to {frame.MAX_CONCURRENCE} threads'
   ),
 )
 MAX_STEPS_OPTION: typer.models.OptionInfo = typer.Option(
@@ -1022,6 +1022,20 @@ def ProduceFractalImage(
   render: image.RenderParameters
   out: image.ImageOutputConfig
   render, out = MakeRenderParameters(params, config)
+  # warn if size estimates are large, before starting expensive computation
+  png_sz: int
+  jpg_sz: int
+  png_sz, jpg_sz = params.png_sz_bytes()
+  if max(png_sz, jpg_sz) > frame.THRESHOLD_LARGE_PNG_BYTES:
+    config.console.print(
+      f'[red]Warning: large on-disk size estimate: '
+      f'PNG ~{human.HumanizedBytes(png_sz)}, JPG ~{human.HumanizedBytes(jpg_sz)}[/]\n'
+    )
+  frame_mem: int = params.comp_memory_sz_bytes
+  if frame_mem > frame.THRESHOLD_LARGE_FRAME_MEMORY_BYTES:
+    config.console.print(
+      f'[red]Warning: large render memory estimate: ~{human.HumanizedBytes(frame_mem)}[/]\n'
+    )
   # compute the image via the unified core primitive
   img: image.Image | None
   raw_png: bytes
@@ -1041,7 +1055,7 @@ def ProduceFractalImage(
   # save the image to disk if requested
   if save_image:
     full_path.write_bytes(raw_png)
-    config.console.print(f'Saved to "{full_path}"')
+    config.console.print(f'Saved to {str(full_path)!r}, {human.HumanizedBytes(len(raw_png))}')
   return (img, raw_png, raw_hash, render)
 
 

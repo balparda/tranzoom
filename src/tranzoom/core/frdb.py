@@ -15,7 +15,7 @@ from typing import Self, TypedDict, cast
 from transcrypto.core import aes, key
 from transcrypto.utils import base as tbase
 from transcrypto.utils import config as app_config
-from transcrypto.utils import timer
+from transcrypto.utils import human, timer
 
 from tranzoom import __version__
 from tranzoom.core import fractal, frame, image
@@ -430,6 +430,16 @@ class FractalDatabase:
     """
     return _DBLabel(self._db)
 
+  @property
+  def is_read_write(self) -> bool:
+    """Whether the database is in use and read-write mode.
+
+    Returns:
+      bool: True if the database is in use and read-write mode, False otherwise.
+
+    """
+    return (not self._read_only) if self._use_db else False
+
   def Save(self) -> None:
     """Save the database to file.
 
@@ -437,7 +447,7 @@ class FractalDatabase:
       Error: if safe_save is enabled and the existing DB on disk differs from the loaded DB
 
     """
-    if self._read_only or not self._use_db:
+    if not self.is_read_write:
       logging.warning('DB in read-only mode or use_db is False: will *NOT* save! (would have now)')
       return
     with _DB_DISK_LOCK:  # ensure thread-safe save operations
@@ -497,18 +507,26 @@ class FractalDatabase:
     """
     path: str = f'img_{params.sha}.Data'
     # trivial case first
-    if self._read_only or not self._use_db:
-      logging.warning(f'Read-only mode or use_db is False: will *NOT* save {params} to "{path}"')
+    if not self.is_read_write:
+      logging.warning(f'Read-only mode or use_db is False: will *NOT* save {params} to {path!r}')
       return (timer.Now(), None)
-    # we will actually save
-    self._config.Serialize(
-      img,
-      config_name=path,
-      encryption_key=self._key,
-      compress=_IMG_DATA_COMPRESS_LEVEL,
-      silent=True,
-    )
-    logging.info(f'Saved image data {params} to "{path}"')
+    # we don't want to save histograms!
+    ext_hist: image.Image.Histogram | None = img.ext_hist
+    int_hist: image.Image.Histogram | None = img.int_hist
+    try:
+      img.ext_hist, img.int_hist = None, None
+      # we will actually save
+      self._config.Serialize(
+        img,
+        config_name=path,
+        encryption_key=self._key,
+        compress=_IMG_DATA_COMPRESS_LEVEL,
+        silent=True,
+      )
+      logging.info(f'Saved image data {params} to {path!r}, {human.HumanizedBytes(img.self_sz)}')
+    finally:
+      # restore histograms in case the caller needs them after saving
+      img.ext_hist, img.int_hist = ext_hist, int_hist
     return (timer.Now(), path)
 
   def LoadImageData(self, path: str) -> image.Image | None:
@@ -525,7 +543,11 @@ class FractalDatabase:
     if not self._use_db:
       logging.debug('use_db is False: skipping loading image computation')
       return None
-    return self._config.DeSerialize(config_name=path, decryption_key=self._key, silent=True)
+    img: image.Image = self._config.DeSerialize(
+      config_name=path, decryption_key=self._key, silent=True
+    )
+    img.RebuildHistograms()  # histograms are not saved, so we need to rebuild them after loading
+    return img
 
   def FindComputation(
     self, params: frame.ComputationParameters
@@ -887,7 +909,7 @@ class FractalDatabase:
       )
     # computation
     img: image.Image
-    params, img = self.DoComputation(params, max_threads, print_comm, force=force)
+    params, img, _ = self.DoComputation(params, max_threads, print_comm, force=force)
     print_comm('')
     # render
     return (
@@ -902,7 +924,7 @@ class FractalDatabase:
         iterm,
         print_comm,
         force=force,
-      ),
+      )[:-1],
     )
 
   def DoComputation(
@@ -912,7 +934,7 @@ class FractalDatabase:
     print_comm: abc.Callable[[str], None],
     *,
     force: bool = False,
-  ) -> tuple[frame.ComputationParameters, image.Image]:
+  ) -> tuple[frame.ComputationParameters, image.Image, bool]:
     """Compute a fractal, producing an image.Image.
 
     This operates even if use_db is False and read_only is True, it just won't use/save cache...
@@ -925,12 +947,14 @@ class FractalDatabase:
       force (bool): If True, will force re-computation of the image even if it is found in the DB
 
     Returns:
-      tuple[frame.ComputationParameters, image.Image]: A tuple:
+      tuple[frame.ComputationParameters, image.Image, bool]: A tuple:
           - frame.ComputationParameters: The computation parameters used for the frame
               (with actual depth if a sentinel was used)
           - image.Image: the computed fractal Image object
+          - bool: whether the image was computed from scratch (True) or loaded from cache (False)
 
     """
+    did_computation: bool = False
     # log
     set_param: str = '' if params.set_points is None else f' w/ SET {params.set_points.value!r}'
     print_comm(
@@ -971,15 +995,17 @@ class FractalDatabase:
           n_processes=max_threads,
           print_comm=print_comm,
         )
+        did_computation = True
         # save img in DB & disk
         img_tm, img_path = self.SaveImageData(params, img)  # disk only
         self.AddComputationToDB(params, img_tm, img_path)  # DB only; returns None if use_db==False
     # done: log and return
     print_comm(
       f'[yellow]Compute:[/] [green]{params.frm.fractal.value.capitalize()}: DONE,[/] '
-      f'with precision {params.precision} bits, in {str(tmr) if tmr else "-"}'
+      f'with precision {params.precision} bits, {human.HumanizedBytes(img.self_sz)}, '
+      f'in {str(tmr) if tmr and did_computation else "[bright_blue]<loaded from disk>[/]"}'
     )
-    return (params, img)
+    return (params, img, did_computation)
 
   def DoRender(
     self,
@@ -995,7 +1021,7 @@ class FractalDatabase:
     zoom_norm: image.Image.FrameColorNorm | None = None,
     silent: bool = False,
     no_meta: bool = False,
-  ) -> tuple[bytes, str, pathlib.Path]:
+  ) -> tuple[bytes, str, pathlib.Path, bool]:
     """Take an image.Image and do the fractal rendering.
 
     This operates even if use_db is False and read_only is True, it just won't use/save cache...
@@ -1026,10 +1052,11 @@ class FractalDatabase:
           metadata is not needed and adds overhead. Default is False (include metadata).
 
     Returns:
-      tuple[bytes, str, pathlib.Path]: A tuple:
+      tuple[bytes, str, pathlib.Path, bool]: A tuple:
           - bytes: the final PNG bytes (with crosshair mark and sector overlay applied, if any)
           - str: the SHA-256 hash of the raw PNG before any post-processing overlays
           - pathlib.Path: the intended save path (NOT yet written to disk; caller must save)
+          - bool: whether the image was rendered from scratch (True) or loaded from cache (False)
 
     Raises:
       Error: on error
@@ -1081,13 +1108,14 @@ class FractalDatabase:
         img_data = path.read_bytes()  # this is why we guard against self._use_db/force
         # we can end this: we have the image PNG on disk and img is as good as necessary
         print_comm(
-          f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE,[/] {img_hash!r} in -'
+          f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE,[/] {img_hash!r} '
+          'in [bright_blue]<loaded from disk>[/]'
         )
         # print inline in iTerm2 if requested
         if iterm:
           print_comm('')
           image.PrintITerm2(img_data)
-        return (img_data, img_hash, full_path(img_hash))
+        return (img_data, img_hash, full_path(img_hash), False)
       # if we got here, we have the render parameters but no existing image on disk
       print_comm(
         f'[red]DB render[/], {render_data["data_hash"]!r}@{timer.TimeStr(render_data["tm"])} '
@@ -1098,7 +1126,7 @@ class FractalDatabase:
     # we got to here, so we have to render the PNG data from the image object and add overlay/mark;
     # hash is computed from the raw PNG before any post-processing overlays
     with timer.Timer(emit_log=False) as tmr:
-      img_data, img_hash = img.AsPNG(  # <<== this is the actual render!
+      img_data, img_hash = img.AsPNG(  # <<== this is the actual render!  <<==   <<==   <<==
         render, zoom_norm=zoom_norm, no_meta=no_meta
       )
       # draw crosshair mark if specified in render parameters
@@ -1122,13 +1150,14 @@ class FractalDatabase:
       render_data = self.AddRenderToDB(params, render, ck, img_hash, str(full_path(img_hash)))
     # log
     print_comm(
-      f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE,[/] {img_hash!r} in {tmr}'
+      f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE,[/] {img_hash!r} '
+      f'in {tmr}, {human.HumanizedBytes(len(img_data))}'
     )
     # print inline in iTerm2 if requested
     if iterm:
       print_comm('')
       image.PrintITerm2(img_data)
-    return (img_data, img_hash, full_path(img_hash))
+    return (img_data, img_hash, full_path(img_hash), True)
 
 
 def _DBLabel(db: _DBType) -> str:

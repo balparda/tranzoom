@@ -57,7 +57,7 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       [
         str(cli_paths['tranz']),
         '--no-date',  # --no-date makes the filename deterministic (hash-only)
-        '--no-db',
+        '--db',
         '--force',
         '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
         tmp_dir,
@@ -175,8 +175,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       [
         str(cli_paths['tranz']),
         '--no-date',  # --no-date makes the filename deterministic (hash-only)
-        '--no-db',
-        '--force',
+        '--db',  # DB makes this a streaming DB-rich generation
         '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
         tmp_dir,
         '--db-path',  # make sure DB will be in temp too!
@@ -215,45 +214,45 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:frame:fractal': 'mandelbrot',
       'tranZoom:frame:center_re': '-5578776469/7500000000',
       'tranZoom:frame:center_im': '8244620127/62500000000',
-      'tranZoom:frame:top_re': '-9953460536484113/13380577500000000',
-      'tranZoom:frame:top_im': '44139455176953337/334514437500000000',
-      'tranZoom:frame:bottom_re': '-3317491012161371/4460192500000000',
-      'tranZoom:frame:bottom_im': '44114767676953337/334514437500000000',
-      'tranZoom:frame:width_re': '395/5352231',
-      'tranZoom:frame:height_im': '395/5352231',
-      'tranZoom:frame:magnification_order': '4.5298777621738715',
+      'tranZoom:frame:top_re': '-22316212891/30000000000',
+      'tranZoom:frame:top_im': '32987705633/250000000000',
+      'tranZoom:frame:bottom_re': '-22313998861/30000000000',
+      'tranZoom:frame:bottom_im': '32969255383/250000000000',
+      'tranZoom:frame:width_re': '73801/1000000000',
+      'tranZoom:frame:height_im': '73801/1000000000',
+      'tranZoom:frame:magnification_order': '4.529877762139788',
       'tranZoom:frame:precision': '140',
-      'tranZoom:frame:hash': 'fb78ce2042c8e7f2cc0a314e0faf09ec9b3423131461a2ac250491f7a17ff83b',
+      'tranZoom:frame:hash': 'a293633123a893f7fb5597b8ebdf444d1fca9ad1390e1940819dcf419c7edd0e',
       'tranZoom:computation:width': '220',
       'tranZoom:computation:height': '220',
-      'tranZoom:computation:depth': '1518',
+      'tranZoom:computation:depth': '1423',
       'tranZoom:computation:color_set': 'none',
       'tranZoom:computation:hash': (
-        'b78c5bc40b52633696533b9594f728d894fa44442f8a77150396a3c3b8c63cdd'
+        'b78683ec55fb5b86b8677a94989049d3263b70812763e33dcc570f49c21f565b'
       ),
       'tranZoom:image:animation': 'gif',
       'tranZoom:image:hash': base.SEAHORSE_ANIMATED_HASH,
-      'tranZoom:image:exterior:count': '48399',
+      'tranZoom:image:exterior:count': '48397',
       'tranZoom:image:exterior:n:min': '98',
-      'tranZoom:image:exterior:n:max': '1400',
-      'tranZoom:image:exterior:nu:min': '1.1549895134521648e-05',
+      'tranZoom:image:exterior:n:max': '1336',
+      'tranZoom:image:exterior:nu:min': '4.646779416361824e-06',
       'tranZoom:image:exterior:nu:max': '0.9999839663505554',
       'tranZoom:image:exterior:bucket:min': '202433',
-      'tranZoom:image:exterior:bucket:max': '2867813',
+      'tranZoom:image:exterior:bucket:max': '2737985',
       'tranZoom:image:exterior:hist:linear': (
-        '{98: 2, 99: 6, 100: 5, ...: 48383, 1317: 1, 1345: 1, 1400: 1}'
+        '{98: 2, 99: 6, 100: 5, ...: 48381, 1276: 1, 1278: 1, 1336: 1}'
       ),
       'tranZoom:image:exterior:hist:linear:cumulative': (
-        '{98: 2, 99: 8, 100: 13, ...: 32414206, 1317: 48397, 1345: 48398, 1400: 48399}'
+        '{98: 2, 99: 8, 100: 13, ...: 32226103, 1276: 48395, 1278: 48396, 1336: 48397}'
       ),
       'tranZoom:image:exterior:hist:bucket': (
-        '{202433: 1, 202682: 1, 202820: 1, ...: 48393, 2697670: 1, 2754588: 1, 2867813: 1}'
+        '{202433: 1, 202682: 1, 202820: 1, ...: 48391, 2614704: 1, 2619173: 1, 2737985: 1}'
       ),
       'tranZoom:image:exterior:hist:bucket:cumulative': (
-        '{202433: 1, 202682: 2, 202820: 3, ...: 1137830172, 2697670: 48397, '
-        '2754588: 48398, 2867813: 48399}'
+        '{202433: 1, 202682: 2, 202820: 3, ...: 1137706770, 2614704: 48395, '
+        '2619173: 48396, 2737985: 48397}'
       ),
-      'tranZoom:image:set:count': '1',
+      'tranZoom:image:set:count': '3',
       'tranZoom:image:set:n:min': '100000000',
       'tranZoom:image:set:n:max': '100000000',
       'tranZoom:image:set:nu:min': '0.0',
@@ -295,7 +294,7 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path]) -> None:
       [
         str(cli_paths['tranz']),
         '--no-date',  # --no-date makes the filename deterministic (hash-only)
-        '--no-db',
+        '--db',
         '--force',
         '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
         tmp_dir,

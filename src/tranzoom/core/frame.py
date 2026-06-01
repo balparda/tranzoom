@@ -8,8 +8,10 @@ import abc as abstract_abc
 import dataclasses
 import enum
 import json
+import os
+import sys
 from collections import abc
-from typing import cast, final
+from typing import Any, cast, final
 
 import gmpy2
 from transcrypto.core import hashes
@@ -37,6 +39,17 @@ HIGH_ITERS: list[int] = [100_000, 1_000_000, 10_000_000]  # these are very high 
 SET_INTERIOR_RESOLUTION: int = 100_000_000  # interior points max val [0..SET_INTERIOR_RESOLUTION]
 MAX_ITER: int = BIT_31 - 1  # ± 2_147_483_647, max for signed array('i'), sint32
 SMOOTH_EXTRA_ITERS: int = 5  # iterations AFTER |z| > 2 to compute: eliminates color banding errors
+
+# file/memory size thresholds for warnings about large files or memory usage
+THRESHOLD_LARGE_PNG_BYTES: int = 50 * 1024 * 1024  # warn if single-frame PNG/JPG exceeds 50 MB
+THRESHOLD_LARGE_FRAME_MEMORY_BYTES: int = 20 * 1024 * 1024 * 1024  # warn if render RAM > 20 GB
+THRESHOLD_LARGE_ANIMATION_BYTES: int = 2 * 1024 * 1024 * 1024  # warn if video file estimate > 2 GB
+THRESHOLD_LARGE_ZOOM_MEMORY_BYTES: int = 32 * 1024 * 1024 * 1024  # warn if zoom render RAM > 32 GB
+
+# multiprocessing
+AVAILABLE_CPU: int = int(getattr(os, 'process_cpu_count', os.cpu_count)() or 1)
+MAX_PRE_PROCESS_CONCURRENCE: int = 4  # for the preprocess step, we limit the concurrency
+MAX_CONCURRENCE: int = 12  # for the main rendering step, we limit the concurrency
 
 # gmpy2.mpfr constants
 _MPFR_MIN_PRECISION: int = 140  # about 42 decimal digits
@@ -180,6 +193,20 @@ class SerializingFractalObject(abstract_abc.ABC):
     """
     return hashes.Hash256(self.binary).hex()
 
+  @final
+  @property
+  def self_sz(self) -> int:
+    """Get the size of the object in bytes, including nested objects.
+
+    Not guaranteed to be exact, but should be a good estimate for our purposes.
+    Not a super cheap call, don't overuse it.
+
+    Returns:
+      int: The size of the object in bytes.
+
+    """
+    return DeepSize(self)
+
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class Frame(SerializingFractalObject):
@@ -253,6 +280,10 @@ class Frame(SerializingFractalObject):
       Error: if the fractal type is unknown (should not happen b/c checked in __post_init__).
 
     """
+    cx: gmpy2.mpq
+    cy: gmpy2.mpq
+    dx: gmpy2.mpq
+    dy: gmpy2.mpq
     cx, cy = self.center
     dx, dy = self.size
     deltas: str = f'± {dx}' if dx == dy else f'± ({dx}, {dy})'
@@ -291,6 +322,8 @@ class Frame(SerializingFractalObject):
       bool: True if the frame is square, False otherwise.
 
     """
+    dx: gmpy2.mpq
+    dy: gmpy2.mpq
     dx, dy = self.size
     return dx == dy
 
@@ -662,6 +695,169 @@ class ComputationParameters(SerializingFractalObject):
     return (self.width, self.height)
 
   @property
+  def disk_sz_bytes(self) -> int:
+    """Estimate the size in bytes of one image.Image object as serialized to disk.
+
+    Images are saved without histograms (ext_hist and int_hist are None at save time;
+    they are rebuilt on demand via RebuildHistograms()).  Only two components are stored:
+
+    1. Escape array (exact): width * height uint64 values at N_BYTES_UINT bytes each.
+    2. One FractalStats object: 2 Python ints + 8 gmpy2.mpfr fields; mpfr at p bits
+       costs 56 B (struct overhead) + ceil(p/64) * 8 B (mantissa limbs).
+
+    For the in-RAM size with histograms (e.g., during animation rendering), use mem_sz_bytes.
+
+    Returns:
+      int: Estimated bytes occupied by a single serialized Image on disk (no histograms).
+
+    """
+    n_px: int = self.width * self.height
+    # (1) escape array: exact -- width*height uint64 values at N_BYTES_UINT = 8 bytes each
+    escape_sz: int = n_px * N_BYTES_UINT
+    # (2) FractalStats (if present): 2 Python ints + 8 gmpy2.mpfr objects;
+    #     mpfr at p bits ~= 56 bytes (Python/MPFR struct overhead) + ceil(p/64)*8 bytes (mantissa)
+    mpfr_sz: int = 56 + ((self.precision + 63) // 64) * 8
+    stats_sz: int = 2 * 28 + 8 * mpfr_sz  # 2 Python ints + 8 mpfr fields
+    return escape_sz + stats_sz
+
+  @property
+  def mem_sz_bytes(self) -> int:
+    """Estimate the size in bytes of one image.Image object in RAM after histograms are built.
+
+    A rendered Image with histograms holds three main data structures:
+
+    1. Escape array (exact): width * height uint64 values at N_BYTES_UINT bytes each.
+    2. Two Histogram objects (ext_hist, int_hist), each storing exactly three fields:
+       - d_cumulative dict (n_lin entries): unique integer escape values → cumulative counts
+       - d_bucket_linear dict (n_buck entries): smooth bucket keys → counts
+       - bucket_cumulative list (n_buck entries): sorted (bucket_key, cumulative_count) pairs
+       n_lin: at most min(n_px, depth + SMOOTH_EXTRA_ITERS) distinct integer escape values
+       n_buck: at most min(n_px, n_lin * 2048) distinct smooth bucket keys;
+       2048 = image._HIST_SUB_BINS, written as literal to avoid circular import
+    3. One FractalStats object: 2 Python ints + 8 gmpy2.mpfr fields; mpfr at p bits
+       costs 56 B (struct overhead) + ceil(p/64) * 8 B (mantissa limbs).
+
+    This estimate underpins animation memory planning -- for example, how much RAM is
+    needed to hold all frames of a ZoomParameters animation simultaneously.
+    For the on-disk size (no histograms), use disk_sz_bytes.
+
+    Returns:
+      int: Estimated bytes occupied by a single in-memory Image with histograms.
+
+    """
+    n_px: int = self.width * self.height
+    # (1) escape array: exact -- width*height uint64 values at N_BYTES_UINT = 8 bytes each
+    escape_sz: int = n_px * N_BYTES_UINT
+    # (2) two Image.Histogram objects (ext_hist, int_hist); each histogram stores:
+    #     - d_cumulative dict:      n_lin entries
+    #     - d_bucket_linear dict:   n_buck entries
+    #     - bucket_cumulative list: n_buck entries
+    #     n_lin: at most min(n_px, depth+SMOOTH_EXTRA_ITERS) distinct integer escape values
+    #     n_buck: at most min(n_px, n_lin * sub_bins) distinct smooth bucket keys;
+    #     2048 = image._HIST_SUB_BINS, written as literal to avoid circular import
+    n_lin: int = min(n_px, self.depth + SMOOTH_EXTRA_ITERS)
+    n_buck: int = min(n_px, n_lin * 2048)  # 2048 = image._HIST_SUB_BINS
+    # per-entry cost across 2 histograms:
+    #   dict entry:  ~60-byte hash-table slot + 2*28-byte Python ints ~= 116 B
+    #   list entry:   8-byte list slot + 56-byte (int,int) tuple + 2*28-byte ints ~= 120 B
+    # n_lin dimension: 2 histograms * 1 d_cumulative dict      -> 2 * 116 = 232 B/entry
+    # n_buck dimension: 2 * (1 d_bucket_linear dict + 1 bucket_cumulative list)
+    #                  -> 2 * (116 + 120)                       = 472 B/entry
+    bytes_per_lin_entry: int = 232
+    bytes_per_buck_entry: int = 472
+    hist_sz: int = n_lin * bytes_per_lin_entry + n_buck * bytes_per_buck_entry
+    # (3) FractalStats (if present): 2 Python ints + 8 gmpy2.mpfr objects;
+    #     mpfr at p bits ~= 56 bytes (Python/MPFR struct overhead) + ceil(p/64)*8 bytes (mantissa)
+    mpfr_sz: int = 56 + ((self.precision + 63) // 64) * 8
+    stats_sz: int = 2 * 28 + 8 * mpfr_sz  # 2 Python ints + 8 mpfr fields
+    return escape_sz + hist_sz + stats_sz
+
+  @property
+  def comp_memory_sz_bytes(self) -> int:
+    """Estimate the peak RAM in bytes needed to render a single frame.
+
+    Rendering one frame uses up to fractal.MAX_CONCURRENCE (= 16) parallel processes
+    simultaneously, each holding an Image in RAM (escape array + stats, no histograms yet
+    during computation) plus mpfr working variables:
+
+    - One Image per process (escape array + stats = disk_sz_bytes; histograms are not
+      built until after computation completes).
+    - ~25 scalar gmpy2.mpfr working variables (zx, zy, magnitude, angle, stats-tracking
+      bounds, normalization temporaries, etc.).
+    - One gmpy2.mpfr per image column (the xs pre-computation array, width values).
+
+    mpfr memory scales with self.precision: 56 B struct overhead +
+    ceil(precision/64) * 8 B mantissa limbs.  self.precision already includes the
+    guard bits required for numerical accuracy at this zoom depth.
+
+    Formula:
+      max_concurrence * (disk_sz_bytes + (width + 25) * mpfr_sz)
+
+    Returns:
+      int: Estimated peak bytes in RAM during a single-frame render.
+
+    """
+    # each worker process holds one image.Image with escape array + stats but NO histograms
+    # (histograms are rebuilt after the parallel computation phase completes)
+    per_proc_image_sz: int = self.disk_sz_bytes
+    # inside `with params.context:` each process maintains gmpy2.mpfr values at
+    # self.precision bits; the dominant per-process mpfr cost is:
+    #   - xs: width gmpy2.mpfr values (precomputed real-axis pixel coordinates, one per column)
+    #   - ~25 scalar mpfr working variables: zx, zy, zx2, zy2, mag_z2, cy, cx, min_z2, max_z2,
+    #       mpfr_pi, mpfr_two_pi, max_iter_p_1, and stats-tracking bounds (max_lo, max_hi,
+    #       min_lo, min_hi, ang_lo, ang_hi, imag_lo, imag_hi) plus normalization temporaries;
+    #       mpfr size grows with self.depth because self.precision adds 2*ceil(log2(depth+1))
+    #       guard bits to maintain per-pixel numerical accuracy over the iteration loop
+    n_working_mpfr: int = 25
+    mpfr_sz: int = 56 + ((self.precision + 63) // 64) * 8  # Python/MPFR overhead + mantissa limbs
+    per_proc_mpfr_sz: int = (self.width + n_working_mpfr) * mpfr_sz
+    return MAX_CONCURRENCE * (per_proc_image_sz + per_proc_mpfr_sz)
+
+  def png_sz_bytes(self) -> tuple[int, int]:
+    """Estimate the on-disk size of the PNG and JPG output files in bytes.
+
+    Both estimates include a metadata block for all frame/computation/render parameters
+    stored as tEXt chunks (PNG) or an EXIF comment (JPG).  The dominant variable cost
+    is the 8 mpq coordinate strings, each stored as "p/q" with ~precision * log10(2)
+    decimal digits per integer:
+      meta_sz = 5000 + 8 * 2 * (precision * 3 // 10 + 1)  bytes
+
+    Pixel compression empirical estimates (calibrated: 2100x2100 fractal -> PNG=4.2 MB,
+    JPG=1.7 MB at quality 95):
+      PNG  (zlib/deflate, 3-byte RGB): ~1.0 byte/pixel  -- deflate handles smooth
+           gradient regions efficiently; fractal boundaries limit the overall ratio.
+      JPG  (JPEG quality 95):         ~0.4 bytes/pixel  -- DCT compresses the dominant
+           smooth exterior very well; the sharp fractal boundary is a small fraction of
+           total pixels, so JPEG is typically smaller than PNG for fractal images.
+
+    Returns:
+      tuple[int, int]: Estimated file sizes as (png_bytes, jpg_bytes).
+
+    """
+    n_px: int = self.width * self.height
+    # metadata overhead: all frame/computation/render/image parameters stored in tEXt chunks
+    # (PNG) or EXIF comment (JPG); ~50 key-value pairs with ~5 KB fixed overhead (keys ~35
+    # chars, hash values 64 chars, int/float values 1-20 chars) plus coordinate mpq strings
+    # for the 8 frame coordinates (top_re, top_im, bottom_re, bottom_im, center_re, center_im,
+    # width_re, height_im); each mpq stored as "p/q" decimal: ~precision * log10(2) digits per int;
+    # integer approx: precision * 3 // 10; total: 8 coords * 2 ints * (precision * 3 // 10 + 1) bt
+    meta_sz: int = 5000 + 8 * 2 * (self.precision * 3 // 10 + 1)
+    # PNG stores pixels as 3-byte RGB and compresses with zlib/deflate; fractal images mix
+    # highly-compressible smooth gradient regions with poorly-compressible fractal boundaries;
+    # empirically a 1024x1024 fractal PNG is ~1 MB (see DEFAULT_IMAGE_SIZE comment above),
+    # which is ~3:1 compression of 3 MB of raw RGB data -> ~1 byte/pixel on average;
+    # the actual compression ratio varies widely by zoom depth and frame content
+    png_sz: int = n_px + meta_sz  # ~1 byte/pixel + metadata
+    # JPEG at JPEG_QUALITY=95 (image.JPEG_QUALITY, written as literal to avoid circular import)
+    # for fractal images: the large smooth gradient exterior regions compress very well with
+    # DCT (they dominate most of the image area), more than offsetting the poorly-compressible
+    # fractal boundary pixels; empirically 2100x2100 fractal JPG at quality 95 is ~1.7 MB vs
+    # ~4.2 MB for the same frame as PNG, i.e. ~0.4 bytes/pixel vs ~1 byte/pixel for PNG;
+    # so JPEG is typically SMALLER than PNG for fractal images, not larger
+    jpg_sz: int = n_px * 2 // 5 + meta_sz  # ~0.4 bytes/pixel at quality 95 + metadata
+    return (png_sz, jpg_sz)
+
+  @property
   def json(self) -> tbase.JSONDict:
     """Get a JSON-serializable dictionary representation of the computation parameters.
 
@@ -878,3 +1074,59 @@ class ComputationParameters(SerializingFractalObject):
 
     """
     return gmpy2.local_context(gmpy2.context(), precision=self.precision)
+
+
+def DeepSize(obj: Any, *, seen: set[int] | None = None) -> int:  # noqa: ANN401, C901
+  """Recursively estimate the deep size of a Python object in bytes, including nested objects.
+
+  Args:
+    obj (Any): The object to estimate the size of.
+    seen (set[int] | None): A set of object IDs that have already been seen during the recursion
+        to avoid infinite loops with circular references. This should not be provided by the caller.
+
+  Returns:
+      int: An estimate of the deep size of the object in bytes.
+
+  """
+  # start with empty set() if not given
+  seen = set() if seen is None else seen
+  # check for circular references
+  obj_id: int = id(obj)
+  if obj_id in seen:
+    return 0
+  seen.add(obj_id)
+  # base size of the object itself
+  size: int = sys.getsizeof(obj)
+  # recursively add size of nested objects based on type
+  # dataclasses: add size of each field
+  if dataclasses.is_dataclass(obj):
+    for field in dataclasses.fields(obj):
+      size += DeepSize(getattr(obj, field.name), seen=seen)
+    return size
+  # mappings: add size of keys and values
+  if isinstance(obj, abc.Mapping):
+    key: Any
+    value: Any
+    for key, value in obj.items():  # pyright: ignore[reportUnknownVariableType]
+      size += DeepSize(key, seen=seen)
+      size += DeepSize(value, seen=seen)
+    return size
+  # iterables: add size of each item; but treat strings and bytes as atomic (don't count each char)
+  if isinstance(obj, (str, bytes, bytearray)):
+    return size
+  # iterables: add size of each item
+  if isinstance(obj, abc.Iterable):
+    item: Any
+    for item in obj:  # pyright: ignore[reportUnknownVariableType]
+      size += DeepSize(item, seen=seen)
+  # objects with __dict__: add size of the __dict__ attributes
+  if hasattr(obj, '__dict__'):  # pyright: ignore[reportUnknownArgumentType]
+    size += DeepSize(vars(obj), seen=seen)
+  # objects with __slots__: add size of each slot attribute if it exists
+  if hasattr(obj, '__slots__'):  # pyright: ignore[reportUnknownArgumentType]
+    slot: str
+    for slot in obj.__slots__:  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType, reportAttributeAccessIssue]
+      if hasattr(obj, slot):  # pyright: ignore[reportUnknownArgumentType]
+        size += DeepSize(getattr(obj, slot), seen=seen)  # pyright: ignore[reportUnknownArgumentType]
+  # return the total size
+  return size
