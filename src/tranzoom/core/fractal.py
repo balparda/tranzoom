@@ -20,6 +20,10 @@ import tqdm
 
 from tranzoom.core import frame, image
 
+# TODO: separate depth probing as something that can be done independently
+# TODO: zoom: create a tighter set of frames to probe depth. every 2x zoom, we do one.
+# TODO: smooth this depth data and use it to do a fixed depth computation for every frame
+
 # automated search for iter
 
 _ITER_OUTLIER_SKIP: int = 3  # skip up to this many extreme-outlier pixels in the probe
