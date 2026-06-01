@@ -2007,7 +2007,7 @@ def DrawCrossOverlay(
     draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
     w, h = img.size
     if not (0 <= x < w) or not (0 <= y < h):
-      raise Error(f'Invalid coordinates for cross overlay: {x=}, {y=}, image size {w}x{h}')
+      raise Error(f'Invalid coordinates for cross overlay: {x=}, {y=}, image size {w=} x {h=}')
     # draw the cross lines
     draw.line((0, y, w, y), fill=col.value, width=lw)
     draw.line((x, 0, x, h), fill=col.value, width=lw)

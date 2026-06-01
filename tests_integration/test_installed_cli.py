@@ -83,7 +83,7 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
-    assert w == h == 1024, f'Expected image dimensions 1024x1024, got {w}x{h}'
+    assert w == h == 1024, f'Expected image dimensions 1024x1024, got {w} x {h}'
     assert hsh == base.SEAHORSE_TAIL_HASH
     assert info == {
       'tranZoom:frame:fractal': 'mandelbrot',
@@ -208,7 +208,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
     assert output_image.exists(), f'Expected output gif not found: {output_image}'
     # check the image data
     w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
-    assert w == h == 220, f'Expected image dimensions 220x220, got {w}x{h}'
+    assert w == h == 220, f'Expected image dimensions 220 x 220, got {w} x {h}'
     assert hsh == base.SEAHORSE_ANIMATED_HASH
     assert info == {
       'tranZoom:frame:fractal': 'mandelbrot',
@@ -327,8 +327,8 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path]) -> None:
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
-    assert w == 512, f'Expected image dimensions 512x377, got {w}x{h}'
-    assert h == 377, f'Expected image dimensions 512x377, got {w}x{h}'
+    assert w == 512, f'Expected image dimensions 512 x 377, got {w} x {h}'
+    assert h == 377, f'Expected image dimensions 512 x 377, got {w} x {h}'
     assert hsh == base.SUZANA_WAVE_HASH
     assert info == {
       'tranZoom:frame:fractal': 'julia',

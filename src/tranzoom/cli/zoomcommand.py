@@ -286,7 +286,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     f'\n{params.width} x {params.height} {render.escaped_pal.value!r} '
     f'{frm.fractal.value.capitalize()!r} [magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/]'
     f', {human.HumanizedSeconds(float(zoom_params.n_seconds))} long, at {fps:.2f} FPS, '
-    f'with {zoom_params.n_frames} frames, '
+    f'with {zoom_params.n_frames} frames ({len(all_markers)} markers, '
+    f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%), '
     f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step...'
   )
   config.console.print(f'[yellow]ZOOM:[/] {zoom_params} ... {all_frames[-1]}\n')
@@ -305,11 +306,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     config.console.print(
       f'[red]Warning: large animation file estimate: '
       f'GIF ~{human.HumanizedBytes(gif_sz)}, MP4 ~{human.HumanizedBytes(mp4_sz)}[/]\n'
-    )
-  zoom_mem: int = zoom_params.comp_memory_sz_bytes
-  if zoom_mem > frame.THRESHOLD_LARGE_ZOOM_MEMORY_BYTES:
-    config.console.print(
-      f'[red]Warning: large zoom render memory estimate: ~{human.HumanizedBytes(zoom_mem)}[/]\n'
     )
   # create path callback missing only the hash
   full_path: abc.Callable[[str], pathlib.Path] = lambda h: image.MakeImagePath(
@@ -343,6 +339,12 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     video_hash: str
     cp: frdb.ComputationData | None
     video_path: pathlib.Path
+    # warn on large memory usage
+    zoom_mem: int = zoom_params.comp_memory_sz_bytes
+    if not streaming and zoom_mem > frame.THRESHOLD_LARGE_ZOOM_MEMORY_BYTES:
+      config.console.print(
+        f'[red]Warning: large zoom render memory estimate: ~{human.HumanizedBytes(zoom_mem)}[/]\n'
+      )
     # see if we have a cache of this zoom
     zoom_data: frdb.ZoomData | None = db.FindZoom(zoom_params)
     if zoom_data:

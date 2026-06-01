@@ -142,7 +142,7 @@ def ComputeFractal(
   # all copied, so we can return the final image; first trigger the histogram calculation
   img.RebuildHistograms()
   logging.info(
-    f'ComputeFractal done: {params.frm.fractal.value} {params.width}x{params.height} '
+    f'ComputeFractal done: {params.frm.fractal.value} {params.width} x {params.height} '
     f'depth={params.depth}, interior={img.stats.n_interior if img.stats else "?"}'
   )
   return (params, img)

@@ -816,7 +816,7 @@ You can easily make animations!
 ```sh
 $ poetry run tranz --no-db --no-date zoom -s 220 --mark "(-5578776469/7500000000,8244620127/62500000000)" auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4
 
-220 x 220 'sahara' 'Mandelbrot' 10^1.0000 magnitude ZOOM, 4.000 s long, at 10.00 FPS, with 40 frames, 106.0818%/step...
+220 x 220 'sahara' 'Mandelbrot' 10^1.0000 magnitude ZOOM, 4.000 s long, at 10.00 FPS, with 40 frames (2 markers, 5.00%), 106.0818%/step...
 ZOOM: <GIF: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]} -> {[PNG, SAHARA, none] + [MARK: red/1 @
 (-5578776469/7500000000, 8244620127/62500000000)]} / (mag:1, n:40, d:4, fps:10, l:0)> ... [MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ±
 73801/1000000000]
