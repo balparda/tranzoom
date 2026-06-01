@@ -22,6 +22,7 @@ from tranzoom.core import frame, image
 
 # automated search for iter
 
+_ITER_OUTLIER_SKIP: int = 3  # skip up to this many extreme-outlier pixels in the probe
 _ITER_SAFETY_FACTOR: float = 1.5  # we multiply the estimated iter by this to be safe
 
 # gmpy2.mpfr constants
@@ -209,8 +210,14 @@ def _FractalAdaptiveIterations(
       logging.info(f'Auto-depth: {high_iter=} produced no exterior points, retrying deeper')
       continue  # no exterior points
     # we have exterior points, so we can look at the histogram sorted by escape iteration;
-    # find the highest escape iteration that is less than high limit
-    max_iter = img16.ext_hist.linear[-1][0]
+    # find the trimmed max: skip the top _ITER_OUTLIER_SKIP pixels from the histogram tail
+    remaining_to_skip: int = _ITER_OUTLIER_SKIP
+    max_iter = img16.ext_hist.linear[-1][0]  # default: absolute max
+    for value, count in reversed(img16.ext_hist.linear):
+      if remaining_to_skip <= 0:
+        max_iter = value
+        break
+      remaining_to_skip -= count
     # apply safety factor and clamp
     max_iter = min(frame.MAX_ITER, max(frame.MIN_ITER, int(max_iter * _ITER_SAFETY_FACTOR)))
     if max_iter < high_iter:
