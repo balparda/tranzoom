@@ -884,7 +884,7 @@ class ZoomParameters(frame.SerializingFractalObject):
         # (ex: 5) float accumulation in mag_log10 + (i+1) * mag_step can produce 4.9999999999999982
         # instead, causing math.ceil to return 4 rather than 5, making max_denominator 10x too
         # small, so 1e-9 before ceil means "within a billionth of an integer rounds up to it"
-        max_denominator = 1000 * (10 ** math.ceil(cur_mag_log10 + 1e-9))
+        max_denominator = 10_000 * (10 ** math.ceil(cur_mag_log10 + 1e-9))
         dx, dy = frm.size  # cache once: used for limit_denominator below and error check below
         reduced_frm = frame.Frame.FromCenter(
           frm.fractal,
@@ -1288,12 +1288,13 @@ class Image:
           )
 
     @staticmethod
-    def FromMarkers(marker_imgs: dict[int, Image]) -> Image.ZoomColorNorm:
-      """Build a ZoomColorNorm from a dict of {frame_idx: Image} for the marker frames.
+    def FromSortedMarkers(marker_imgs: abc.Iterable[tuple[int, Image]]) -> Image.ZoomColorNorm:
+      """Build a ZoomColorNorm from an iterable of (frame_idx, Image) tuples for the marker frames.
 
       Args:
-        marker_imgs (dict[int, Image]): The marker images keyed by frame index. Every Image
-            must have valid escape data; histograms will be built here if not yet present.
+        marker_imgs (abc.Iterable[tuple[int, Image]]): The marker images keyed by frame index.
+            Every Image must have valid escape data; histograms will be built here if not
+            yet present; we require these come in sorted order by frame index for a single pass
 
       Returns:
         ZoomColorNorm: The constructed ZoomColorNorm.
@@ -1304,9 +1305,9 @@ class Image:
       """
       # build the marker list; iterating once so mypy can narrow ext_hist / int_hist to non-None
       marker_list: list[tuple[int, Image.Histogram, Image.Histogram]] = []
+      idx: int
       img: Image
-      for idx in sorted(marker_imgs):
-        img = marker_imgs[idx]
+      for idx, img in marker_imgs:
         if not img.ext_hist or not img.int_hist:
           img.RebuildHistograms()
         if not img.ext_hist or not img.int_hist:

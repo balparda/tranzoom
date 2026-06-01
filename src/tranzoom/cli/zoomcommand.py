@@ -28,7 +28,7 @@ from tranzoom.cli import base
 from tranzoom.core import ai, frame, frdb, image
 
 _MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the fractal score
-_N_FRAMES_PER_DB_SAVE: int = 8  # how many frames to compute before saving to DB
+_N_FRAMES_PER_DB_SAVE: int = 5  # how many frames to compute before saving to DB
 
 # gmpy2.mpq constants
 _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
@@ -261,7 +261,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       f'got {duration=}, {frames=} and {fps=}'
     )
   # TODO: split this monster method
-  # TODO: streaming option with DB so we don't have all images in memory at once
   # build parameters
   n_frames_actually_computed: int = 0
   frm: frame.Frame = base.MakeFrameFromConfig(config, center_re, center_im, f_width, f_height)
@@ -281,6 +280,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   all_frames: list[frame.Frame]
   all_markers: list[tuple[int, frame.Frame]]
   all_frames, all_markers = zoom_params.Frames()  # last thing that could go boom!
+  d_all_markers: dict[int, frame.Frame] = dict(all_markers)  # for quick lookup
   # we should be good to go, all options check out; log and warn if needed
   config.console.print(
     f'\n{params.width} x {params.height} {render.escaped_pal.value!r} '
@@ -335,9 +335,13 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
 
   # DB
   img: image.Image
-  all_img_obj: dict[int, image.Image] = {}
+  did_comp: bool
+  all_img_obj: dict[int, image.Image] = {}  # to keep images if not streaming
+  all_params: dict[int, frame.ComputationParameters] = {}
   with config.OpenDB() as db:
+    streaming: bool = db.is_read_write
     video_hash: str
+    cp: frdb.ComputationData | None
     video_path: pathlib.Path
     # see if we have a cache of this zoom
     zoom_data: frdb.ZoomData | None = db.FindZoom(zoom_params)
@@ -359,64 +363,68 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
         config.console.print(f'Success: {zoom_params.tp.value.upper()} {video_hash!r} from disk')
         _SaveLogAndITerm(video_path, video_path.stat().st_size)
         return
-    # main zoom loop, go for frames iterations, producing the image and then zooming in the frame
-    all_marker_imgs: dict[int, image.Image] = {}  # Image objects for ZoomColorNorm (see below)
-    # MARKERS: produce marker frames FIRST
-    with timer.Timer(emit_log=False) as markers_tmr:
-      for i, (idx, frm) in enumerate(all_markers):
-        config.console.print(f'[yellow]Marker {i + 1} / {len(all_markers)}[/]')
-        # we have the marker, now feed it to the producer
-        params, img = db.DoComputation(
-          dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER),  # send frm, mark as sentinel
+    # produce the frames
+    with timer.Timer(emit_log=False) as frames_tmr:
+      for idx, frm in enumerate(all_frames):
+        params = dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER)
+        # log
+        config.console.print(
+          f'{"[magenta]Marker " if idx in d_all_markers else "[yellow]"}Frame '
+          f'{idx + 1} / {zoom_params.n_frames}[/]'
+        )
+        # if we are streaming it is super worth it to check before loading!
+        if streaming:
+          params, _, cp = db.FindComputation(params)
+          if cp and cp['raw_data_path']:
+            all_params[idx] = params
+            config.console.print('Loaded from DB cache\n')
+            continue
+        # we really need to compute: feed frame to the producer
+        params, img, did_comp = db.DoComputation(
+          params,  # send frm, mark as sentinel
           max_threads=config.max_threads,
           print_comm=config.console.print,
           force=config.img_force_redo,
         )
-        n_frames_actually_computed += 1
+        n_frames_actually_computed += bool(did_comp)  # count only actually computed frames
         # save
-        all_marker_imgs[idx] = img  # keep Image object for ZoomColorNorm construction below
+        all_params[idx] = params
+        if not streaming:
+          all_img_obj[idx] = img
         # DB checkpoint
-        if n_frames_actually_computed and not n_frames_actually_computed % _N_FRAMES_PER_DB_SAVE:
-          config.console.print('[white](DB checkpoint)[/]')
+        if (
+          streaming
+          and n_frames_actually_computed
+          and not n_frames_actually_computed % _N_FRAMES_PER_DB_SAVE
+        ):
+          config.console.print('\n[bright_blue](DB checkpoint)[/]')
           db.Save()  # commit to disk every N computations
         config.console.print()
+    # we have all frames; if we're using DB and have done computations, make sure it is all saved
+    if streaming and n_frames_actually_computed:
+      db.Save()
+      config.console.print('\n[bright_blue](DB save)[/]\n')
+    # we should have all images either in memory or in DB; so now we we rely on _SmartImage()
+
+    def _SmartImage(i: int) -> image.Image:
+      if not streaming:
+        return all_img_obj[i]  # noqa: F821
+      img_obj: image.Image | None = db.LoadImageData(f'img_{all_params[i].sha}.Data')
+      if not img_obj:
+        raise base.Error(f'Image data for frame {i} not found in DB; bug; report!')
+      return img_obj
+
     # build ZoomColorNorm from the marker images: anchors color normalization so the same
     # escape-iteration value maps to a consistent palette position across the whole animation,
     # eliminating wild per-frame palette shifts (one color anchor per MAGNITUDE_PER_FRAME_MARKER
     # zoom decades, i.e., one marker every 10x zoom by default)
-    zoom_norm: image.Image.ZoomColorNorm = image.Image.ZoomColorNorm.FromMarkers(all_marker_imgs)
+    zoom_norm: image.Image.ZoomColorNorm = image.Image.ZoomColorNorm.FromSortedMarkers(
+      (i, _SmartImage(i)) for i, _ in all_markers
+    )  # use the original all_markers b/c it is sorted
     config.console.print(
-      f'[yellow]ZOOM:[/] [green]Color norm[/]: built from {len(all_marker_imgs)} marker frames\n'
+      f'[yellow]ZOOM:[/] [green]Color norm[/]: built from {len(all_markers)} marker frames\n'
     )
-    # produce the regular frames now
-    with timer.Timer(emit_log=False) as frames_tmr:
-      for i, frm in enumerate(all_frames):
-        if (i, frm) in all_markers:
-          # already produced as marker, skip
-          config.console.print(
-            f'[cyan]Frame {i + 1} / {zoom_params.n_frames}[/] -> [green]Marker: DONE[/]\n'
-          )
-          continue
-        config.console.print(f'[yellow]Frame {i + 1} / {zoom_params.n_frames}[/]')
-        # we have the frame, now feed it to the producer
-        params, img = db.DoComputation(
-          dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER),  # send frm, mark as sentinel
-          max_threads=config.max_threads,
-          print_comm=config.console.print,
-          force=config.img_force_redo,
-        )
-        n_frames_actually_computed += 1
-        # save
-        all_img_obj[i] = img
-        # DB checkpoint
-        if n_frames_actually_computed and not n_frames_actually_computed % _N_FRAMES_PER_DB_SAVE:
-          config.console.print('[white](DB checkpoint)[/]')
-          db.Save()  # commit to disk every N computations
-        config.console.print()
-    # update the main dict with the marker frames: this way we have all frames in one dict
-    all_img_obj.update(all_marker_imgs)
-    del all_marker_imgs  # free memory
-    # save the final animation, first to a temporary path because we do not have the hash yet...
+    # render the final animation, first to a temporary path because we do not have the hash yet...
     with tempfile.TemporaryDirectory() as tmpdir, timer.Timer(emit_log=False) as render_tmr:
       # make the rendering progress bar
       config.console.print(f'[yellow]Render:[/] {render}')
@@ -428,21 +436,22 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
         smoothing=0.1,
         colour='yellow',
       )
+      # keep the last frame, for later metadata
+      last_img: image.Image = img  # pyright: ignore[reportPossiblyUnboundVariable]
+      del img  # pyright: ignore[reportPossiblyUnboundVariable]
       try:
 
-        def _RenderFrame(i: int) -> bytes:
+        def _StreamingRenderFrame(i: int) -> bytes:
           img_data: bytes
           data_hash: str
           img_path: pathlib.Path
           p: int
           n: int
           zn: image.Image.FrameColorNorm
-          # get image
-          img_obj: image.Image = all_img_obj[i]  # noqa: F821
           # render
           p, n, zn = zoom_norm.ForFrame(i)
-          img_data, data_hash, img_path = db.DoRender(
-            img_obj,
+          img_data, data_hash, img_path, _ = db.DoRender(
+            _SmartImage(i),  # get the Image object for this frame
             dataclasses.replace(render, prev_marker=all_frames[p], next_marker=all_frames[n]),
             out,
             add_serial=i + 1,
@@ -469,7 +478,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
         tmp_path: pathlib.Path = pathlib.Path(tmpdir) / f'temp_video.{zoom_params.tp.value.lower()}'
         if zoom_params.tp == image.AnimationType.GIF:
           image.WriteAnimatedGIF(
-            (_RenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
+            (_StreamingRenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
             tmp_path,
             zoom_params.img.width,
             zoom_params.img.height,
@@ -479,7 +488,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           )
         elif zoom_params.tp == image.AnimationType.MP4:
           image.WriteVideoMP4(
-            (_RenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
+            (_StreamingRenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
             tmp_path,
             zoom_params.img.width,
             zoom_params.img.height,
@@ -491,16 +500,15 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       finally:
         # we are done, close the progress bar, free memory
         p_bar.close()
-        img = all_img_obj[zoom_params.n_frames - 1]  # NOTE: keep the last image alive for metadata
-        del all_img_obj  # this should help free all generated images from memory
+      del all_img_obj  # this should help free all generated images from memory
       # we can finally compute the hash
       video_hash = hashes.Hash256(
         # stable if the image data and order does not change
         ('|'.join(all_hash[i] for i in range(zoom_params.n_frames))).encode('ascii')
       ).hex()
       # create metadata
-      meta: dict[str, str] = image.MakeImageMeta(img, render, video_hash)
-      del img  # now the 1st image can go too
+      meta: dict[str, str] = image.MakeImageMeta(last_img, render, video_hash)  # use dest. frame
+      del last_img
       # add video-specific metadata
       meta[image.META_IMAGE_ANIMATION_KEY] = zoom_params.tp.value.lower()
       meta.update(
@@ -542,6 +550,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   # done, close DB, final log and iTerm2
   config.console.print(
     f'Success: {zoom_params.tp.value.upper()} {video_hash!r} in '
-    f'{markers_tmr} (markers) + {frames_tmr} (frames) + {render_tmr} (render)'
+    f'{frames_tmr} (frames) + {render_tmr} (render)'
   )
   _SaveLogAndITerm(video_path, video_path.stat().st_size)
