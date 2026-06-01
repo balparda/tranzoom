@@ -325,13 +325,13 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
  poetry run tranz image clean /path/to/image.png --no-hash --no-path                                                                                       
                                                                                                                                                            
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --width       -w      INTEGER RANGE [16<=x<=16384]         Width of the image; 16 ≤ w ≤ 16384; default is 1024                           │
-│ --height      -h      INTEGER RANGE [16<=x<=16384]         Height of the image; 16 ≤ h ≤ 16384; default is 1024                          │
-│ --size        -s      INTEGER RANGE [16<=x<=16384]         Size of the image: *overrides* both `-w/--width` and `-h/--height` by determining the max    │
+│ --width       -w      INTEGER RANGE [24<=x<=16384]         Width of the image; 24 ≤ w ≤ 16384; default is 1024                           │
+│ --height      -h      INTEGER RANGE [24<=x<=16384]         Height of the image; 24 ≤ h ≤ 16384; default is 1024                          │
+│ --size        -s      INTEGER RANGE [24<=x<=16384]         Size of the image: *overrides* both `-w/--width` and `-h/--height` by determining the max    │
 │                                                            pixel length of the final image, which will be proportional to the given frame, i.e., the    │
 │                                                            final dimensions will be scaled accordingly and, given a size S, will be either (S, x), (x,  │
 │                                                            S) or (S, S), where x < S, and will make the final image ratio/proportion be the same as the │
-│                                                            frame; 16 ≤ S ≤ 16384; default is None, i.e., follow the explicit `-w/--width` and           │
+│                                                            frame; 24 ≤ S ≤ 16384; default is None, i.e., follow the explicit `-w/--width` and           │
 │                                                            `-h/--height` options                                                                        │
 │ --iter        -i      INTEGER RANGE [1001<=x<=2147483647]  Maximum iterations (depth) to compute before determining escape; 1001 ≤ iter ≤ 2147483647;   │
 │                                                            default is None (automatic search for optimal iterations --- recommended)                    │
@@ -543,12 +543,12 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --fractal     -f                  Fractal type to generate; possible values: 'mandelbrot', 'julia'; default: 'mandelbrot'             │
 │                                                                                                                                    │
-│ --width       -w      INTEGER RANGE [16<=x<=16384]  Width of the image; 16 ≤ w ≤ 16384; default is 512                                    │
-│ --height      -h      INTEGER RANGE [16<=x<=16384]  Height of the image; 16 ≤ h ≤ 16384; default is 512                                   │
-│ --size        -s      INTEGER RANGE [16<=x<=16384]  Size of the image: *overrides* both `-w/--width` and `-h/--height` by determining the max pixel     │
+│ --width       -w      INTEGER RANGE [24<=x<=16384]  Width of the image; 24 ≤ w ≤ 16384; default is 512                                    │
+│ --height      -h      INTEGER RANGE [24<=x<=16384]  Height of the image; 24 ≤ h ≤ 16384; default is 512                                   │
+│ --size        -s      INTEGER RANGE [24<=x<=16384]  Size of the image: *overrides* both `-w/--width` and `-h/--height` by determining the max pixel     │
 │                                                     length of the final image, which will be proportional to the given frame, i.e., the final           │
 │                                                     dimensions will be scaled accordingly and, given a size S, will be either (S, x), (x, S) or (S, S), │
-│                                                     where x < S, and will make the final image ratio/proportion be the same as the frame; 16 ≤ S ≤      │
+│                                                     where x < S, and will make the final image ratio/proportion be the same as the frame; 24 ≤ S ≤      │
 │                                                     16384; default is None, i.e., follow the explicit `-w/--width` and `-h/--height` options            │
 │ --max-steps   -n      INTEGER RANGE           Maximum number of zoom steps to run; 0 means run until manually stopped (Ctrl+C); default is 0      │
 │                                                     (unlimited, run forever)                                                                            │
