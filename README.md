@@ -257,7 +257,7 @@ The format is `{[Frame] : [width, height, depth] : set_algorithm}` where:
 - `depth` is either `AUTO` (meaning the engine will probe for an optimal iteration limit) or an explicit integer from `-i/--iter`
 - `set_algorithm` is the interior Set coloring algorithm name (lowercase), only shown when `--set` is given
 
-The `depth=AUTO` sentinel value (`MIN_ITER = 1000`) triggers an adaptive probe: a tiny `16×16` test image is rendered at each candidate depth in `[100k, 1M, 10M]` and the smallest depth where the escape histogram is not saturated is chosen and multiplied by a safety factor. The resolved depth replaces the `AUTO` sentinel before the full render begins, and `ComputationParameters.precision` (and `.context`) always see the final resolved depth.
+The `depth=AUTO` sentinel value (`MIN_ITER = 1000`) triggers an adaptive probe: a tiny `24×24` test image is rendered at each candidate depth in `[100k, 1M, 10M]` and the smallest depth where the escape histogram is not saturated is chosen and multiplied by a safety factor. The resolved depth replaces the `AUTO` sentinel before the full render begins, and `ComputationParameters.precision` (and `.context`) always see the final resolved depth.
 
 #### Precision
 
@@ -321,10 +321,10 @@ $ poetry run tranz --no-db --no-date image mandel
 
 1024 x 1024 Mandelbrot, 10^0.000 magnitude...
 Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 348844.00px/s]
-Picked depth 1000, histogram {2: 20, 3: 64, 4: 40, ...: 68, 35: 2, 57: 2, 222: 2}, 58/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 409838.53px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, 30.150 MiB, in 3.658 s
+Pre: 100%|█████████████████████████████████████████████| 576/576 [00:00<00:00, 5046.61px/s]
+Picked depth 1000, histogram {2: 38, 3: 136, 4: 94, ...: 174, 72: 2, 125: 2, 803: 2}, 128/576 set points
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 415325.61px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 30.150 MiB, in 3.875 s
 
 Render: {[PNG, SAHARA, none]}
 Render: PNG: DONE, '0d4139e11c83f741bfc38ad7192d1c2a77decd85bb0fa512bd7ed6d291af0e02' in 1.212 s, 447.901 KiB
@@ -429,8 +429,8 @@ tranz [global flags] image [-w W] [-h H] [-s S] [--iter N] [--mark COORD] <mande
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `-w`/`--width` | Output image width in pixels (16–16384) | 1024 |
-| `-h`/`--height` | Output image height in pixels (16–16384) | 1024 |
+| `-w`/`--width` | Output image width in pixels (24–16384) | 1024 |
+| `-h`/`--height` | Output image height in pixels (24–16384) | 1024 |
 | `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales the other dimension proportionally to match the frame aspect ratio | None (use `-w`/`-h`) |
 | `-i`/`--iter` | Override max iterations (depth); `1000`–4294967295 | automatic adaptive search |
 | `--mark` | Draw a crosshair at this complex coordinate, formatted as `"(re, im)"` | None |
@@ -447,8 +447,8 @@ tranz [global flags] zoom [-w W] [-h H] [-s S] [-f FRACTAL] [-n STEPS] [--julia-
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `-w`/`--width` | Output image width in pixels (16–16384) | 512 |
-| `-h`/`--height` | Output image height in pixels (16–16384) | 512 |
+| `-w`/`--width` | Output image width in pixels (24–16384) | 512 |
+| `-h`/`--height` | Output image height in pixels (24–16384) | 512 |
 | `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales proportionally | None (use `-w`/`-h`) |
 | `-f`/`--fractal` | Fractal type: `mandelbrot` or `julia` | `mandelbrot` |
 | `--julia-re` | Real part of the Julia Set constant `c` | `'0.27334'` |
@@ -493,7 +493,7 @@ The command:
 
 1. Constructs a `Frame` from the given coordinates using `gmpy2.mpq` exact arithmetic
 2. Calculates the required `mpfr` precision automatically based on zoom depth
-3. When `--iter` is not given, runs an adaptive pre-pass on a tiny 16×16 render to estimate the optimal `max_iter` for the frame (with a 1.5× safety margin); otherwise uses the value supplied
+3. When `--iter` is not given, runs an adaptive pre-pass on a tiny 24×24 render to estimate the optimal `max_iter` for the frame (with a 1.5× safety margin); otherwise uses the value supplied
 4. Renders all pixels in parallel using `ProcessPoolExecutor` (one process per available CPU core, up to 12), each writing an interleaved subset of rows; results are merged into the final image
 5. Each process uses the escape-time algorithm with cardioid/period-2 bulb interior shortcuts and histogram-equalized color palette
 6. Saves the PNG to `<prefix>[-<YYYYMMDDhhmmss>][-<SHA256-20>].png` in the working directory (or the path given by `-o/--out`)
@@ -724,10 +724,10 @@ $ poetry run tranz --no-db --no-date image mandel
 
 1024 x 1024 Mandelbrot, 10^0.000 magnitude...
 Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 348844.00px/s]
-Picked depth 1000, histogram {2: 20, 3: 64, 4: 40, ...: 68, 35: 2, 57: 2, 222: 2}, 58/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 409838.53px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, 30.150 MiB, in 3.658 s
+Pre: 100%|█████████████████████████████████████████████| 576/576 [00:00<00:00, 5046.61px/s]
+Picked depth 1000, histogram {2: 38, 3: 136, 4: 94, ...: 174, 72: 2, 125: 2, 803: 2}, 128/576 set points
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 415325.61px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 30.150 MiB, in 3.875 s
 
 Render: {[PNG, SAHARA, none]}
 Render: PNG: DONE, '0d4139e11c83f741bfc38ad7192d1c2a77decd85bb0fa512bd7ed6d291af0e02' in 1.212 s, 447.901 KiB
@@ -747,14 +747,14 @@ $ poetry run tranz --no-db --set imaginary --set-palette "lava" --palette "rgray
 
 1024 x 1024 Mandelbrot w/ SET 'imaginary', 10^0.000 magnitude...
 Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO] : imaginary}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 277.24px/s]
-Picked depth 1000, histogram {2: 20, 3: 64, 4: 40, ...: 68, 35: 2, 57: 2, 222: 2}, 58/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:20<00:00, 52261.66px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, 60.674 MiB, in 22.475 s
+Pre: 100%|█████████████████████████████████████████████| 576/576 [00:02<00:00, 255.32px/s]
+Picked depth 1000, histogram {2: 38, 3: 136, 4: 94, ...: 174, 72: 2, 125: 2, 803: 2}, 128/576 set points
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:20<00:00, 51231.75px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 61.112 MiB, in 24.277 s
 
 Render: {[PNG, GRAYSCALE_REVERSE, LAVA]}
-Render: PNG: DONE, 'bcee34eba7a442b179aa5eb5e3015b14f523d79173ff2f08f70cd532a21f2e9b' in 1.455 s, 445.114 KiB
-Saved to 'mandel-bcee34eba7a442b179aa.png', 445.114 KiB
+Render: PNG: DONE, '618b366fa07d297957d24ab2d6412ee03d72f7dab8dfef6f94110f6c6c3c5828' in 1.460 s, 446.449 KiB
+Saved to 'mandel-618b366fa07d297957d2.png', 446.449 KiB
 ```
 
 Notice how it takes much more time. The interior coloring requires much computation and the whole set (like this image is an example of) has a lot of interior to do, so the whole thing takes almost ten times as long to finish.
@@ -770,14 +770,14 @@ $ poetry run tranz --no-db --no-date image mandel " -0.74303" "0.126433" "0.0161
 
 1024 x 1024 Mandelbrot, 10^2.191 magnitude...
 Compute: {[MANDELBROT: (-74303/100000, 126433/1000000) ± 1611/100000] : [1024, 1024, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 2089.49px/s]
-Picked depth 9277, histogram {24: 2, 25: 12, 26: 11, ...: 162, 2264: 1, 3215: 1, 6185: 1}, 66/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:45<00:00, 22934.20px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, 82.972 MiB, in 47.453 s
+Pre: 100%|█████████████████████████████████████████████| 576/576 [00:00<00:00, 1242.29px/s]
+Picked depth 24049, histogram {24: 3, 25: 25, 26: 29, ...: 375, 27749: 1, 31174: 1, 31451: 1}, 141/576 set points
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [01:36<00:00, 10867.85px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 83.736 MiB, in 1.658 min
 
 Render: {[PNG, SAHARA, none]}
-Render: PNG: DONE, 'a08eaf11d2fdcd542bf4e1f22ba8f981b42a6f62f96d443d4e1bb027c9653033' in 1.600 s, 1.023 MiB
-Saved to 'mandel-a08eaf11d2fdcd542bf4.png', 1.023 MiB
+Render: PNG: DONE, 'f81d8670d12d7ed3468c40d85eb321cc85737345addf4d1df444a895650297bf' in 1.624 s, 1.023 MiB
+Saved to 'mandel-f81d8670d12d7ed3468c.png', 1.023 MiB
 ```
 
 This one also is time consuming, and definitely demands more time than even much deeper zooms. It has the features that make an image demand computation: a lot of set points (half the image is black, i.e., set points) and a much larger iteration depth (than the previous examples).
@@ -793,10 +793,10 @@ $ poetry run tranz --no-db --set imaginary --no-date image mandel " -0.7436499" 
 
 1024 x 1024 Mandelbrot w/ SET 'imaginary', 10^3.530 magnitude...
 Compute: {[MANDELBROT: (-7436499/10000000, 3297051/25000000) ± 73801/100000000] : [1024, 1024, AUTO] : imaginary}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 55378.92px/s]
-Picked depth 1000, histogram {37: 8, 38: 11, 39: 14, ...: 220, 415: 1, 465: 1, 650: 1}, 0/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:10<00:00, 96775.13px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, 75.760 MiB, in 11.986 s
+Pre: 100%|█████████████████████████████████████████████| 576/576 [00:00<00:00, 53067.96px/s]
+Picked depth 1000, histogram {37: 15, 38: 28, 39: 30, ...: 500, 438: 1, 509: 1, 765: 1}, 0/576 set points
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:09<00:00, 115152.65px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 75.760 MiB, in 10.341 s
 
 Render: {[PNG, SAHARA, GRAYSCALE_REVERSE]}
 Render: PNG: DONE, 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9' in 1.814 s, 1.019 MiB
@@ -824,10 +824,10 @@ ZOOM: <GIF: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73
 Marker Frame 1 / 40
 220 x 220 Mandelbrot, 10^3.530 magnitude...
 Compute: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 56090.57px/s]
-Picked depth 1000, histogram {36: 14, 37: 20, 38: 21, ...: 198, 439: 1, 478: 1, 639: 1}, 0/256 set points
-Img: 100%|█████████████████████████████████████████████| 48400/48400 [00:00<00:00, 97230.95px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, 7.025 MiB, in 1.167 s
+Pre: 100%|█████████████████████████████████████████████| 576/576 [00:00<00:00, 70116.06px/s]
+Picked depth 1000, histogram {36: 32, 37: 46, 38: 40, ...: 455, 595: 1, 638: 1, 698: 1}, 0/576 set points
+Img: 100%|█████████████████████████████████████████████| 48400/48400 [00:00<00:00, 144330.60px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 7.025 MiB, in 796.175 ms
 
 Frame 2 / 40
 [...builds frames 2–40...]
@@ -835,11 +835,11 @@ Frame 2 / 40
 ZOOM: Color norm: built from 2 marker frames
 
 Render: {[PNG, SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}
-Render: 100%|█████████████████████████████████████████████| 40/40 [00:04<00:00,  9.05fr/s]
+Render: 100%|█████████████████████████████████████████████| 40/40 [00:04<00:00,  9.08fr/s]
 Render: DONE
 
-Success: GIF '0ef4d4d828a2ad99c623f699ae936d5f02b15a557428677a3773f1386e2227fa' in 45.696 s (frames) + 4.749 s (render)
-Saved GIF to 'mandel-0ef4d4d828a2ad99c623.gif', 1.757 MiB
+Success: GIF '041f9f86e1c0cc6a215d0251fbcaf88e56a4d1dc5b02c5e747b77f7d74b981c2' in 45.682 s (frames) + 4.738 s (render)
+Saved GIF to 'mandel-041f9f86e1c0cc6a215d.gif', 1.757 MiB
 ```
 
 To make that an MP4, just add `--anim mp4` to the command.
@@ -855,10 +855,10 @@ $ poetry run tranz --no-db --no-date --palette electric image -s 1024 julia
 
 838 x 1024 Julia, 10^0.000 magnitude...
 Compute: {[JULIA: (0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)] : [838, 1024, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 149.50px/s]
-Picked depth 1000, histogram {2: 12, 3: 16, 4: 34, ...: 64, 41: 2, 44: 2, 45: 2}, 124/256 set points
-Img: 100%|█████████████████████████████████████████████| 858112/858112 [00:27<00:00, 30824.30px/s]
-Compute: Julia: DONE, with precision 140 bits, 23.736 MiB, in 30.537 s
+Pre: 100%|█████████████████████████████████████████████| 576/576 [00:03<00:00, 155.45px/s]
+Picked depth 1000, histogram {2: 12, 3: 44, 4: 64, ...: 176, 364: 2, 462: 2, 1323: 2}, 274/576 set points
+Img: 100%|█████████████████████████████████████████████| 858112/858112 [00:27<00:00, 30648.53px/s]
+Compute: Julia: DONE, with precision 140 bits, 23.736 MiB, in 33.330 s
 
 Render: {[PNG, ELECTRIC, none]}
 Render: PNG: DONE, 'b97d669ec0da38ab23929cf73a3fc4a46d79f4e8ab4ef0faca8480fd551685a6' in 730.539 ms, 511.996 KiB
@@ -876,14 +876,14 @@ $ poetry run tranz --no-db --palette electric --set max --set-palette sunset --n
 
 512 x 377 Julia w/ SET 'max', 10^2.630 magnitude...
 Compute: {[JULIA: (-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)] : [512, 377, AUTO] : max}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 135.75px/s]
-Picked depth 1819, histogram {43: 2, 44: 14, 45: 14, ...: 98, 147: 1, 208: 1, 1213: 1}, 125/256 set points
-Img: 100%|█████████████████████████████████████████████| 193024/193024 [00:11<00:00, 17525.49px/s]
-Compute: Julia: DONE, with precision 140 bits, 31.230 MiB, in 13.959 s
+Pre: 100%|█████████████████████████████████████████████| 576/576 [00:03<00:00, 145.69px/s]
+Picked depth 1000, histogram {43: 3, 44: 31, 45: 30, ...: 245, 425: 1, 431: 1, 1175: 1}, 264/576 set points
+Img: 100%|█████████████████████████████████████████████| 193024/193024 [00:06<00:00, 30599.33px/s]
+Compute: Julia: DONE, with precision 140 bits, 31.086 MiB, in 11.617 s
 
 Render: {[PNG, ELECTRIC, SUNSET]}
-Render: PNG: DONE, '8f06e7bcd0ea14dff1b6fc3c829cdc295367695fea882e2cf9e25bb1a6dfb5fc' in 300.182 ms, 160.661 KiB
-Saved to 'julia-8f06e7bcd0ea14dff1b6.png', 160.661 KiB
+Render: PNG: DONE, 'ea6ecb1b230c24d2af80535874744686bb7fc1f68fad8adea9e176be843829a4' in 302.506 ms, 159.979 KiB
+Saved to 'julia-ea6ecb1b230c24d2af80.png', 159.979 KiB
 ```
 
 If the hash of this image changes, remember to change it in `src/tranzoom/cli/base.py`.
