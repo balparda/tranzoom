@@ -38,13 +38,27 @@ This project follows a pragmatic versioning approach:
 ## 1.6.1 - 2026-06-01
 
 - Added
-  - TBD
+  - **Size and memory estimation** (`frame.py`, `image.py`, `zoomcommand.py`): new `DeepSize()` function for recursive deep-size estimation; `self_sz` property on `SerializingFractalObject`, `Image`, and `Image.Histogram`; `ComputationParameters.disk_sz_bytes`, `.mem_sz_bytes`, `.comp_memory_sz_bytes`, `.png_sz_bytes()`; `ZoomParameters.data_sz_bytes`, `.comp_memory_sz_bytes`, `.animation_sz_bytes()`; size threshold constants in `frame.py` (`THRESHOLD_LARGE_PNG_BYTES` 50 MB, `THRESHOLD_LARGE_FRAME_MEMORY_BYTES` 20 GB, `THRESHOLD_LARGE_ANIMATION_BYTES` 2 GB, `THRESHOLD_LARGE_ZOOM_MEMORY_BYTES` 32 GB).
+  - **Pre-computation size/memory warnings** (`base.py`, `zoomcommand.py`): before starting any expensive computation or animation, warnings are now printed if estimated on-disk file sizes exceed 50 MB (single image) or 2 GB (animation), or if estimated peak RAM exceeds 20 GB (single image) or 32 GB (animation).
+  - **`FractalDatabase.is_read_write` property** (`frdb.py`): convenience property returning `True` iff the database is in-use and not read-only.
+  - **Streaming frame mode in `tranz zoom auto`** (`zoomcommand.py`): when the DB is read-write, individual frames are loaded from disk on demand during animation rendering (`_SmartImage()`) rather than held all in RAM simultaneously; this reduces peak memory proportionally to the number of frames.
+  - **DB periodic check-pointing in `tranz zoom auto`** (`zoomcommand.py`): the DB is saved to disk after every 5 computed frames (`_N_FRAMES_PER_DB_SAVE = 5`), protecting against data loss during long-running zoom operations.
+  - **File sizes in completion log messages** (`frdb.py`, `base.py`, `zoomcommand.py`): saved-image log lines now include the actual on-disk file size as a humanized byte string (e.g., `Saved to 'file.png', 4.2 MB`).
 
 - Changed
-  - TBD
+  - **Multiprocessing constants moved to `frame.py`** (`fractal.py` → `frame.py`): `AVAILABLE_CPU`, `MAX_PRE_PROCESS_CONCURRENCE`, and `MAX_CONCURRENCE` moved from `fractal.py` to `frame.py`; `fractal.MAX_CONCURRENCE` and `fractal.AVAILABLE_CPU` are no longer public — use `frame.MAX_CONCURRENCE` and `frame.AVAILABLE_CPU`; `MAX_CONCURRENCE` reduced from 16 to 12.
+  - **`Image.Histogram` memory reduction** (`image.py`): `linear`, `d_linear`, `cumulative`, and `d_bucket_cumulative` are now `@property` methods computed on-the-fly from the stored `d_cumulative` and `bucket_cumulative`; only `d_cumulative`, `d_bucket_linear`, and `bucket_cumulative` are stored as dataclass fields, reducing per-histogram memory.
+  - **`Image.ZoomColorNorm.FromMarkers()` renamed to `FromSortedMarkers()`** (`image.py`): signature changed from `dict[int, Image]` to `abc.Iterable[tuple[int, Image]]`; callers must pass an iterable of `(idx, Image)` pairs in sorted order to enable single-pass processing.
+  - **`FractalDatabase.DoComputation()` return type** (`frdb.py`): widened from `tuple[ComputationParameters, Image]` to `tuple[ComputationParameters, Image, bool]`; the third element is `True` if the image was freshly computed, `False` if loaded from cache.
+  - **`FractalDatabase.DoRender()` return type** (`frdb.py`): widened from `tuple[bytes, str, Path]` to `tuple[bytes, str, Path, bool]`; the fourth element is `True` if the render was done from scratch, `False` if loaded from disk cache.
+  - **`FractalDatabase.SaveImageData()` strips histograms before saving** (`frdb.py`): histograms are stripped before serialization and restored afterward; `LoadImageData()` now automatically calls `RebuildHistograms()` after deserialization; this reduces the on-disk size of cached image data.
+  - **`tranz zoom auto` single-pass rendering** (`zoomcommand.py`): the previous two-pass approach (marker frames first, then regular frames) is replaced by a single unified loop over all frames in order; marker frames are still distinguished in the log (magenta color) and identified for `ZoomColorNorm` construction; the final success message no longer includes a separate `(markers)` timer.
+  - **`MAGNITUDE_PER_FRAME_MARKER`** (`image.py`): changed from `1` (one marker every exactly 10× zoom) to `13/14` (one marker every ≈8.5× zoom); finer color normalization anchoring for smoother color consistency across animation frames.
+  - **`max_denominator` rational precision in `ZoomParameters.Frames()`** (`image.py`): increased 100× from `100 × 10^ceil(mag)` to `10_000 × 10^ceil(mag)` to reduce coordinate rounding errors at high zoom depth.
+  - **`SEAHORSE_ANIMATED_HASH`** (`base.py`): updated to reflect the animation produced by the changed marker interval.
 
 - Fixed
-  - TBD
+  - **Missing local type annotations in `Frame.__str__()` and `Frame.IsSquare()`** (`frame.py`): the `cx, cy = self.center` and `dx, dy = self.size` unpacking assignments were missing explicit `gmpy2.mpq` type annotations, causing strict type checker warnings.
 
 ## 1.6.0 - 2026-05-30
 
@@ -76,7 +90,7 @@ This project follows a pragmatic versioning approach:
   - **`FractalDatabase.FindImage()` renamed to `FindRender()`** (`frdb.py`): the method that finds a cached render is now named `FindRender()` to distinguish it from the new `FindComputation()` method; all callers updated.
   - **`FractalDatabase.CoreComputeImage()` refactored** (`frdb.py`): the monolithic `CoreComputeImage()` method is now a thin wrapper that calls `DoComputation()` then `DoRender()`; the `require_img_obj` parameter has been removed.
   - **Zoom animation architecture overhaul** (`zoomcommand.py`): `tranz zoom auto` now (1) computes all marker frames first (calling `db.DoComputation()` only), (2) builds `ZoomColorNorm` from the marker `Image` objects for consistent cross-frame color mapping, (3) computes the remaining regular frames, and (4) renders and assembles all frames in a single streaming pass using Python generators so only one rendered frame lives in memory at a time; the GIF/MP4 is written to a `tempfile.TemporaryDirectory` first, then metadata is injected via `ReWriteAnimatedGIFMeta` / `ReWriteVideoMP4Meta` and the file is moved to its final destination.
-  - **`SEAHORSE_ANIMATED_HASH`** (`base.py`): updated to `cfcd42...` to reflect the new color normalization output (marker-based `ZoomColorNorm` produces a deterministically different animation).
+  - **`SEAHORSE_ANIMATED_HASH`** (`base.py`): updated to reflect the new color normalization output (marker-based `ZoomColorNorm` produces a deterministically different animation).
   - **Frame generation performance optimization** (`image.py`): the frame loop now tracks magnification using a cheap float approximation instead of an mpfr call at every iteration; `limit_denominator` is applied only every 10 steps on the internal high-precision tracking frame (with a larger max_denominator), and once per step on the output reduced frame; cumulative error logging added; generation is now sub-second even for very large frame counts.
   - **`WriteAnimatedGIF` accepts lazy iterables** (`image.py`): the `frames` parameter type changed from `list[bytes]` to `abc.Iterable[bytes]`; frames are consumed lazily one at a time so they do not all need to fit in memory; the old up-front length check is replaced by a post-generation frame-count validation.
   - **`use_db` threaded into `FractalDatabase`** (`frdb.py`, `base.py`, `tranz.py`): `FractalDatabase.__init__()` now accepts a `use_db: bool` parameter (default `True`); when `False`, the DB behaves as if it does not exist — no load, no save, and all lookup/add operations are silently skipped — allowing tranZoom to run fully without any DB overhead.

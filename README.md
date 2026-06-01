@@ -173,6 +173,8 @@ Starting with version 1.4.0, tranZoom can render animated GIF and MP4 zoom anima
 
 Starting with version 1.5.0, the fractal renderer uses **smooth coloring**: each exterior pixel stores both an integer escape count `n` and a fractional value `nu ∈ [0, 1)` derived from the normalized iteration count formula, packed into 8 bytes per pixel. This eliminates discrete color bands and produces smooth gradients at all zoom depths. The database now caches both the raw computed pixel data and the rendered PNGs, so revisiting a frame or re-rendering with a new palette is fast — the expensive fractal computation is only performed once.
 
+Starting with version 1.6.1, tranZoom estimates file sizes and memory requirements before starting any expensive operation and warns when estimates exceed configurable thresholds (50 MB for a single image, 2 GB for an animation, 20 GB RAM for a single image render, 32 GB RAM for a full animation render). The `tranz zoom auto` command now streams frames from disk on demand during animation rendering (when the DB is enabled) to reduce peak memory, and periodically checkpoints the DB to protect against data loss during long renders.
+
 The tool can save all computations to a local DB. If allowed, it will use these saved computations to save time in any new computation. This DB can be encrypted.
 
 ### What this tool is not
@@ -191,6 +193,7 @@ The tool can save all computations to a local DB. If allowed, it will use these 
 - **Escape-time iteration**: The core Mandelbrot test; larger `max_iter` produces more detail at high zoom.
 - **Interior tests**: Fast algebraic checks (main cardioid, period-2 bulb) that skip the iterative test for points known to be inside the set, speeding up rendering significantly.
 - **Smooth coloring**: Each exterior pixel stores both an integer escape count `n` and a fractional smooth-escape value `nu ∈ [0, 1)` using the normalized iteration count formula. The two values are packed into a single `uint64` (8 bytes per pixel) using `EncodeIntFloatTo64`. Palette mapping uses `(n, nu)` interpolation over the cumulative histogram for smooth, band-free color gradients at all zoom depths.
+- **Zoom color normalization**: A `ZoomColorNorm` is built from a set of **marker frames** selected at regular zoom-depth intervals (one per ≈8.5× zoom by default, controlled by `MAGNITUDE_PER_FRAME_MARKER`). Each marker's histogram is used as a color anchor so that the same escape-iteration value maps to a consistent palette position across every frame in an animation, eliminating per-frame color flickering. `ZoomColorNorm.FromSortedMarkers()` constructs the normalizer from a sorted iterable of `(frame_idx, Image)` pairs.
 - **Color palette**: Fourteen built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette` (global flag). Positions in the palette are determined by smooth histogram equalization of `(n, nu)` escape values, so the full color range is used regardless of zoom depth or iteration scale. Available palettes: `sahara` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient), `aurora` (16-stop night-sky → polar-green aurora → white), `plasma` (16-stop dark void → purple → magenta → white), `forest` (16-stop dark soil → forest green → lime-yellow), `coral` (16-stop deep abyss → teal → coral → pale pink), `gold`, `toxic`, `iris`, `ember`, `rgrayscale` (8-stop white-to-black gradient, designed for interior coloring), `grayscale` (8-stop black-to-white gradient).
 - **DB computation and render caching**: The `FractalDatabase` persists the raw computed `Image` data to disk after each fractal render. On subsequent calls with the same frame and computation parameters, the expensive fractal computation is skipped and the cached data is loaded instead. Rendered PNGs are also cached; if a matching PNG file exists on disk, it is returned immediately. Use `--force` to bypass the cache and always recompute.
 - **Interior (Set) coloring**: By default, interior points (those that never escape, i.e., inside the Mandelbrot/Julia Set) are rendered as pure black. Passing `--set ALGORITHM` enables smooth coloring of those points using a separate `--set-palette` (default `rgrayscale`); supported algorithms: `min` (minimum `|z|` at max depth), `max` (maximum `|z|`), `angle` (angle of `z`), `imaginary` (imaginary-weighted average of `z`). Histogram equalization is applied over the stored values. The `rgrayscale` set palette goes white (deep interior, low `|z|`) → black (near boundary, high `|z|`), so the Set boundary is always dark for contrast with the exterior colors. Both flags are global and apply to all `image` and `zoom` commands.
@@ -314,18 +317,18 @@ You can always easily wipe the DB and storage later to save space with `config d
 Render the [full Mandelbrot set](#full--default-1) (default, 1024×1024):
 
 ```sh
-$ poetry run tranz --no-date image mandel
+$ poetry run tranz --no-db --no-date image mandel
 
 1024 x 1024 Mandelbrot, 10^0.000 magnitude...
 Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 348730.70px/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 348844.00px/s]
 Picked depth 1000, histogram {2: 20, 3: 64, 4: 40, ...: 68, 35: 2, 57: 2, 222: 2}, 58/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 408219.37px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, in 3.669 s
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 409838.53px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 30.150 MiB, in 3.658 s
 
 Render: {[PNG, SAHARA, none]}
-Render: PNG: DONE, '0d4139e11c83f741bfc38ad7192d1c2a77decd85bb0fa512bd7ed6d291af0e02' in 1.194 s
-Saved to "mandel-0d4139e11c83f741bfc3.png"
+Render: PNG: DONE, '0d4139e11c83f741bfc38ad7192d1c2a77decd85bb0fa512bd7ed6d291af0e02' in 1.212 s, 447.901 KiB
+Saved to 'mandel-0d4139e11c83f741bfc3.png', 447.901 KiB
 ```
 
 As can be seen, the `Frame` is stored as rational numbers with arbitrary precision, `[(-3/4, 0) ± 5/2]`, so it is guaranteed to be exact (centered in $-0.75+0j$ and with width of $2.5$). It will pick a precision, in bits, which is the internal `float` representation (mantissa), and will pick the (max) number of iterations for the generation. The magnitude shown is `10^0.00` because it is the full Mandelbrot set (magnification 1). There will be a progress bar, counting the horizontal lines being produced. The generated image data will be hashed and then saved to a PNG on disk.
@@ -491,7 +494,7 @@ The command:
 1. Constructs a `Frame` from the given coordinates using `gmpy2.mpq` exact arithmetic
 2. Calculates the required `mpfr` precision automatically based on zoom depth
 3. When `--iter` is not given, runs an adaptive pre-pass on a tiny 16×16 render to estimate the optimal `max_iter` for the frame (with a 1.5× safety margin); otherwise uses the value supplied
-4. Renders all pixels in parallel using `ProcessPoolExecutor` (one process per available CPU core, up to 16), each writing an interleaved subset of rows; results are merged into the final image
+4. Renders all pixels in parallel using `ProcessPoolExecutor` (one process per available CPU core, up to 12), each writing an interleaved subset of rows; results are merged into the final image
 5. Each process uses the escape-time algorithm with cardioid/period-2 bulb interior shortcuts and histogram-equalized color palette
 6. Saves the PNG to `<prefix>[-<YYYYMMDDhhmmss>][-<SHA256-20>].png` in the working directory (or the path given by `-o/--out`)
 
@@ -668,7 +671,7 @@ Renders a straight zoom-in animation from a starting frame to a target magnifica
 
 The zoom progression is geometrically uniform: each successive frame is scaled by a fixed rational factor computed so that the product of all per-frame zoom steps equals exactly the requested total magnification. Zoom metadata such as initial frame size, zoom step, FPS, duration, frame count, and loop count is stored with the final animated output under `tranZoom:zoom:*` PNG text chunks; if you save intermediate PNG frames, they are written as regular tranZoom still images.
 
-A set of **marker frames** is automatically selected from the full frame sequence at regular 10× magnification intervals (one per 10× zoom by default). Marker frames serve two purposes: (1) they act as chapter/seek points stored in the DB alongside all frames, and (2) they are computed *before* regular frames so that a `ZoomColorNorm` can be built from their histograms — ensuring every frame in the animation maps the same escape-iteration value to the same palette position and eliminating per-frame color flickering.
+A set of **marker frames** is automatically selected from the full frame sequence at regular ≈8.5× magnification intervals (one marker per `MAGNITUDE_PER_FRAME_MARKER = 13/14` decades of zoom). Marker frames serve two purposes: (1) they act as chapter/seek points stored in the DB alongside all frames, and (2) they anchor the `ZoomColorNorm` so that every frame in the animation maps the same escape-iteration value to the same palette position, eliminating per-frame color flickering. All frames are rendered in a single pass; markers are identified in the log in magenta.
 
 Positional arguments:
 
@@ -717,18 +720,18 @@ You can run all these at once by executing `scripts/make_examples.sh`.
 Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) with all the default values (image size 1024×1024, centered in $-0.75+0j$ and with width of $2.5$, a good frame that contains the whole set):
 
 ```sh
-$ poetry run tranz --no-date image mandel
+$ poetry run tranz --no-db --no-date image mandel
 
 1024 x 1024 Mandelbrot, 10^0.000 magnitude...
 Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 348730.70px/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 348844.00px/s]
 Picked depth 1000, histogram {2: 20, 3: 64, 4: 40, ...: 68, 35: 2, 57: 2, 222: 2}, 58/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 408219.37px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, in 3.669 s
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 409838.53px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 30.150 MiB, in 3.658 s
 
 Render: {[PNG, SAHARA, none]}
-Render: PNG: DONE, '0d4139e11c83f741bfc38ad7192d1c2a77decd85bb0fa512bd7ed6d291af0e02' in 1.194 s
-Saved to "mandel-0d4139e11c83f741bfc3.png"
+Render: PNG: DONE, '0d4139e11c83f741bfc38ad7192d1c2a77decd85bb0fa512bd7ed6d291af0e02' in 1.212 s, 447.901 KiB
+Saved to 'mandel-0d4139e11c83f741bfc3.png', 447.901 KiB
 ```
 
 This is what tranZoom considers ***`10^0.00 magnitude`*** (magnification 1), and will measure other magnifications against this size.
@@ -740,18 +743,18 @@ This is what tranZoom considers ***`10^0.00 magnitude`*** (magnification 1), and
 You can also extract details from the set points (the traditionally black part of the image) using `--set` and `--set-palette`. For example:
 
 ```sh
-$ poetry run tranz --set imaginary --set-palette "lava" --palette "rgrayscale" --no-date image mandel
+$ poetry run tranz --no-db --set imaginary --set-palette "lava" --palette "rgrayscale" --no-date image mandel
 
 1024 x 1024 Mandelbrot w/ SET 'imaginary', 10^0.000 magnitude...
 Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO] : imaginary}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 306.23px/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 277.24px/s]
 Picked depth 1000, histogram {2: 20, 3: 64, 4: 40, ...: 68, 35: 2, 57: 2, 222: 2}, 58/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:19<00:00, 52453.34px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, in 22.697 s
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:20<00:00, 52261.66px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 60.674 MiB, in 22.475 s
 
 Render: {[PNG, GRAYSCALE_REVERSE, LAVA]}
-Render: PNG: DONE, 'bcee34eba7a442b179aa5eb5e3015b14f523d79173ff2f08f70cd532a21f2e9b' in 1.399 s
-Saved to "mandel-bcee34eba7a442b179aa.png"
+Render: PNG: DONE, 'bcee34eba7a442b179aa5eb5e3015b14f523d79173ff2f08f70cd532a21f2e9b' in 1.455 s, 445.114 KiB
+Saved to 'mandel-bcee34eba7a442b179aa.png', 445.114 KiB
 ```
 
 Notice how it takes much more time. The interior coloring requires much computation and the whole set (like this image is an example of) has a lot of interior to do, so the whole thing takes almost ten times as long to finish.
@@ -763,18 +766,18 @@ Notice how it takes much more time. The interior coloring requires much computat
 Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mandel_zoom_03_seehorse.jpg) to a 1024×1024 image (default size):
 
 ```sh
-$ poetry run tranz --no-date image mandel " -0.74303" "0.126433" "0.01611"
+$ poetry run tranz --no-db --no-date image mandel " -0.74303" "0.126433" "0.01611"
 
 1024 x 1024 Mandelbrot, 10^2.191 magnitude...
 Compute: {[MANDELBROT: (-74303/100000, 126433/1000000) ± 1611/100000] : [1024, 1024, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 2117.77px/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 2089.49px/s]
 Picked depth 9277, histogram {24: 2, 25: 12, 26: 11, ...: 162, 2264: 1, 3215: 1, 6185: 1}, 66/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:45<00:00, 23210.03px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, in 46.673 s
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:45<00:00, 22934.20px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 82.972 MiB, in 47.453 s
 
 Render: {[PNG, SAHARA, none]}
-Render: PNG: DONE, 'a08eaf11d2fdcd542bf4e1f22ba8f981b42a6f62f96d443d4e1bb027c9653033' in 1.500 s
-Saved to "mandel-a08eaf11d2fdcd542bf4.png"
+Render: PNG: DONE, 'a08eaf11d2fdcd542bf4e1f22ba8f981b42a6f62f96d443d4e1bb027c9653033' in 1.600 s, 1.023 MiB
+Saved to 'mandel-a08eaf11d2fdcd542bf4.png', 1.023 MiB
 ```
 
 This one also is time consuming, and definitely demands more time than even much deeper zooms. It has the features that make an image demand computation: a lot of set points (half the image is black, i.e., set points) and a much larger iteration depth (than the previous examples).
@@ -786,18 +789,18 @@ This one also is time consuming, and definitely demands more time than even much
 Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tail_part.jpg) at default 1024×1024:
 
 ```sh
-$ poetry run tranz --set imaginary --no-date image mandel " -0.7436499" "0.13188204" "0.00073801"
+$ poetry run tranz --no-db --set imaginary --no-date image mandel " -0.7436499" "0.13188204" "0.00073801"
 
 1024 x 1024 Mandelbrot w/ SET 'imaginary', 10^3.530 magnitude...
 Compute: {[MANDELBROT: (-7436499/10000000, 3297051/25000000) ± 73801/100000000] : [1024, 1024, AUTO] : imaginary}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 55270.59px/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 55378.92px/s]
 Picked depth 1000, histogram {37: 8, 38: 11, 39: 14, ...: 220, 415: 1, 465: 1, 650: 1}, 0/256 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:09<00:00, 113376.25px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, in 10.427 s
+Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:10<00:00, 96775.13px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 75.760 MiB, in 11.986 s
 
 Render: {[PNG, SAHARA, GRAYSCALE_REVERSE]}
-Render: PNG: DONE, 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9' in 1.764 s
-Saved to "mandel-e4fad99036a41cc87ad0.png"
+Render: PNG: DONE, 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9' in 1.814 s, 1.019 MiB
+Saved to 'mandel-e4fad99036a41cc87ad0.png', 1.019 MiB
 ```
 
 This image is relatively fast to generate (despite the zoom level, it has very little interior regions), so we use it in the unit and integration tests to make sure we are operating consistently. If the hash of this image changes, remember to change it in `src/tranzoom/cli/base.py`.
@@ -811,39 +814,32 @@ This image is relatively fast to generate (despite the zoom level, it has very l
 You can easily make animations!
 
 ```sh
-$ poetry run tranz --no-date zoom -s 220 --mark "(-5578776469/7500000000,8244620127/62500000000)" auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4
+$ poetry run tranz --no-db --no-date zoom -s 220 --mark "(-5578776469/7500000000,8244620127/62500000000)" auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4
 
 220 x 220 'sahara' 'Mandelbrot' 10^1.0000 magnitude ZOOM, 4.000 s long, at 10.00 FPS, with 40 frames, 106.0818%/step...
 ZOOM: <GIF: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]} -> {[PNG, SAHARA, none] + [MARK: red/1 @
 (-5578776469/7500000000, 8244620127/62500000000)]} / (mag:1, n:40, d:4, fps:10, l:0)> ... [MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ±
-395/5352231]
+73801/1000000000]
 
-Marker 1 / 2
+Marker Frame 1 / 40
 220 x 220 Mandelbrot, 10^3.530 magnitude...
 Compute: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 59038.97px/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:00<00:00, 56090.57px/s]
 Picked depth 1000, histogram {36: 14, 37: 20, 38: 21, ...: 198, 439: 1, 478: 1, 639: 1}, 0/256 set points
-Img: 100%|█████████████████████████████████████████████| 48400/48400 [00:00<00:00, 150980.62px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, in 798.080 ms
+Img: 100%|█████████████████████████████████████████████| 48400/48400 [00:00<00:00, 97230.95px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 7.025 MiB, in 1.167 s
 
-Marker 2 / 2
-[... builds marker 2...]
+Frame 2 / 40
+[...builds frames 2–40...]
 
 ZOOM: Color norm: built from 2 marker frames
 
-Frame 1 / 40 -> Marker: DONE
-
-Frame 2 / 40
-[...builds frames 2 to 39 (number 40 was done as a marker)]
-
-Frame 40 / 40 -> Marker: DONE
-
 Render: {[PNG, SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}
-Render: 100%|█████████████████████████████████████████████| 40/40 [00:04<00:00,  9.14fr/s]
+Render: 100%|█████████████████████████████████████████████| 40/40 [00:04<00:00,  9.05fr/s]
 Render: DONE
 
-Success: GIF 'cfcd4250757a16c4d4c9d4594693ad0f02588796d0ddb328bbea6e889478e406' in 2.135 s (markers) + 37.533 s (frames) + 4.748 s (render)
-Saved GIF to "mandel-cfcd4250757a16c4d4c9.gif"
+Success: GIF '0ef4d4d828a2ad99c623f699ae936d5f02b15a557428677a3773f1386e2227fa' in 45.696 s (frames) + 4.749 s (render)
+Saved GIF to 'mandel-0ef4d4d828a2ad99c623.gif', 1.757 MiB
 ```
 
 To make that an MP4, just add `--anim mp4` to the command.
@@ -855,18 +851,18 @@ To make that an MP4, just add `--anim mp4` to the command.
 Render a "Julia Suzana" at `-s/--size` 1024, one of the possible [Julia Set](https://en.wikipedia.org/wiki/Julia_set):
 
 ```sh
-$ poetry run tranz --no-date --palette electric image -s 1024 julia
+$ poetry run tranz --no-db --no-date --palette electric image -s 1024 julia
 
 838 x 1024 Julia, 10^0.000 magnitude...
 Compute: {[JULIA: (0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)] : [838, 1024, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 149.84px/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 149.50px/s]
 Picked depth 1000, histogram {2: 12, 3: 16, 4: 34, ...: 64, 41: 2, 44: 2, 45: 2}, 124/256 set points
-Img: 100%|█████████████████████████████████████████████| 858112/858112 [00:27<00:00, 30680.64px/s]
-Compute: Julia: DONE, with precision 140 bits, in 30.583 s
+Img: 100%|█████████████████████████████████████████████| 858112/858112 [00:27<00:00, 30824.30px/s]
+Compute: Julia: DONE, with precision 140 bits, 23.736 MiB, in 30.537 s
 
 Render: {[PNG, ELECTRIC, none]}
-Render: PNG: DONE, 'b97d669ec0da38ab23929cf73a3fc4a46d79f4e8ab4ef0faca8480fd551685a6' in 728.322 ms
-Saved to "julia-b97d669ec0da38ab2392.png"
+Render: PNG: DONE, 'b97d669ec0da38ab23929cf73a3fc4a46d79f4e8ab4ef0faca8480fd551685a6' in 730.539 ms, 511.996 KiB
+Saved to 'julia-b97d669ec0da38ab2392.png', 511.996 KiB
 ```
 
 #### Julia Suzana Wave (×427)
@@ -876,18 +872,18 @@ Saved to "julia-b97d669ec0da38ab2392.png"
 Render a "Julia Suzana Wave" at `-s/--size` 1024:
 
 ```sh
-$ poetry run tranz --palette electric --set max --set-palette sunset --no-date image -s 512 julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
+$ poetry run tranz --no-db --palette electric --set max --set-palette sunset --no-date image -s 512 julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
 
 512 x 377 Julia w/ SET 'max', 10^2.630 magnitude...
 Compute: {[JULIA: (-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)] : [512, 377, AUTO] : max}
-Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 136.34px/s]
+Pre: 100%|█████████████████████████████████████████████| 256/256 [00:01<00:00, 135.75px/s]
 Picked depth 1819, histogram {43: 2, 44: 14, 45: 14, ...: 98, 147: 1, 208: 1, 1213: 1}, 125/256 set points
-Img: 100%|█████████████████████████████████████████████| 193024/193024 [00:11<00:00, 17306.11px/s]
-Compute: Julia: DONE, with precision 140 bits, in 13.973 s
+Img: 100%|█████████████████████████████████████████████| 193024/193024 [00:11<00:00, 17525.49px/s]
+Compute: Julia: DONE, with precision 140 bits, 31.230 MiB, in 13.959 s
 
 Render: {[PNG, ELECTRIC, SUNSET]}
-Render: PNG: DONE, '8f06e7bcd0ea14dff1b6fc3c829cdc295367695fea882e2cf9e25bb1a6dfb5fc' in 265.904 ms
-Saved to "julia-8f06e7bcd0ea14dff1b6.png"
+Render: PNG: DONE, '8f06e7bcd0ea14dff1b6fc3c829cdc295367695fea882e2cf9e25bb1a6dfb5fc' in 300.182 ms, 160.661 KiB
+Saved to 'julia-8f06e7bcd0ea14dff1b6.png', 160.661 KiB
 ```
 
 If the hash of this image changes, remember to change it in `src/tranzoom/cli/base.py`.
@@ -953,13 +949,13 @@ The CLI respects the `NO_COLOR` environment variable and the `--no-color` / `--c
 | `cli/base.py` | Shared CLI options, defaults, `DEFAULT_MANDELBROT_FRAME`, `ProduceFractalImage()` |
 | `cli/imagecommand.py` | `tranz image mandel`, `tranz image julia`, `tranz image read`, and `tranz image clean` command implementations |
 | `cli/zoomcommand.py` | `tranz zoom ai`, `tranz zoom manual`, and `tranz zoom auto` command implementations |
-| `core/fractal.py` | `Mandelbrot()` and `Julia()` renderers — fractal math |
-| `core/frame.py` | `SerializingFractalObject` base class; `Frame` class, `ComputationParameters` class, `Fractal` enum, and base coordinate math |
+| `core/fractal.py` | `Mandelbrot()` and `Julia()` renderers — fractal math; uses `AVAILABLE_CPU` / `MAX_CONCURRENCE` from `frame.py` |
+| `core/frame.py` | `SerializingFractalObject` base class; `Frame` class, `ComputationParameters` class (with size-estimation properties), `Fractal` enum, base coordinate math; `DeepSize()` for recursive object-size estimation; `AVAILABLE_CPU`, `MAX_PRE_PROCESS_CONCURRENCE`, `MAX_CONCURRENCE`; size threshold constants |
 | `core/image.py` | `Image` class (with inner `ZoomColorNorm` / `FrameColorNorm` for stable cross-frame color normalization); `RenderParameters`, `ZoomParameters`, `ImageOutputConfig`; image utilities, overlays, iTerm2 printing, metadata helpers; `ReWriteAnimatedGIFMeta()` / `ReWriteVideoMP4Meta()` for metadata-only rewrites; `CleanSavePNG()` / `CleanSaveJPG()` for metadata-stripped output |
 | `core/palette.py` | Palette definitions and color mapping |
 | `core/queries.py` | AI prompt templates and Pydantic models for structured LLM responses |
 | `core/ai.py` | `ZoomLoop()` — iterative AI and manual zoom session logic |
-| `core/frdb.py` | `FractalDatabase` — persistent storage for frames, computations, renders, and video entries; `DoComputation()` / `DoRender()` are the split rendering primitives (extracted from the old `CoreComputeImage()`), each with full DB cache support; `FindComputation()` / `FindRender()` for cache lookups; `SaveImageData`/`LoadImageData` for raw pixel cache I/O |
+| `core/frdb.py` | `FractalDatabase` — persistent storage for frames, computations, renders, and video entries; `DoComputation()` / `DoRender()` are the split rendering primitives, each returning a `bool` indicating whether work was freshly done or loaded from cache; `is_read_write` property; `FindComputation()` / `FindRender()` for cache lookups; `SaveImageData` / `LoadImageData` for raw pixel cache I/O (histograms stripped on save, rebuilt on load) |
 | `utils/template.py` | Template for new utility modules |
 
 ### Performance characteristics
