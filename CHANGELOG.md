@@ -6,9 +6,10 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
-  - [1.6.0 - 2026-06-TBD](#160---2026-06-tbd)
-  - [1.5.2 - 2026-06-27](#152---2026-06-27)
-  - [1.5.1 - 2026-06-26](#151---2026-06-26)
+  - [1.6.1 - 2026-06-01](#161---2026-06-01)
+  - [1.6.0 - 2026-05-30](#160---2026-05-30)
+  - [1.5.2 - 2026-05-27](#152---2026-05-27)
+  - [1.5.1 - 2026-05-26](#151---2026-05-26)
   - [1.5.0 - 2026-05-26](#150---2026-05-26)
   - [1.4.1 - 2026-05-21](#141---2026-05-21)
   - [1.4.0 - 2026-05-20](#140---2026-05-20)
@@ -34,7 +35,18 @@ This project follows a pragmatic versioning approach:
 - Fixed
   - Placeholder for future fixes.
 
-## 1.6.0 - 2026-06-TBD
+## 1.6.1 - 2026-06-01
+
+- Added
+  - TBD
+
+- Changed
+  - TBD
+
+- Fixed
+  - TBD
+
+## 1.6.0 - 2026-05-30
 
 - Added
   - **`tranz image clean` command** (`imagecommand.py`, `image.py`, `base.py`): new command to read a tranZoom fractal image and save a clean copy with all tranZoom metadata stripped; accepts `--hash/--no-hash` (keep safe frame/computation/render/image hashes; default keep), `--path/--no-path` (randomize filename to `fractal-<HEX20>.ext`; default keep), and `--out FORMAT` (`jpeg`/`jpg`/`png`; default `jpeg`); JPEG is recommended for sharing (smaller, and slight lossy compression adds noise); for PNG output, hashes are stored as PNG tEXt chunks; for JPEG output, hashes are serialized as compact JSON in the EXIF `ImageDescription` tag.
@@ -76,7 +88,7 @@ This project follows a pragmatic versioning approach:
   - **Memory usage in `tranz zoom auto`** (`zoomcommand.py`): the old implementation accumulated all rendered frame bytes in a `list[bytes]` in memory before assembling the animation, requiring all frames to fit in memory simultaneously; the new generator-based approach renders and discards each frame one at a time during GIF/MP4 assembly, keeping peak memory proportional to one frame.
   - **`WriteAnimatedGIF` frame-count validation** (`image.py`): the old up-front `len(frames) != n_frames` check was incompatible with lazy iterables; the check is now done after generation by counting frames as they are consumed.
 
-## 1.5.2 - 2026-06-27
+## 1.5.2 - 2026-05-27
 
 - Added
   - **8 new palettes** (`palette.py`): `aurora` (night-sky → polar-green aurora → white), `plasma`
@@ -154,7 +166,7 @@ This project follows a pragmatic versioning approach:
     render when entering `ZoomLoop`; the render parameters are now patched with
     `OverlayType.GRID` before the loop starts (if no other overlay is set).
 
-## 1.5.1 - 2026-06-26
+## 1.5.1 - 2026-05-26
 
 - Changed
   - New ruff version

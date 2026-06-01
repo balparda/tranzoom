@@ -94,9 +94,9 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                                                     Set points, either None, or one of 'min', 'max',    │
 │                                                                                                     'angle', 'imaginary'; default is None, do not color │
 │                                                                                                     the Set points (i.e., they will be black)           │
-│ --threads                                        INTEGER RANGE [1<=x<=16]                           Number of threads to use for rendering; default is  │
+│ --threads                                        INTEGER RANGE [1<=x<=12]                           Number of threads to use for rendering; default is  │
 │                                                                                                     None, which means to use all available CPU cores;   │
-│                                                                                                     will be limited to 16 threads                       │
+│                                                                                                     will be limited to 12 threads                       │
 │ --model               -m                         TEXT                                               LLM vision model to load and use: the model must be │
 │                                                                                                     compatible with the LMStudio client libraries and   │
 │                                                                                                     must support vision; will NOT get the model for     │
