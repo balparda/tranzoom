@@ -221,14 +221,16 @@ def FractalAdaptiveIterations(
     max_iter = min(frame.MAX_ITER, max(frame.MIN_ITER, int(max_iter * _ITER_SAFETY_FACTOR)))
     if max_iter < high_iter:
       # we found a winner! print and stop
-      print_comm(
-        f'Picked depth {max_iter}, histogram {image.SummaryHistogram(img16.ext_hist.linear)}, '
-        f'{img16.stats.n_interior}/{img16.stats.n_px} set points'
-      )
+      if progress_bar:
+        print_comm(
+          f'Picked depth {max_iter}, histogram {image.SummaryHistogram(img16.ext_hist.linear)}, '
+          f'{img16.stats.n_interior}/{img16.stats.n_px} set points'
+        )
       return (max_iter, img16.stats)
-    print_comm(
-      f'[red]Iteration limit of {high_iter} was too low:[/] will try again [red]10x[/] deeper...'
-    )
+    if progress_bar:
+      print_comm(
+        f'[red]Iteration limit of {high_iter} was too low:[/] will try again [red]10x[/] deeper...'
+      )
     # here we didn't find, so we loop to the next higher limit...
   # if we exhausted all the high_iters without finding a suitable max_iter, we have to give up
   raise Error(

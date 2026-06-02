@@ -27,6 +27,8 @@ MIN_IMAGE_SIZE: int = 24  # BEWARE: we use this for the "auto" depth calculation
 MAX_IMAGE_SIZE: int = 16 * 1024  # huge image, 16k x 16k, 256Mpx, tens or hundreds of Mb per image
 DEFAULT_IMAGE_SIZE: int = 1024  # good all-around default, 1Mpx, ~1Mb per image (compressed)
 DEFAULT_ZOOM_SIZE: int = 512  # smaller default for zoom, since it can be more expensive
+MIN_IMAGE_PX: int = MIN_IMAGE_SIZE**2
+MAX_IMAGE_PX: int = MAX_IMAGE_SIZE**2
 
 BIT_31: int = 0x80000000
 BIT_32: int = 0x100000000

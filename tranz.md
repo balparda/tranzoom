@@ -663,28 +663,23 @@ Usage: tranz zoom auto [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │                                                                                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --anim                                                             Type of animation to produce; possible values: 'gif', 'mp4'; default is     │
-│                                                                             "gif"                                                                       │
+│ --anim                                                     Type of animation to produce; possible values: 'gif', 'mp4'; default is "gif"       │
 │                                                                                                                                           │
-│ --duration                             FLOAT RANGE [0.1<=x<=45000.0]        GIF/video duration, in seconds; 0.1 ≤ d ≤ 45000.0 or None; pick 2 out of    │
-│                                                                             `--duration`, `--frames` and `--fps`, and the third will be computed;       │
-│                                                                             default is None                                                             │
-│ --frames                               INTEGER RANGE [3<=x<=100000]         Number of frames in GIF/video; 3 ≤ fr ≤ 100000 or None; pick 2 out of       │
-│                                                                             `--duration`, `--frames` and `--fps`, and the third will be computed;       │
-│                                                                             default is None                                                             │
-│ --fps                                  FLOAT RANGE [0.1<=x<=30.0]           Frames per second (FPS) for the GIF/video; 0.1 ≤ fps ≤ 30.0 or None; pick 2 │
-│                                                                             out of `--duration`, `--frames` and `--fps`, and the third will be          │
-│                                                                             computed; default is None                                                   │
-│ --loop                                 INTEGER RANGE [0<=x<=1000]           Number of loops for the GIF (NOT MP4!); 0 ≤ loop ≤ 1000; default is 0; zero │
-│                                                                             (0) means infinite loops                                                    │
+│ --duration                           FLOAT RANGE [0.1<=x<=45000.0]  GIF/video duration, in seconds; 0.1 ≤ d ≤ 45000.0 or None; pick 2 out of            │
+│                                                                     `--duration`, `--frames` and `--fps`, and the third will be computed; default is    │
+│                                                                     None                                                                                │
+│ --frames                             INTEGER RANGE [3<=x<=100000]   Number of frames in GIF/video; 3 ≤ fr ≤ 100000 or None; pick 2 out of `--duration`, │
+│                                                                     `--frames` and `--fps`, and the third will be computed; default is None             │
+│ --fps                                FLOAT RANGE [0.1<=x<=30.0]     Frames per second (FPS) for the GIF/video; 0.1 ≤ fps ≤ 30.0 or None; pick 2 out of  │
+│                                                                     `--duration`, `--frames` and `--fps`, and the third will be computed; default is    │
+│                                                                     None                                                                                │
+│ --loop                               INTEGER RANGE [0<=x<=1000]     Number of loops for the GIF (NOT MP4!); 0 ≤ loop ≤ 1000; default is 0; zero (0)     │
+│                                                                     means infinite loops                                                                │
 │                                                                                                                                             │
-│ --iter         -i                      INTEGER RANGE [1001<=x<=2147483647]  Maximum iterations (depth) to compute before determining escape; 1001 ≤     │
-│                                                                             iter ≤ 2147483647; default is None (automatic search for optimal iterations │
-│                                                                             --- recommended)                                                            │
-│ --save-frames      --no-save-frames                                         If True, will save the intermediate frames of the animation; if False,      │
-│                                                                             intermediate frames will not be saved; default is False                     │
+│ --save-frames    --no-save-frames                                   If True, will save the intermediate frames of the animation; if False, intermediate │
+│                                                                     frames will not be saved; default is False                                          │
 │                                                                                                                                │
-│ --help                                                                      Show this message and exit.                                                 │
+│ --help                                                              Show this message and exit.                                                         │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                                                            
  Examples:                                                                                                                                                 

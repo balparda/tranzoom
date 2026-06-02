@@ -119,6 +119,8 @@ META_ZOOM_STEPS_KEY: str = f'{_app}:zoom:frame:steps'  # int
 META_ZOOM_FPS_KEY: str = f'{_app}:zoom:frame:fps'  # gmpy2.mpq
 META_ZOOM_MAGNITUDE_PER_STEP_KEY: str = f'{_app}:zoom:frame:magnitude_per_step'  # gmpy2.mpq
 META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str = f'{_app}:zoom:frame:magnification_per_step'  # gmpy2.mpq
+META_ZOOM_MARKER_INDEX_LIST_KEY: str = f'{_app}:zoom:marker:index'  # list[int]
+META_ZOOM_DEPTH_FRAMES_LIST_KEY: str = f'{_app}:zoom:depth:frames'  # list[tuple[int, int, int]]]
 META_ZOOM_HASH_KEY: str = f'{_app}:zoom:hash'  # str, like "abcdef1234567890", a SHA256
 # LLM extra keys
 META_LLM_MODEL_KEY: str = f'{_app}:llm:model'  # str (META_LLM_MODEL_VALUE_HUMAN or "HUMAN")
@@ -247,7 +249,7 @@ _MPQ_VIDEO_DURATION_STORE_SCALE: gmpy2.mpq = gmpy2.mpq(str(VIDEO_DURATION_STORE_
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class FractalStats:
+class FractalStats(frame.SerializingFractalObject):
   """Defines Mandelbrot stats values, collected over the sample run.
 
   Attributes:
@@ -286,6 +288,114 @@ class FractalStats:
   # limits of the Imaginary Weight Average for interior (Set) points, in [0, 1]
   imag_lo: gmpy2.mpfr  # min(all sac values for interior points)
   imag_hi: gmpy2.mpfr  # max(all sac values for interior points)
+
+  def __post_init__(self) -> None:
+    """Check FractalStats validity.
+
+    Raises:
+      Error: if the object is invalid.
+
+    """
+    if not (frame.MIN_IMAGE_PX <= self.n_px <= frame.MAX_IMAGE_PX):
+      raise Error(
+        f'Invalid {self.n_px=}, must be between {frame.MIN_IMAGE_PX} and {frame.MAX_IMAGE_PX}'
+      )
+    if not (0 <= self.n_interior < self.n_px):
+      raise Error(f'Invalid {self.n_interior=}, must be between 0 and {self.n_px - 1}')
+    if (self.max_lo != _MPFR_FOUR or self.max_hi != _MPFR_ZERO) and not (
+      _MPFR_ZERO <= self.max_lo <= self.max_hi
+    ):
+      raise Error(f'Invalid {self.max_lo=} and {self.max_hi=}, must satisfy 0 <= max_lo <= max_hi')
+    if (self.min_lo != _MPFR_FOUR or self.min_hi != _MPFR_ZERO) and not (
+      _MPFR_ZERO <= self.min_lo <= self.min_hi
+    ):
+      raise Error(f'Invalid {self.min_lo=} and {self.min_hi=}, must satisfy 0 <= min_lo <= min_hi')
+    if (self.ang_lo != _MPFR_ONE or self.ang_hi != _MPFR_ZERO) and not (
+      _MPFR_ZERO <= self.ang_lo <= self.ang_hi <= _MPFR_ONE
+    ):
+      raise Error(
+        f'Invalid {self.ang_lo=} and {self.ang_hi=}, must satisfy 0 <= ang_lo <= ang_hi <= 1'
+      )
+    if (self.imag_lo != _MPFR_ONE or self.imag_hi != _MPFR_ZERO) and not (
+      _MPFR_ZERO <= self.imag_lo <= self.imag_hi <= _MPFR_ONE
+    ):
+      raise Error(
+        f'Invalid {self.imag_lo=} and {self.imag_hi=}, must satisfy 0 <= imag_lo <= imag_hi <= 1'
+      )
+
+  def __str__(self) -> str:
+    """Get string representation of the FractalStats.
+
+    Returns:
+      str: String representation of the FractalStats.
+
+    """
+    return (
+      f'FractalStats(n_px={self.n_px}, n_interior={self.n_interior}, '
+      f'max_lo={self.max_lo}, max_hi={self.max_hi}, min_lo={self.min_lo}, min_hi={self.min_hi}, '
+      f'ang_lo={self.ang_lo}, ang_hi={self.ang_hi}, imag_lo={self.imag_lo}, imag_hi={self.imag_hi})'
+    )
+
+  @property
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the FractalStats.
+
+    Keys:
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the FractalStats.
+
+    """
+    return {
+      # ATTENTION: changing anything here changes the HASH!!
+      'n_px': self.n_px,
+      'n_interior': self.n_interior,
+      'max_lo': str(self.max_lo),
+      'max_hi': str(self.max_hi),
+      'min_lo': str(self.min_lo),
+      'min_hi': str(self.min_hi),
+      'ang_lo': str(self.ang_lo),
+      'ang_hi': str(self.ang_hi),
+      'imag_lo': str(self.imag_lo),
+      'imag_hi': str(self.imag_hi),
+    }
+
+  @staticmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> FractalStats:
+    """Create a FractalStats object from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from Frame.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the frame. If the
+          calculated hash does not match, an error is raised.
+
+    Returns:
+      FractalStats: A FractalStats object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      params = FractalStats(  # object creation will check the data is valid and consistent
+        n_px=int(str(data['n_px'])),
+        n_interior=int(str(data['n_interior'])),
+        max_lo=gmpy2.mpfr(str(data['max_lo'])),
+        max_hi=gmpy2.mpfr(str(data['max_hi'])),
+        min_lo=gmpy2.mpfr(str(data['min_lo'])),
+        min_hi=gmpy2.mpfr(str(data['min_hi'])),
+        ang_lo=gmpy2.mpfr(str(data['ang_lo'])),
+        ang_hi=gmpy2.mpfr(str(data['ang_hi'])),
+        imag_lo=gmpy2.mpfr(str(data['imag_lo'])),
+        imag_hi=gmpy2.mpfr(str(data['imag_hi'])),
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid FractalStats JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and params.sha != check_hash:
+      raise Error(f'FractalStats {params.sha!r} does not match expected {check_hash!r}')
+    return params
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)

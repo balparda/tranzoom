@@ -816,30 +816,33 @@ You can easily make animations!
 ```sh
 $ poetry run tranz --no-db --no-date zoom -s 220 --mark "(-5578776469/7500000000,8244620127/62500000000)" auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4
 
-220 x 220 'sahara' 'Mandelbrot' 10^1.0000 magnitude ZOOM, 4.000 s long, at 10.00 FPS, with 40 frames (2 markers, 5.00%), 106.0818%/step...
+220 x 220 'sahara' 'Mandelbrot' 10^1.0000 magnitude ZOOM, 4.000 s long, at 10.00 FPS, with 40 frames (2 markers, 5.00%, and 4 depth frames, 10.00%),
+106.0818%/step...
 ZOOM: <GIF: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]} -> {[PNG, SAHARA, none] + [MARK: red/1 @
 (-5578776469/7500000000, 8244620127/62500000000)]} / (mag:1, n:40, d:4, fps:10, l:0)> ... [MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ±
 73801/1000000000]
 
-Marker Frame 1 / 40
-220 x 220 Mandelbrot, 10^3.530 magnitude...
-Compute: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 576/576 [00:00<00:00, 70116.06px/s]
-Picked depth 1000, histogram {36: 32, 37: 46, 38: 40, ...: 455, 595: 1, 638: 1, 698: 1}, 0/576 set points
-Img: 100%|█████████████████████████████████████████████| 48400/48400 [00:00<00:00, 144330.60px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, 7.025 MiB, in 796.175 ms
+Making 4 depth computations...
+Depth: 100%|█████████████████████████████████████████████| 4/4 [00:01<00:00,  3.74fr/s]
+4 depth computations done in 1.030 s
 
-Frame 2 / 40
+Marker Frame 1 / 40 - depth 1001
+220 x 220 Mandelbrot, 10^3.530 magnitude...
+Compute: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, 1001]}
+Img: 100%|█████████████████████████████████████████████| 48400/48400 [00:00<00:00, 146484.25px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 7.025 MiB, in 625.930 ms
+
+Frame 2 / 40 - depth 1002
 [...builds frames 2–40...]
 
 ZOOM: Color norm: built from 2 marker frames
 
 Render: {[PNG, SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}
-Render: 100%|█████████████████████████████████████████████| 40/40 [00:04<00:00,  9.08fr/s]
+Render: 100%|█████████████████████████████████████████████| 40/40 [00:04<00:00,  9.09fr/s]
 Render: DONE
 
-Success: GIF '041f9f86e1c0cc6a215d0251fbcaf88e56a4d1dc5b02c5e747b77f7d74b981c2' in 45.682 s (frames) + 4.738 s (render)
-Saved GIF to 'mandel-041f9f86e1c0cc6a215d.gif', 1.757 MiB
+Success: GIF 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab' in 38.525 s (frames) + 4.728 s (render)
+Saved GIF to 'mandel-e631ffec80dd902e375e.gif', 1.757 MiB
 ```
 
 To make that an MP4, just add `--anim mp4` to the command.

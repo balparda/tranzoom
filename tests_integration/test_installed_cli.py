@@ -225,34 +225,34 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:frame:hash': 'a293633123a893f7fb5597b8ebdf444d1fca9ad1390e1940819dcf419c7edd0e',
       'tranZoom:computation:width': '220',
       'tranZoom:computation:height': '220',
-      'tranZoom:computation:depth': '1159',
+      'tranZoom:computation:depth': '1105',
       'tranZoom:computation:color_set': 'none',
       'tranZoom:computation:hash': (
-        'b30a253dedcde9f73b8c76a7dc700c5c07820a94c3fc05e87578c9e75ac27593'
+        'f7c110603e5498fe126427b74f078b6a944a370d1be9c363445fb299a105668c'
       ),
       'tranZoom:image:animation': 'gif',
       'tranZoom:image:hash': base.SEAHORSE_ANIMATED_HASH,
-      'tranZoom:image:exterior:count': '48385',
+      'tranZoom:image:exterior:count': '48380',
       'tranZoom:image:exterior:n:min': '98',
-      'tranZoom:image:exterior:n:max': '1155',
+      'tranZoom:image:exterior:n:max': '1087',
       'tranZoom:image:exterior:nu:min': '4.646779416361824e-06',
       'tranZoom:image:exterior:nu:max': '0.9999839663505554',
       'tranZoom:image:exterior:bucket:min': '202433',
-      'tranZoom:image:exterior:bucket:max': '2365985',
+      'tranZoom:image:exterior:bucket:max': '2227517',
       'tranZoom:image:exterior:hist:linear': (
-        '{98: 2, 99: 6, 100: 5, ...: 48369, 1139: 1, 1150: 1, 1155: 1}'
+        '{98: 2, 99: 6, 100: 5, ...: 48364, 1064: 1, 1084: 1, 1087: 1}'
       ),
       'tranZoom:image:exterior:hist:linear:cumulative': (
-        '{98: 2, 99: 8, 100: 13, ...: 31645441, 1139: 48383, 1150: 48384, 1155: 48385}'
+        '{98: 2, 99: 8, 100: 13, ...: 31403541, 1064: 48378, 1084: 48379, 1087: 48380}'
       ),
       'tranZoom:image:exterior:hist:bucket': (
-        '{202433: 1, 202682: 1, 202820: 1, ...: 48379, 2333324: 1, 2356949: 1, 2365985: 1}'
+        '{202433: 1, 202682: 1, 202820: 1, ...: 48374, 2179925: 1, 2220863: 1, 2227517: 1}'
       ),
       'tranZoom:image:exterior:hist:bucket:cumulative': (
-        '{202433: 1, 202682: 2, 202820: 3, ...: 1137126108, 2333324: 48383, '
-        '2356949: 48384, 2365985: 48385}'
+        '{202433: 1, 202682: 2, 202820: 3, ...: 1136884208, 2179925: 48378, '
+        '2220863: 48379, 2227517: 48380}'
       ),
-      'tranZoom:image:set:count': '15',
+      'tranZoom:image:set:count': '20',
       'tranZoom:image:set:n:min': '100000000',
       'tranZoom:image:set:n:max': '100000000',
       'tranZoom:image:set:nu:min': '0.0',
@@ -278,6 +278,10 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:zoom:frame:steps': '39',
       'tranZoom:zoom:frame:magnitude_per_step': '1/39',
       'tranZoom:zoom:frame:magnification_per_step': '4777501148913803/4503599627370496',
+      'tranZoom:zoom:marker:index': '[0, 39]',
+      'tranZoom:zoom:depth:frames': (
+        '[(0, 1000, 1001), (13, 1000, 1019), (26, 1000, 1034), (39, 1159, 1105)]'
+      ),
       'tranZoom:zoom:hash': 'e3e0d784d4694b805efb2aa52548605cff720a3ddc3c19f48e3a713785f2eb62',
     }
 

@@ -10,6 +10,7 @@ README.md has good examples for different zoom levels.
 from __future__ import annotations
 
 import dataclasses
+import logging
 import pathlib
 import tempfile
 from collections import abc
@@ -280,6 +281,9 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   all_depth: list[tuple[int, frame.Frame]]
   all_frames, all_markers, all_depth = zoom_params.Frames()  # last thing that could go boom!
   d_all_markers: dict[int, frame.Frame] = dict(all_markers)  # for quick lookup
+  idx: int
+  j: int
+  logging.debug(f'Marker frames: {[idx for idx, _ in all_markers]}')
   # we should be good to go, all options check out; log and warn if needed
   config.console.print(
     f'\n{params.width} x {params.height} {render.escaped_pal.value!r} '
@@ -319,7 +323,13 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   )
 
   def _SaveLogAndITerm(img_p: pathlib.Path, img_sz: int) -> None:
-    """To be called before return."""
+    """To be called before return.
+
+    Args:
+      img_p (pathlib.Path): The path to the saved image.
+      img_sz (int): The size of the saved image in bytes.
+
+    """
     # log
     config.console.print(
       f'Saved {zoom_params.tp.value.upper()} to {str(img_p)!r}, {human.HumanizedBytes(img_sz)}\n'
@@ -332,6 +342,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   # DB
   img: image.Image
   did_comp: bool
+  depth_tmr: timer.Timer | None = None
   all_img_obj: dict[int, image.Image] = {}  # to keep images if not streaming
   all_params: dict[int, frame.ComputationParameters] = {}
   with config.OpenDB() as db:
@@ -348,11 +359,11 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     # see if we have a cache of this zoom
     zoom_data: frdb.ZoomData | None = db.FindZoom(zoom_params)
     if zoom_data:
-      video_hash = zoom_data['data_hash']
+      video_hash = zoom_data['data_hash'] or ''
       old_path: pathlib.Path | None = (
         pathlib.Path(zoom_data['rendered_path']) if zoom_data['rendered_path'] else None
       )
-      if old_path and old_path.exists() and old_path.is_file():
+      if video_hash and old_path and old_path.exists() and old_path.is_file():
         # we do have the video!
         config.console.print(
           f'[red]DB render[/], {video_hash!r}@{timer.TimeStr(zoom_data["tm"])} -> "{old_path}"\n'
@@ -368,31 +379,87 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     # produce the depth computations for all the depth frames: this will save us a lot of trouble
     max_iter: int
     stats: image.FractalStats
-    depth_computations: dict[int, tuple[frame.Frame, int, image.FractalStats]] = {}
-    n_threads: int = frame.ConcurrenceToUse(config.max_threads)
-    for idx, frm in all_depth:
-      params = dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER)
-      max_iter, stats = fractal.FractalAdaptiveIterations(
-        params.frm,
-        set_points=params.set_points,
-        progress_bar=True,
-        n_processes=n_threads,
-        print_comm=config.console.print,
-      )
-      depth_computations[idx] = (frm, max_iter, stats)
-    # we have them, now we can smooth them and replace them into the dict of proposed depths
-    smoothed_depths: list[int] = frame.SmoothDepths([
-      depth_computations[idx][1] for idx, _ in all_depth
-    ])
-    for j, (idx, _) in enumerate(all_depth):
-      frm, _, stats = depth_computations[idx]
-      depth_computations[idx] = (frm, smoothed_depths[j], stats)
+    depth_computations: dict[int, tuple[frame.Frame, int, int, image.FractalStats]] = {}
+    if zoom_data is None or not streaming:
+      n_threads: int = frame.ConcurrenceToUse(config.max_threads)
+      config.console.print(f'[yellow]Making {len(all_depth)} depth computations...[/]')
+      with timer.Timer(emit_log=False) as depth_tmr:
+        for idx, frm in tqdm.tqdm(
+          all_depth,
+          desc='Depth',
+          unit='fr',
+          dynamic_ncols=True,
+          smoothing=0.1,
+          colour='yellow',
+        ):
+          params = dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER)
+          max_iter, stats = fractal.FractalAdaptiveIterations(
+            params.frm,
+            set_points=params.set_points,
+            progress_bar=False,
+            n_processes=n_threads,
+            print_comm=config.console.print,
+          )
+          depth_computations[idx] = (frm, max_iter, max_iter, stats)
+        # we have them, now we can smooth them and replace them into the dict of proposed depths
+        jagged_depths: list[int] = [depth_computations[idx][1] for idx, _ in all_depth]
+        logging.debug(f'Raw depths for depth frames: {jagged_depths}')
+        smoothed_depths: list[int] = frame.SmoothDepths(jagged_depths)
+        del jagged_depths
+        logging.debug(f'Smoothed depths for depth frames: {smoothed_depths}')
+        for j, (idx, _) in enumerate(all_depth):
+          frm, max_iter, _, stats = depth_computations[idx]
+          depth_computations[idx] = (frm, max_iter, smoothed_depths[j], stats)
+        del smoothed_depths
+        # this is our first milestone; add to DB; commit
+        if streaming:
+          db.AddZoomToDB(
+            zoom_params,
+            timestamp,
+            None,
+            None,
+            all_frames,
+            all_markers,
+            [(i, *depth_computations[i]) for i in sorted(depth_computations)],
+          )
+          db.Save()
+      # depth computations done, log
+      config.console.print(f'{len(all_depth)} depth computations done in {depth_tmr}\n')
+    else:
+      # we already have the zoom data in the DB, so load it
+      for dfd in zoom_data['depths']:
+        df: frame.Frame | None = db.FindFrame(dfd['frm'])[0]
+        if not df:
+          raise base.Error(f'Depth frame {dfd["idx"]} references frame {dfd["frm"]} not in DB')
+        depth_computations[dfd['idx']] = (
+          df,
+          dfd['orig_depth'],
+          dfd['smooth_depth'],
+          image.FractalStats.FromJson(dfd['stats']),
+        )
+      # depth computations loaded, sanity check and log
+      if set(depth_computations) != (depth_set := {idx for idx, _ in all_depth}):
+        raise base.Error(
+          'Depth computations in DB do not match the expected depth frames for this zoom: '
+          f'{set(depth_computations.keys())} vs {depth_set}; bug! report!'
+        )
+      config.console.print(f'{len(all_depth)} depth computations loaded from disk\n')
+    # from DB or computed, now we have the depths
     sorted_depth_keys: list[int] = sorted(depth_computations)
 
     def _DepthAndStatsForFrame(i: int) -> tuple[int, image.FractalStats]:
-      """Helper to get the depth/stats for a Frame index, interpolating from depth_computations."""
+      """Get the depth/stats for a Frame index, interpolating from depth_computations.
+
+      Args:
+        i (int): The index of the frame in the zoom sequence.
+
+      Returns:
+        tuple[int, image.FractalStats]: A tuple containing the interpolated max iteration depth and
+            fractal statistics for the frame at index i.
+
+      """
       if i in depth_computations:
-        return (depth_computations[i][1], depth_computations[i][2])
+        return (depth_computations[i][2], depth_computations[i][3])
       # interpolate: find the two bracketing keys in depth_computations
       lo_idx: int = sorted_depth_keys[0]
       hi_idx: int = sorted_depth_keys[-1]
@@ -403,13 +470,13 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           hi_idx = k
           break
       # linearly interpolate max_iter between the two bracketing depths
-      lo_depth: int = depth_computations[lo_idx][1]
-      hi_depth: int = depth_computations[hi_idx][1]
+      lo_depth: int = depth_computations[lo_idx][2]
+      hi_depth: int = depth_computations[hi_idx][2]
       t: float = (i - lo_idx) / (hi_idx - lo_idx) if hi_idx != lo_idx else 0.0
       interpolated_depth: int = round(lo_depth + t * (hi_depth - lo_depth))
       # interpolate each FractalStats field independently
-      lo_stats: image.FractalStats = depth_computations[lo_idx][2]
-      hi_stats: image.FractalStats = depth_computations[hi_idx][2]
+      lo_stats: image.FractalStats = depth_computations[lo_idx][3]
+      hi_stats: image.FractalStats = depth_computations[hi_idx][3]
       t_mpfr: gmpy2.mpfr = gmpy2.mpfr(t)
       interpolated_stats: image.FractalStats = image.FractalStats(
         n_px=round(lo_stats.n_px + t * (hi_stats.n_px - lo_stats.n_px)),
@@ -426,14 +493,27 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       return (interpolated_depth, interpolated_stats)
 
     # produce the frames
+    total_depth: int = sum(_DepthAndStatsForFrame(j)[0] for j in range(len(all_frames)))
+    cmp_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
+      total=total_depth,
+      desc='Frames',
+      unit='fr',
+      dynamic_ncols=True,
+      smoothing=0.1,
+      colour='magenta',
+    )
     with timer.Timer(emit_log=False) as frames_tmr:
       for idx, frm in enumerate(all_frames):
         max_iter, stats = _DepthAndStatsForFrame(idx)
         params = dataclasses.replace(params, frm=frm, depth=max_iter)
         # log
+        log_color: str = (
+          '[magenta]Marker '
+          if idx in d_all_markers
+          else ('[cyan]Depth ' if idx in depth_computations else '[yellow]')
+        )
         config.console.print(
-          f'{"[magenta]Marker " if idx in d_all_markers else "[yellow]"}Frame '
-          f'{idx + 1} / {zoom_params.n_frames}[/] - depth={max_iter}'
+          f'{log_color}Frame {idx + 1} / {zoom_params.n_frames}[/] - depth {max_iter}'
         )
         # if we are streaming it is super worth it to check before loading!
         if streaming:
@@ -441,6 +521,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           if cp and cp['raw_data_path']:
             all_params[idx] = params
             config.console.print('Computation in DB cache\n')
+            cmp_bar.update(max_iter)  # update progress bar with the depth of this frame
             continue
         # we really need to compute: feed frame to the producer
         params, img, did_comp = db.DoComputation(
@@ -464,13 +545,27 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           config.console.print('\n[bright_blue](DB checkpoint)[/]')
           db.Save()  # commit to disk every N computations
         config.console.print()
+        cmp_bar.update(max_iter)  # update progress bar with the depth of this frame
     # we have all frames; if we're using DB and have done computations, make sure it is all saved
+    cmp_bar.close()
     if streaming and n_frames_actually_computed:
       db.Save()
       config.console.print('\n[bright_blue](DB save)[/]\n')
     # we should have all images either in memory or in DB; so now we we rely on _SmartImage()
 
     def _SmartImage(i: int) -> image.Image:
+      """Get the Image object for frame i, either from memory (not streaming) or DB (streaming).
+
+      Args:
+        i (int): The index of the frame in the zoom sequence.
+
+      Returns:
+        image.Image: The Image object for the frame at index i.
+
+      Raises:
+        base.Error: If the image data for frame i is not found in the DB when streaming
+
+      """
       if not streaming:
         return all_img_obj[i]  # noqa: F821
       img_obj: image.Image | None = db.LoadImageData(f'img_{all_params[i].sha}.Data')
@@ -506,6 +601,15 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       try:
 
         def _StreamingRenderFrame(i: int) -> bytes:
+          """Render a single frame, returning the image data as bytes. Only one in memory at a time.
+
+          Args:
+            i (int): The index of the frame in the zoom sequence.
+
+          Returns:
+            bytes: The rendered image data for the frame at index i.
+
+          """
           img_data: bytes
           data_hash: str
           img_path: pathlib.Path
@@ -591,6 +695,14 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           image.META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str(
             zoom_params.scalar_magnification_per_step
           ),
+          image.META_ZOOM_MARKER_INDEX_LIST_KEY: str([idx for idx, _ in all_markers]),
+          image.META_ZOOM_DEPTH_FRAMES_LIST_KEY: str(
+            # we include pre- and post-smoothing depths for all depth frames
+            [
+              (idx, depth_computations[idx][1], depth_computations[idx][2])
+              for idx in sorted_depth_keys
+            ]
+          ),
           image.META_ZOOM_HASH_KEY: zoom_params.sha,
         }
       )
@@ -605,16 +717,16 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     # we just freed the temporary directory; add to DB
     db.AddZoomToDB(
       zoom_params,
-      video_hash,
       timestamp,
+      video_hash,
       str(video_path),
       all_frames,
       all_markers,
-      [(i, *depth_computations[i]) for i in sorted(depth_computations)],
+      [(idx, *depth_computations[idx]) for idx in sorted_depth_keys],
     )
   # done, close DB, final log and iTerm2
   config.console.print(
     f'Success: {zoom_params.tp.value.upper()} {video_hash!r} in '
-    f'{frames_tmr} (frames) + {render_tmr} (render)'
+    f'{depth_tmr or "-"} (depth) + {frames_tmr} (frames) + {render_tmr} (render)'
   )
   _SaveLogAndITerm(video_path, video_path.stat().st_size)
