@@ -8,7 +8,9 @@ import abc as abstract_abc
 import dataclasses
 import enum
 import json
+import math
 import os
+import statistics
 import sys
 from collections import abc
 from typing import Any, cast, final
@@ -1074,6 +1076,115 @@ class ComputationParameters(SerializingFractalObject):
 
     """
     return gmpy2.local_context(gmpy2.context(), precision=self.precision)
+
+
+def _ReflectIndex(i: int, n: int) -> int:
+  """Reflect an index i into the range [0, n-1] by reflecting at the boundaries.
+
+  For example, with n=5, the sequence of reflected indices is:
+  i:   ... -7 -6 -5 -4 -3 -2 -1  r(i): ...  2  1  0  1  2  i:    0  1  2  3  4  5  6  7  ...
+  This is useful for symmetric boundary conditions in smoothing operations.
+
+  Args:
+    i (int): The input index, which can be any integer.
+    n (int): The size of the range to reflect into; must be positive.
+
+  Returns:
+    int: The reflected index within the range [0, n-1].
+
+  """
+  if n == 1:
+    return 0
+  while i < 0 or i >= n:
+    if i < 0:
+      i = -i
+    elif i >= n:
+      i = 2 * n - 2 - i
+  return i
+
+
+def SmoothDepths(
+  depths: list[int | float],
+  *,
+  floor_at_raw: bool = False,
+  margin: float = 1.03,
+  spike_window: int = 5,
+  spike_down_sigma: float = 2.5,
+  spike_up_sigma: float = 4.0,
+  smooth_weights: tuple[float, ...] = (0.03, 0.07, 0.12, 0.18, 0.20, 0.18, 0.12, 0.07, 0.03),
+) -> list[int]:
+  """Convert raw Mandelbrot max-iteration estimates d(i) into smoothed depths s(i).
+
+  The default smoothing kernel is a centered 9-stop low-pass. In z-transform form:
+    H(z)= 0.03 z^4 + 0.07 z^3 + 0.12 z^2 + 0.18 z + 0.20 +           <- future/present samples
+          0.18 z^{-1} + 0.12 z^{-2} + 0.07 z^{-3} + 0.03 z^{-4}      <- past samples
+  Because it is symmetric, it has zero phase shift when applied offline. So a mini-brot
+  feature at stop i does not get delayed into later frames the way a causal EMA would.
+  This filter is centered, so it uses future samples.
+
+  Pipeline:
+    1. log(depth)
+    2. robust local spike clamp
+    3. centered low-pass FIR smoothing
+    4. exp() back to depth
+    5. optional safety floor at raw d(i)
+
+  Args:
+    depths (list[int | float]): Raw estimated depths d(i), all positive.
+    floor_at_raw (bool): If True, s(i) is never below d(i). Safer, but may preserve upward spikes.
+    margin (float): Safety multiplier applied after smoothing.
+    spike_window (int): Odd local window used for robust outlier clamping.
+    spike_down_sigma (float): How strongly to clamp downward outliers in log space.
+    spike_up_sigma (float): How strongly to clamp upward outliers in log space.
+    smooth_weights (tuple[float, ...]): Centered FIR weights. Must have odd length and sum roughly
+        to 1.
+
+  Returns:
+    list[int]: Smoothed integer depths s(i).
+
+  Raises:
+    Error: on error
+
+  """
+  # check parameters
+  if not depths:
+    return []
+  if any(d < MIN_ITER for d in depths):
+    raise Error('all depths must be positive')
+  if not spike_window % 2:
+    raise Error('spike_window must be odd')
+  if not len(smooth_weights) % 2:
+    raise Error('smooth_weights must have odd length')
+  n_depths: int = len(depths)
+  # (1) log-domain signal
+  lds: list[float] = [math.log(float(d)) for d in depths]
+  # (2) robust local spike clamp
+  half_spike: int = spike_window // 2
+  xr: list[float] = []
+  for i in range(n_depths):
+    window: list[float] = [
+      lds[j] for j in (_ReflectIndex(i + j, n_depths) for j in range(-half_spike, half_spike + 1))
+    ]
+    median: float = statistics.median(window)
+    sigma: float = 1.4826 * statistics.median(abs(v - median) for v in window) + 1e-9
+    # clamp x[i] to median ± sigma * (spike_down_sigma, spike_up_sigma), with asymmetric thresholds
+    xr.append(max(median - spike_down_sigma * sigma, min(median + spike_up_sigma * sigma, lds[i])))
+  # (3) centered low-pass smoothing & (4) back to integer depth -> zip()
+  weights: list[float] = [w / sum(smooth_weights) for w in smooth_weights]
+  half_smooth: int = len(weights) // 2
+  smoothed: list[int] = []
+  for raw, yi in zip(
+    depths,
+    [
+      sum(w * xr[_ReflectIndex(i + k - half_smooth, n_depths)] for k, w in enumerate(weights))
+      for i in range(n_depths)
+    ],
+    strict=True,
+  ):
+    s: int = math.ceil(margin * math.exp(yi))
+    smoothed.append(max(math.ceil(raw), s) if floor_at_raw else s)
+  # done
+  return smoothed
 
 
 def DeepSize(obj: Any, *, seen: set[int] | None = None) -> int:  # noqa: ANN401, C901

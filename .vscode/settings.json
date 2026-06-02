@@ -105,6 +105,7 @@
     "autodoc",
     "autouse",
     "Balparda",
+    "brot",
     "celerybeat",
     "cffi",
     "cfgv",
