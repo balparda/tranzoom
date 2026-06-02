@@ -35,7 +35,7 @@ for palette in sahara lava electric sunset aurora plasma forest coral gold toxic
   poetry run tranz --no-db --force --no-date --no-hash --prefix "demo-mandel-seahorse-tail-${palette}" -o tests/data/images --palette "${palette}" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
 done
 
-# Render Animated Seahorse Tail video
+# Render MP4 Animated Seahorse Tail video
 poetry run tranz --no-db --force --no-date --no-hash --prefix "demo-mandel-seahorse-tail-video" -o tests/data/images zoom -s 512 auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4 --anim mp4
 
 # Render Julia Suzana
