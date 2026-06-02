@@ -60,6 +60,7 @@ Built with:
     - [`tranz zoom ai` — AI-guided fractal zoom search](#tranz-zoom-ai--ai-guided-fractal-zoom-search)
     - [`tranz zoom manual` — Manually-guided fractal zoom](#tranz-zoom-manual--manually-guided-fractal-zoom)
     - [`tranz zoom auto` — Automated GIF/MP4 zoom animation](#tranz-zoom-auto--automated-gifmp4-zoom-animation)
+    - [How animations are created, In 10 Steps](#how-animations-are-created-in-10-steps)
     - [Comprehensive example images and zooms](#comprehensive-example-images-and-zooms)
       - [Full / Default (×1)](#full--default-1)
         - [Set Interior Coloring](#set-interior-coloring)
@@ -175,6 +176,8 @@ Starting with version 1.5.0, the fractal renderer uses **smooth coloring**: each
 
 Starting with version 1.6.1, tranZoom estimates file sizes and memory requirements before starting any expensive operation and warns when estimates exceed configurable thresholds (50 MB for a single image, 2 GB for an animation, 20 GB RAM for a single image render, 32 GB RAM for a full animation render). The `tranz zoom auto` command now streams frames from disk on demand during animation rendering (when the DB is enabled) to reduce peak memory, and periodically checkpoints the DB to protect against data loss during long renders.
 
+Starting with version 1.6.2, tranZoom computes the optimal iteration depth adaptively for each animation frame rather than applying a single global depth. Before the main render pass, a set of "depth key frames" is pre-sampled at ≈2× zoom intervals; their raw depths are smoothed in log-space with a robust centered FIR filter (`SmoothDepths()`), and non-key frames receive linearly interpolated depths. This produces animations that are both faster to render (no over-deep frames) and more visually consistent (no jarring quality jumps between successive frames). Depth results are cached in the DB, so re-renders skip the pre-pass entirely.
+
 The tool can save all computations to a local DB. If allowed, it will use these saved computations to save time in any new computation. This DB can be encrypted.
 
 ### What this tool is not
@@ -197,7 +200,7 @@ The tool can save all computations to a local DB. If allowed, it will use these 
 - **Color palette**: Fourteen built-in palettes color the exterior (escaped) pixels. The active palette is chosen with `--palette` (global flag). Positions in the palette are determined by smooth histogram equalization of `(n, nu)` escape values, so the full color range is used regardless of zoom depth or iteration scale. Available palettes: `sahara` (classic 16-stop gradient, default), `lava` (16-stop volcanic gradient), `electric` (32-stop abyss-to-magenta-to-lavender gradient), `sunset` (32-stop indigo-to-amber-to-wine gradient), `aurora` (16-stop night-sky → polar-green aurora → white), `plasma` (16-stop dark void → purple → magenta → white), `forest` (16-stop dark soil → forest green → lime-yellow), `coral` (16-stop deep abyss → teal → coral → pale pink), `gold`, `toxic`, `iris`, `ember`, `rgrayscale` (8-stop white-to-black gradient, designed for interior coloring), `grayscale` (8-stop black-to-white gradient).
 - **DB computation and render caching**: The `FractalDatabase` persists the raw computed `Image` data to disk after each fractal render. On subsequent calls with the same frame and computation parameters, the expensive fractal computation is skipped and the cached data is loaded instead. Rendered PNGs are also cached; if a matching PNG file exists on disk, it is returned immediately. Use `--force` to bypass the cache and always recompute.
 - **Interior (Set) coloring**: By default, interior points (those that never escape, i.e., inside the Mandelbrot/Julia Set) are rendered as pure black. Passing `--set ALGORITHM` enables smooth coloring of those points using a separate `--set-palette` (default `rgrayscale`); supported algorithms: `min` (minimum `|z|` at max depth), `max` (maximum `|z|`), `angle` (angle of `z`), `imaginary` (imaginary-weighted average of `z`). Histogram equalization is applied over the stored values. The `rgrayscale` set palette goes white (deep interior, low `|z|`) → black (near boundary, high `|z|`), so the Set boundary is always dark for contrast with the exterior colors. Both flags are global and apply to all `image` and `zoom` commands.
-- **Zoom animation**: The `tranz zoom auto` command renders a straight zoom-in path from a starting frame down to a target magnification and saves it as an animated GIF or MP4 video. Specify any two of `--frames`, `--fps`, and `--duration` to constrain the third. Use `--anim gif` (default) or `--anim mp4` to select the output format. Rendered zoom animations are cached in the DB; if the same zoom parameters were already rendered and the file is still on disk, the cached file is served immediately.
+- **Zoom animation**: The `tranz zoom auto` command renders a straight zoom-in path from a starting frame down to a target magnification and saves it as an animated GIF or MP4 video. Specify any two of `--frames`, `--fps`, and `--duration` to constrain the third. Use `--anim gif` (default) or `--anim mp4` to select the output format. Rendered zoom animations are cached in the DB; if the same zoom parameters were already rendered and the file is still on disk, the cached file is served immediately. The iteration depth (`max_iter`) is computed adaptively per frame using depth key frames and log-space smoothing; see [How animations are created, In 10 Steps](#how-animations-are-created-in-10-steps).
 - **AI zoom session**: The `tranz zoom ai` command starts an iterative loop: render the current frame, draw a 3×3 thirds grid overlay with green sector labels, send the image to a local LLM vision model, parse the 9-sector scoring response, and move the frame center toward the highest-scoring sector. Supports both Mandelbrot (default) and Julia Set fractals via `-f/--fractal`. The optional `--query` flag enables targeted search, blending fractal-quality scores with target-match scores. The loop runs until Ctrl+C or `--max-steps` is reached.
 - **Manual zoom session**: The `tranz zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM. Supports both Mandelbrot and Julia Set fractals.
 - **Sector scoring**: Each sector is scored on a 0–100 scale for `fractal_score` (visual complexity / zoom promise). When targeted search is active, an additional `target_match_score` (also 0–100) is blended in with a configurable weight.
@@ -671,7 +674,10 @@ Renders a straight zoom-in animation from a starting frame to a target magnifica
 
 The zoom progression is geometrically uniform: each successive frame is scaled by a fixed rational factor computed so that the product of all per-frame zoom steps equals exactly the requested total magnification. Zoom metadata such as initial frame size, zoom step, FPS, duration, frame count, and loop count is stored with the final animated output under `tranZoom:zoom:*` PNG text chunks; if you save intermediate PNG frames, they are written as regular tranZoom still images.
 
-A set of **marker frames** is automatically selected from the full frame sequence at regular ≈8.5× magnification intervals (one marker per `MAGNITUDE_PER_FRAME_MARKER = 13/14` decades of zoom). Marker frames serve two purposes: (1) they act as chapter/seek points stored in the DB alongside all frames, and (2) they anchor the `ZoomColorNorm` so that every frame in the animation maps the same escape-iteration value to the same palette position, eliminating per-frame color flickering. All frames are rendered in a single pass; markers are identified in the log in magenta.
+Two special subsets of frames are automatically selected:
+
+- **Marker frames**: one per ≈8.5× zoom step (`MAGNITUDE_PER_FRAME_MARKER = 13/14` decades). They act as chapter/seek points in the DB and anchor the `ZoomColorNorm` so the same escape-iteration value maps to the same palette position across every frame, eliminating per-frame color flickering. Shown in magenta in the log.
+- **Depth key frames**: one per ≈2× zoom step (`MAGNITUDE_PER_DEPTH_MARKER = 3/10` decades). Before any full-resolution rendering begins, each depth key frame is probed at 24×24 pixels to estimate the optimal `max_iter`. The raw depth estimates are smoothed with `SmoothDepths()` (a 5-tap log-space FIR filter with spike rejection), and all other frames receive linearly interpolated depths. This makes render time predictable and avoids quality inconsistencies across the animation. See [How animations are created, In 10 Steps](#how-animations-are-created-in-10-steps) for a detailed step-by-step walkthrough.
 
 Positional arguments:
 
@@ -693,7 +699,6 @@ Command-level options:
 | `--fps` | Frames per second (0.1–30) | None (computed) |
 | `--loop` | Number of GIF loops; `0` = infinite (ignored for MP4) | `0` |
 | `--save-frames/--no-save-frames` | Save each intermediate PNG frame to disk | off |
-| `--max-iter` | Override max iterations (depth) | automatic adaptive search |
 
 Mark options (`--mark`, `--mark-color`, `--mark-width`) are **`tranz zoom` subgroup flags** (see [above](#tranz-zoom-subgroup-flags)) and apply to all zoom commands, including `auto`.
 
@@ -708,6 +713,40 @@ poetry run tranz --no-date zoom -s 220 auto \
 ```
 
 To produce an MP4 instead of a GIF, add `--anim mp4`.
+
+### How animations are created, In 10 Steps
+
+This section describes the internal pipeline that `tranz zoom auto` follows, step by step, when you ask for a GIF or MP4 zoom animation.
+
+1. **Frame sequence generation**: `ZoomParameters.Frames()` computes the complete list of frame coordinates for the animation entirely in exact `gmpy2.mpq` rational arithmetic, with no floating-point rounding. Each frame is a `Frame` object (center + half-width). In the same call, two special subsets are selected:
+   1. *Marker frames* — one per ≈8.5× zoom step, used for color normalization;
+   2. *Depth key frames* — one per ≈2× zoom step, used for per-frame depth estimation. No rendering happens in this step. It is pure deterministic coordinate arithmetic.
+
+2. **Depth pre-computation pass**: Before any full-resolution frame is rendered, tranZoom probes every depth key frame at the minimum image size (24×24 pixels = 576 pixels). For each probe, `FractalAdaptiveIterations()` renders the tiny image and examines the escape-iteration histogram to find the minimum `max_iter` that captures all meaningful detail (with a 1.5× safety factor and an outlier trim that discards the top 3 extreme pixels). The result is a raw depth estimate for each key frame. The progress of this pass is shown with a yellow `Depth` tqdm bar.
+
+3. **Depth smoothing**: Raw depth estimates can jump between neighboring key frames because the fractal's local complexity changes unevenly with zoom. `SmoothDepths()` converts the raw list into smoothed depths:
+   1. Convert to log-space: `ld[i] = log(depth[i])`.
+   2. Robust spike clamp: for each position, compute the local median and MAD (median absolute deviation) over a 5-element window; clamp downward outliers at `median − 4σ` and upward outliers at `median + 8σ`.
+   3. Centered FIR smoothing: apply a symmetric 5-tap filter `(0.05, 0.15, 0.60, 0.15, 0.05)` (zero phase, so no frame-delay) with reflected boundary conditions.
+   4. Convert back: `smoothed[i] = ceil(exp(ld_smooth[i]) × safety_margin)`. The safety margin scales with local log-depth variation so flat regions get no margin and noisy regions get up to 3% extra headroom.
+
+4. **Depth interpolation for non-key frames**: Each non-key frame receives a `max_iter` by linear interpolation between its two bracketing depth key frames. This means every frame is rendered at the minimum depth needed for its zoom level — no wasted computation on over-deep frames and no quality deficit on under-deep ones.
+
+5. **Depth results saved to DB**: The pre-computed depths (both raw and smoothed), along with the `FractalStats` collected during probing, are saved to the `FractalDatabase` as `DepthFrameData` records. On any subsequent run with identical zoom parameters, this entire pre-pass is skipped and the depths are loaded directly from the DB.
+
+6. **Main rendering pass**: All frames are iterated in animation order. (The main progress bar uses total depth (sum of all `max_iter` values) as its work unit, giving a more accurate time estimate than a simple frame count.) For each frame:
+   1. The assigned `max_iter` (after depth smoothing in *Step 3*) is set on the `ComputationParameters`.
+   2. `FractalDatabase.DoComputation()` is called. If the frame was previously computed and is cached in the DB, the cached `Image` is loaded; otherwise the full-resolution fractal render runs.
+   3. The `Image` is stored either in memory (non-streaming mode) or on disk (streaming mode, one frame at a time).
+   4. The DB is check-pointed every 5 freshly computed frames.
+
+7. **Color normalization**: After all frames are computed, the marker frames (Step 1) are used to construct a `ZoomColorNorm`. This maps each frame's histogram so that the same escape-iteration value always produces the same color across every frame in the animation, eliminating the per-frame hue-shift that would otherwise appear as a flicker.
+
+8. **Render and animation assembly**: All frames are rendered (applying the color normalization from Step 7) and fed to `imageio` for assembly into the final GIF or MP4. In streaming mode, frames are loaded from disk one at a time so peak RAM equals roughly one frame rather than the whole animation.
+
+9. **Metadata embedding**: The final file receives `tranZoom:zoom:*` metadata tags: frame count, FPS, duration, zoom step, magnification per step, marker frame indices, depth frame data (pre- and post-smoothing depths), and the zoom hash. This metadata can be inspected with `tranz image read`.
+
+10. **DB persistence**: A `ZoomData` entry is written to the DB referencing all individual frames, the marker subset, and the depth subset. Future runs with the same parameters will find the cached video file and return it immediately without repeating any computation.
 
 ### Comprehensive example images and zooms
 
@@ -953,12 +992,12 @@ The CLI respects the `NO_COLOR` environment variable and the `--no-color` / `--c
 | `cli/imagecommand.py` | `tranz image mandel`, `tranz image julia`, `tranz image read`, and `tranz image clean` command implementations |
 | `cli/zoomcommand.py` | `tranz zoom ai`, `tranz zoom manual`, and `tranz zoom auto` command implementations |
 | `core/fractal.py` | `Mandelbrot()` and `Julia()` renderers — fractal math; uses `AVAILABLE_CPU` / `MAX_CONCURRENCE` from `frame.py` |
-| `core/frame.py` | `SerializingFractalObject` base class; `Frame` class, `ComputationParameters` class (with size-estimation properties), `Fractal` enum, base coordinate math; `DeepSize()` for recursive object-size estimation; `AVAILABLE_CPU`, `MAX_PRE_PROCESS_CONCURRENCE`, `MAX_CONCURRENCE`; size threshold constants |
+| `core/frame.py` | `SerializingFractalObject` base class; `Frame` class, `ComputationParameters` class (with size-estimation properties), `Fractal` enum, base coordinate math; `DeepSize()` for recursive object-size estimation; `SmoothDepths()` for per-frame depth smoothing; `ConcurrenceToUse()` for process-count selection; `AVAILABLE_CPU`, `MAX_CONCURRENCE`; size threshold constants |
 | `core/image.py` | `Image` class (with inner `ZoomColorNorm` / `FrameColorNorm` for stable cross-frame color normalization); `RenderParameters`, `ZoomParameters`, `ImageOutputConfig`; image utilities, overlays, iTerm2 printing, metadata helpers; `ReWriteAnimatedGIFMeta()` / `ReWriteVideoMP4Meta()` for metadata-only rewrites; `CleanSavePNG()` / `CleanSaveJPG()` for metadata-stripped output |
 | `core/palette.py` | Palette definitions and color mapping |
 | `core/queries.py` | AI prompt templates and Pydantic models for structured LLM responses |
 | `core/ai.py` | `ZoomLoop()` — iterative AI and manual zoom session logic |
-| `core/frdb.py` | `FractalDatabase` — persistent storage for frames, computations, renders, and video entries; `DoComputation()` / `DoRender()` are the split rendering primitives, each returning a `bool` indicating whether work was freshly done or loaded from cache; `is_read_write` property; `FindComputation()` / `FindRender()` for cache lookups; `SaveImageData` / `LoadImageData` for raw pixel cache I/O (histograms stripped on save, rebuilt on load) |
+| `core/frdb.py` | `FractalDatabase` — persistent storage for frames, computations, renders, and video entries; `DoComputation()` / `DoRender()` are the split rendering primitives, each returning a `bool` indicating whether work was freshly done or loaded from cache; `is_read_write` property; `FindFrame()` / `AddFrameToDB()` for individual frame storage; `FindComputation()` / `FindRender()` for cache lookups; `SaveImageData` / `LoadImageData` for raw pixel cache I/O (histograms stripped on save, rebuilt on load); `KeyFrameData` / `DepthFrameData` TypedDicts for typed zoom frame storage |
 | `utils/template.py` | Template for new utility modules |
 
 ### Performance characteristics
