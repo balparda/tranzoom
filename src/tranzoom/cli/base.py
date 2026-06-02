@@ -750,7 +750,7 @@ class TranZoomConfig(clibase.CLIConfig):
     """
     if self.appconfig.path.exists():
       logging.info(f'Loading config from "{self.appconfig.path}"')
-      return cast('ConfigType', self.appconfig.DeSerialize())
+      return cast('ConfigType', self.appconfig.DeSerialize(silent=True))
     return _ConfigTypeFactory()
 
   def SetConfig(self, cnf: ConfigType) -> None:
@@ -768,7 +768,7 @@ class TranZoomConfig(clibase.CLIConfig):
         'last_save': timer.Now(),
       }
     )
-    self.appconfig.Serialize(cnf)
+    self.appconfig.Serialize(cnf, silent=True)
     logging.info(f'Saved config to "{self.appconfig.path}": {cnf}')
 
 

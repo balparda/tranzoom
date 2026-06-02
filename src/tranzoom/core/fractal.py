@@ -20,10 +20,6 @@ import tqdm
 
 from tranzoom.core import frame, image
 
-# TODO: separate depth probing as something that can be done independently
-# TODO: zoom: create a tighter set of frames to probe depth. every 2x zoom, we do one.
-# TODO: smooth this depth data and use it to do a fixed depth computation for every frame
-
 # automated search for iter
 
 _ITER_OUTLIER_SKIP: int = 3  # skip up to this many extreme-outlier pixels in the probe
@@ -48,6 +44,7 @@ def ComputeFractal(
   *,
   progress_bar: bool = True,
   n_processes: int | None = None,
+  stats: image.FractalStats | None = None,
   print_comm: abc.Callable[[str], None] = print,
 ) -> tuple[frame.ComputationParameters, image.Image]:
   """Render the Mandelbrot frame rectangle to an Image.
@@ -57,6 +54,7 @@ def ComputeFractal(
     progress_bar (bool, optional): Whether to show a progress bar. Defaults to True.
     n_processes (int | None, optional): The number of processes to use for rendering. Defaults
         to None, which means to use all available CPU cores. Will be limited to MAX_CONCURRENCE.
+    stats (image.FractalStats | None, optional): Optional pre-collected stats from a sample run.
     print_comm (Callable[[str], None], optional): A callable to print messages. Defaults to print.
 
   Returns:
@@ -67,26 +65,22 @@ def ComputeFractal(
     Error: on error
 
   """
-  # determine processes
-  if n_processes is not None and n_processes < 1:
-    raise Error(f'{n_processes=} must be a positive integer or None')
+  # if max_iter is MIN_ITER, we do an adaptive iteration limit calculation based on a small image;
+  # BEWARE: the method call will call ComputeFractal() recursively, so skip MIN_IMAGE_SIZE
+  n_processes = frame.ConcurrenceToUse(n_processes)
   is_preprocess: bool = (
     params.width == frame.MIN_IMAGE_SIZE and params.height == frame.MIN_IMAGE_SIZE
   )
-  n_processes = n_processes or frame.AVAILABLE_CPU
-  n_processes = (
-    min(n_processes, frame.MAX_PRE_PROCESS_CONCURRENCE) if is_preprocess else n_processes
-  )
-  n_processes = min(n_processes, frame.MAX_CONCURRENCE, frame.AVAILABLE_CPU)  # never exceed CPU!
-  # if max_iter is MIN_ITER, we do an adaptive iteration limit calculation based on a small image;
-  # BEWARE: the method call will call ComputeFractal() recursively, so skip MIN_IMAGE_SIZE
-  stats: image.FractalStats | None = None
   if params.depth == frame.MIN_ITER and max(params.size) > frame.MIN_IMAGE_SIZE:
     # MIN_ITER is a special mark that means "automatically calculate the depth" based on the frame,
     # but we only do this if the image is larger than the minimum size (we use those for probing)
     max_iter: int
-    max_iter, stats = _FractalAdaptiveIterations(
-      params.frm, params.set_points, progress_bar, n_processes, print_comm
+    max_iter, stats = FractalAdaptiveIterations(
+      params.frm,
+      set_points=params.set_points,
+      progress_bar=progress_bar,
+      n_processes=n_processes,
+      print_comm=print_comm,
     )
     params = dataclasses.replace(params, depth=max_iter)  # update params with the new max_iter
   logging.debug(
@@ -153,8 +147,9 @@ def ComputeFractal(
   return (params, img)
 
 
-def _FractalAdaptiveIterations(
+def FractalAdaptiveIterations(
   frm: frame.Frame,
+  *,
   set_points: frame.SetHighlightAlgorithm | None,
   progress_bar: bool,
   n_processes: int,

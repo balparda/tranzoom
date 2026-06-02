@@ -25,7 +25,7 @@ from transcrypto.utils import human, timer
 
 from tranzoom import tranz
 from tranzoom.cli import base
-from tranzoom.core import ai, frame, frdb, image
+from tranzoom.core import ai, fractal, frame, frdb, image
 
 _MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the fractal score
 _N_FRAMES_PER_DB_SAVE: int = 5  # how many frames to compute before saving to DB
@@ -241,11 +241,9 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   frames: int | None = base.ANIM_FRAMES_OPTION,  # type: ignore[assignment]
   fps: float | None = base.ANIM_FPS_OPTION,  # type: ignore[assignment]
   loop: int = base.ANIM_LOOP_OPTION,  # type: ignore[assignment]
-  max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
   save_frames: bool = base.ANIM_SAVE_FRAMES_OPTION,  # type: ignore[assignment]
 ) -> None:
   # we intend passing config, so we add the options here...
-  ctx.obj = dataclasses.replace(ctx.obj, max_iter=max_iter)
   config: base.TranZoomConfig = ctx.obj
   timestamp: int = timer.Now()
   # make basic video params conversion; will be validated later in ZoomParameters
@@ -279,7 +277,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   )
   all_frames: list[frame.Frame]
   all_markers: list[tuple[int, frame.Frame]]
-  all_frames, all_markers = zoom_params.Frames()  # last thing that could go boom!
+  all_depth: list[tuple[int, frame.Frame]]
+  all_frames, all_markers, all_depth = zoom_params.Frames()  # last thing that could go boom!
   d_all_markers: dict[int, frame.Frame] = dict(all_markers)  # for quick lookup
   # we should be good to go, all options check out; log and warn if needed
   config.console.print(
@@ -287,7 +286,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     f'{frm.fractal.value.capitalize()!r} [magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/]'
     f', {human.HumanizedSeconds(float(zoom_params.n_seconds))} long, at {fps:.2f} FPS, '
     f'with {zoom_params.n_frames} frames ({len(all_markers)} markers, '
-    f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%), '
+    f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%, and {len(all_depth)} depth frames, '
+    f'{100.0 * len(all_depth) / zoom_params.n_frames:.2f}%), '
     f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step...'
   )
   config.console.print(f'[yellow]ZOOM:[/] {zoom_params} ... {all_frames[-1]}\n')
@@ -365,26 +365,88 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
         config.console.print(f'Success: {zoom_params.tp.value.upper()} {video_hash!r} from disk')
         _SaveLogAndITerm(video_path, video_path.stat().st_size)
         return
+    # produce the depth computations for all the depth frames: this will save us a lot of trouble
+    max_iter: int
+    stats: image.FractalStats
+    depth_computations: dict[int, tuple[frame.Frame, int, image.FractalStats]] = {}
+    n_threads: int = frame.ConcurrenceToUse(config.max_threads)
+    for idx, frm in all_depth:
+      params = dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER)
+      max_iter, stats = fractal.FractalAdaptiveIterations(
+        params.frm,
+        set_points=params.set_points,
+        progress_bar=True,
+        n_processes=n_threads,
+        print_comm=config.console.print,
+      )
+      depth_computations[idx] = (frm, max_iter, stats)
+    # we have them, now we can smooth them and replace them into the dict of proposed depths
+    smoothed_depths: list[int] = frame.SmoothDepths([
+      depth_computations[idx][1] for idx, _ in all_depth
+    ])
+    for j, (idx, _) in enumerate(all_depth):
+      frm, _, stats = depth_computations[idx]
+      depth_computations[idx] = (frm, smoothed_depths[j], stats)
+    sorted_depth_keys: list[int] = sorted(depth_computations)
+
+    def _DepthAndStatsForFrame(i: int) -> tuple[int, image.FractalStats]:
+      """Helper to get the depth/stats for a Frame index, interpolating from depth_computations."""
+      if i in depth_computations:
+        return (depth_computations[i][1], depth_computations[i][2])
+      # interpolate: find the two bracketing keys in depth_computations
+      lo_idx: int = sorted_depth_keys[0]
+      hi_idx: int = sorted_depth_keys[-1]
+      for k in sorted_depth_keys:
+        if k <= i:
+          lo_idx = k
+        else:
+          hi_idx = k
+          break
+      # linearly interpolate max_iter between the two bracketing depths
+      lo_depth: int = depth_computations[lo_idx][1]
+      hi_depth: int = depth_computations[hi_idx][1]
+      t: float = (i - lo_idx) / (hi_idx - lo_idx) if hi_idx != lo_idx else 0.0
+      interpolated_depth: int = round(lo_depth + t * (hi_depth - lo_depth))
+      # interpolate each FractalStats field independently
+      lo_stats: image.FractalStats = depth_computations[lo_idx][2]
+      hi_stats: image.FractalStats = depth_computations[hi_idx][2]
+      t_mpfr: gmpy2.mpfr = gmpy2.mpfr(t)
+      interpolated_stats: image.FractalStats = image.FractalStats(
+        n_px=round(lo_stats.n_px + t * (hi_stats.n_px - lo_stats.n_px)),
+        n_interior=round(lo_stats.n_interior + t * (hi_stats.n_interior - lo_stats.n_interior)),
+        max_lo=lo_stats.max_lo + t_mpfr * (hi_stats.max_lo - lo_stats.max_lo),
+        max_hi=lo_stats.max_hi + t_mpfr * (hi_stats.max_hi - lo_stats.max_hi),
+        min_lo=lo_stats.min_lo + t_mpfr * (hi_stats.min_lo - lo_stats.min_lo),
+        min_hi=lo_stats.min_hi + t_mpfr * (hi_stats.min_hi - lo_stats.min_hi),
+        ang_lo=lo_stats.ang_lo + t_mpfr * (hi_stats.ang_lo - lo_stats.ang_lo),
+        ang_hi=lo_stats.ang_hi + t_mpfr * (hi_stats.ang_hi - lo_stats.ang_hi),
+        imag_lo=lo_stats.imag_lo + t_mpfr * (hi_stats.imag_lo - lo_stats.imag_lo),
+        imag_hi=lo_stats.imag_hi + t_mpfr * (hi_stats.imag_hi - lo_stats.imag_hi),
+      )
+      return (interpolated_depth, interpolated_stats)
+
     # produce the frames
     with timer.Timer(emit_log=False) as frames_tmr:
       for idx, frm in enumerate(all_frames):
-        params = dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER)
+        max_iter, stats = _DepthAndStatsForFrame(idx)
+        params = dataclasses.replace(params, frm=frm, depth=max_iter)
         # log
         config.console.print(
           f'{"[magenta]Marker " if idx in d_all_markers else "[yellow]"}Frame '
-          f'{idx + 1} / {zoom_params.n_frames}[/]'
+          f'{idx + 1} / {zoom_params.n_frames}[/] - depth={max_iter}'
         )
         # if we are streaming it is super worth it to check before loading!
         if streaming:
           params, _, cp = db.FindComputation(params)
           if cp and cp['raw_data_path']:
             all_params[idx] = params
-            config.console.print('Loaded from DB cache\n')
+            config.console.print('Computation in DB cache\n')
             continue
         # we really need to compute: feed frame to the producer
         params, img, did_comp = db.DoComputation(
-          params,  # send frm, mark as sentinel
+          params,  # send frm
           max_threads=config.max_threads,
+          stats=stats,
           print_comm=config.console.print,
           force=config.img_force_redo,
         )
@@ -548,6 +610,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       str(video_path),
       all_frames,
       all_markers,
+      [(i, *depth_computations[i]) for i in sorted(depth_computations)],
     )
   # done, close DB, final log and iTerm2
   config.console.print(

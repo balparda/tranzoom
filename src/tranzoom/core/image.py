@@ -231,7 +231,8 @@ DEFAULT_LOOP: int = 0  # 0 means infinite loop for GIFs
 THRESHOLD_JUMPY_ZOOM_PER_FRAME: float = 1.25  # if zoom per frame is above this warn about jumpiness
 MAX_TOLERATED_FRAME_MAG_ERROR: float = 0.0002  # 0.02% - max error Frame vs. reduced mpq Frame
 MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.001  # 0.1% - max total cumulative error of total zoom
-MAGNITUDE_PER_FRAME_MARKER: gmpy2.mpq = gmpy2.mpq('13/14')  # one marker every ~8.5x zoom
+MAGNITUDE_PER_FRAME_MARKER: gmpy2.mpq = gmpy2.mpq('13/14')  # ~8.5x zoom/marker (10**(13/14)=8.483)
+MAGNITUDE_PER_DEPTH_MARKER: gmpy2.mpq = gmpy2.mpq('3/10')  # ~2x zoom/frame (10**(3/10)=1.995)
 MAX_TOLERATED_MARKER_MAG_ERROR: float = 0.15  # 15% max error for marker frames
 
 
@@ -826,12 +827,15 @@ class ZoomParameters(frame.SerializingFractalObject):
       raise Error(f'ZoomParameters {params.sha!r} does not match expected {check_hash!r}')
     return params
 
-  def Frames(self) -> tuple[list[frame.Frame], list[tuple[int, frame.Frame]]]:  # noqa: C901, PLR0912, PLR0914, PLR0915
+  def Frames(  # noqa: PLR0914
+    self,
+  ) -> tuple[list[frame.Frame], list[tuple[int, frame.Frame]], list[tuple[int, frame.Frame]]]:
     """Get the Frames. Could be a property, but is a method to remind this is an expensive-ish call.
 
     Returns:
-      tuple[list[frame.Frame], list[tuple[int, frame.Frame]]]: The (frames, marker_frames) for
-          this animation, where marker_frames is a strict subset of frames and is a list
+      tuple[list[frame.Frame], list[tuple[int, frame.Frame]], list[tuple[int, frame.Frame]]]:
+          The (frames, marker_frames, depth_frames) for this animation,
+          where marker_frames & depth_frames are a strict subset of frames and are lists
           of sorted (index, frame) pairs for frames that were picked
 
     Raises:
@@ -926,16 +930,45 @@ class ZoomParameters(frame.SerializingFractalObject):
       f'(actual {float(actual_mag):.6f} vs intended {float(self.mag):.6f})'
     )
     # we finished the frame generation, now we pick them special ones
-    # we don't care about the number of frames, we care about a fixed zoom magnitude
-    n_marker_steps: int = int(
-      cast('gmpy2.mpz', max(math.floor(self.mag / MAGNITUDE_PER_FRAME_MARKER), 1))
+    return (
+      all_frames,
+      self._FramesSubset(all_frames, MAGNITUDE_PER_FRAME_MARKER, 'marker'),
+      self._FramesSubset(all_frames, MAGNITUDE_PER_DEPTH_MARKER, 'depth'),
     )
+
+  def _FramesSubset(
+    self,
+    all_frames: list[frame.Frame],
+    mag_per_step: gmpy2.mpq,
+    name: str,
+  ) -> list[tuple[int, frame.Frame]]:
+    """Get a subset of frames based on the given magnification step.
+
+    Args:
+      all_frames (list[frame.Frame]): The list of all frames generated for the zoom.
+      mag_per_step (gmpy2.mpq): The magnification step per frame.
+      name (str): The name of the subset, used for logging.
+
+    Returns:
+      list[tuple[int, frame.Frame]]: A list of (index, frame) pairs for frames that were picked.
+
+    Raises:
+      Error: if the frames cannot be generated within the tolerated error threshold.
+
+    """
+    # float magnification tracking: avoids 30k-bit precision mpfr computation in every loop step;
+    # frm.magnification[1] is only used to compute max_denominator for limit_denominator, so
+    # a float approximation is precise enough (error is << MAX_TOLERATED_FRAME_MAG_ERROR)
+    mag_log10: float = self.img.frm.magnification[1]  # log10 magnification of the initial frame
+    mag_step: float = float(self.mag_per_step)  # log10 magnification increment per step
+    # we don't care about the number of frames, we care about a fixed zoom magnitude
+    n_marker_steps: int = int(cast('gmpy2.mpz', max(math.floor(self.mag / mag_per_step), 1)))
     if n_marker_steps <= 1 or self.n_frames < 5:  # noqa: PLR2004
       # if we only have 2 or fewer markers (1 step), just use the first and last frames as
       # markers; same thing for few frames: [1st, X, Y, Z, last] is the smallest degenerate
       # case where it is worth having a "marker", frame Y, and return [1st, Y, last]
-      logging.info('No new marker frames needed, will use [first, last]')
-      return (all_frames, [(0, all_frames[0]), (len(all_frames) - 1, all_frames[-1])])
+      logging.info(f'Frames subset {name!r} is trivial, will use [first, last]')
+      return [(0, all_frames[0]), (len(all_frames) - 1, all_frames[-1])]
     # we will need more markers; start from the first and find the "ideal" stops
     with timer.Timer('marker generation'):
       marker_mag: gmpy2.mpq = self.mag / gmpy2.mpq(n_marker_steps)
@@ -948,7 +981,7 @@ class ZoomParameters(frame.SerializingFractalObject):
       ideal_marker_mag_log10: float = mag_log10  # tracks the ideal marker magnification
       # log10(exp10(x)) = x exactly, so use the underlying value rather than gmpy2.log10(marker_mag)
       marker_mag_step_log10: float = float(self.mag) / float(n_marker_steps)
-      frm = all_frames[0]  # start with initial frame, keep as-is
+      frm: frame.Frame = all_frames[0]  # start with initial frame, keep as-is
       marker_frames: list[tuple[int, frame.Frame]] = [(0, frm)]  # start with the first frame
       last_idx: int = 0
       idx: int
@@ -977,31 +1010,31 @@ class ZoomParameters(frame.SerializingFractalObject):
         new_marker: frame.Frame = all_frames[idx]
         if idx == last_idx:
           raise Error(
-            f'Marker frame {i + 1} is closer to last marker index {last_idx}. This is a bug!'
+            f'Frames sub-set {name!r} / {i + 1} is closer to last marker index {last_idx}. Bug!'
           )
         # make sure we don't have duplicates; add it
         if (idx, new_marker) in marker_frames:
-          raise Error(f'Duplicate marker frame found; bug! report. Marker frame: {new_marker}')
+          raise Error(f'Duplicate frame found in {name!r} subset; bug! report. Frame: {new_marker}')
         marker_frames.append((idx, new_marker))
         last_idx = idx
     # done; check we arrived at the last frame and error is acceptable; if so, all is good
     if marker_frames[-1] != (len(all_frames) - 1, all_frames[-1]):
       raise Error(
-        'Last marker frame is not the same as the last frame; bug! report. '
-        f'Last marker frame: {marker_frames[-1]}, last frame: {all_frames[-1]}'
+        f'Last frame in {name!r} subset is not the same as the last frame; bug! report. '
+        f'Last frame in subset: {marker_frames[-1]}, last frame: {all_frames[-1]}'
       )
     if any(1 for j, f in marker_frames if all_frames[j] != f):
-      raise Error('Inconsistent marker frame hashes do not match frames list; Report bug!')
+      raise Error(f'Inconsistent hashes in {name!r} sub-set do not match frames list; Report bug!')
     if max_min_mag_float > MAX_TOLERATED_MARKER_MAG_ERROR:
       raise Error(
-        f'Marker frames are not close enough to the ideal frames; bug! report. '
+        f'Frames sub-set {name!r} are not close enough to the ideal frames; bug! report. '
         f'Maximum deviation in mag2 is {100.0 * max_min_mag_float:.6f}%, which is a bug! report'
       )
     logging.info(
-      f'Generated {len(marker_frames) - 2} non-trivial MARKER Frames for the zoom, '
+      f'Generated {len(marker_frames) - 2} non-trivial {name!r} Frames for the zoom, '
       f'max frame deviation from ideal {100.0 * float(max_min_mag_float):.6f}%'
     )
-    return (all_frames, marker_frames)
+    return marker_frames
 
 
 class Image:

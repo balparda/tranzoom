@@ -162,6 +162,10 @@ class ZoomData(TypedDict):
         magnification ascending; len >=3
     markers (list[tuple[int, str]]): ("CHILDREN") subset of frames entry: key Frame(s) for color
         normalization; (idx, Frame) and idx is the index in the frames list; len >=2 (first & last)
+    depths (list[tuple[int, str, int, image.FractalStats]]): ("CHILDREN") subset of frames entry:
+        key Frame(s) for depth; (idx, Frame, depth, FractalStats) and idx is the index in the
+        frames list; len >=2 (first & last); depth is the chosen depth >= MIN_DEPTH+1 for the frame;
+        and FractalStats is the stats for the frame at that depth
 
   Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
   Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
@@ -182,6 +186,7 @@ class ZoomData(TypedDict):
   # we compute this from core data, so this could be "CACHE" too...
   frames: list[str]  # Frame hashes; ordered by magnification ascending; len >=3
   markers: list[tuple[int, str]]  # subset of frames entry: key Frame(s); len >=2 (first & last)
+  depths: list[tuple[int, str, int, image.FractalStats]]  # subset of frames entry: depth Frame(s)
 
 
 class _DBType(TypedDict):
@@ -792,6 +797,7 @@ class FractalDatabase:
     path: str,
     all_frames: list[frame.Frame],
     markers: list[tuple[int, frame.Frame]],
+    depths: list[tuple[int, frame.Frame, int, image.FractalStats]],
   ) -> None:
     """Add a zoom (video/GIF) to the DB.
 
@@ -805,6 +811,8 @@ class FractalDatabase:
           magnification ascending (video order)
       markers (list[tuple[int, frame.Frame]]): the marker frames that compose the video, a
           subset of all_frames
+      depths (list[tuple[int, frame.Frame, int, image.FractalStats]]): the depth frames that compose
+          the video, a subset of all_frames, with their associated stats
 
     Raises:
       Error: on error, mostly inconsistent DB, not missing data
@@ -831,6 +839,7 @@ class FractalDatabase:
         rendered_path=path,
         frames=[f.sha for f in all_frames],
         markers=[(j, f.sha) for j, f in markers],
+        depths=[(j, f.sha, d, s) for j, f, d, s in depths],
       )
       if any(1 for j, f in zd['markers'] if zd['frames'][j] != f):
         raise Error('Inconsistent DB: marker frame hashes do not match frames list; Report bug!')
@@ -909,7 +918,9 @@ class FractalDatabase:
       )
     # computation
     img: image.Image
-    params, img, _ = self.DoComputation(params, max_threads, print_comm, force=force)
+    params, img, _ = self.DoComputation(
+      params, max_threads=max_threads, print_comm=print_comm, force=force
+    )
     print_comm('')
     # render
     return (
@@ -919,10 +930,10 @@ class FractalDatabase:
         img,
         render,
         out,
-        add_serial,
-        tm,
-        iterm,
-        print_comm,
+        add_serial=add_serial,
+        tm=tm,
+        iterm=iterm,
+        print_comm=print_comm,
         force=force,
       )[:-1],
     )
@@ -930,9 +941,10 @@ class FractalDatabase:
   def DoComputation(
     self,
     params: frame.ComputationParameters,
-    max_threads: int | None,
-    print_comm: abc.Callable[[str], None],
     *,
+    max_threads: int | None,
+    stats: image.FractalStats | None = None,
+    print_comm: abc.Callable[[str], None],
     force: bool = False,
   ) -> tuple[frame.ComputationParameters, image.Image, bool]:
     """Compute a fractal, producing an image.Image.
@@ -943,6 +955,7 @@ class FractalDatabase:
       params (frame.ComputationParameters): The computation parameters for the frame, including
           width, height, and other settings.
       max_threads (int | None): Maximum threads for parallel rendering; None means all CPUs.
+      stats (image.FractalStats | None, optional): Optional pre-collected stats from a sample run.
       print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
       force (bool): If True, will force re-computation of the image even if it is found in the DB
 
@@ -993,6 +1006,7 @@ class FractalDatabase:
           params,  # remember that this params will be updated with the actual depth now!
           progress_bar=True,
           n_processes=max_threads,
+          stats=stats,
           print_comm=print_comm,
         )
         did_computation = True
@@ -1012,11 +1026,11 @@ class FractalDatabase:
     img: image.Image,
     render: image.RenderParameters,
     out: image.ImageOutputConfig,
+    *,
     add_serial: int | None,
     tm: int | None,
     iterm: bool,
     print_comm: abc.Callable[[str], None],
-    *,
     force: bool = False,
     zoom_norm: image.Image.FrameColorNorm | None = None,
     silent: bool = False,
