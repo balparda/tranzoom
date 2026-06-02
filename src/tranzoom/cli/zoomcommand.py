@@ -10,6 +10,7 @@ README.md has good examples for different zoom levels.
 from __future__ import annotations
 
 import dataclasses
+import logging
 import pathlib
 import tempfile
 from collections import abc
@@ -25,7 +26,7 @@ from transcrypto.utils import human, timer
 
 from tranzoom import tranz
 from tranzoom.cli import base
-from tranzoom.core import ai, frame, frdb, image
+from tranzoom.core import ai, fractal, frame, frdb, image
 
 _MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the fractal score
 _N_FRAMES_PER_DB_SAVE: int = 5  # how many frames to compute before saving to DB
@@ -241,11 +242,9 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   frames: int | None = base.ANIM_FRAMES_OPTION,  # type: ignore[assignment]
   fps: float | None = base.ANIM_FPS_OPTION,  # type: ignore[assignment]
   loop: int = base.ANIM_LOOP_OPTION,  # type: ignore[assignment]
-  max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
   save_frames: bool = base.ANIM_SAVE_FRAMES_OPTION,  # type: ignore[assignment]
 ) -> None:
   # we intend passing config, so we add the options here...
-  ctx.obj = dataclasses.replace(ctx.obj, max_iter=max_iter)
   config: base.TranZoomConfig = ctx.obj
   timestamp: int = timer.Now()
   # make basic video params conversion; will be validated later in ZoomParameters
@@ -279,14 +278,20 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   )
   all_frames: list[frame.Frame]
   all_markers: list[tuple[int, frame.Frame]]
-  all_frames, all_markers = zoom_params.Frames()  # last thing that could go boom!
+  all_depth: list[tuple[int, frame.Frame]]
+  all_frames, all_markers, all_depth = zoom_params.Frames()  # last thing that could go boom!
   d_all_markers: dict[int, frame.Frame] = dict(all_markers)  # for quick lookup
+  idx: int
+  j: int
+  logging.debug(f'Marker frames: {[idx for idx, _ in all_markers]}')
   # we should be good to go, all options check out; log and warn if needed
   config.console.print(
     f'\n{params.width} x {params.height} {render.escaped_pal.value!r} '
     f'{frm.fractal.value.capitalize()!r} [magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/]'
     f', {human.HumanizedSeconds(float(zoom_params.n_seconds))} long, at {fps:.2f} FPS, '
-    f'with {zoom_params.n_frames} frames, '
+    f'with {zoom_params.n_frames} frames ({len(all_markers)} markers, '
+    f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%, and {len(all_depth)} depth frames, '
+    f'{100.0 * len(all_depth) / zoom_params.n_frames:.2f}%), '
     f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step...'
   )
   config.console.print(f'[yellow]ZOOM:[/] {zoom_params} ... {all_frames[-1]}\n')
@@ -306,11 +311,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       f'[red]Warning: large animation file estimate: '
       f'GIF ~{human.HumanizedBytes(gif_sz)}, MP4 ~{human.HumanizedBytes(mp4_sz)}[/]\n'
     )
-  zoom_mem: int = zoom_params.comp_memory_sz_bytes
-  if zoom_mem > frame.THRESHOLD_LARGE_ZOOM_MEMORY_BYTES:
-    config.console.print(
-      f'[red]Warning: large zoom render memory estimate: ~{human.HumanizedBytes(zoom_mem)}[/]\n'
-    )
   # create path callback missing only the hash
   full_path: abc.Callable[[str], pathlib.Path] = lambda h: image.MakeImagePath(
     config.img_output_path,
@@ -323,7 +323,13 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   )
 
   def _SaveLogAndITerm(img_p: pathlib.Path, img_sz: int) -> None:
-    """To be called before return."""
+    """To be called before return.
+
+    Args:
+      img_p (pathlib.Path): The path to the saved image.
+      img_sz (int): The size of the saved image in bytes.
+
+    """
     # log
     config.console.print(
       f'Saved {zoom_params.tp.value.upper()} to {str(img_p)!r}, {human.HumanizedBytes(img_sz)}\n'
@@ -336,6 +342,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
   # DB
   img: image.Image
   did_comp: bool
+  depth_tmr: timer.Timer | None = None
   all_img_obj: dict[int, image.Image] = {}  # to keep images if not streaming
   all_params: dict[int, frame.ComputationParameters] = {}
   with config.OpenDB() as db:
@@ -343,14 +350,20 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     video_hash: str
     cp: frdb.ComputationData | None
     video_path: pathlib.Path
+    # warn on large memory usage
+    zoom_mem: int = zoom_params.comp_memory_sz_bytes
+    if not streaming and zoom_mem > frame.THRESHOLD_LARGE_ZOOM_MEMORY_BYTES:
+      config.console.print(
+        f'[red]Warning: large zoom render memory estimate: ~{human.HumanizedBytes(zoom_mem)}[/]\n'
+      )
     # see if we have a cache of this zoom
     zoom_data: frdb.ZoomData | None = db.FindZoom(zoom_params)
     if zoom_data:
-      video_hash = zoom_data['data_hash']
+      video_hash = zoom_data['data_hash'] or ''
       old_path: pathlib.Path | None = (
         pathlib.Path(zoom_data['rendered_path']) if zoom_data['rendered_path'] else None
       )
-      if old_path and old_path.exists() and old_path.is_file():
+      if video_hash and old_path and old_path.exists() and old_path.is_file():
         # we do have the video!
         config.console.print(
           f'[red]DB render[/], {video_hash!r}@{timer.TimeStr(zoom_data["tm"])} -> "{old_path}"\n'
@@ -363,26 +376,158 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
         config.console.print(f'Success: {zoom_params.tp.value.upper()} {video_hash!r} from disk')
         _SaveLogAndITerm(video_path, video_path.stat().st_size)
         return
+    # produce the depth computations for all the depth frames: this will save us a lot of trouble
+    max_iter: int
+    stats: image.FractalStats
+    depth_computations: dict[int, tuple[frame.Frame, int, int, image.FractalStats]] = {}
+    if zoom_data is None or not streaming:
+      n_threads: int = frame.ConcurrenceToUse(config.max_threads)
+      config.console.print(f'[yellow]Making {len(all_depth)} depth computations...[/]')
+      with timer.Timer(emit_log=False) as depth_tmr:
+        for idx, frm in tqdm.tqdm(
+          all_depth,
+          desc='Depth',
+          unit='fr',
+          dynamic_ncols=True,
+          smoothing=0.1,
+          colour='yellow',
+        ):
+          params = dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER)
+          max_iter, stats = fractal.FractalAdaptiveIterations(
+            params.frm,
+            set_points=params.set_points,
+            progress_bar=False,
+            n_processes=n_threads,
+            print_comm=config.console.print,
+          )
+          depth_computations[idx] = (frm, max_iter, max_iter, stats)
+        # we have them, now we can smooth them and replace them into the dict of proposed depths
+        jagged_depths: list[int] = [depth_computations[idx][1] for idx, _ in all_depth]
+        logging.debug(f'Raw depths for depth frames: {jagged_depths}')
+        smoothed_depths: list[int] = frame.SmoothDepths(jagged_depths)
+        del jagged_depths
+        logging.debug(f'Smoothed depths for depth frames: {smoothed_depths}')
+        for j, (idx, _) in enumerate(all_depth):
+          frm, max_iter, _, stats = depth_computations[idx]
+          depth_computations[idx] = (frm, max_iter, smoothed_depths[j], stats)
+        del smoothed_depths
+        # this is our first milestone; add to DB; commit
+        if streaming:
+          db.AddZoomToDB(
+            zoom_params,
+            timestamp,
+            None,
+            None,
+            all_frames,
+            all_markers,
+            [(i, *depth_computations[i]) for i in sorted(depth_computations)],
+          )
+          db.Save()
+      # depth computations done, log
+      config.console.print(f'{len(all_depth)} depth computations done in {depth_tmr}\n')
+    else:
+      # we already have the zoom data in the DB, so load it
+      for dfd in zoom_data['depths']:
+        df: frame.Frame | None = db.FindFrame(dfd['frm'])[0]
+        if not df:
+          raise base.Error(f'Depth frame {dfd["idx"]} references frame {dfd["frm"]} not in DB')
+        depth_computations[dfd['idx']] = (
+          df,
+          dfd['orig_depth'],
+          dfd['smooth_depth'],
+          image.FractalStats.FromJson(dfd['stats']),
+        )
+      # depth computations loaded, sanity check and log
+      if set(depth_computations) != (depth_set := {idx for idx, _ in all_depth}):
+        raise base.Error(
+          'Depth computations in DB do not match the expected depth frames for this zoom: '
+          f'{set(depth_computations.keys())} vs {depth_set}; bug! report!'
+        )
+      config.console.print(f'{len(all_depth)} depth computations loaded from disk\n')
+    # from DB or computed, now we have the depths
+    sorted_depth_keys: list[int] = sorted(depth_computations)
+
+    def _DepthAndStatsForFrame(i: int) -> tuple[int, image.FractalStats]:
+      """Get the depth/stats for a Frame index, interpolating from depth_computations.
+
+      Args:
+        i (int): The index of the frame in the zoom sequence.
+
+      Returns:
+        tuple[int, image.FractalStats]: A tuple containing the interpolated max iteration depth and
+            fractal statistics for the frame at index i.
+
+      """
+      if i in depth_computations:
+        return (depth_computations[i][2], depth_computations[i][3])
+      # interpolate: find the two bracketing keys in depth_computations
+      lo_idx: int = sorted_depth_keys[0]
+      hi_idx: int = sorted_depth_keys[-1]
+      for k in sorted_depth_keys:
+        if k <= i:
+          lo_idx = k
+        else:
+          hi_idx = k
+          break
+      # linearly interpolate max_iter between the two bracketing depths
+      lo_depth: int = depth_computations[lo_idx][2]
+      hi_depth: int = depth_computations[hi_idx][2]
+      t: float = (i - lo_idx) / (hi_idx - lo_idx) if hi_idx != lo_idx else 0.0
+      interpolated_depth: int = round(lo_depth + t * (hi_depth - lo_depth))
+      # interpolate each FractalStats field independently
+      lo_stats: image.FractalStats = depth_computations[lo_idx][3]
+      hi_stats: image.FractalStats = depth_computations[hi_idx][3]
+      t_mpfr: gmpy2.mpfr = gmpy2.mpfr(t)
+      interpolated_stats: image.FractalStats = image.FractalStats(
+        n_px=round(lo_stats.n_px + t * (hi_stats.n_px - lo_stats.n_px)),
+        n_interior=round(lo_stats.n_interior + t * (hi_stats.n_interior - lo_stats.n_interior)),
+        max_lo=lo_stats.max_lo + t_mpfr * (hi_stats.max_lo - lo_stats.max_lo),
+        max_hi=lo_stats.max_hi + t_mpfr * (hi_stats.max_hi - lo_stats.max_hi),
+        min_lo=lo_stats.min_lo + t_mpfr * (hi_stats.min_lo - lo_stats.min_lo),
+        min_hi=lo_stats.min_hi + t_mpfr * (hi_stats.min_hi - lo_stats.min_hi),
+        ang_lo=lo_stats.ang_lo + t_mpfr * (hi_stats.ang_lo - lo_stats.ang_lo),
+        ang_hi=lo_stats.ang_hi + t_mpfr * (hi_stats.ang_hi - lo_stats.ang_hi),
+        imag_lo=lo_stats.imag_lo + t_mpfr * (hi_stats.imag_lo - lo_stats.imag_lo),
+        imag_hi=lo_stats.imag_hi + t_mpfr * (hi_stats.imag_hi - lo_stats.imag_hi),
+      )
+      return (interpolated_depth, interpolated_stats)
+
     # produce the frames
+    total_depth: int = sum(_DepthAndStatsForFrame(j)[0] for j in range(len(all_frames)))
+    cmp_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
+      total=total_depth,
+      desc='Frames',
+      unit='fr',
+      dynamic_ncols=True,
+      smoothing=0.1,
+      colour='magenta',
+    )
     with timer.Timer(emit_log=False) as frames_tmr:
       for idx, frm in enumerate(all_frames):
-        params = dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER)
+        max_iter, stats = _DepthAndStatsForFrame(idx)
+        params = dataclasses.replace(params, frm=frm, depth=max_iter)
         # log
+        log_color: str = (
+          '[magenta]Marker '
+          if idx in d_all_markers
+          else ('[cyan]Depth ' if idx in depth_computations else '[yellow]')
+        )
         config.console.print(
-          f'{"[magenta]Marker " if idx in d_all_markers else "[yellow]"}Frame '
-          f'{idx + 1} / {zoom_params.n_frames}[/]'
+          f'{log_color}Frame {idx + 1} / {zoom_params.n_frames}[/] - depth {max_iter}'
         )
         # if we are streaming it is super worth it to check before loading!
         if streaming:
           params, _, cp = db.FindComputation(params)
           if cp and cp['raw_data_path']:
             all_params[idx] = params
-            config.console.print('Loaded from DB cache\n')
+            config.console.print('Computation in DB cache\n')
+            cmp_bar.update(max_iter)  # update progress bar with the depth of this frame
             continue
         # we really need to compute: feed frame to the producer
         params, img, did_comp = db.DoComputation(
-          params,  # send frm, mark as sentinel
+          params,  # send frm
           max_threads=config.max_threads,
+          stats=stats,
           print_comm=config.console.print,
           force=config.img_force_redo,
         )
@@ -400,13 +545,27 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           config.console.print('\n[bright_blue](DB checkpoint)[/]')
           db.Save()  # commit to disk every N computations
         config.console.print()
+        cmp_bar.update(max_iter)  # update progress bar with the depth of this frame
     # we have all frames; if we're using DB and have done computations, make sure it is all saved
+    cmp_bar.close()
     if streaming and n_frames_actually_computed:
       db.Save()
       config.console.print('\n[bright_blue](DB save)[/]\n')
     # we should have all images either in memory or in DB; so now we we rely on _SmartImage()
 
     def _SmartImage(i: int) -> image.Image:
+      """Get the Image object for frame i, either from memory (not streaming) or DB (streaming).
+
+      Args:
+        i (int): The index of the frame in the zoom sequence.
+
+      Returns:
+        image.Image: The Image object for the frame at index i.
+
+      Raises:
+        base.Error: If the image data for frame i is not found in the DB when streaming
+
+      """
       if not streaming:
         return all_img_obj[i]  # noqa: F821
       img_obj: image.Image | None = db.LoadImageData(f'img_{all_params[i].sha}.Data')
@@ -442,6 +601,15 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       try:
 
         def _StreamingRenderFrame(i: int) -> bytes:
+          """Render a single frame, returning the image data as bytes. Only one in memory at a time.
+
+          Args:
+            i (int): The index of the frame in the zoom sequence.
+
+          Returns:
+            bytes: The rendered image data for the frame at index i.
+
+          """
           img_data: bytes
           data_hash: str
           img_path: pathlib.Path
@@ -527,6 +695,14 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           image.META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str(
             zoom_params.scalar_magnification_per_step
           ),
+          image.META_ZOOM_MARKER_INDEX_LIST_KEY: str([idx for idx, _ in all_markers]),
+          image.META_ZOOM_DEPTH_FRAMES_LIST_KEY: str(
+            # we include pre- and post-smoothing depths for all depth frames
+            [
+              (idx, depth_computations[idx][1], depth_computations[idx][2])
+              for idx in sorted_depth_keys
+            ]
+          ),
           image.META_ZOOM_HASH_KEY: zoom_params.sha,
         }
       )
@@ -541,15 +717,16 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     # we just freed the temporary directory; add to DB
     db.AddZoomToDB(
       zoom_params,
-      video_hash,
       timestamp,
+      video_hash,
       str(video_path),
       all_frames,
       all_markers,
+      [(idx, *depth_computations[idx]) for idx in sorted_depth_keys],
     )
   # done, close DB, final log and iTerm2
   config.console.print(
     f'Success: {zoom_params.tp.value.upper()} {video_hash!r} in '
-    f'{frames_tmr} (frames) + {render_tmr} (render)'
+    f'{depth_tmr or "-"} (depth) + {frames_tmr} (frames) + {render_tmr} (render)'
   )
   _SaveLogAndITerm(video_path, video_path.stat().st_size)

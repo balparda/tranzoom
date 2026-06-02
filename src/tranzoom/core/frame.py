@@ -8,7 +8,9 @@ import abc as abstract_abc
 import dataclasses
 import enum
 import json
+import math
 import os
+import statistics
 import sys
 from collections import abc
 from typing import Any, cast, final
@@ -21,10 +23,12 @@ from transcrypto.utils import base as tbase
 
 type ExactInputType = str | float | gmpy2.mpq
 
-MIN_IMAGE_SIZE: int = 16  # BEWARE: we use this for the "auto" depth calculation, so not too small!
+MIN_IMAGE_SIZE: int = 24  # BEWARE: we use this for the "auto" depth calculation, so not too small!
 MAX_IMAGE_SIZE: int = 16 * 1024  # huge image, 16k x 16k, 256Mpx, tens or hundreds of Mb per image
 DEFAULT_IMAGE_SIZE: int = 1024  # good all-around default, 1Mpx, ~1Mb per image (compressed)
 DEFAULT_ZOOM_SIZE: int = 512  # smaller default for zoom, since it can be more expensive
+MIN_IMAGE_PX: int = MIN_IMAGE_SIZE**2
+MAX_IMAGE_PX: int = MAX_IMAGE_SIZE**2
 
 BIT_31: int = 0x80000000
 BIT_32: int = 0x100000000
@@ -48,7 +52,6 @@ THRESHOLD_LARGE_ZOOM_MEMORY_BYTES: int = 32 * 1024 * 1024 * 1024  # warn if zoom
 
 # multiprocessing
 AVAILABLE_CPU: int = int(getattr(os, 'process_cpu_count', os.cpu_count)() or 1)
-MAX_PRE_PROCESS_CONCURRENCE: int = 4  # for the preprocess step, we limit the concurrency
 MAX_CONCURRENCE: int = 12  # for the main rendering step, we limit the concurrency
 
 # gmpy2.mpfr constants
@@ -1076,6 +1079,138 @@ class ComputationParameters(SerializingFractalObject):
     return gmpy2.local_context(gmpy2.context(), precision=self.precision)
 
 
+def _ReflectIndex(i: int, n: int) -> int:
+  """Reflect an index i into the range [0, n-1] by reflecting at the boundaries.
+
+  For example, with n=5, the sequence of reflected indices is:
+  i:   ... -7 -6 -5 -4 -3 -2 -1  r(i): ...  2  1  0  1  2  i:    0  1  2  3  4  5  6  7  ...
+  This is useful for symmetric boundary conditions in smoothing operations.
+
+  Args:
+    i (int): The input index, which can be any integer.
+    n (int): The size of the range to reflect into; must be positive.
+
+  Returns:
+    int: The reflected index within the range [0, n-1].
+
+  """
+  if n == 1:
+    return 0
+  while i < 0 or i >= n:
+    if i < 0:
+      i = -i
+    elif i >= n:
+      i = 2 * n - 2 - i
+  return i
+
+
+def SmoothDepths(  # noqa: C901, PLR0912
+  depths: list[int],
+  *,
+  floor_at_raw: bool = False,
+  margin: float = 0.03,
+  margin_full_scale: float = math.log(1.5),
+  spike_window: int = 5,
+  spike_down_sigma: float = 4.0,
+  spike_up_sigma: float = 8.0,
+  enable_spike_clamp: bool = True,
+  smooth_weights: tuple[float, ...] = (0.05, 0.15, 0.60, 0.15, 0.05),
+) -> list[int]:
+  """Convert raw Mandelbrot max-iteration estimates d(i) into smoothed depths s(i).
+
+  Notice that s(i) is guaranteed > MIN_ITER, so that they are never considered sentinel/"AUTO".
+  But notice that we do accept inputs of d(i)==MIN_ITER they'll just come up as at least
+  MIN_ITER+1 in the output.
+
+  The default smoothing kernel is a centered 5-stop low-pass. In z-transform form:
+    H(z)= 0.05 z^2 + 0.15 z + 0.60 + 0.15 z^{-1} + 0.05 z^{-2}
+  Because it is symmetric, it has zero phase shift when applied offline. So a mini-brot
+  feature at stop i does not get delayed into later frames the way a causal EMA would.
+  This filter is centered, so it uses future samples.
+
+  Pipeline:
+    1. log(depth)
+    2. robust local spike clamp
+    3. centered low-pass FIR smoothing
+    4. exp() back to depth
+    5. optional safety floor at raw d(i)
+
+  Args:
+    depths (list[int]): Raw estimated depths d(i), all positive.
+    floor_at_raw (bool): If True, s(i) is never below d(i). Safer, but may preserve upward spikes.
+    margin (float): Safety multiplier applied after smoothing.
+    margin_full_scale (float): Log-depth variation that activates the full margin.
+    spike_window (int): Odd local window used for robust outlier clamping.
+    spike_down_sigma (float): How strongly to clamp downward outliers in log space.
+    spike_up_sigma (float): How strongly to clamp upward outliers in log space.
+    enable_spike_clamp (bool): Whether to do the robust local clamp.
+    smooth_weights (tuple[float, ...]): Centered FIR weights. Must have odd length and sum roughly
+        to 1.
+
+  Returns:
+    list[int]: Smoothed integer depths s(i), MIN_ITER < s(i) <= MAX_ITER.
+
+  Raises:
+    Error: on error
+
+  """
+  # check parameters
+  if not depths:
+    return []
+  if any(d < MIN_ITER for d in depths):
+    raise Error(f'all depths must be positive, >= {MIN_ITER}')
+  if not spike_window % 2:
+    raise Error('spike_window must be odd')
+  if not len(smooth_weights) % 2:
+    raise Error('smooth_weights must have odd length')
+  if margin < 0.0:
+    raise Error('margin must be >= 0')
+  if margin_full_scale <= 0.0:
+    raise Error('margin_full_scale must be > 0')
+  if sum(smooth_weights) <= 0.0:
+    raise Error('smooth_weights must have positive sum')
+  n_depths: int = len(depths)
+  # preserve true constants exactly, except for the sentinel rule
+  if all(d == depths[0] for d in depths):
+    return [min(max(d, MIN_ITER + 1), MAX_ITER) for d in depths]
+  # (1) log-domain signal
+  lds: list[float] = [math.log(float(d)) for d in depths]
+  # (2) robust local spike clamp
+  if enable_spike_clamp and n_depths >= spike_window:
+    half_spike: int = spike_window // 2
+    xr: list[float] = []
+    for i in range(n_depths):
+      window: list[float] = [
+        lds[j] for j in (_ReflectIndex(i + j, n_depths) for j in range(-half_spike, half_spike + 1))
+      ]
+      median: float = statistics.median(window)
+      sigma: float = 1.4826 * statistics.median(abs(v - median) for v in window) + 1e-9
+      xr.append(
+        max(median - spike_down_sigma * sigma, min(median + spike_up_sigma * sigma, lds[i]))
+      )
+  else:
+    xr = list(lds)
+  # (3) centered low-pass smoothing
+  weights: list[float] = [w / sum(smooth_weights) for w in smooth_weights]
+  half_smooth: int = len(weights) // 2
+  smoothed: list[int] = []
+  for i, raw in enumerate(depths):
+    yi: float = sum(
+      w * xr[_ReflectIndex(i + k - half_smooth, n_depths)] for k, w in enumerate(weights)
+    )
+    # local variation controls the safety margin; if the local region is flat, no margin is applied
+    local_values: list[float] = [
+      xr[_ReflectIndex(i + k - half_smooth, n_depths)] for k in range(len(weights))
+    ]
+    local_variation: float = max(local_values) - min(local_values)
+    effective_margin: float = 1.0 + (margin * min(1.0, local_variation / margin_full_scale))
+    s: int = math.ceil(effective_margin * math.exp(yi))
+    if floor_at_raw:
+      s = max(math.ceil(raw), s)
+    smoothed.append(min(max(s, MIN_ITER + 1), MAX_ITER))
+  return smoothed
+
+
 def DeepSize(obj: Any, *, seen: set[int] | None = None) -> int:  # noqa: ANN401, C901
   """Recursively estimate the deep size of a Python object in bytes, including nested objects.
 
@@ -1130,3 +1265,23 @@ def DeepSize(obj: Any, *, seen: set[int] | None = None) -> int:  # noqa: ANN401,
         size += DeepSize(getattr(obj, slot), seen=seen)  # pyright: ignore[reportUnknownArgumentType]
   # return the total size
   return size
+
+
+def ConcurrenceToUse(n_processes: int | None = None) -> int:
+  """Determine the number of concurrent processes to use for rendering based on the system limits.
+
+  Args:
+    n_processes (int | None): The desired number of processes to use. If None, it will default
+        to the number of available CPU cores.
+
+  Returns:
+    int: The number of processes to use, which will be a positive integer not exceeding the
+        available CPU cores or MAX_CONCURRENCE.
+
+  Raises:
+    Error: If n_processes is provided and is not a positive integer.
+
+  """
+  if n_processes is not None and n_processes < 1:
+    raise Error(f'{n_processes=} must be a positive integer or None')
+  return min(n_processes or AVAILABLE_CPU, MAX_CONCURRENCE, AVAILABLE_CPU)  # never exceed CPU!

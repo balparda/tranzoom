@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
+  - [1.6.2 - 2026-06-02](#162---2026-06-02)
   - [1.6.1 - 2026-06-01](#161---2026-06-01)
   - [1.6.0 - 2026-05-30](#160---2026-05-30)
   - [1.5.2 - 2026-05-27](#152---2026-05-27)
@@ -34,6 +35,40 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future fixes.
+
+## 1.6.2 - 2026-06-02
+
+- Added
+  - **`SmoothDepths()` function** (`frame.py`): new function that converts raw per-frame max-iteration estimates into smoothed depth values; operates in log-space with a centered 5-tap zero-phase FIR filter plus a robust local spike clamp (median absolute deviation, configurable `spike_down_sigma` / `spike_up_sigma`); a `_ReflectIndex()` helper provides symmetric boundary conditions; output is always in `(MIN_ITER, MAX_ITER]` and never equals the sentinel `MIN_ITER`; a variable-strength safety margin is applied proportional to local log-depth variation.
+  - **`ConcurrenceToUse()` helper** (`frame.py`): extracted and centralizes the logic for determining the number of parallel render processes, replacing inline boilerplate in `ComputeFractal()`; raises `Error` on invalid input; respects `MAX_CONCURRENCE` and `AVAILABLE_CPU` limits.
+  - **Per-frame adaptive depth with depth key frames** (`zoomcommand.py`, `image.py`): before rendering animation frames, `tranz zoom auto` now pre-computes optimal iteration depths for a set of "depth key frames" (one per ≈2× zoom step, controlled by `MAGNITUDE_PER_DEPTH_MARKER = gmpy2.mpq('3/10')`); raw depths are smoothed with `SmoothDepths()` to avoid jarring depth jumps between adjacent frames; non-depth frames receive a linearly interpolated depth between the two nearest depth key frames; the smoothed depths (and associated `FractalStats`) are saved to the DB so a second run with the same zoom parameters can skip the entire depth pre-pass.
+  - **Depth pre-computation progress bar** (`zoomcommand.py`): a `tqdm` bar (yellow, unit `fr`) tracks progress across the depth key frame probe pass; the main frame-rendering bar now uses total iteration depth (sum of all per-frame `max_iter`) as its work unit, giving a more accurate ETA.
+  - **`MAGNITUDE_PER_DEPTH_MARKER` constant** (`image.py`): `gmpy2.mpq('3/10')`, one depth probe per ≈2× zoom; controls the density of depth key frames and therefore the smoothness of the per-frame depth variation.
+  - **`FractalStats` serialization** (`image.py`): `FractalStats` now extends `SerializingFractalObject`; added `__post_init__()` validation, `__str__()`, a `json` property, and a `FromJson()` static method; `FractalStats` objects can now be stored in and retrieved from the DB as part of `DepthFrameData`.
+  - **`KeyFrameData` and `DepthFrameData` TypedDicts** (`frdb.py`): new typed storage structures for marker and depth frames; `KeyFrameData` holds `idx` (frame index) and `frm` (frame hash); `DepthFrameData` extends it with `orig_depth`, `smooth_depth`, and `stats` (serialized `FractalStats`); used in the updated `ZoomData`.
+  - **`FractalDatabase.FindFrame()` method** (`frdb.py`): look up a `Frame` object and its `FrameData` by hash; returns `(None, None)` if not found or if `use_db` is False.
+  - **`FractalDatabase.AddFrameToDB()` method** (`frdb.py`): add a `Frame` to the frames dict if not already present; no-op if already stored; called automatically by `AddZoomToDB()` for all frames.
+  - **`META_ZOOM_MARKER_INDEX_LIST_KEY` and `META_ZOOM_DEPTH_FRAMES_LIST_KEY`** (`image.py`): new `tranZoom:zoom:marker:index` and `tranZoom:zoom:depth:frames` metadata keys stored in the final GIF/MP4 output; the marker key is a list of frame indices; the depth key is a list of `(idx, orig_depth, smooth_depth)` triples, one per depth key frame.
+  - **`FractalAdaptiveIterations()` made public** (`fractal.py`): renamed from `_FractalAdaptiveIterations()` to `FractalAdaptiveIterations()`; keyword-only parameters added; now called directly from `zoomcommand.py` for the depth pre-computation pass without going through `ComputeFractal()`.
+  - **`MIN_IMAGE_PX` and `MAX_IMAGE_PX` constants** (`frame.py`): convenience pixel-count constants `MIN_IMAGE_SIZE**2` and `MAX_IMAGE_SIZE**2`; used in `FractalStats.__post_init__()` validation.
+
+- Changed
+  - **`tranz zoom auto` removes `--max-iter` option** (`zoomcommand.py`): iteration depth is now always computed adaptively per frame using the depth key frame pre-pass and interpolation; the `--max-iter` flag has been removed; there is no longer a way to manually override depth for animations.
+  - **`ZoomParameters.Frames()` return type** (`image.py`): changed from `tuple[list[Frame], list[tuple[int, Frame]]]` to `tuple[list[Frame], list[tuple[int, Frame]], list[tuple[int, Frame]]]`; the third element is the list of depth key frames (selected at `MAGNITUDE_PER_DEPTH_MARKER` intervals); a new `_FramesSubset()` helper generalizes both marker and depth frame selection, replacing duplicated logic.
+  - **`ZoomData` TypedDict updated** (`frdb.py`): `data_hash` changed to `str | None` (depth-only pre-pass saves to DB before file creation); `rendered_path` changed to `str | None`; `markers` changed from `list[tuple[int, str]]` to `list[KeyFrameData]`; new `depths: list[DepthFrameData]` field for depth key frame storage.
+  - **`FractalDatabase.AddZoomToDB()` signature updated** (`frdb.py`): `data_hash` and `path` are now `str | None`; added `depths` parameter (`list[tuple[int, frame.Frame, int, int, image.FractalStats]]`); now calls `AddFrameToDB()` for every frame before inserting the zoom entry; path and hash indices are only updated when the respective values are non-`None`.
+  - **`FractalDatabase.DoComputation()` accepts `stats` parameter** (`frdb.py`): optional `image.FractalStats` pre-collected from a depth probe; passed through to `ComputeFractal()` to skip the re-probe when stats are already known; parameter ordering regularized to keyword-only after `max_threads`.
+  - **`MAX_PRE_PROCESS_CONCURRENCE` removed** (`frame.py`): the separate pre-process concurrency limit is gone; `ConcurrenceToUse()` now uses `MAX_CONCURRENCE` uniformly for both probe and full-resolution renders.
+  - **Zoom summary includes depth frame count** (`zoomcommand.py`): the zoom start log line now reports both marker and depth frame counts, e.g. `with 40 frames (2 markers, 5.00%, and 4 depth frames, 10.00%)` instead of just `with 40 frames`.
+  - **Frame log includes depth** (`zoomcommand.py`): each frame log line now shows `Frame N / M - depth D` so you can see the per-frame iteration depth as the animation renders.
+  - **`MIN_IMAGE_SIZE` raised from 16 to 24** (`frame.py`): the minimum image size (also used as the probe image size for adaptive depth estimation) was raised from 16 to 24; this gives a 576-pixel sample (vs. the previous 256) for a more reliable histogram during the auto-depth pre-pass, and tightens the minimum accepted image dimension in the CLI from 16 to 24 pixels.
+  - **Powers-of-1000 example** (`scripts/make_examples.sh`): `--set imaginary` removed from the powers-of-1000 zoom rendering script; these images are now rendered without interior set coloring.
+  - **Config serialize/deserialize with `silent=True`** (`base.py`): `TranZoomConfig.LoadConfig()` and `SetConfig()` now call `DeSerialize(silent=True)` / `Serialize(silent=True)`, suppressing spurious log chatter during routine config I/O.
+  - **`SEAHORSE_ANIMATED_HASH` and `SUZANA_WAVE_HASH` updated** (`base.py`): reflect the changed render output produced by the improved per-frame adaptive depth computation.
+
+- Fixed
+  - **Adaptive depth probe: outlier trimming** (`fractal.py`): the auto-depth probe now skips the top `_ITER_OUTLIER_SKIP = 3` extreme-outlier pixels from the histogram tail when estimating the max escape iteration; this prevents a small number of isolated deep-escape pixels from artificially inflating the depth estimate and causing unnecessarily deep (slow) renders.
+  - **Memory warning suppressed in streaming mode** (`zoomcommand.py`): the "large zoom render memory" warning is no longer emitted when `--stream` is active, because streaming processes frames one at a time and does not hold the full frame set in memory; the check is now inside the DB context so it can correctly inspect the streaming flag.
 
 ## 1.6.1 - 2026-06-01
 

@@ -83,7 +83,7 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
-    assert w == h == 1024, f'Expected image dimensions 1024x1024, got {w}x{h}'
+    assert w == h == 1024, f'Expected image dimensions 1024x1024, got {w} x {h}'
     assert hsh == base.SEAHORSE_TAIL_HASH
     assert info == {
       'tranZoom:frame:fractal': 'mandelbrot',
@@ -208,7 +208,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
     assert output_image.exists(), f'Expected output gif not found: {output_image}'
     # check the image data
     w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
-    assert w == h == 220, f'Expected image dimensions 220x220, got {w}x{h}'
+    assert w == h == 220, f'Expected image dimensions 220 x 220, got {w} x {h}'
     assert hsh == base.SEAHORSE_ANIMATED_HASH
     assert info == {
       'tranZoom:frame:fractal': 'mandelbrot',
@@ -225,34 +225,34 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:frame:hash': 'a293633123a893f7fb5597b8ebdf444d1fca9ad1390e1940819dcf419c7edd0e',
       'tranZoom:computation:width': '220',
       'tranZoom:computation:height': '220',
-      'tranZoom:computation:depth': '1423',
+      'tranZoom:computation:depth': '1105',
       'tranZoom:computation:color_set': 'none',
       'tranZoom:computation:hash': (
-        'b78683ec55fb5b86b8677a94989049d3263b70812763e33dcc570f49c21f565b'
+        'f7c110603e5498fe126427b74f078b6a944a370d1be9c363445fb299a105668c'
       ),
       'tranZoom:image:animation': 'gif',
       'tranZoom:image:hash': base.SEAHORSE_ANIMATED_HASH,
-      'tranZoom:image:exterior:count': '48397',
+      'tranZoom:image:exterior:count': '48380',
       'tranZoom:image:exterior:n:min': '98',
-      'tranZoom:image:exterior:n:max': '1336',
+      'tranZoom:image:exterior:n:max': '1087',
       'tranZoom:image:exterior:nu:min': '4.646779416361824e-06',
       'tranZoom:image:exterior:nu:max': '0.9999839663505554',
       'tranZoom:image:exterior:bucket:min': '202433',
-      'tranZoom:image:exterior:bucket:max': '2737985',
+      'tranZoom:image:exterior:bucket:max': '2227517',
       'tranZoom:image:exterior:hist:linear': (
-        '{98: 2, 99: 6, 100: 5, ...: 48381, 1276: 1, 1278: 1, 1336: 1}'
+        '{98: 2, 99: 6, 100: 5, ...: 48364, 1064: 1, 1084: 1, 1087: 1}'
       ),
       'tranZoom:image:exterior:hist:linear:cumulative': (
-        '{98: 2, 99: 8, 100: 13, ...: 32226103, 1276: 48395, 1278: 48396, 1336: 48397}'
+        '{98: 2, 99: 8, 100: 13, ...: 31403541, 1064: 48378, 1084: 48379, 1087: 48380}'
       ),
       'tranZoom:image:exterior:hist:bucket': (
-        '{202433: 1, 202682: 1, 202820: 1, ...: 48391, 2614704: 1, 2619173: 1, 2737985: 1}'
+        '{202433: 1, 202682: 1, 202820: 1, ...: 48374, 2179925: 1, 2220863: 1, 2227517: 1}'
       ),
       'tranZoom:image:exterior:hist:bucket:cumulative': (
-        '{202433: 1, 202682: 2, 202820: 3, ...: 1137706770, 2614704: 48395, '
-        '2619173: 48396, 2737985: 48397}'
+        '{202433: 1, 202682: 2, 202820: 3, ...: 1136884208, 2179925: 48378, '
+        '2220863: 48379, 2227517: 48380}'
       ),
-      'tranZoom:image:set:count': '3',
+      'tranZoom:image:set:count': '20',
       'tranZoom:image:set:n:min': '100000000',
       'tranZoom:image:set:n:max': '100000000',
       'tranZoom:image:set:nu:min': '0.0',
@@ -278,6 +278,10 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:zoom:frame:steps': '39',
       'tranZoom:zoom:frame:magnitude_per_step': '1/39',
       'tranZoom:zoom:frame:magnification_per_step': '4777501148913803/4503599627370496',
+      'tranZoom:zoom:marker:index': '[0, 39]',
+      'tranZoom:zoom:depth:frames': (
+        '[(0, 1000, 1001), (13, 1000, 1019), (26, 1000, 1034), (39, 1159, 1105)]'
+      ),
       'tranZoom:zoom:hash': 'e3e0d784d4694b805efb2aa52548605cff720a3ddc3c19f48e3a713785f2eb62',
     }
 
@@ -327,8 +331,8 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path]) -> None:
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
-    assert w == 512, f'Expected image dimensions 512x377, got {w}x{h}'
-    assert h == 377, f'Expected image dimensions 512x377, got {w}x{h}'
+    assert w == 512, f'Expected image dimensions 512 x 377, got {w} x {h}'
+    assert h == 377, f'Expected image dimensions 512 x 377, got {w} x {h}'
     assert hsh == base.SUZANA_WAVE_HASH
     assert info == {
       'tranZoom:frame:fractal': 'julia',
@@ -347,34 +351,34 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:frame:hash': '8faa5c419732c9444c77bfd61cad10e2a6a84681a541a2ef3a88b979fdca51e6',
       'tranZoom:computation:width': '512',
       'tranZoom:computation:height': '377',
-      'tranZoom:computation:depth': '1819',
+      'tranZoom:computation:depth': '1000',
       'tranZoom:computation:color_set': 'max',
       'tranZoom:computation:hash': (
-        '096853172953a47c23baee6382f164c720392ad7ecb0266d2edada47fc280081'
+        'd2abc05d51981f2b3bc54958d5331369e77041d20a119a4236da124feb4e8e90'
       ),
       'tranZoom:image:animation': 'none',
       'tranZoom:image:hash': base.SUZANA_WAVE_HASH,
-      'tranZoom:image:exterior:count': '106710',
+      'tranZoom:image:exterior:count': '106573',
       'tranZoom:image:exterior:n:min': '43',
-      'tranZoom:image:exterior:n:max': '1813',
+      'tranZoom:image:exterior:n:max': '994',
       'tranZoom:image:exterior:nu:min': '5.752321158070117e-06',
       'tranZoom:image:exterior:nu:max': '0.9999896883964539',
       'tranZoom:image:exterior:bucket:min': '89879',
-      'tranZoom:image:exterior:bucket:max': '3715024',
+      'tranZoom:image:exterior:bucket:max': '2037662',
       'tranZoom:image:exterior:hist:linear': (
-        '{43: 379, 44: 9212, 45: 11219, ...: 85897, 1792: 1, 1798: 1, 1813: 1}'
+        '{43: 379, 44: 9212, 45: 11219, ...: 85759, 989: 2, 991: 1, 994: 1}'
       ),
       'tranZoom:image:exterior:hist:linear:cumulative': (
-        '{43: 379, 44: 9591, 45: 20810, ...: 87208500, 1792: 106708, 1798: 106709, 1813: 106710}'
+        '{43: 379, 44: 9591, 45: 20810, ...: 74305010, 989: 106571, 991: 106572, 994: 106573}'
       ),
       'tranZoom:image:exterior:hist:bucket': (
-        '{89879: 5, 89880: 2, 89881: 2, ...: 106698, 3671955: 1, 3684029: 1, 3715024: 1}'
+        '{89879: 5, 89880: 2, 89881: 2, ...: 106561, 2027341: 1, 2031483: 1, 2037662: 1}'
       ),
       'tranZoom:image:exterior:hist:bucket:cumulative': (
-        '{89879: 5, 89880: 7, 89881: 9, ...: 3348600053, 3671955: 106708, 3684029: 106709, '
-        '3715024: 106710}'
+        '{89879: 5, 89880: 7, 89881: 9, ...: 3333990510, 2027341: 106571, '
+        '2031483: 106572, 2037662: 106573}'
       ),
-      'tranZoom:image:set:count': '86314',
+      'tranZoom:image:set:count': '86451',
       'tranZoom:image:set:n:min': '1',
       'tranZoom:image:set:n:max': '100000000',
       'tranZoom:image:set:nu:min': '0.0',
@@ -382,22 +386,22 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path]) -> None:
       'tranZoom:image:set:bucket:min': '2048',
       'tranZoom:image:set:bucket:max': '204800000000',
       'tranZoom:image:set:hist:linear': (
-        '{1: 1, 9349: 1, 18697: 1, ...: 86021, 99957787: 1, 99960423: 1, 100000000: 288}'
+        '{1: 1, 10590: 1, 21180: 1, ...: 85187, 99989180: 1, 99999294: 1, 100000000: 1259}'
       ),
       'tranZoom:image:set:hist:linear:cumulative': (
-        '{1: 1, 9349: 2, 18697: 3, ...: 3679815476, 99957787: 86025, 99960423: 86026, '
-        '100000000: 86314}'
+        '{1: 1, 10590: 2, 21180: 3, ...: 3611351558, 99989180: 85191, 99999294: 85192, '
+        '100000000: 86451}'
       ),
       'tranZoom:image:set:hist:bucket': (
-        '{2048: 1, 19146752: 1, 38291456: 1, ...: 86021, 204713547776: 1, '
-        '204718946304: 1, 204800000000: 288}'
+        '{2048: 1, 21688320: 1, 43376640: 1, ...: 85187, 204777840640: 1, '
+        '204798554112: 1, 204800000000: 1259}'
       ),
       'tranZoom:image:set:hist:bucket:cumulative': (
-        '{2048: 1, 19146752: 2, 38291456: 3, ...: 3679815476, 204713547776: 86025, '
-        '204718946304: 86026, 204800000000: 86314}'
+        '{2048: 1, 21688320: 2, 43376640: 3, ...: 3611351558, 204777840640: 85191, '
+        '204798554112: 85192, 204800000000: 86451}'
       ),
       'tranZoom:image:stats:max_lo': '1.0303269913803812829799720484633954828318221',
-      'tranZoom:image:stats:max_hi': '1.274341960143743658549164107217164534985235',
+      'tranZoom:image:stats:max_hi': '2.0404855784383760342353483617573930562163787',
       'tranZoom:render:overlay': 'none',
       'tranZoom:render:palette': 'electric',
       'tranZoom:render:set_palette': 'sunset',

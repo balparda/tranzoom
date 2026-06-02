@@ -146,6 +146,42 @@ class ImageData(TypedDict):
   rendered_paths: list[str]  # paths to image PNG files; empty if not saved (actual path on disk)
 
 
+class KeyFrameData(TypedDict):
+  """Data on a key frame for a video/GIF.
+
+  Attributes:
+    idx (int): index of the key frame in the video/GIF frames list
+    frm (str): Frame hash
+
+  Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
+  Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
+
+  """
+
+  idx: int  # index of the key frame in the video/GIF frames list
+  frm: str  # Frame hash
+
+
+class DepthFrameData(KeyFrameData):
+  """Data on a key frame for a video/GIF.
+
+  Attributes:
+    idx (int): index of the key frame in the video/GIF frames list
+    frm (str): Frame hash
+    orig_depth (int): this is the computed depth
+    smooth_depth (int): this is the smoothed depth
+    stats (tbase.JSONDict): image.FractalStats.json: the computed stats
+
+  Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
+  Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
+
+  """
+
+  orig_depth: int  # this is the computed depth
+  smooth_depth: int  # this is the smoothed depth
+  stats: tbase.JSONDict  # image.FractalStats.json: the computed stats
+
+
 class ZoomData(TypedDict):
   """Video/GIF zoom data type, for storing zoom metadata and parameters.
 
@@ -160,8 +196,13 @@ class ZoomData(TypedDict):
     rendered_path (str | None): (CACHE) path to video/GIF file; None if not saved
     frames (list[str]): ("CHILDREN") list of Frame hashes -> grandfather Frames; ordered by
         magnification ascending; len >=3
-    markers (list[tuple[int, str]]): ("CHILDREN") subset of frames entry: key Frame(s) for color
+    markers (list[KeyFrameData]): ("CHILDREN") subset of frames entry: key Frame(s) for color
         normalization; (idx, Frame) and idx is the index in the frames list; len >=2 (first & last)
+    depths (list[DepthFrameData]): ("CHILDREN") subset of frames entry: key Frame(s) for depth;
+        (idx, Frame, orig_depth, smooth_depth, FractalStats) and idx is the index in the frames
+        list; len >=2 (first & last); orig_depth is the computed depth >= MIN_DEPTH+1 for the frame;
+        smooth_depth is the smoothed depth for the frame; and FractalStats is the stats for the
+        frame at that depth
 
   Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
   Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
@@ -174,14 +215,15 @@ class ZoomData(TypedDict):
   # CACHE
   fps: float  # = len(`frames`) / `zoom.duration`
   step_mag: float  # video step SCALAR magnification (total magnitude is in `zoom.mag`)
-  data_hash: str  # hash of the video/GIF data = SHA-256('|'.join(data_hash for all frames))
   tm: int  # timestamp of last rendered video/GIF creation
+  data_hash: str | None  # hash of the video/GIF data = SHA-256('|'.join(data_hash for all frames))
   rendered_path: str | None  # path to video/GIF file; None if not saved
 
   # "CHILDREN" would be the individual frames/images that compose the video;
   # we compute this from core data, so this could be "CACHE" too...
   frames: list[str]  # Frame hashes; ordered by magnification ascending; len >=3
-  markers: list[tuple[int, str]]  # subset of frames entry: key Frame(s); len >=2 (first & last)
+  markers: list[KeyFrameData]  # subset of frames entry: key Frame(s); len >=2 (first & last)
+  depths: list[DepthFrameData]  # subset of frames entry: depth Frame(s)
 
 
 class _DBType(TypedDict):
@@ -549,6 +591,28 @@ class FractalDatabase:
     img.RebuildHistograms()  # histograms are not saved, so we need to rebuild them after loading
     return img
 
+  def FindFrame(self, frame_hash: str) -> tuple[frame.Frame | None, FrameData | None]:
+    """Find a frame in the database given its hash.
+
+    Args:
+      frame_hash (str): the hash of the frame to find
+
+    Returns:
+      tuple[frame.Frame | None, FrameData | None]: a tuple containing the frame.Frame object and
+          its corresponding FrameData if found; if not found, both entries will be None
+
+    """
+    if not self._use_db:
+      logging.debug('use_db is False: skipping frame lookup')
+      return (None, None)
+    if frame_hash not in self._db['frames']:
+      return (None, None)
+    frame_data: FrameData = self._db['frames'][frame_hash]
+    return (
+      frame.Frame.FromJson(frame_data['frm'], check_hash=frame_hash),
+      frame_data,
+    )
+
   def FindComputation(
     self, params: frame.ComputationParameters
   ) -> tuple[frame.ComputationParameters, FrameData | None, ComputationData | None]:
@@ -657,6 +721,27 @@ class FractalDatabase:
       return None
     # videos are keyed directly by zoom.sha; one hash -> one ZoomData entry (no indirection)
     return self._db['videos'].get(zoom.sha)
+
+  def AddFrameToDB(self, frm: frame.Frame) -> FrameData | None:
+    """Add a frame to the database if not already present.
+
+    Args:
+      frm (frame.Frame): the frame to add
+
+    Returns:
+      FrameData | None: the FrameData for the added frame, or None if use_db is False
+
+    """
+    if not self._use_db:
+      logging.info('use_db is False: skipping add frame to DB')
+      return None
+    frm_hash: str = frm.sha
+    if frm_hash in self._db['frames']:
+      return self._db['frames'][frm_hash]
+    frm_data: FrameData = FrameData(frm=frm.json, mag=frm.magnification[1], cps={})
+    self._db['frames'][frm_hash] = frm_data
+    logging.info(f'AddFrameToDB: new frame {frm_hash!r} added to DB')
+    return frm_data
 
   def AddComputationToDB(
     self, params: frame.ComputationParameters, img_tm: int, img_path: str | None
@@ -787,24 +872,28 @@ class FractalDatabase:
   def AddZoomToDB(
     self,
     zoom: image.ZoomParameters,
-    data_hash: str,
     tm: int,
-    path: str,
+    data_hash: str | None,
+    path: str | None,
     all_frames: list[frame.Frame],
     markers: list[tuple[int, frame.Frame]],
+    depths: list[tuple[int, frame.Frame, int, int, image.FractalStats]],
   ) -> None:
     """Add a zoom (video/GIF) to the DB.
 
     Args:
       zoom (image.ZoomParameters): the zoom parameters to add; zoom is created with the sentinel
           value (if on AUTO) and does NOT update!
-      data_hash (str): the hash of the video/GIF data, used for indexing and deduplication
       tm (int): the timestamp of the video/GIF creation
-      path (str): the path to the video/GIF file, as stored in the DB; this is absolute disk path
+      data_hash (str | None): the hash of the video/GIF data, used for indexing and deduplication
+      path (str | None): the path to the video/GIF file, as stored in the DB; this is absolute
+          disk path
       all_frames (list[frame.Frame]): the list of all frames that compose the video, ordered by
           magnification ascending (video order)
       markers (list[tuple[int, frame.Frame]]): the marker frames that compose the video, a
           subset of all_frames
+      depths (list[tuple[int, frame.Frame, int, int, image.FractalStats]]): the depth frames that
+          compose the video, a subset of all_frames, with their associated stats
 
     Raises:
       Error: on error, mostly inconsistent DB, not missing data
@@ -821,7 +910,10 @@ class FractalDatabase:
       self._db['videos'][zoom_hash]['rendered_path'] = path  # update path (in case it changed)
       logging.info(f'AddZoomToDB: updated existing zoom {zoom_hash!r} in DB, path {path!r}')
     else:
-      # new entry
+      # new entry, first add frames
+      for frm in all_frames:
+        self.AddFrameToDB(frm)  # this will add frames if not already present, or do nothing
+      # now add main object
       zd: ZoomData = ZoomData(
         zoom=zoom.json,
         fps=float(zoom.fps),
@@ -830,21 +922,31 @@ class FractalDatabase:
         tm=tm,
         rendered_path=path,
         frames=[f.sha for f in all_frames],
-        markers=[(j, f.sha) for j, f in markers],
+        markers=[KeyFrameData(idx=j, frm=f.sha) for j, f in markers],
+        depths=[
+          DepthFrameData(idx=j, frm=f.sha, orig_depth=od, smooth_depth=sd, stats=s.json)
+          for j, f, od, sd, s in depths
+        ],
       )
-      if any(1 for j, f in zd['markers'] if zd['frames'][j] != f):
+      if missing_frames := [k for k in zd['frames'] if k not in self._db['frames']]:
+        raise Error(f'Inconsistent DB: frame(s) not in DB: {missing_frames}; Report bug!')
+      if any(1 for k in zd['markers'] if zd['frames'][k['idx']] != k['frm']):
         raise Error('Inconsistent DB: marker frame hashes do not match frames list; Report bug!')
+      if any(1 for k in zd['depths'] if zd['frames'][k['idx']] != k['frm']):
+        raise Error('Inconsistent DB: depth frame hashes do not match frames list; Report bug!')
       self._db['videos'][zoom_hash] = zd
       logging.info(
         f'AddZoomToDB: new zoom {zoom_hash!r} added to DB, '
         f'{len(all_frames)} frames, {len(markers)} markers, path {path!r}'
       )
-    # add path index
-    self._db['video_paths_idx'][path] = zoom_hash
+    # add path index, if needed
+    if path is not None:
+      self._db['video_paths_idx'][path] = zoom_hash
     # add hash index
-    idx_list: list[str] = self._db['videos_idx'].setdefault(data_hash, [])
-    if zoom_hash not in idx_list:
-      idx_list.append(zoom_hash)
+    if data_hash is not None:
+      idx_list: list[str] = self._db['videos_idx'].setdefault(data_hash, [])
+      if zoom_hash not in idx_list:
+        idx_list.append(zoom_hash)
 
   def CoreComputeImage(
     self,
@@ -909,7 +1011,9 @@ class FractalDatabase:
       )
     # computation
     img: image.Image
-    params, img, _ = self.DoComputation(params, max_threads, print_comm, force=force)
+    params, img, _ = self.DoComputation(
+      params, max_threads=max_threads, print_comm=print_comm, force=force
+    )
     print_comm('')
     # render
     return (
@@ -919,10 +1023,10 @@ class FractalDatabase:
         img,
         render,
         out,
-        add_serial,
-        tm,
-        iterm,
-        print_comm,
+        add_serial=add_serial,
+        tm=tm,
+        iterm=iterm,
+        print_comm=print_comm,
         force=force,
       )[:-1],
     )
@@ -930,9 +1034,10 @@ class FractalDatabase:
   def DoComputation(
     self,
     params: frame.ComputationParameters,
-    max_threads: int | None,
-    print_comm: abc.Callable[[str], None],
     *,
+    max_threads: int | None,
+    stats: image.FractalStats | None = None,
+    print_comm: abc.Callable[[str], None],
     force: bool = False,
   ) -> tuple[frame.ComputationParameters, image.Image, bool]:
     """Compute a fractal, producing an image.Image.
@@ -943,6 +1048,7 @@ class FractalDatabase:
       params (frame.ComputationParameters): The computation parameters for the frame, including
           width, height, and other settings.
       max_threads (int | None): Maximum threads for parallel rendering; None means all CPUs.
+      stats (image.FractalStats | None, optional): Optional pre-collected stats from a sample run.
       print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
       force (bool): If True, will force re-computation of the image even if it is found in the DB
 
@@ -993,6 +1099,7 @@ class FractalDatabase:
           params,  # remember that this params will be updated with the actual depth now!
           progress_bar=True,
           n_processes=max_threads,
+          stats=stats,
           print_comm=print_comm,
         )
         did_computation = True
@@ -1012,11 +1119,11 @@ class FractalDatabase:
     img: image.Image,
     render: image.RenderParameters,
     out: image.ImageOutputConfig,
+    *,
     add_serial: int | None,
     tm: int | None,
     iterm: bool,
     print_comm: abc.Callable[[str], None],
-    *,
     force: bool = False,
     zoom_norm: image.Image.FrameColorNorm | None = None,
     silent: bool = False,

@@ -119,6 +119,8 @@ META_ZOOM_STEPS_KEY: str = f'{_app}:zoom:frame:steps'  # int
 META_ZOOM_FPS_KEY: str = f'{_app}:zoom:frame:fps'  # gmpy2.mpq
 META_ZOOM_MAGNITUDE_PER_STEP_KEY: str = f'{_app}:zoom:frame:magnitude_per_step'  # gmpy2.mpq
 META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str = f'{_app}:zoom:frame:magnification_per_step'  # gmpy2.mpq
+META_ZOOM_MARKER_INDEX_LIST_KEY: str = f'{_app}:zoom:marker:index'  # list[int]
+META_ZOOM_DEPTH_FRAMES_LIST_KEY: str = f'{_app}:zoom:depth:frames'  # list[tuple[int, int, int]]]
 META_ZOOM_HASH_KEY: str = f'{_app}:zoom:hash'  # str, like "abcdef1234567890", a SHA256
 # LLM extra keys
 META_LLM_MODEL_KEY: str = f'{_app}:llm:model'  # str (META_LLM_MODEL_VALUE_HUMAN or "HUMAN")
@@ -231,7 +233,8 @@ DEFAULT_LOOP: int = 0  # 0 means infinite loop for GIFs
 THRESHOLD_JUMPY_ZOOM_PER_FRAME: float = 1.25  # if zoom per frame is above this warn about jumpiness
 MAX_TOLERATED_FRAME_MAG_ERROR: float = 0.0002  # 0.02% - max error Frame vs. reduced mpq Frame
 MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.001  # 0.1% - max total cumulative error of total zoom
-MAGNITUDE_PER_FRAME_MARKER: gmpy2.mpq = gmpy2.mpq('13/14')  # one marker every ~8.5x zoom
+MAGNITUDE_PER_FRAME_MARKER: gmpy2.mpq = gmpy2.mpq('13/14')  # ~8.5x zoom/marker (10**(13/14)=8.483)
+MAGNITUDE_PER_DEPTH_MARKER: gmpy2.mpq = gmpy2.mpq('3/10')  # ~2x zoom/frame (10**(3/10)=1.995)
 MAX_TOLERATED_MARKER_MAG_ERROR: float = 0.15  # 15% max error for marker frames
 
 
@@ -246,7 +249,7 @@ _MPQ_VIDEO_DURATION_STORE_SCALE: gmpy2.mpq = gmpy2.mpq(str(VIDEO_DURATION_STORE_
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class FractalStats:
+class FractalStats(frame.SerializingFractalObject):
   """Defines Mandelbrot stats values, collected over the sample run.
 
   Attributes:
@@ -285,6 +288,114 @@ class FractalStats:
   # limits of the Imaginary Weight Average for interior (Set) points, in [0, 1]
   imag_lo: gmpy2.mpfr  # min(all sac values for interior points)
   imag_hi: gmpy2.mpfr  # max(all sac values for interior points)
+
+  def __post_init__(self) -> None:
+    """Check FractalStats validity.
+
+    Raises:
+      Error: if the object is invalid.
+
+    """
+    if not (frame.MIN_IMAGE_PX <= self.n_px <= frame.MAX_IMAGE_PX):
+      raise Error(
+        f'Invalid {self.n_px=}, must be between {frame.MIN_IMAGE_PX} and {frame.MAX_IMAGE_PX}'
+      )
+    if not (0 <= self.n_interior <= self.n_px):
+      raise Error(f'Invalid {self.n_interior=}, must be between 0 and {self.n_px}')
+    if (self.max_lo != _MPFR_FOUR or self.max_hi != _MPFR_ZERO) and not (
+      _MPFR_ZERO <= self.max_lo <= self.max_hi
+    ):
+      raise Error(f'Invalid {self.max_lo=} and {self.max_hi=}, must satisfy 0 <= max_lo <= max_hi')
+    if (self.min_lo != _MPFR_FOUR or self.min_hi != _MPFR_ZERO) and not (
+      _MPFR_ZERO <= self.min_lo <= self.min_hi
+    ):
+      raise Error(f'Invalid {self.min_lo=} and {self.min_hi=}, must satisfy 0 <= min_lo <= min_hi')
+    if (self.ang_lo != _MPFR_ONE or self.ang_hi != _MPFR_ZERO) and not (
+      _MPFR_ZERO <= self.ang_lo <= self.ang_hi <= _MPFR_ONE
+    ):
+      raise Error(
+        f'Invalid {self.ang_lo=} and {self.ang_hi=}, must satisfy 0 <= ang_lo <= ang_hi <= 1'
+      )
+    if (self.imag_lo != _MPFR_ONE or self.imag_hi != _MPFR_ZERO) and not (
+      _MPFR_ZERO <= self.imag_lo <= self.imag_hi <= _MPFR_ONE
+    ):
+      raise Error(
+        f'Invalid {self.imag_lo=} and {self.imag_hi=}, must satisfy 0 <= imag_lo <= imag_hi <= 1'
+      )
+
+  def __str__(self) -> str:
+    """Get string representation of the FractalStats.
+
+    Returns:
+      str: String representation of the FractalStats.
+
+    """
+    return (
+      f'FractalStats(n_px={self.n_px}, n_interior={self.n_interior}, '
+      f'max_lo={self.max_lo}, max_hi={self.max_hi}, min_lo={self.min_lo}, min_hi={self.min_hi}, '
+      f'ang_lo={self.ang_lo}, ang_hi={self.ang_hi}, imag_lo={self.imag_lo}, imag_hi={self.imag_hi})'
+    )
+
+  @property
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the FractalStats.
+
+    Keys:
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the FractalStats.
+
+    """
+    return {
+      # ATTENTION: changing anything here changes the HASH!!
+      'n_px': self.n_px,
+      'n_interior': self.n_interior,
+      'max_lo': str(self.max_lo),
+      'max_hi': str(self.max_hi),
+      'min_lo': str(self.min_lo),
+      'min_hi': str(self.min_hi),
+      'ang_lo': str(self.ang_lo),
+      'ang_hi': str(self.ang_hi),
+      'imag_lo': str(self.imag_lo),
+      'imag_hi': str(self.imag_hi),
+    }
+
+  @staticmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> FractalStats:
+    """Create a FractalStats object from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from Frame.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the frame. If the
+          calculated hash does not match, an error is raised.
+
+    Returns:
+      FractalStats: A FractalStats object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      params = FractalStats(  # object creation will check the data is valid and consistent
+        n_px=int(str(data['n_px'])),
+        n_interior=int(str(data['n_interior'])),
+        max_lo=gmpy2.mpfr(str(data['max_lo'])),
+        max_hi=gmpy2.mpfr(str(data['max_hi'])),
+        min_lo=gmpy2.mpfr(str(data['min_lo'])),
+        min_hi=gmpy2.mpfr(str(data['min_hi'])),
+        ang_lo=gmpy2.mpfr(str(data['ang_lo'])),
+        ang_hi=gmpy2.mpfr(str(data['ang_hi'])),
+        imag_lo=gmpy2.mpfr(str(data['imag_lo'])),
+        imag_hi=gmpy2.mpfr(str(data['imag_hi'])),
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid FractalStats JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and params.sha != check_hash:
+      raise Error(f'FractalStats {params.sha!r} does not match expected {check_hash!r}')
+    return params
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
@@ -826,12 +937,15 @@ class ZoomParameters(frame.SerializingFractalObject):
       raise Error(f'ZoomParameters {params.sha!r} does not match expected {check_hash!r}')
     return params
 
-  def Frames(self) -> tuple[list[frame.Frame], list[tuple[int, frame.Frame]]]:  # noqa: C901, PLR0912, PLR0914, PLR0915
+  def Frames(  # noqa: PLR0914
+    self,
+  ) -> tuple[list[frame.Frame], list[tuple[int, frame.Frame]], list[tuple[int, frame.Frame]]]:
     """Get the Frames. Could be a property, but is a method to remind this is an expensive-ish call.
 
     Returns:
-      tuple[list[frame.Frame], list[tuple[int, frame.Frame]]]: The (frames, marker_frames) for
-          this animation, where marker_frames is a strict subset of frames and is a list
+      tuple[list[frame.Frame], list[tuple[int, frame.Frame]], list[tuple[int, frame.Frame]]]:
+          The (frames, marker_frames, depth_frames) for this animation,
+          where marker_frames & depth_frames are a strict subset of frames and are lists
           of sorted (index, frame) pairs for frames that were picked
 
     Raises:
@@ -926,18 +1040,47 @@ class ZoomParameters(frame.SerializingFractalObject):
       f'(actual {float(actual_mag):.6f} vs intended {float(self.mag):.6f})'
     )
     # we finished the frame generation, now we pick them special ones
-    # we don't care about the number of frames, we care about a fixed zoom magnitude
-    n_marker_steps: int = int(
-      cast('gmpy2.mpz', max(math.floor(self.mag / MAGNITUDE_PER_FRAME_MARKER), 1))
+    return (
+      all_frames,
+      self._FramesSubset(all_frames, MAGNITUDE_PER_FRAME_MARKER, 'marker'),
+      self._FramesSubset(all_frames, MAGNITUDE_PER_DEPTH_MARKER, 'depth'),
     )
+
+  def _FramesSubset(
+    self,
+    all_frames: list[frame.Frame],
+    mag_per_step: gmpy2.mpq,
+    name: str,
+  ) -> list[tuple[int, frame.Frame]]:
+    """Get a subset of frames based on the given magnification step.
+
+    Args:
+      all_frames (list[frame.Frame]): The list of all frames generated for the zoom.
+      mag_per_step (gmpy2.mpq): The magnification step per frame.
+      name (str): The name of the subset, used for logging.
+
+    Returns:
+      list[tuple[int, frame.Frame]]: A list of (index, frame) pairs for frames that were picked.
+
+    Raises:
+      Error: if the frames cannot be generated within the tolerated error threshold.
+
+    """
+    # float magnification tracking: avoids 30k-bit precision mpfr computation in every loop step;
+    # frm.magnification[1] is only used to compute max_denominator for limit_denominator, so
+    # a float approximation is precise enough (error is << MAX_TOLERATED_FRAME_MAG_ERROR)
+    mag_log10: float = self.img.frm.magnification[1]  # log10 magnification of the initial frame
+    mag_step: float = float(self.mag_per_step)  # log10 magnification increment per step
+    # we don't care about the number of frames, we care about a fixed zoom magnitude
+    n_marker_steps: int = int(cast('gmpy2.mpz', max(math.floor(self.mag / mag_per_step), 1)))
     if n_marker_steps <= 1 or self.n_frames < 5:  # noqa: PLR2004
       # if we only have 2 or fewer markers (1 step), just use the first and last frames as
       # markers; same thing for few frames: [1st, X, Y, Z, last] is the smallest degenerate
       # case where it is worth having a "marker", frame Y, and return [1st, Y, last]
-      logging.info('No new marker frames needed, will use [first, last]')
-      return (all_frames, [(0, all_frames[0]), (len(all_frames) - 1, all_frames[-1])])
+      logging.info(f'Frames subset {name!r} is trivial, will use [first, last]')
+      return [(0, all_frames[0]), (len(all_frames) - 1, all_frames[-1])]
     # we will need more markers; start from the first and find the "ideal" stops
-    with timer.Timer('marker generation'):
+    with timer.Timer(f'{name} generation'):
       marker_mag: gmpy2.mpq = self.mag / gmpy2.mpq(n_marker_steps)
       marker_mag = gmpy2.mpq(
         gmpy2.exp10(marker_mag)
@@ -948,7 +1091,7 @@ class ZoomParameters(frame.SerializingFractalObject):
       ideal_marker_mag_log10: float = mag_log10  # tracks the ideal marker magnification
       # log10(exp10(x)) = x exactly, so use the underlying value rather than gmpy2.log10(marker_mag)
       marker_mag_step_log10: float = float(self.mag) / float(n_marker_steps)
-      frm = all_frames[0]  # start with initial frame, keep as-is
+      frm: frame.Frame = all_frames[0]  # start with initial frame, keep as-is
       marker_frames: list[tuple[int, frame.Frame]] = [(0, frm)]  # start with the first frame
       last_idx: int = 0
       idx: int
@@ -977,31 +1120,31 @@ class ZoomParameters(frame.SerializingFractalObject):
         new_marker: frame.Frame = all_frames[idx]
         if idx == last_idx:
           raise Error(
-            f'Marker frame {i + 1} is closer to last marker index {last_idx}. This is a bug!'
+            f'Frames sub-set {name!r} / {i + 1} is closer to last marker index {last_idx}. Bug!'
           )
         # make sure we don't have duplicates; add it
         if (idx, new_marker) in marker_frames:
-          raise Error(f'Duplicate marker frame found; bug! report. Marker frame: {new_marker}')
+          raise Error(f'Duplicate frame found in {name!r} subset; bug! report. Frame: {new_marker}')
         marker_frames.append((idx, new_marker))
         last_idx = idx
     # done; check we arrived at the last frame and error is acceptable; if so, all is good
     if marker_frames[-1] != (len(all_frames) - 1, all_frames[-1]):
       raise Error(
-        'Last marker frame is not the same as the last frame; bug! report. '
-        f'Last marker frame: {marker_frames[-1]}, last frame: {all_frames[-1]}'
+        f'Last frame in {name!r} subset is not the same as the last frame; bug! report. '
+        f'Last frame in subset: {marker_frames[-1]}, last frame: {all_frames[-1]}'
       )
     if any(1 for j, f in marker_frames if all_frames[j] != f):
-      raise Error('Inconsistent marker frame hashes do not match frames list; Report bug!')
+      raise Error(f'Inconsistent hashes in {name!r} sub-set do not match frames list; Report bug!')
     if max_min_mag_float > MAX_TOLERATED_MARKER_MAG_ERROR:
       raise Error(
-        f'Marker frames are not close enough to the ideal frames; bug! report. '
+        f'Frames sub-set {name!r} are not close enough to the ideal frames; bug! report. '
         f'Maximum deviation in mag2 is {100.0 * max_min_mag_float:.6f}%, which is a bug! report'
       )
     logging.info(
-      f'Generated {len(marker_frames) - 2} non-trivial MARKER Frames for the zoom, '
+      f'Generated {len(marker_frames) - 2} non-trivial {name!r} Frames for the zoom, '
       f'max frame deviation from ideal {100.0 * float(max_min_mag_float):.6f}%'
     )
-    return (all_frames, marker_frames)
+    return marker_frames
 
 
 class Image:
@@ -2007,7 +2150,7 @@ def DrawCrossOverlay(
     draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
     w, h = img.size
     if not (0 <= x < w) or not (0 <= y < h):
-      raise Error(f'Invalid coordinates for cross overlay: {x=}, {y=}, image size {w}x{h}')
+      raise Error(f'Invalid coordinates for cross overlay: {x=}, {y=}, image size {w=} x {h=}')
     # draw the cross lines
     draw.line((0, y, w, y), fill=col.value, width=lw)
     draw.line((x, 0, x, h), fill=col.value, width=lw)

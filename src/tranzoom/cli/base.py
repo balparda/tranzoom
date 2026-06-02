@@ -52,8 +52,8 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 # this indicates that the mathematical computation or the setting of colors has changed;
 # this should NOT change over metadata changes, as it is computed from raw pixel data
 SEAHORSE_TAIL_HASH: str = 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9'
-SEAHORSE_ANIMATED_HASH: str = '0ef4d4d828a2ad99c623f699ae936d5f02b15a557428677a3773f1386e2227fa'
-SUZANA_WAVE_HASH: str = '8f06e7bcd0ea14dff1b6fc3c829cdc295367695fea882e2cf9e25bb1a6dfb5fc'
+SEAHORSE_ANIMATED_HASH: str = 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab'
+SUZANA_WAVE_HASH: str = 'ea6ecb1b230c24d2af80535874744686bb7fc1f68fad8adea9e176be843829a4'
 # this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
 
 # CLI options that can be re-used
@@ -750,7 +750,7 @@ class TranZoomConfig(clibase.CLIConfig):
     """
     if self.appconfig.path.exists():
       logging.info(f'Loading config from "{self.appconfig.path}"')
-      return cast('ConfigType', self.appconfig.DeSerialize())
+      return cast('ConfigType', self.appconfig.DeSerialize(silent=True))
     return _ConfigTypeFactory()
 
   def SetConfig(self, cnf: ConfigType) -> None:
@@ -768,7 +768,7 @@ class TranZoomConfig(clibase.CLIConfig):
         'last_save': timer.Now(),
       }
     )
-    self.appconfig.Serialize(cnf)
+    self.appconfig.Serialize(cnf, silent=True)
     logging.info(f'Saved config to "{self.appconfig.path}": {cnf}')
 
 

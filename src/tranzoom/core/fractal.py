@@ -22,6 +22,7 @@ from tranzoom.core import frame, image
 
 # automated search for iter
 
+_ITER_OUTLIER_SKIP: int = 3  # skip up to this many extreme-outlier pixels in the probe
 _ITER_SAFETY_FACTOR: float = 1.5  # we multiply the estimated iter by this to be safe
 
 # gmpy2.mpfr constants
@@ -43,6 +44,7 @@ def ComputeFractal(
   *,
   progress_bar: bool = True,
   n_processes: int | None = None,
+  stats: image.FractalStats | None = None,
   print_comm: abc.Callable[[str], None] = print,
 ) -> tuple[frame.ComputationParameters, image.Image]:
   """Render the Mandelbrot frame rectangle to an Image.
@@ -52,6 +54,7 @@ def ComputeFractal(
     progress_bar (bool, optional): Whether to show a progress bar. Defaults to True.
     n_processes (int | None, optional): The number of processes to use for rendering. Defaults
         to None, which means to use all available CPU cores. Will be limited to MAX_CONCURRENCE.
+    stats (image.FractalStats | None, optional): Optional pre-collected stats from a sample run.
     print_comm (Callable[[str], None], optional): A callable to print messages. Defaults to print.
 
   Returns:
@@ -62,26 +65,22 @@ def ComputeFractal(
     Error: on error
 
   """
-  # determine processes
-  if n_processes is not None and n_processes < 1:
-    raise Error(f'{n_processes=} must be a positive integer or None')
+  # if max_iter is MIN_ITER, we do an adaptive iteration limit calculation based on a small image;
+  # BEWARE: the method call will call ComputeFractal() recursively, so skip MIN_IMAGE_SIZE
+  n_processes = frame.ConcurrenceToUse(n_processes)
   is_preprocess: bool = (
     params.width == frame.MIN_IMAGE_SIZE and params.height == frame.MIN_IMAGE_SIZE
   )
-  n_processes = n_processes or frame.AVAILABLE_CPU
-  n_processes = (
-    min(n_processes, frame.MAX_PRE_PROCESS_CONCURRENCE) if is_preprocess else n_processes
-  )
-  n_processes = min(n_processes, frame.MAX_CONCURRENCE, frame.AVAILABLE_CPU)  # never exceed CPU!
-  # if max_iter is MIN_ITER, we do an adaptive iteration limit calculation based on a small image;
-  # BEWARE: the method call will call ComputeFractal() recursively, so skip MIN_IMAGE_SIZE
-  stats: image.FractalStats | None = None
   if params.depth == frame.MIN_ITER and max(params.size) > frame.MIN_IMAGE_SIZE:
     # MIN_ITER is a special mark that means "automatically calculate the depth" based on the frame,
     # but we only do this if the image is larger than the minimum size (we use those for probing)
     max_iter: int
-    max_iter, stats = _FractalAdaptiveIterations(
-      params.frm, params.set_points, progress_bar, n_processes, print_comm
+    max_iter, stats = FractalAdaptiveIterations(
+      params.frm,
+      set_points=params.set_points,
+      progress_bar=progress_bar,
+      n_processes=n_processes,
+      print_comm=print_comm,
     )
     params = dataclasses.replace(params, depth=max_iter)  # update params with the new max_iter
   logging.debug(
@@ -142,14 +141,15 @@ def ComputeFractal(
   # all copied, so we can return the final image; first trigger the histogram calculation
   img.RebuildHistograms()
   logging.info(
-    f'ComputeFractal done: {params.frm.fractal.value} {params.width}x{params.height} '
+    f'ComputeFractal done: {params.frm.fractal.value} {params.width} x {params.height} '
     f'depth={params.depth}, interior={img.stats.n_interior if img.stats else "?"}'
   )
   return (params, img)
 
 
-def _FractalAdaptiveIterations(
+def FractalAdaptiveIterations(
   frm: frame.Frame,
+  *,
   set_points: frame.SetHighlightAlgorithm | None,
   progress_bar: bool,
   n_processes: int,
@@ -209,20 +209,28 @@ def _FractalAdaptiveIterations(
       logging.info(f'Auto-depth: {high_iter=} produced no exterior points, retrying deeper')
       continue  # no exterior points
     # we have exterior points, so we can look at the histogram sorted by escape iteration;
-    # find the highest escape iteration that is less than high limit
-    max_iter = img16.ext_hist.linear[-1][0]
+    # find the trimmed max: skip the top _ITER_OUTLIER_SKIP pixels from the histogram tail
+    remaining_to_skip: int = _ITER_OUTLIER_SKIP
+    max_iter = img16.ext_hist.linear[-1][0]  # default: absolute max
+    for value, count in reversed(img16.ext_hist.linear):
+      if remaining_to_skip <= 0 or count > remaining_to_skip:
+        max_iter = value
+        break
+      remaining_to_skip -= count
     # apply safety factor and clamp
     max_iter = min(frame.MAX_ITER, max(frame.MIN_ITER, int(max_iter * _ITER_SAFETY_FACTOR)))
     if max_iter < high_iter:
       # we found a winner! print and stop
-      print_comm(
-        f'Picked depth {max_iter}, histogram {image.SummaryHistogram(img16.ext_hist.linear)}, '
-        f'{img16.stats.n_interior}/{img16.stats.n_px} set points'
-      )
+      if progress_bar:
+        print_comm(
+          f'Picked depth {max_iter}, histogram {image.SummaryHistogram(img16.ext_hist.linear)}, '
+          f'{img16.stats.n_interior}/{img16.stats.n_px} set points'
+        )
       return (max_iter, img16.stats)
-    print_comm(
-      f'[red]Iteration limit of {high_iter} was too low:[/] will try again [red]10x[/] deeper...'
-    )
+    if progress_bar:
+      print_comm(
+        f'[red]Iteration limit of {high_iter} was too low:[/] will try again [red]10x[/] deeper...'
+      )
     # here we didn't find, so we loop to the next higher limit...
   # if we exhausted all the high_iters without finding a suitable max_iter, we have to give up
   raise Error(
