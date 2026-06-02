@@ -928,8 +928,11 @@ class FractalDatabase:
           for j, f, od, sd, s in depths
         ],
       )
-      if any(1 for k in zd['frames'] if k not in self._db['frames']):
-        raise Error('Inconsistent DB: marker frame hashes do not match frames list; Report bug!')
+missing_frames: list[str] = [k for k in zd['frames'] if k not in self._db['frames']]
+if missing_frames:
+  raise Error(
+    f'Inconsistent DB: zoom references frame(s) not present in DB: {missing_frames[:5]}; Report bug!'
+  )
       if any(1 for k in zd['markers'] if zd['frames'][k['idx']] != k['frm']):
         raise Error('Inconsistent DB: marker frame hashes do not match frames list; Report bug!')
       if any(1 for k in zd['depths'] if zd['frames'][k['idx']] != k['frm']):
