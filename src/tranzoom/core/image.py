@@ -1080,7 +1080,7 @@ class ZoomParameters(frame.SerializingFractalObject):
       logging.info(f'Frames subset {name!r} is trivial, will use [first, last]')
       return [(0, all_frames[0]), (len(all_frames) - 1, all_frames[-1])]
     # we will need more markers; start from the first and find the "ideal" stops
-    with timer.Timer('marker generation'):
+with timer.Timer(f'{name} generation'):
       marker_mag: gmpy2.mpq = self.mag / gmpy2.mpq(n_marker_steps)
       marker_mag = gmpy2.mpq(
         gmpy2.exp10(marker_mag)
