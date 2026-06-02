@@ -496,8 +496,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     total_depth: int = sum(_DepthAndStatsForFrame(j)[0] for j in range(len(all_frames)))
     cmp_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
       total=total_depth,
-      desc='Frames',
-      unit='fr',
+      desc='Iter',
+      unit='it',
       dynamic_ncols=True,
       smoothing=0.1,
       colour='magenta',

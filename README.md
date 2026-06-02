@@ -862,25 +862,26 @@ ZOOM: <GIF: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73
 73801/1000000000]
 
 Making 4 depth computations...
-Depth: 100%|█████████████████████████████████████████████| 4/4 [00:01<00:00,  3.74fr/s]
-4 depth computations done in 1.030 s
+Depth: 100%|█████████████████████████████████████████████| 4/4 [00:03<00:00,  1.32fr/s]
+4 depth computations done in 3.080 s
 
-Marker Frame 1 / 40 - depth 1001
+Iter:   0%|                                              | 0/41431 [00:00<?, ?it/s]Marker Frame 1 / 40 - depth 1001
 220 x 220 Mandelbrot, 10^3.530 magnitude...
 Compute: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, 1001]}
-Img: 100%|█████████████████████████████████████████████| 48400/48400 [00:00<00:00, 146484.25px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, 7.025 MiB, in 625.930 ms
+Img: 100%|█████████████████████████████████████████████| 48400/48400 [00:01<00:00, 29531.69px/s]
+Compute: Mandelbrot: DONE, with precision 140 bits, 7.025 MiB, in 2.455 s
 
-Frame 2 / 40 - depth 1002
+Iter:   2%|██                                            | 1001/41431 [00:02<01:51, 362.12it/s]Frame 2 / 40 - depth 1002
 [...builds frames 2–40...]
 
+Iter: 100%|█████████████████████████████████████████████| 41431/41431 [02:03<00:00, 334.84it/s]
 ZOOM: Color norm: built from 2 marker frames
 
 Render: {[PNG, SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}
-Render: 100%|█████████████████████████████████████████████| 40/40 [00:04<00:00,  9.09fr/s]
+Render: 100%|█████████████████████████████████████████████| 40/40 [00:09<00:00,  4.01fr/s]
 Render: DONE
 
-Success: GIF 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab' in 38.525 s (frames) + 4.728 s (render)
+Success: GIF 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab' in 3.080 s (depth) + 2.062 min (frames) + 10.597 s (render)
 Saved GIF to 'mandel-e631ffec80dd902e375e.gif', 1.757 MiB
 ```
 
