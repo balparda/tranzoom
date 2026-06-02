@@ -300,8 +300,8 @@ class FractalStats(frame.SerializingFractalObject):
       raise Error(
         f'Invalid {self.n_px=}, must be between {frame.MIN_IMAGE_PX} and {frame.MAX_IMAGE_PX}'
       )
-    if not (0 <= self.n_interior < self.n_px):
-      raise Error(f'Invalid {self.n_interior=}, must be between 0 and {self.n_px - 1}')
+if not (0 <= self.n_interior <= self.n_px):
+  raise Error(f'Invalid {self.n_interior=}, must be between 0 and {self.n_px}')
     if (self.max_lo != _MPFR_FOUR or self.max_hi != _MPFR_ZERO) and not (
       _MPFR_ZERO <= self.max_lo <= self.max_hi
     ):
