@@ -300,8 +300,8 @@ class FractalStats(frame.SerializingFractalObject):
       raise Error(
         f'Invalid {self.n_px=}, must be between {frame.MIN_IMAGE_PX} and {frame.MAX_IMAGE_PX}'
       )
-if not (0 <= self.n_interior <= self.n_px):
-  raise Error(f'Invalid {self.n_interior=}, must be between 0 and {self.n_px}')
+    if not (0 <= self.n_interior <= self.n_px):
+      raise Error(f'Invalid {self.n_interior=}, must be between 0 and {self.n_px}')
     if (self.max_lo != _MPFR_FOUR or self.max_hi != _MPFR_ZERO) and not (
       _MPFR_ZERO <= self.max_lo <= self.max_hi
     ):
@@ -1080,7 +1080,7 @@ class ZoomParameters(frame.SerializingFractalObject):
       logging.info(f'Frames subset {name!r} is trivial, will use [first, last]')
       return [(0, all_frames[0]), (len(all_frames) - 1, all_frames[-1])]
     # we will need more markers; start from the first and find the "ideal" stops
-with timer.Timer(f'{name} generation'):
+    with timer.Timer(f'{name} generation'):
       marker_mag: gmpy2.mpq = self.mag / gmpy2.mpq(n_marker_steps)
       marker_mag = gmpy2.mpq(
         gmpy2.exp10(marker_mag)
