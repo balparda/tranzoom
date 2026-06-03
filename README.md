@@ -86,6 +86,10 @@ Built with:
       - [Create environment and install dependencies](#create-environment-and-install-dependencies)
       - [Optional: VSCode setup](#optional-vscode-setup)
     - [Build](#build)
+    - [Optional: Cython acceleration](#optional-cython-acceleration)
+      - [Build the extension](#build-the-extension)
+      - [Verify it loaded](#verify-it-loaded)
+      - [Reverting to pure Python](#reverting-to-pure-python)
     - [Run locally](#run-locally)
     - [Testing](#testing)
       - [Unit tests / Coverage](#unit-tests--coverage)
@@ -1009,6 +1013,8 @@ Rendering is CPU-bound. Time scales roughly with `width × height × max_iter ×
 
 The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image and reuses them across rows, which is an important optimization since `mpfr` construction is expensive at high precision.
 
+An **optional Cython acceleration** is available: the inner per-pixel loops in `fractalfast.py` can be compiled to a native extension that Python automatically prefers over the pure-Python fallback. See [Optional: Cython acceleration](#optional-cython-acceleration) under Development Instructions.
+
 ## Development Instructions
 
 ### File structure
@@ -1018,6 +1024,7 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 ├── CHANGELOG.md                  ⟸ latest changes/releases
 ├── LICENSE
 ├── Makefile
+├── build_ext.py                  ⟸ Cython build script (see `make cython`; optional, gitignored output)
 ├── tranz.md                      ⟸ auto-generated CLI doc (by `make docs` or `make ci`)
 ├── poetry.lock                   ⟸ maintained by Poetry; do not manually edit
 ├── pyproject.toml                ⟸ most important configurations live here
@@ -1054,6 +1061,7 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 │       │   ├── __init__.py
 │       │   ├── ai.py             ⟸ ZoomLoop() and ManualLoop() — zoom session logic
 │       │   ├── fractal.py        ⟸ Mandelbrot() renderer
+│       │   ├── fractalfast.py    ⟸ Cython-compilable helpers; pure-Python fallback always present
 │       │   ├── frame.py          ⟸ Frame class, Fractal enum; base for computation
 |       |   ├── frdb.py           ⟸ Fractal DB/persistence objects; DoComputation()/DoRender() rendering primitives
 │       │   ├── image.py          ⟸ Image class, overlays, iTerm2, metadata helpers
@@ -1166,6 +1174,40 @@ This repo ships a `.vscode/settings.json` configured to use `./.venv/bin/python`
 ```sh
 poetry build   # builds wheel + sdist in dist/
 ```
+
+### Optional: Cython acceleration
+
+`fractalfast.py` is written in **pure Python** and works with no extra steps. It is also structured as a [Cython pure-Python-mode](https://cython.readthedocs.io/en/latest/src/tutorial/pure.html) source file, so it can be compiled into a native extension that Python automatically prefers over the `.py` fallback when present.
+
+This is purely a **local development optimization** — the compiled `.so`/`.pyd` is never committed to the repository, and the installed PyPI wheel always ships the pure-Python version.
+
+#### Build the extension
+
+`cython` and `setuptools` are part of the standard dev dependencies, so after `poetry sync` you already have everything needed:
+
+```sh
+make cython
+# equivalent to:
+poetry run python build_ext.py build_ext --inplace
+```
+
+This compiles `src/tranzoom/core/fractalfast.py` and writes a `fractalfast.cpython-<ver>-<platform>.so` (macOS/Linux) or `.pyd` (Windows) alongside the source file. The intermediate `fractalfast.c` and the `build/` directory are gitignored.
+
+#### Verify it loaded
+
+```python
+from tranzoom.core import fractalfast
+
+print(fractalfast.__file__)  # should end in .so / .pyd, not .py
+```
+
+#### Reverting to pure Python
+
+```sh
+make clean-cython
+```
+
+This removes the compiled extension and the intermediate C file. On the next import, Python falls back to the `.py` source automatically — no code changes required.
 
 ### Run locally
 

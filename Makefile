@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: install fmt lint type test integration cov flakes precommit docs req ci
+.PHONY: install fmt lint type test integration cov flakes precommit docs req ci cython clean-cython
 
 install:
 	poetry install
@@ -39,3 +39,12 @@ req:
 
 ci: cov integration precommit docs req
 	@echo "CI checks passed! Generated docs & requirements.txt."
+
+cython:
+	@echo "Building Cython extension"
+	poetry run python build_ext.py build_ext --inplace
+	@echo "Done. fractalfast extension built alongside src/tranzoom/core/fractalfast.py"
+
+clean-cython:
+	@echo "Removing Cython build artifacts"
+	rm -rf build/ src/tranzoom/core/fractalfast.c src/tranzoom/core/fractalfast*.so src/tranzoom/core/fractalfast*.pyd
