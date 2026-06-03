@@ -21,31 +21,28 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+<<<<<<< HEAD
 import math
 import warnings
+=======
+>>>>>>> 893d244 (cython load gmpy)
 from collections import abc
 from concurrent import futures
-from typing import NoReturn, cast
 
+<<<<<<< HEAD
 import gmpy2
 import tqdm.rich
 from tqdm.std import TqdmExperimentalWarning
 
 from tranzoom.core import frame, image
+=======
+from tranzoom.core import fractalfast, frame, image
+>>>>>>> 893d244 (cython load gmpy)
 
 # automated search for iter
 
 _ITER_OUTLIER_SKIP: int = 3  # skip up to this many extreme-outlier pixels in the probe
 _ITER_SAFETY_FACTOR: float = 1.5  # we multiply the estimated iter by this to be safe
-
-# gmpy2.mpfr constants
-_MPFR_ZERO: gmpy2.mpfr = gmpy2.mpfr('0')
-_MPFR_SIXTEENTH: gmpy2.mpfr = gmpy2.mpfr('0.0625')
-_MPFR_FOURTH: gmpy2.mpfr = gmpy2.mpfr('0.25')
-_MPFR_HALF: gmpy2.mpfr = gmpy2.mpfr('0.5')
-_MPFR_ONE: gmpy2.mpfr = gmpy2.mpfr('1')
-_MPFR_TWO: gmpy2.mpfr = gmpy2.mpfr('2')
-_MPFR_FOUR: gmpy2.mpfr = gmpy2.mpfr('4')
 
 
 class Error(image.Error):
@@ -96,13 +93,16 @@ def ComputeFractal(
       print_comm=print_comm,
     )
     params = dataclasses.replace(params, depth=max_iter)  # update params with the new max_iter
-  logging.debug(
+  # log the start of the render (not pre-computation anymore here)
+  optimized: bool = fractalfast.__file__.lower().endswith(('.so', '.pyd'))
+  logging.info(
     f'{params.frm.fractal.value.upper()} using {n_processes} process(es) '
-    f'for {"PRE " if is_preprocess else ""}rendering'
+    f'for {"PRE " if is_preprocess else ""}rendering '
+    f'- {"OPTIMIZED CYTHON" if optimized else "PURE PYTHON"}'
   )
   # create inputs
-  inp: list[_FractalTaskInput] = [
-    _FractalTaskInput(
+  inp: list[image.FractalTaskInput] = [
+    image.FractalTaskInput(
       params=params,
       progress_bar=progress_bar,
       n_task=i + 1,
@@ -112,9 +112,11 @@ def ComputeFractal(
     for i in range(n_processes)
   ]
   # execute in processes
-  results: list[_FractalTaskOutput]
-  computation: _FractalComputation = (
-    _MandelbrotComputation if params.frm.fractal == frame.Fractal.MANDELBROT else _JuliaComputation
+  results: list[image.FractalTaskOutput]
+  computation: image.FractalComputation = (
+    fractalfast.MandelbrotComputation
+    if params.frm.fractal == frame.Fractal.MANDELBROT
+    else fractalfast.JuliaComputation
   )
   if n_processes == 1:
     # no multiprocessing, just run the single task directly in this process (also good for debug)
@@ -252,6 +254,7 @@ def FractalAdaptiveIterations(
     f'Estimated {max_iter=} is above the adaptive limit of {frame.HIGH_ITERS[-1]}; '
     'maybe this frame is interior-only (all pixels are non-escaping)'
   )
+<<<<<<< HEAD
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
@@ -897,3 +900,5 @@ def NormalizeSmoothEscape(n: int, nu: float) -> tuple[int, float]:
   if not (0.0 <= nu < 1.0):
     raise Error(f'Normalized smooth escape range should be 0 <= {nu=} < 1, {n=}, bug! report')
   return (n, nu)
+=======
+>>>>>>> 893d244 (cython load gmpy)

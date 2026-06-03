@@ -228,6 +228,9 @@ preview = true  # if you want new features being previewed
 
 "build_ext.py" = [
   "INP001",   # root-level build script, not part of a Python package
+  "S404",     # subprocess module is acceptable in a build script
+  "S603",     # subprocess call with trusted, literal input args
+  "S607",     # partial executable path is acceptable for `brew` in a build script
 ]
 
 "scripts*/**/*.py" = [

@@ -147,8 +147,8 @@ META_SAFE_HASHES: set[str] = {
 }
 
 # pre-compiled constants for encoding/decoding
-_PACK_IF = struct.Struct('>if')  # signed int32 + float32
-_PACK_Q = struct.Struct('>Q')  # uint64
+PACK_IF = struct.Struct('>if')  # signed int32 + float32
+PACK_Q = struct.Struct('>Q')  # uint64
 
 # image constants
 
@@ -1719,6 +1719,58 @@ class Image:
     return (buf.getvalue(), img_data_hash)
 
 
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class FractalTaskInput:
+  """Defines the input for a single Mandelbrot/Julia computation task.
+
+  Attributes:
+    params (frame.ComputationParameters): The full computation parameters for this task,
+        including the frame, image dimensions, depth, and optional set points algorithm.
+    progress_bar (bool): If True, this task should render a progress bar during computation.
+    n_task (int): The 1-based index of this task among the total tasks.
+    total_tasks (int): The total number of tasks in the computation batch.
+    stats (FractalStats | None): Optional pre-collected stats from a sample run;
+        if None, no sample-run stats are attached; default is None.
+
+  """
+
+  params: frame.ComputationParameters
+  progress_bar: bool
+  n_task: int
+  total_tasks: int
+  stats: FractalStats | None = None
+
+  def __post_init__(self) -> None:
+    """Validate parameters.
+
+    Raises:
+      Error: on error
+
+    """
+    # check task numbers
+    if not (1 <= self.n_task <= self.total_tasks):
+      raise Error(f'{self.n_task=} must be between 1 and {self.total_tasks}')
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class FractalTaskOutput:
+  """Defines the output of a single Mandelbrot/Julia computation task.
+
+  Attributes:
+    img (Image): The completed fractal image produced by this task.
+    n_task (int): The 1-based index of this task among the total tasks.
+    total_tasks (int): The total number of tasks in the computation batch.
+
+  """
+
+  img: Image
+  n_task: int
+  total_tasks: int
+
+
+type FractalComputation = abc.Callable[[FractalTaskInput], FractalTaskOutput]
+
+
 def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[str, str]:  # noqa: C901, PLR0912
   """Create a metadata dictionary for the image.
 
@@ -2744,31 +2796,6 @@ def ReWriteVideoMP4Meta(
   reader.close()
 
 
-def EncodeIntFloatTo64(i: int, f: float) -> int:
-  """Encode a signed int32 and a float32 into a single uint64, by concatenating their bits.
-
-  This is benchmarked at ~1.6ns per call, ~160ms for a 1024x1024 image to encode all pixels.
-  struct.pack()/unpack() does range checks already, so we DO NOT check inputs, as that degrades
-  performance by a lot. We also use pre-compiled struct formats to speed this up.
-
-  Args:
-    i (int): The signed int32 to encode.
-    f (float): The float32 to encode; garbage in, garbage out: if the float is not
-        valid/finite (NaN or Inf), you will get the same garbage float back on Decode64ToIntFloat().
-
-  Returns:
-    int: The encoded uint64 containing both the int and float.
-
-  Raises:
-    Error: inputs out of range or other encoding issues
-
-  """
-  try:
-    return cast('int', _PACK_Q.unpack(_PACK_IF.pack(i, f))[0])
-  except (struct.error, OverflowError) as err:
-    raise Error(f'Error encoding {i=} and {f=} to uint64: {err}') from err
-
-
 def Decode64ToIntFloat(x: int) -> tuple[int, float]:
   """Decode a uint64 containing a signed int32 and a float32 back into its components.
 
@@ -2788,6 +2815,6 @@ def Decode64ToIntFloat(x: int) -> tuple[int, float]:
 
   """
   try:
-    return _PACK_IF.unpack(_PACK_Q.pack(x))
+    return PACK_IF.unpack(PACK_Q.pack(x))
   except (struct.error, OverflowError) as e:
     raise Error(f'Error decoding uint64 to int and float: {e}') from e
