@@ -2,6 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 """Fractal computing.
 
+BEWARE when debugging/editing this module:
+
+On MacOS (Python ≥ 3.8) --- and presumably on other systems too --- the default multiprocessing
+start method is "spawn", not "fork". With spawn, each worker process is a fresh Python interpreter
+that re-imports all modules from disk when it starts. This means that unless `--threads` is
+manually set to 1, the code will reload for every worker every time an image is rendered.
+
+This means that if you are executing some long computation with many fractals (think animation),
+and you start editing this part of the codebase, you will may break your running computation in
+really ugly ways.
+
 Heavy use of gmpy2 for arbitrary precision, which is needed to render deep zooms correctly; see
 <https://gmpy2.readthedocs.io/en/latest/>
 """
