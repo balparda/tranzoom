@@ -1825,9 +1825,9 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
       img_meta[META_IMAGE_STATS_ANG_LO_KEY] = str(img.stats.ang_lo)
     if img.stats.ang_hi is not None:
       img_meta[META_IMAGE_STATS_ANG_HI_KEY] = str(img.stats.ang_hi)
-    if img.stats.imag_lo:
+    if img.stats.imag_lo is not None:
       img_meta[META_IMAGE_STATS_IMAG_LO_KEY] = str(img.stats.imag_lo)
-    if img.stats.imag_hi:
+    if img.stats.imag_hi is not None:
       img_meta[META_IMAGE_STATS_IMAG_HI_KEY] = str(img.stats.imag_hi)
   # Julia
   if frm.fractal == frame.Fractal.JULIA:
