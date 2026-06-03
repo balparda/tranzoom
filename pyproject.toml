@@ -129,6 +129,7 @@ typeguard = "^4.5"
 # project-specific dev-only
 gmpy2-stubs = "^2.2"
 types-tqdm = "^4.67"
+types-setuptools = "^82.0"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = "^1.10"
