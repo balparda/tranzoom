@@ -1066,7 +1066,7 @@ class FractalDatabase:
     print_comm(
       f'{params.width} x {params.height} '
       f'{params.frm.fractal.value.capitalize()}{set_param}, '
-      f'10^{params.frm.magnification[1]:.3f} magnitude...'
+      f'10^{params.frm.magnification[1]:.3f} magnitude, {fractal.CORE_COMPUTATION}...'
     )
     print_comm(f'[yellow]Compute:[/] {params}')
     # do we know about this render?

@@ -26,6 +26,29 @@ from concurrent import futures
 
 from tranzoom.core import fractalfast, frame, image
 
+# load the Cython versions of the computations if available, otherwise fall back to the pure Python
+# versions in fractalfast.py; we do this at the module level so that the ComputeFractal function
+# can just call the appropriate computation without worrying about which implementation is used;
+# we also compile the vanilla fractalfast.py so that is a hybrid version, and we detect that with
+# the var fractalfast.CYTHON
+_MANDELBROT_COMPUTATION: image.FractalComputation = fractalfast.MandelbrotComputation
+_JULIA_COMPUTATION: image.FractalComputation = fractalfast.JuliaComputation
+CORE_COMPUTATION: str = 'PYTHON/CYTHON HYBRID' if fractalfast.CYTHON else 'PURE PYTHON'
+# we already have either the pure Python or the Hybrid, we try to load the full Cython version
+try:
+  from tranzoom.core import (  # type: ignore[attr-defined]
+    fractalc,  # pyright: ignore[reportUnknownVariableType, reportAttributeAccessIssue]
+  )
+
+  # if load succeeded attach the Cython versions
+  _MANDELBROT_COMPUTATION = fractalc.MandelbrotComputation  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
+  _JULIA_COMPUTATION = fractalc.JuliaComputation  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
+  CORE_COMPUTATION = 'CYTHON'  # pyright: ignore[reportConstantRedefinition]
+except ImportError:
+  logging.warning(f'Could not import fractalc.py Cython, will use {CORE_COMPUTATION} instead')
+
+
+# iter constants
 _ITER_OUTLIER_SKIP: int = 3  # skip up to this many extreme-outlier pixels in the probe
 _ITER_SAFETY_FACTOR: float = 1.5  # we multiply the estimated iter by this to be safe
 
@@ -81,8 +104,7 @@ def ComputeFractal(
   # log the start of the render (not pre-computation anymore here)
   logging.info(
     f'{params.frm.fractal.value.upper()} using {n_processes} process(es) '
-    f'for {"PRE " if is_preprocess else ""}rendering '
-    f'- {"CYTHON fractalfast.py" if fractalfast.CYTHON else "PURE PYTHON fractalfast.py"}'
+    f'for {"PRE " if is_preprocess else ""}rendering - {CORE_COMPUTATION}'
   )
   # create inputs
   inp: list[image.FractalTaskInput] = [
@@ -98,9 +120,9 @@ def ComputeFractal(
   # execute in processes
   results: list[image.FractalTaskOutput]
   computation: image.FractalComputation = (
-    fractalfast.MandelbrotComputation
+    _MANDELBROT_COMPUTATION
     if params.frm.fractal == frame.Fractal.MANDELBROT
-    else fractalfast.JuliaComputation
+    else _JULIA_COMPUTATION
   )
   if n_processes == 1:
     # no multiprocessing, just run the single task directly in this process (also good for debug)
