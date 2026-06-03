@@ -1813,9 +1813,9 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
     )
   # add any stats that aren't just noise
   if img.stats:
-    if img.stats.max_lo:
+    if img.stats.max_lo is not None:
       img_meta[META_IMAGE_STATS_MAX_LO_KEY] = str(img.stats.max_lo)
-    if img.stats.max_hi:
+    if img.stats.max_hi is not None:
       img_meta[META_IMAGE_STATS_MAX_HI_KEY] = str(img.stats.max_hi)
     if img.stats.min_lo:
       img_meta[META_IMAGE_STATS_MIN_LO_KEY] = str(img.stats.min_lo)
