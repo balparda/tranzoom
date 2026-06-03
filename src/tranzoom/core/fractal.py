@@ -497,19 +497,15 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
             escaped_at, smooth_escape = NormalizeSmoothEscape(escaped_at, smooth_escape)  # noqa: PLW2901
             break
           # Imaginary Weight Average: accumulate sin(arg(z))**2 = zy**2/|z|**2 BEFORE the update
-          if (
-            stats_imag
-            and inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY
-            and mag_z2 > _MPFR_ZERO
-          ):
+          if inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY and mag_z2 > _MPFR_ZERO:
             imag_acc += zy2 / mag_z2
           # z = z^2 + c in terms of zx/zy: zx' = zx^2 - zy^2 + cx - the actual Mandelbrot iteration
           zy = _MPFR_TWO * zx * zy + cy
           zx = zx2 - zy2 + cx
           # accumulate |z|; don't do this first, or else, for example, min() will always be 0.0
-          if stats_min and inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
+          if inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
             min_z2 = min(min_z2, mag_z2)
-          elif stats_max and inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
             max_z2 = max(max_z2, mag_z2)
         else:
           # if we didn't break, we reached max_iter, mark as non-escaped, so
@@ -522,7 +518,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
           if inp.params.set_points is None:
             # default coloring: just mark as interior with a special negative value
             escaped_at = -frame.SET_INTERIOR_RESOLUTION  # negative to mark it as interior!
-          elif stats_min and inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
             # track the min |z|^2; first the stats...
             min_lo = min(min_lo, min_z2)
             min_hi = max(min_hi, min_z2)
@@ -533,7 +529,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
               if stats_min
               else normalize(sqrt_min, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
             )
-          elif stats_max and inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
             # track the max |z|^2; first the stats...
             max_lo = min(max_lo, max_z2)
             max_hi = max(max_hi, max_z2)
@@ -544,7 +540,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
               if stats_max
               else normalize(sqrt_max, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
             )
-          elif stats_ang and inp.params.set_points == frame.SetHighlightAlgorithm.ANGLE:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.ANGLE:
             # angle stats for interior points; first the stats...
             ang: gmpy2.mpfr = gmpy2.atan2(zy, zx)  # angle in radians, between -pi and pi
             ang = (ang + mpfr_pi) / mpfr_two_pi  # shift to [0, 2pi] then to [0, 1]
@@ -557,7 +553,7 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
               if stats_ang
               else normalize(ang, _MPFR_ZERO, _MPFR_ONE)
             )
-          elif stats_imag and inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY:
             # Imaginary Weight Average: mean(sin(arg(z))**2) over orbit; first the stats...
             imag_mean: gmpy2.mpfr = (imag_acc / max_iter_p_1) / frame.MPFR_MAX_SET_Z
             imag_lo = min(imag_lo, imag_mean)
@@ -774,19 +770,15 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
             escaped_at, smooth_escape = NormalizeSmoothEscape(escaped_at, smooth_escape)  # noqa: PLW2901
             break
           # Imaginary Weight Average: accumulate sin(arg(z))**2 = zy**2/|z|**2 BEFORE the update
-          if (
-            stats_imag
-            and inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY
-            and mag_z2 > _MPFR_ZERO
-          ):
+          if inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY and mag_z2 > _MPFR_ZERO:
             imag_acc += zy2 / mag_z2
           # z = z^2 + c in terms of zx/zy: zx' = zx^2 - zy^2 + cx - the actual Julia iteration
           zy = _MPFR_TWO * zx * zy + cy
           zx = zx2 - zy2 + cx
           # accumulate |z|; don't do this first, or else, for example, min() will always be 0.0
-          if stats_min and inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
+          if inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
             min_z2 = min(min_z2, mag_z2)
-          elif stats_max and inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
             max_z2 = max(max_z2, mag_z2)
         else:
           # if we didn't break, we reached max_iter, mark as non-escaped, so
@@ -799,7 +791,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
           if inp.params.set_points is None:
             # default coloring: just mark as interior with a special negative value
             escaped_at = -frame.SET_INTERIOR_RESOLUTION  # negative to mark it as interior!
-          elif stats_min and inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
             # track the min |z|^2; first the stats...
             min_lo = min(min_lo, min_z2)
             min_hi = max(min_hi, min_z2)
@@ -810,7 +802,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
               if stats_min
               else normalize(sqrt_min, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
             )
-          elif stats_max and inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
             # track the max |z|^2; first the stats...
             max_lo = min(max_lo, max_z2)
             max_hi = max(max_hi, max_z2)
@@ -821,7 +813,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
               if stats_max
               else normalize(sqrt_max, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
             )
-          elif stats_ang and inp.params.set_points == frame.SetHighlightAlgorithm.ANGLE:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.ANGLE:
             # angle stats for interior points; first the stats...
             ang: gmpy2.mpfr = gmpy2.atan2(zy, zx)  # angle in radians, between -pi and pi
             ang = (ang + mpfr_pi) / mpfr_two_pi  # shift to [0, 2pi] then to [0, 1]
@@ -834,7 +826,7 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
               if stats_ang
               else normalize(ang, _MPFR_ZERO, _MPFR_ONE)
             )
-          elif stats_imag and inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY:
+          elif inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY:
             # Imaginary Weight Average: mean(sin(arg(z))**2) over orbit; first the stats...
             imag_mean: gmpy2.mpfr = (imag_acc / max_iter_p_1) / frame.MPFR_MAX_SET_Z
             imag_lo = min(imag_lo, imag_mean)
