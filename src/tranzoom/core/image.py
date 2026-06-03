@@ -276,48 +276,77 @@ class FractalStats(frame.SerializingFractalObject):
   n_interior: int  # number of interior (Set) points in the image, pixels with escape iteration < 0
 
   # limits of |z| magnitudes for interior (Set) points
-  max_lo: gmpy2.mpfr  # min(all max(|z|) for interior points)
-  max_hi: gmpy2.mpfr  # max(all max(|z|) for interior points)
-  min_lo: gmpy2.mpfr  # min(all min(|z|) for interior points)
-  min_hi: gmpy2.mpfr  # max(all min(|z|) for interior points)
+  max_lo: gmpy2.mpfr | None  # min(all max(|z|) for interior points)
+  max_hi: gmpy2.mpfr | None  # max(all max(|z|) for interior points)
+  min_lo: gmpy2.mpfr | None  # min(all min(|z|) for interior points)
+  min_hi: gmpy2.mpfr | None  # max(all min(|z|) for interior points)
 
   # limits of angles for interior (Set) points, in [0, 1]
-  ang_lo: gmpy2.mpfr  # min(all angles for interior points)
-  ang_hi: gmpy2.mpfr  # max(all angles for interior points)
+  ang_lo: gmpy2.mpfr | None  # min(all angles for interior points)
+  ang_hi: gmpy2.mpfr | None  # max(all angles for interior points)
 
   # limits of the Imaginary Weight Average for interior (Set) points, in [0, 1]
-  imag_lo: gmpy2.mpfr  # min(all sac values for interior points)
-  imag_hi: gmpy2.mpfr  # max(all sac values for interior points)
+  imag_lo: gmpy2.mpfr | None  # min(all sac values for interior points)
+  imag_hi: gmpy2.mpfr | None  # max(all sac values for interior points)
 
-  def __post_init__(self) -> None:
+  def __post_init__(self) -> None:  # noqa: C901
     """Check FractalStats validity.
 
     Raises:
       Error: if the object is invalid.
 
     """
+    # check n_px and n_interior are valid
     if not (frame.MIN_IMAGE_PX <= self.n_px <= frame.MAX_IMAGE_PX):
       raise Error(
         f'Invalid {self.n_px=}, must be between {frame.MIN_IMAGE_PX} and {frame.MAX_IMAGE_PX}'
       )
     if not (0 <= self.n_interior <= self.n_px):
       raise Error(f'Invalid {self.n_interior=}, must be between 0 and {self.n_px}')
-    if (self.max_lo != _MPFR_FOUR or self.max_hi != _MPFR_ZERO) and not (
-      _MPFR_ZERO <= self.max_lo <= self.max_hi
+    # check max/min_lo/hi are valid: they must be both None or both not None
+    if (self.max_lo is None) != (self.max_hi is None):
+      raise Error(
+        f'max_lo and max_hi must both be None or both be not None: {self.max_lo=}, {self.max_hi=}'
+      )
+    if (
+      self.max_lo is not None
+      and self.max_hi is not None
+      and not (_MPFR_ZERO <= self.max_lo <= self.max_hi)
     ):
       raise Error(f'Invalid {self.max_lo=} and {self.max_hi=}, must satisfy 0 <= max_lo <= max_hi')
-    if (self.min_lo != _MPFR_FOUR or self.min_hi != _MPFR_ZERO) and not (
-      _MPFR_ZERO <= self.min_lo <= self.min_hi
+    if (self.min_lo is None) != (self.min_hi is None):
+      raise Error(
+        f'min_lo and min_hi must both be None or both be not None: {self.min_lo=}, {self.min_hi=}'
+      )
+    if (
+      self.min_lo is not None
+      and self.min_hi is not None
+      and not (_MPFR_ZERO <= self.min_lo <= self.min_hi)
     ):
       raise Error(f'Invalid {self.min_lo=} and {self.min_hi=}, must satisfy 0 <= min_lo <= min_hi')
-    if (self.ang_lo != _MPFR_ONE or self.ang_hi != _MPFR_ZERO) and not (
-      _MPFR_ZERO <= self.ang_lo <= self.ang_hi <= _MPFR_ONE
+    # check ang_lo/hi are valid: they must be both None or both not None
+    if (self.ang_lo is None) != (self.ang_hi is None):
+      raise Error(
+        f'ang_lo and ang_hi must both be None or both be not None: {self.ang_lo=}, {self.ang_hi=}'
+      )
+    if (
+      self.ang_lo is not None
+      and self.ang_hi is not None
+      and not (_MPFR_ZERO <= self.ang_lo <= self.ang_hi <= _MPFR_ONE)
     ):
       raise Error(
         f'Invalid {self.ang_lo=} and {self.ang_hi=}, must satisfy 0 <= ang_lo <= ang_hi <= 1'
       )
-    if (self.imag_lo != _MPFR_ONE or self.imag_hi != _MPFR_ZERO) and not (
-      _MPFR_ZERO <= self.imag_lo <= self.imag_hi <= _MPFR_ONE
+    # check imag_lo/hi are valid: they must be both None or both not None
+    if (self.imag_lo is None) != (self.imag_hi is None):
+      raise Error(
+        f'imag_lo and imag_hi must both be None or both be not None:'
+        f' {self.imag_lo=}, {self.imag_hi=}'
+      )
+    if (
+      self.imag_lo is not None
+      and self.imag_hi is not None
+      and not (_MPFR_ZERO <= self.imag_lo <= self.imag_hi <= _MPFR_ONE)
     ):
       raise Error(
         f'Invalid {self.imag_lo=} and {self.imag_hi=}, must satisfy 0 <= imag_lo <= imag_hi <= 1'
@@ -350,14 +379,14 @@ class FractalStats(frame.SerializingFractalObject):
       # ATTENTION: changing anything here changes the HASH!!
       'n_px': self.n_px,
       'n_interior': self.n_interior,
-      'max_lo': str(self.max_lo),
-      'max_hi': str(self.max_hi),
-      'min_lo': str(self.min_lo),
-      'min_hi': str(self.min_hi),
-      'ang_lo': str(self.ang_lo),
-      'ang_hi': str(self.ang_hi),
-      'imag_lo': str(self.imag_lo),
-      'imag_hi': str(self.imag_hi),
+      'max_lo': str(self.max_lo) if self.max_lo is not None else None,
+      'max_hi': str(self.max_hi) if self.max_hi is not None else None,
+      'min_lo': str(self.min_lo) if self.min_lo is not None else None,
+      'min_hi': str(self.min_hi) if self.min_hi is not None else None,
+      'ang_lo': str(self.ang_lo) if self.ang_lo is not None else None,
+      'ang_hi': str(self.ang_hi) if self.ang_hi is not None else None,
+      'imag_lo': str(self.imag_lo) if self.imag_lo is not None else None,
+      'imag_hi': str(self.imag_hi) if self.imag_hi is not None else None,
     }
 
   @staticmethod
@@ -381,14 +410,14 @@ class FractalStats(frame.SerializingFractalObject):
       params = FractalStats(  # object creation will check the data is valid and consistent
         n_px=int(str(data['n_px'])),
         n_interior=int(str(data['n_interior'])),
-        max_lo=gmpy2.mpfr(str(data['max_lo'])),
-        max_hi=gmpy2.mpfr(str(data['max_hi'])),
-        min_lo=gmpy2.mpfr(str(data['min_lo'])),
-        min_hi=gmpy2.mpfr(str(data['min_hi'])),
-        ang_lo=gmpy2.mpfr(str(data['ang_lo'])),
-        ang_hi=gmpy2.mpfr(str(data['ang_hi'])),
-        imag_lo=gmpy2.mpfr(str(data['imag_lo'])),
-        imag_hi=gmpy2.mpfr(str(data['imag_hi'])),
+        max_lo=gmpy2.mpfr(str(data['max_lo'])) if data['max_lo'] is not None else None,
+        max_hi=gmpy2.mpfr(str(data['max_hi'])) if data['max_hi'] is not None else None,
+        min_lo=gmpy2.mpfr(str(data['min_lo'])) if data['min_lo'] is not None else None,
+        min_hi=gmpy2.mpfr(str(data['min_hi'])) if data['min_hi'] is not None else None,
+        ang_lo=gmpy2.mpfr(str(data['ang_lo'])) if data['ang_lo'] is not None else None,
+        ang_hi=gmpy2.mpfr(str(data['ang_hi'])) if data['ang_hi'] is not None else None,
+        imag_lo=gmpy2.mpfr(str(data['imag_lo'])) if data['imag_lo'] is not None else None,
+        imag_hi=gmpy2.mpfr(str(data['imag_hi'])) if data['imag_hi'] is not None else None,
       )
     except (KeyError, ValueError, TypeError, Error) as err:
       raise Error(f'Invalid FractalStats JSON data: {err}') from err
