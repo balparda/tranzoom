@@ -1817,9 +1817,9 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
       img_meta[META_IMAGE_STATS_MAX_LO_KEY] = str(img.stats.max_lo)
     if img.stats.max_hi is not None:
       img_meta[META_IMAGE_STATS_MAX_HI_KEY] = str(img.stats.max_hi)
-    if img.stats.min_lo:
+    if img.stats.min_lo is not None:
       img_meta[META_IMAGE_STATS_MIN_LO_KEY] = str(img.stats.min_lo)
-    if img.stats.min_hi:
+    if img.stats.min_hi is not None:
       img_meta[META_IMAGE_STATS_MIN_HI_KEY] = str(img.stats.min_hi)
     if img.stats.ang_lo:
       img_meta[META_IMAGE_STATS_ANG_LO_KEY] = str(img.stats.ang_lo)
