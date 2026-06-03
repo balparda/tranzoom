@@ -14,6 +14,7 @@ import logging
 import math
 import pathlib
 import tempfile
+import warnings
 from collections import abc
 from typing import NoReturn
 
@@ -21,6 +22,7 @@ import click
 import gmpy2
 import tqdm.rich
 import typer
+from tqdm.std import TqdmExperimentalWarning
 from transcrypto.cli import clibase
 from transcrypto.core import hashes
 from transcrypto.utils import human, timer
@@ -385,14 +387,17 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       n_threads: int = frame.ConcurrenceToUse(config.max_threads)
       config.console.print(f'[yellow]Making {len(all_depth)} depth computations...[/]')
       with timer.Timer(emit_log=False) as depth_tmr:
-        for idx, frm in tqdm.rich.tqdm(
-          all_depth,
-          desc='Depth',
-          unit='fr',
-          dynamic_ncols=True,
-          smoothing=0.1,
-          colour='yellow',
-        ):
+        with warnings.catch_warnings():
+          warnings.simplefilter('ignore', category=TqdmExperimentalWarning)
+          depth_bar: tqdm.rich.tqdm[tuple[int, frame.Frame]] = tqdm.rich.tqdm(
+            all_depth,
+            desc='Depth',
+            unit='fr',
+            dynamic_ncols=True,
+            smoothing=0.1,
+            colour='yellow',
+          )
+        for idx, frm in depth_bar:
           params = dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER)
           max_iter, stats = fractal.FractalAdaptiveIterations(
             params.frm,
@@ -531,14 +536,16 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     total_depth: int = sum(
       _FrameEstimatedIters(*_DepthAndStatsForFrame(j)) for j in range(len(all_frames))
     )
-    cmp_bar: tqdm.rich.tqdm[NoReturn] = tqdm.rich.tqdm(
-      total=total_depth,
-      desc='Iter',
-      unit='it',
-      dynamic_ncols=True,
-      smoothing=0.1,
-      colour='magenta',
-    )
+    with warnings.catch_warnings():
+      warnings.simplefilter('ignore', category=TqdmExperimentalWarning)
+      cmp_bar: tqdm.rich.tqdm[NoReturn] = tqdm.rich.tqdm(
+        total=total_depth,
+        desc='Iter',
+        unit='it',
+        dynamic_ncols=True,
+        smoothing=0.1,
+        colour='magenta',
+      )
     with timer.Timer(emit_log=False) as frames_tmr:
       for idx, frm in enumerate(all_frames):
         max_iter, stats = _DepthAndStatsForFrame(idx)
@@ -624,14 +631,16 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     with tempfile.TemporaryDirectory() as tmpdir, timer.Timer(emit_log=False) as render_tmr:
       # make the rendering progress bar
       config.console.print(f'[yellow]Render:[/] {render}')
-      p_bar: tqdm.rich.tqdm[NoReturn] = tqdm.rich.tqdm(
-        total=zoom_params.n_frames,
-        desc='Render',
-        unit='fr',
-        dynamic_ncols=True,
-        smoothing=0.1,
-        colour='yellow',
-      )
+      with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=TqdmExperimentalWarning)
+        p_bar: tqdm.rich.tqdm[NoReturn] = tqdm.rich.tqdm(
+          total=zoom_params.n_frames,
+          desc='Render',
+          unit='fr',
+          dynamic_ncols=True,
+          smoothing=0.1,
+          colour='yellow',
+        )
       # keep the last frame, for later metadata
       last_img: image.Image = img  # pyright: ignore[reportPossiblyUnboundVariable]
       del img  # pyright: ignore[reportPossiblyUnboundVariable]

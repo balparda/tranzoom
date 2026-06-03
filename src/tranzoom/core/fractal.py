@@ -11,12 +11,14 @@ from __future__ import annotations
 import dataclasses
 import logging
 import math
+import warnings
 from collections import abc
 from concurrent import futures
 from typing import NoReturn, cast
 
 import gmpy2
 import tqdm.rich
+from tqdm.std import TqdmExperimentalWarning
 
 from tranzoom.core import frame, image
 
@@ -396,15 +398,17 @@ def _MandelbrotComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noq
     # create progress bar based on total pixels and the options
     has_procs: bool = inp.total_tasks > 1
     n_task: int = inp.n_task - 1  # convert to 0-based index for easier modulo math
-    p_bar: tqdm.rich.tqdm[NoReturn] = tqdm.rich.tqdm(
-      total=inp.params.width * inp.params.height,
-      desc='Pre' if is_preprocess else 'Img',
-      unit='px',
-      dynamic_ncols=True,
-      smoothing=0.1,
-      colour='green',
-      disable=not inp.progress_bar or (has_procs and n_task != 0),  # show for the 1st process only
-    )
+    with warnings.catch_warnings():
+      warnings.simplefilter('ignore', category=TqdmExperimentalWarning)
+      p_bar: tqdm.rich.tqdm[NoReturn] = tqdm.rich.tqdm(
+        total=inp.params.width * inp.params.height,
+        desc='Pre' if is_preprocess else 'Img',
+        unit='px',
+        dynamic_ncols=True,
+        smoothing=0.1,
+        colour='green',
+        disable=not inp.progress_bar or (has_procs and n_task != 0),  # show for the 1st process
+      )
     # iterate over pixels in row-major order, computing escape iterations in mpfr
     px_count: int = -1
     for py in range(inp.params.height):
@@ -678,15 +682,17 @@ def _JuliaComputation(inp: _FractalTaskInput) -> _FractalTaskOutput:  # noqa: C9
     # create progress bar based on total pixels and the options
     has_procs: bool = inp.total_tasks > 1
     n_task: int = inp.n_task - 1  # convert to 0-based index for easier modulo math
-    p_bar: tqdm.rich.tqdm[NoReturn] = tqdm.rich.tqdm(
-      total=inp.params.width * inp.params.height,
-      desc='Pre' if is_preprocess else 'Img',
-      unit='px',
-      dynamic_ncols=True,
-      smoothing=0.1,
-      colour='green',
-      disable=not inp.progress_bar or (has_procs and n_task != 0),  # show for the 1st process only
-    )
+    with warnings.catch_warnings():
+      warnings.simplefilter('ignore', category=TqdmExperimentalWarning)
+      p_bar: tqdm.rich.tqdm[NoReturn] = tqdm.rich.tqdm(
+        total=inp.params.width * inp.params.height,
+        desc='Pre' if is_preprocess else 'Img',
+        unit='px',
+        dynamic_ncols=True,
+        smoothing=0.1,
+        colour='green',
+        disable=not inp.progress_bar or (has_procs and n_task != 0),  # show for the 1st process
+      )
     # Julia c-parameter: fixed throughout the entire computation (the 'c' in z_{n+1} = z_n^2 + c)
     cx: gmpy2.mpfr = gmpy2.mpfr(inp.params.frm.point_re)
     cy: gmpy2.mpfr = gmpy2.mpfr(inp.params.frm.point_im)
