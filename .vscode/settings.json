@@ -110,6 +110,7 @@
     "cffi",
     "cfgv",
     "charliermarsh",
+    "cimports",
     "clibase",
     "cmap",
     "codz",

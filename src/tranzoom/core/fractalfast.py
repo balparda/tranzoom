@@ -31,12 +31,14 @@ really ugly ways.
 
 import math
 import struct
+import warnings
 from collections import abc
 from typing import NoReturn, cast
 
-import cython
+import cython  # pyright: ignore[reportMissingTypeStubs]
 import gmpy2
-import tqdm
+import tqdm.rich
+from tqdm.std import TqdmExperimentalWarning
 
 from tranzoom.core import frame, image
 
@@ -70,8 +72,7 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
     image.FractalTaskOutput: The rendered fractal image and task information.
 
   Raises:
-    ValueError: on error
-    RuntimeError: on error
+    image.Error: on error
 
   """
   is_preprocess: bool = (
@@ -85,7 +86,7 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
   dx, dy = inp.params.frm.size
   dx, dy = dx / gmpy2.mpq(inp.params.width - 1), dy / gmpy2.mpq(inp.params.height - 1)
   if dx <= 0 or dy <= 0:
-    raise ValueError(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
+    raise image.Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
   # start the mpfr context for floating-point computations with the precision needed
   with inp.params.context:  # noqa: PLR1702
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
@@ -118,16 +119,35 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
     stats_imag: bool = False
     imag_delta: gmpy2.mpfr = _MPFR_ZERO
     if inp.stats is not None:
-      stats_max = inp.stats.max_hi > inp.stats.max_lo
-      sqrt_lo = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.max_lo))
-      sqrt_delta = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.max_hi) - sqrt_lo)
-      stats_min = inp.stats.min_hi > inp.stats.min_lo
-      sqrt_lo2 = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.min_lo))
-      sqrt_delta2 = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.min_hi) - sqrt_lo2)
-      stats_ang = inp.stats.ang_hi > inp.stats.ang_lo
-      ang_delta = inp.stats.ang_hi - inp.stats.ang_lo
-      stats_imag = inp.stats.imag_hi > inp.stats.imag_lo
-      imag_delta = inp.stats.imag_hi - inp.stats.imag_lo
+      # stats_max/min/ang/imag are True only when pre-stats were collected (non-None) AND there is
+      # a valid range to normalize against (hi > lo); used to decide normalization strategy below
+      if stats_max := (
+        inp.stats.max_lo is not None
+        and inp.stats.max_hi is not None
+        and inp.stats.max_hi > inp.stats.max_lo
+      ):
+        sqrt_lo = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.max_lo))  # pyright: ignore[reportArgumentType]
+        sqrt_delta = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.max_hi) - sqrt_lo)  # pyright: ignore[reportArgumentType]
+      if stats_min := (
+        inp.stats.min_lo is not None
+        and inp.stats.min_hi is not None
+        and inp.stats.min_hi > inp.stats.min_lo
+      ):
+        sqrt_lo2 = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.min_lo))  # pyright: ignore[reportArgumentType]
+        sqrt_delta2 = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.min_hi) - sqrt_lo2)  # pyright: ignore[reportArgumentType]
+      if stats_ang := (
+        inp.stats.ang_lo is not None
+        and inp.stats.ang_hi is not None
+        and inp.stats.ang_hi > inp.stats.ang_lo
+      ):
+        ang_delta = inp.stats.ang_hi - inp.stats.ang_lo  # pyright: ignore[reportOperatorIssue, reportUnknownVariableType]
+      if stats_imag := (
+        inp.stats.imag_lo is not None
+        and inp.stats.imag_hi is not None
+        and inp.stats.imag_hi > inp.stats.imag_lo
+      ):
+        imag_delta = inp.stats.imag_hi - inp.stats.imag_lo  # pyright: ignore[reportOperatorIssue, reportUnknownVariableType]
+    # pre-compute normalization function used everywhere for set points
     normalize: abc.Callable[[gmpy2.mpfr, gmpy2.mpfr, gmpy2.mpfr], int] = lambda v, lo, d: (
       -min(  # negative to mark it as interior!
         frame.SET_INTERIOR_RESOLUTION,  # clamp to the max
@@ -145,15 +165,17 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
     # create progress bar based on total pixels and the options
     has_procs: bool = inp.total_tasks > 1
     n_task: int = inp.n_task - 1  # convert to 0-based index for easier modulo math
-    p_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
-      total=inp.params.width * inp.params.height,
-      desc='Pre' if is_preprocess else 'Img',
-      unit='px',
-      dynamic_ncols=True,
-      smoothing=0.1,
-      colour='green',
-      disable=not inp.progress_bar or (has_procs and n_task != 0),  # show for the 1st process only
-    )
+    with warnings.catch_warnings():
+      warnings.simplefilter('ignore', category=TqdmExperimentalWarning)
+      p_bar: tqdm.rich.tqdm[NoReturn] = tqdm.rich.tqdm(
+        total=inp.params.width * inp.params.height,
+        desc='Pre' if is_preprocess else 'Img',
+        unit='px',
+        dynamic_ncols=True,
+        smoothing=0.1,
+        colour='green',
+        disable=not inp.progress_bar or (has_procs and n_task != 0),  # show for the 1st process
+      )
     # iterate over pixels in row-major order, computing escape iterations in mpfr
     px_count: int = -1
     for py in range(inp.params.height):
@@ -245,7 +267,7 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
           # if we didn't break, we reached max_iter, mark as non-escaped, so
           # we will declare this a "Interior Set Point"; the max_z2 should always be <= 4: check
           if not 0 <= max_z2 < _MPFR_FOUR:
-            raise RuntimeError(
+            raise image.Error(
               f'Interior point exceeded max |z|^2 of 4, should never happen, {max_z2=}'
             )
           # always count interior points, even if we don't do any special coloring for them
@@ -285,7 +307,7 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
             # ...then the normalized value for coloring
             escaped_at = (
               # ang_lo & ang_delta are pre-computed
-              normalize(ang, inp.stats.ang_lo, ang_delta)  # type: ignore[union-attr]
+              normalize(ang, inp.stats.ang_lo, ang_delta)  # type: ignore[union-attr, arg-type]
               if stats_ang
               else normalize(ang, _MPFR_ZERO, _MPFR_ONE)
             )
@@ -297,12 +319,12 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
             # ...then the normalized value for coloring
             escaped_at = (
               # imag_lo & imag_delta are pre-computed
-              normalize(imag_mean, inp.stats.imag_lo, imag_delta)  # type: ignore[union-attr]
+              normalize(imag_mean, inp.stats.imag_lo, imag_delta)  # type: ignore[union-attr, arg-type]
               if stats_imag
               else normalize(imag_mean, _MPFR_ZERO, _MPFR_ONE)
             )
           else:
-            raise RuntimeError(f'Unknown fractal type {inp.params.set_points=}; bug! report')
+            raise image.Error(f'Unknown fractal type {inp.params.set_points=}; should never happen')
         # either in or out of the set, we now should always have a value for escaped_at;
         # this is setting the pixel escape (not the coloring! that is done later in image.Image)
         img.escape[px_count] = EncodeIntFloatTo64(escaped_at, smooth_escape)  # carefully set
@@ -312,14 +334,14 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
     img.stats = image.FractalStats(
       n_px=inp.params.width * inp.params.height,
       n_interior=n_interior,
-      max_lo=max_lo,
-      max_hi=max_hi,
-      min_lo=min_lo,
-      min_hi=min_hi,
-      ang_lo=ang_lo,
-      ang_hi=ang_hi,
-      imag_lo=imag_lo,
-      imag_hi=imag_hi,
+      max_lo=max_lo if max_hi >= max_lo else None,  # sentinel (4, 0) means no data collected
+      max_hi=max_hi if max_hi >= max_lo else None,
+      min_lo=min_lo if min_hi >= min_lo else None,  # sentinel (4, 0) means no data collected
+      min_hi=min_hi if min_hi >= min_lo else None,
+      ang_lo=ang_lo if ang_hi >= ang_lo else None,  # sentinel (1, 0) means no data collected
+      ang_hi=ang_hi if ang_hi >= ang_lo else None,
+      imag_lo=imag_lo if imag_hi >= imag_lo else None,  # sentinel (1, 0) means no data collected
+      imag_hi=imag_hi if imag_hi >= imag_lo else None,
     )
     return image.FractalTaskOutput(img=img, n_task=inp.n_task, total_tasks=inp.total_tasks)
 
@@ -334,12 +356,11 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
     image.FractalTaskOutput: The rendered fractal image and task information.
 
   Raises:
-    ValueError: on error
-    RuntimeError: on error
+    image.Error: on error
 
   """
   if inp.params.frm.fractal != frame.Fractal.JULIA:
-    raise ValueError(f'Expected Julia computation, got {inp.params.frm.fractal}')
+    raise image.Error(f'Expected Julia computation, got {inp.params.frm.fractal}')
   is_preprocess: bool = (
     inp.params.width == frame.MIN_IMAGE_SIZE and inp.params.height == frame.MIN_IMAGE_SIZE
   )
@@ -351,7 +372,7 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
   dx, dy = inp.params.frm.size
   dx, dy = dx / gmpy2.mpq(inp.params.width - 1), dy / gmpy2.mpq(inp.params.height - 1)
   if dx <= 0 or dy <= 0:
-    raise ValueError(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
+    raise image.Error(f'frame must have positive area, got {dx=} and {dy=}, should never happen')
   # start the mpfr context for floating-point computations with the precision needed
   with inp.params.context:  # noqa: PLR1702
     # precompute x coordinates once: this matters because mpfr construction and arithmetic
@@ -384,16 +405,35 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
     stats_imag: bool = False
     imag_delta: gmpy2.mpfr = _MPFR_ZERO
     if inp.stats is not None:
-      stats_max = inp.stats.max_hi > inp.stats.max_lo
-      sqrt_lo = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.max_lo))
-      sqrt_delta = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.max_hi) - sqrt_lo)
-      stats_min = inp.stats.min_hi > inp.stats.min_lo
-      sqrt_lo2 = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.min_lo))
-      sqrt_delta2 = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.min_hi) - sqrt_lo2)
-      stats_ang = inp.stats.ang_hi > inp.stats.ang_lo
-      ang_delta = inp.stats.ang_hi - inp.stats.ang_lo
-      stats_imag = inp.stats.imag_hi > inp.stats.imag_lo
-      imag_delta = inp.stats.imag_hi - inp.stats.imag_lo
+      # stats_max/min/ang/imag are True only when pre-stats were collected (non-None) AND there is
+      # a valid range to normalize against (hi > lo); used to decide normalization strategy below
+      if stats_max := (
+        inp.stats.max_lo is not None
+        and inp.stats.max_hi is not None
+        and inp.stats.max_hi > inp.stats.max_lo
+      ):
+        sqrt_lo = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.max_lo))  # pyright: ignore[reportArgumentType]
+        sqrt_delta = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.max_hi) - sqrt_lo)  # pyright: ignore[reportArgumentType]
+      if stats_min := (
+        inp.stats.min_lo is not None
+        and inp.stats.min_hi is not None
+        and inp.stats.min_hi > inp.stats.min_lo
+      ):
+        sqrt_lo2 = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.min_lo))  # pyright: ignore[reportArgumentType]
+        sqrt_delta2 = cast('gmpy2.mpfr', gmpy2.sqrt(inp.stats.min_hi) - sqrt_lo2)  # pyright: ignore[reportArgumentType]
+      if stats_ang := (
+        inp.stats.ang_lo is not None
+        and inp.stats.ang_hi is not None
+        and inp.stats.ang_hi > inp.stats.ang_lo
+      ):
+        ang_delta = inp.stats.ang_hi - inp.stats.ang_lo  # pyright: ignore[reportOperatorIssue, reportUnknownVariableType]
+      if stats_imag := (
+        inp.stats.imag_lo is not None
+        and inp.stats.imag_hi is not None
+        and inp.stats.imag_hi > inp.stats.imag_lo
+      ):
+        imag_delta = inp.stats.imag_hi - inp.stats.imag_lo  # pyright: ignore[reportOperatorIssue, reportUnknownVariableType]
+    # pre-compute normalization function used everywhere for set points
     normalize: abc.Callable[[gmpy2.mpfr, gmpy2.mpfr, gmpy2.mpfr], int] = lambda v, lo, d: (
       -min(  # negative to mark it as interior!
         frame.SET_INTERIOR_RESOLUTION,  # clamp to the max
@@ -411,18 +451,21 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
     # create progress bar based on total pixels and the options
     has_procs: bool = inp.total_tasks > 1
     n_task: int = inp.n_task - 1  # convert to 0-based index for easier modulo math
-    p_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
-      total=inp.params.width * inp.params.height,
-      desc='Pre' if is_preprocess else 'Img',
-      unit='px',
-      dynamic_ncols=True,
-      smoothing=0.1,
-      colour='green',
-      disable=not inp.progress_bar or (has_procs and n_task != 0),  # show for the 1st process only
-    )
-    # iterate over pixels in row-major order, computing escape iterations in mpfr
+    with warnings.catch_warnings():
+      warnings.simplefilter('ignore', category=TqdmExperimentalWarning)
+      p_bar: tqdm.rich.tqdm[NoReturn] = tqdm.rich.tqdm(
+        total=inp.params.width * inp.params.height,
+        desc='Pre' if is_preprocess else 'Img',
+        unit='px',
+        dynamic_ncols=True,
+        smoothing=0.1,
+        colour='green',
+        disable=not inp.progress_bar or (has_procs and n_task != 0),  # show for the 1st process
+      )
+    # Julia c-parameter: fixed throughout the entire computation (the 'c' in z_{n+1} = z_n^2 + c)
     cx: gmpy2.mpfr = gmpy2.mpfr(inp.params.frm.point_re)
     cy: gmpy2.mpfr = gmpy2.mpfr(inp.params.frm.point_im)
+    # iterate over pixels in row-major order, computing escape iterations in mpfr
     px_count: int = -1
     for py in range(inp.params.height):
       # PILImage.frombytes interprets the first row written as the top row of the image, so
@@ -499,7 +542,7 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
           # if we didn't break, we reached max_iter, mark as non-escaped, so
           # we will declare this a Set point, interior; the max_z2 should be <= 4: check
           if not 0 <= max_z2 < _MPFR_FOUR:
-            raise RuntimeError(
+            raise image.Error(
               f'Interior point exceeded max |z|^2 of 4, should never happen, {max_z2=}'
             )
           # always count interior points, even if we don't do any special coloring for them
@@ -539,7 +582,7 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
             # ...then the normalized value for coloring
             escaped_at = (
               # ang_lo & ang_delta are pre-computed
-              normalize(ang, inp.stats.ang_lo, ang_delta)  # type: ignore[union-attr]
+              normalize(ang, inp.stats.ang_lo, ang_delta)  # type: ignore[union-attr, arg-type]
               if stats_ang
               else normalize(ang, _MPFR_ZERO, _MPFR_ONE)
             )
@@ -551,12 +594,12 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
             # ...then the normalized value for coloring
             escaped_at = (
               # imag_lo & imag_delta are pre-computed
-              normalize(imag_mean, inp.stats.imag_lo, imag_delta)  # type: ignore[union-attr]
+              normalize(imag_mean, inp.stats.imag_lo, imag_delta)  # type: ignore[union-attr, arg-type]
               if stats_imag
               else normalize(imag_mean, _MPFR_ZERO, _MPFR_ONE)
             )
           else:
-            raise RuntimeError(f'Unknown fractal type {inp.params.set_points=}; bug! report')
+            raise image.Error(f'Unknown fractal type {inp.params.set_points=}; should never happen')
         # either in or out of the set, we now should always have a value for escaped_at;
         # this is setting the pixel escape (not the coloring! that is done later in image.Image)
         img.escape[px_count] = EncodeIntFloatTo64(escaped_at, smooth_escape)  # carefully set
@@ -566,14 +609,14 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
     img.stats = image.FractalStats(
       n_px=inp.params.width * inp.params.height,
       n_interior=n_interior,
-      max_lo=max_lo,
-      max_hi=max_hi,
-      min_lo=min_lo,
-      min_hi=min_hi,
-      ang_lo=ang_lo,
-      ang_hi=ang_hi,
-      imag_lo=imag_lo,
-      imag_hi=imag_hi,
+      max_lo=max_lo if max_hi >= max_lo else None,  # sentinel (4, 0) means no data collected
+      max_hi=max_hi if max_hi >= max_lo else None,
+      min_lo=min_lo if min_hi >= min_lo else None,  # sentinel (4, 0) means no data collected
+      min_hi=min_hi if min_hi >= min_lo else None,
+      ang_lo=ang_lo if ang_hi >= ang_lo else None,  # sentinel (1, 0) means no data collected
+      ang_hi=ang_hi if ang_hi >= ang_lo else None,
+      imag_lo=imag_lo if imag_hi >= imag_lo else None,  # sentinel (1, 0) means no data collected
+      imag_hi=imag_hi if imag_hi >= imag_lo else None,
     )
     return image.FractalTaskOutput(img=img, n_task=inp.n_task, total_tasks=inp.total_tasks)
 
