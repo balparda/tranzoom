@@ -10,7 +10,7 @@ that re-imports all modules from disk when it starts. This means that unless `--
 manually set to 1, the code will reload for every worker every time an image is rendered.
 
 This means that if you are executing some long computation with many fractals (think animation),
-and you start editing this part of the codebase, you will may break your running computation in
+and you start editing this part of the codebase, you may break your running computation in
 really ugly ways.
 
 Heavy use of gmpy2 for arbitrary precision, which is needed to render deep zooms correctly; see
