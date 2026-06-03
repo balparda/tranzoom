@@ -10,7 +10,7 @@ import math
 import gmpy2
 import pytest
 
-from tranzoom.core import frame, image, palette
+from tranzoom.core import fractalfast, frame, image, palette
 
 # this is the max uint64 that can be encoded to non-nan/inf float32
 _MAX_ENCODING_UINT64: int = 18446744073701163007
@@ -304,7 +304,7 @@ def test_encode_decode(
 ) -> None:
   """Encode/decode checks."""
   # encode
-  encoded: int = image.EncodeIntFloatTo64(i, f)
+  encoded: int = fractalfast.EncodeIntFloatTo64(i, f)
   assert n == encoded, f'encode mismatch for uint64: {n=} != {encoded=}'
   # decode
   decoded_i: int
@@ -346,7 +346,7 @@ def test_encode_error(
 ) -> None:
   """Encode error checks."""
   with pytest.raises(image.Error, match=r'encoding.*uint64.*(?:requires|float too large)'):
-    image.EncodeIntFloatTo64(i, f)
+    fractalfast.EncodeIntFloatTo64(i, f)
 
 
 @pytest.mark.parametrize(

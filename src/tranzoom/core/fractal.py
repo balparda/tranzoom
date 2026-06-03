@@ -31,8 +31,8 @@ from tranzoom.core import fractalfast, frame, image
 # can just call the appropriate computation without worrying about which implementation is used;
 # we also compile the vanilla fractalfast.py so that is a hybrid version, and we detect that with
 # the var fractalfast.CYTHON
-_MANDELBROT_COMPUTATION: image.FractalComputation = fractalfast.MandelbrotComputation
-_JULIA_COMPUTATION: image.FractalComputation = fractalfast.JuliaComputation
+MANDELBROT_COMPUTATION: image.FractalComputation = fractalfast.MandelbrotComputation
+JULIA_COMPUTATION: image.FractalComputation = fractalfast.JuliaComputation
 CORE_COMPUTATION: str = 'PYTHON/CYTHON HYBRID' if fractalfast.CYTHON else 'PURE PYTHON'
 # we already have either the pure Python or the Hybrid, we try to load the full Cython version
 try:
@@ -41,8 +41,8 @@ try:
   )
 
   # if load succeeded attach the Cython versions
-  _MANDELBROT_COMPUTATION = fractalc.MandelbrotComputation  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
-  _JULIA_COMPUTATION = fractalc.JuliaComputation  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
+  MANDELBROT_COMPUTATION = fractalc.MandelbrotComputation  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
+  JULIA_COMPUTATION = fractalc.JuliaComputation  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
   CORE_COMPUTATION = 'CYTHON'  # pyright: ignore[reportConstantRedefinition]
 except ImportError:
   logging.warning(f'Could not import fractalc.py Cython, will use {CORE_COMPUTATION} instead')
@@ -120,9 +120,7 @@ def ComputeFractal(
   # execute in processes
   results: list[image.FractalTaskOutput]
   computation: image.FractalComputation = (
-    _MANDELBROT_COMPUTATION
-    if params.frm.fractal == frame.Fractal.MANDELBROT
-    else _JULIA_COMPUTATION
+    MANDELBROT_COMPUTATION if params.frm.fractal == frame.Fractal.MANDELBROT else JULIA_COMPUTATION
   )
   if n_processes == 1:
     # no multiprocessing, just run the single task directly in this process (also good for debug)
