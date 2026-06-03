@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
+  - [1.6.3 - 2026-06-03](#163---2026-06-03)
   - [1.6.2 - 2026-06-02](#162---2026-06-02)
   - [1.6.1 - 2026-06-01](#161---2026-06-01)
   - [1.6.0 - 2026-05-30](#160---2026-05-30)
@@ -35,6 +36,20 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future fixes.
+
+## 1.6.3 - 2026-06-03
+
+- Added
+  - **`_FrameEstimatedIters()` helper** (`zoomcommand.py`): new internal function that estimates the computational load for an animation frame as `d/5 + 4d × n_interior/(5 × n_px)` — a weighted sum of a fixed base (1/5 of depth) plus a load proportional to the fraction of interior (Set) pixels; used both for the progress bar total and for per-frame updates, giving significantly more accurate ETAs for frames with mixed interior and exterior content.
+
+- Changed
+  - **`FractalStats` nullable interior-stats fields** (`image.py`, `fractal.py`, `zoomcommand.py`): the eight interior-stats fields (`max_lo`, `max_hi`, `min_lo`, `min_hi`, `ang_lo`, `ang_hi`, `imag_lo`, `imag_hi`) are now typed `gmpy2.mpfr | None` instead of using magic sentinel values (`(4, 0)` for max/min, `(1, 0)` for ang/imag) to signal "no data collected"; `__post_init__()` validation, serialization, deserialization, stats aggregation in `ComputeFractal()`, stats interpolation in `_DepthAndStatsForFrame()`, and `MakeImageMeta()` all updated accordingly; `None` fields are omitted from image metadata instead of being written as magic-value strings.
+  - **`tqdm.rich` progress bars** (`fractal.py`, `zoomcommand.py`): per-pixel progress bars in `_MandelbrotComputation()` and `_JuliaComputation()`, the depth pre-pass bar, and the render bar in `Auto()` now use `tqdm.rich.tqdm` for richer terminal display; `TqdmExperimentalWarning` is suppressed with `warnings.catch_warnings()`; the outer computation bar in `Auto()` intentionally remains `tqdm.tqdm` because it has a live sub-bar and both would fight for the same terminal line.
+  - **Animation computation progress bar unit** (`zoomcommand.py`): the main animation computation bar was renamed from `'Frames'/'fr'` to `'Iter'/'it'`, reflecting that its work unit is now estimated iterations rather than frame count.
+
+- Fixed
+  - **`FractalStats` stats aggregation with nullable fields** (`fractal.py`): `ComputeFractal()` was calling `min()`/`max()` directly over stats fields from parallel worker tasks, which would raise `TypeError` if any field was `None`; aggregation now filters `None` values and uses `default=None`, producing `None` when all workers had no data for a field; both `_MandelbrotComputation()` and `_JuliaComputation()` now emit `None` for stats fields when the pixel-level sentinel condition (`hi < lo`) is met, replacing the old magic-value output.
+  - **AI zoom missing depth reset** (`ai.py`): the `dataclasses.replace(params, ...)` call inside `ZoomLoop()` was missing `depth=frame.MIN_ITER`, causing the AI zoom to carry over a stale `max_iter` depth from the previous frame into the next frame's computation parameters.
 
 ## 1.6.2 - 2026-06-02
 

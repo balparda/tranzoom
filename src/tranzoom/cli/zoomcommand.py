@@ -11,15 +11,19 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import math
 import pathlib
 import tempfile
+import warnings
 from collections import abc
 from typing import NoReturn
 
 import click
 import gmpy2
 import tqdm
+import tqdm.rich
 import typer
+from tqdm.std import TqdmExperimentalWarning
 from transcrypto.cli import clibase
 from transcrypto.core import hashes
 from transcrypto.utils import human, timer
@@ -384,14 +388,17 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       n_threads: int = frame.ConcurrenceToUse(config.max_threads)
       config.console.print(f'[yellow]Making {len(all_depth)} depth computations...[/]')
       with timer.Timer(emit_log=False) as depth_tmr:
-        for idx, frm in tqdm.tqdm(
-          all_depth,
-          desc='Depth',
-          unit='fr',
-          dynamic_ncols=True,
-          smoothing=0.1,
-          colour='yellow',
-        ):
+        with warnings.catch_warnings():
+          warnings.simplefilter('ignore', category=TqdmExperimentalWarning)
+          depth_bar: tqdm.rich.tqdm[tuple[int, frame.Frame]] = tqdm.rich.tqdm(
+            all_depth,
+            desc='Depth',
+            unit='fr',
+            dynamic_ncols=True,
+            smoothing=0.1,
+            colour='yellow',
+          )
+        for idx, frm in depth_bar:
           params = dataclasses.replace(params, frm=frm, depth=frame.MIN_ITER)
           max_iter, stats = fractal.FractalAdaptiveIterations(
             params.frm,
@@ -474,30 +481,69 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       hi_depth: int = depth_computations[hi_idx][2]
       t: float = (i - lo_idx) / (hi_idx - lo_idx) if hi_idx != lo_idx else 0.0
       interpolated_depth: int = round(lo_depth + t * (hi_depth - lo_depth))
-      # interpolate each FractalStats field independently
+      # interpolate each FractalStats field independently; if either endpoint is None, result None
       lo_stats: image.FractalStats = depth_computations[lo_idx][3]
       hi_stats: image.FractalStats = depth_computations[hi_idx][3]
       t_mpfr: gmpy2.mpfr = gmpy2.mpfr(t)
       interpolated_stats: image.FractalStats = image.FractalStats(
         n_px=round(lo_stats.n_px + t * (hi_stats.n_px - lo_stats.n_px)),
         n_interior=round(lo_stats.n_interior + t * (hi_stats.n_interior - lo_stats.n_interior)),
-        max_lo=lo_stats.max_lo + t_mpfr * (hi_stats.max_lo - lo_stats.max_lo),
-        max_hi=lo_stats.max_hi + t_mpfr * (hi_stats.max_hi - lo_stats.max_hi),
-        min_lo=lo_stats.min_lo + t_mpfr * (hi_stats.min_lo - lo_stats.min_lo),
-        min_hi=lo_stats.min_hi + t_mpfr * (hi_stats.min_hi - lo_stats.min_hi),
-        ang_lo=lo_stats.ang_lo + t_mpfr * (hi_stats.ang_lo - lo_stats.ang_lo),
-        ang_hi=lo_stats.ang_hi + t_mpfr * (hi_stats.ang_hi - lo_stats.ang_hi),
-        imag_lo=lo_stats.imag_lo + t_mpfr * (hi_stats.imag_lo - lo_stats.imag_lo),
-        imag_hi=lo_stats.imag_hi + t_mpfr * (hi_stats.imag_hi - lo_stats.imag_hi),
+        max_lo=(lo_stats.max_lo + t_mpfr * (hi_stats.max_lo - lo_stats.max_lo))
+        if lo_stats.max_lo is not None and hi_stats.max_lo is not None
+        else None,
+        max_hi=(lo_stats.max_hi + t_mpfr * (hi_stats.max_hi - lo_stats.max_hi))
+        if lo_stats.max_hi is not None and hi_stats.max_hi is not None
+        else None,
+        min_lo=(lo_stats.min_lo + t_mpfr * (hi_stats.min_lo - lo_stats.min_lo))
+        if lo_stats.min_lo is not None and hi_stats.min_lo is not None
+        else None,
+        min_hi=(lo_stats.min_hi + t_mpfr * (hi_stats.min_hi - lo_stats.min_hi))
+        if lo_stats.min_hi is not None and hi_stats.min_hi is not None
+        else None,
+        ang_lo=(lo_stats.ang_lo + t_mpfr * (hi_stats.ang_lo - lo_stats.ang_lo))
+        if lo_stats.ang_lo is not None and hi_stats.ang_lo is not None
+        else None,
+        ang_hi=(lo_stats.ang_hi + t_mpfr * (hi_stats.ang_hi - lo_stats.ang_hi))
+        if lo_stats.ang_hi is not None and hi_stats.ang_hi is not None
+        else None,
+        imag_lo=(lo_stats.imag_lo + t_mpfr * (hi_stats.imag_lo - lo_stats.imag_lo))
+        if lo_stats.imag_lo is not None and hi_stats.imag_lo is not None
+        else None,
+        imag_hi=(lo_stats.imag_hi + t_mpfr * (hi_stats.imag_hi - lo_stats.imag_hi))
+        if lo_stats.imag_hi is not None and hi_stats.imag_hi is not None
+        else None,
       )
       return (interpolated_depth, interpolated_stats)
 
+    def _FrameEstimatedIters(d: int, s: image.FractalStats) -> int:
+      """Estimate a measure for how hard the iterations will be for this frame.
+
+      We will use the following approximation:
+        - 1/5 of depth, plus
+        - 4/5 of depth allocated as percentage of estimated set points (s.n_interior / s.n_px)
+
+      Args:
+        d (int): estimated depth for frame
+        s (image.FractalStats):  estimated stats for image
+
+      Returns:
+        int: estimated iteration count for frame, used for progress bar estimation;
+            (d // 5) <= estimate <= d
+
+      """
+      return d // 5 + math.floor((4.0 * d * s.n_interior) / (5.0 * s.n_px))
+
     # produce the frames
-    total_depth: int = sum(_DepthAndStatsForFrame(j)[0] for j in range(len(all_frames)))
+    total_depth: int = sum(
+      _FrameEstimatedIters(*_DepthAndStatsForFrame(j)) for j in range(len(all_frames))
+    )
     cmp_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
+      # BEWARE: the tqdm-rich.tqdm bar is visually nicer BUT it cannot live with another bar because
+      # they will both fight for the same console space (the current line), so bars that are meant
+      # to have sub-bars (like here) need to be "regular" tqdm.tqdm instead
       total=total_depth,
-      desc='Frames',
-      unit='fr',
+      desc='Iter',
+      unit='it',
       dynamic_ncols=True,
       smoothing=0.1,
       colour='magenta',
@@ -521,7 +567,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           if cp and cp['raw_data_path']:
             all_params[idx] = params
             config.console.print('Computation in DB cache\n')
-            cmp_bar.update(max_iter)  # update progress bar with the depth of this frame
+            cmp_bar.update(_FrameEstimatedIters(max_iter, stats))  # update progress bar
             continue
         # we really need to compute: feed frame to the producer
         params, img, did_comp = db.DoComputation(
@@ -544,8 +590,9 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
         ):
           config.console.print('\n[bright_blue](DB checkpoint)[/]')
           db.Save()  # commit to disk every N computations
+        # write a space and update the bar, and we're done with this frame
         config.console.print()
-        cmp_bar.update(max_iter)  # update progress bar with the depth of this frame
+        cmp_bar.update(_FrameEstimatedIters(max_iter, stats))  # update progress bar
     # we have all frames; if we're using DB and have done computations, make sure it is all saved
     cmp_bar.close()
     if streaming and n_frames_actually_computed:
@@ -587,14 +634,16 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     with tempfile.TemporaryDirectory() as tmpdir, timer.Timer(emit_log=False) as render_tmr:
       # make the rendering progress bar
       config.console.print(f'[yellow]Render:[/] {render}')
-      p_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
-        total=zoom_params.n_frames,
-        desc='Render',
-        unit='fr',
-        dynamic_ncols=True,
-        smoothing=0.1,
-        colour='yellow',
-      )
+      with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=TqdmExperimentalWarning)
+        p_bar: tqdm.rich.tqdm[NoReturn] = tqdm.rich.tqdm(
+          total=zoom_params.n_frames,
+          desc='Render',
+          unit='fr',
+          dynamic_ncols=True,
+          smoothing=0.1,
+          colour='yellow',
+        )
       # keep the last frame, for later metadata
       last_img: image.Image = img  # pyright: ignore[reportPossiblyUnboundVariable]
       del img  # pyright: ignore[reportPossiblyUnboundVariable]

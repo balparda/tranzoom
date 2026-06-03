@@ -273,6 +273,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
             target_weight if not manual else 0.0,
             print_comm,
           ),
+          depth=frame.MIN_ITER,
         )
         # stop if we've reached the maximum number of steps
         if max_steps and count >= max_steps:
