@@ -324,9 +324,9 @@ $ poetry run tranz --no-db --no-date image mandel
 
 1024 x 1024 Mandelbrot, 10^0.000 magnitude...
 Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 576/576 [00:00<00:00, 5046.61px/s]
+Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , 867,929 px/s ]
 Picked depth 1000, histogram {2: 38, 3: 136, 4: 94, ...: 174, 72: 2, 125: 2, 803: 2}, 128/576 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 415325.61px/s]
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:00:02 < 0:00:00 , 387,141 px/s ]
 Compute: Mandelbrot: DONE, with precision 140 bits, 30.150 MiB, in 3.875 s
 
 Render: {[PNG, SAHARA, none]}
@@ -763,9 +763,9 @@ $ poetry run tranz --no-db --no-date image mandel
 
 1024 x 1024 Mandelbrot, 10^0.000 magnitude...
 Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 576/576 [00:00<00:00, 5046.61px/s]
+Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , 867,929 px/s ]
 Picked depth 1000, histogram {2: 38, 3: 136, 4: 94, ...: 174, 72: 2, 125: 2, 803: 2}, 128/576 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:02<00:00, 415325.61px/s]
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:00:02 < 0:00:00 , 387,141 px/s ]
 Compute: Mandelbrot: DONE, with precision 140 bits, 30.150 MiB, in 3.875 s
 
 Render: {[PNG, SAHARA, none]}
@@ -786,9 +786,9 @@ $ poetry run tranz --no-db --set imaginary --set-palette "lava" --palette "rgray
 
 1024 x 1024 Mandelbrot w/ SET 'imaginary', 10^0.000 magnitude...
 Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO] : imaginary}
-Pre: 100%|█████████████████████████████████████████████| 576/576 [00:02<00:00, 255.32px/s]
+Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , 542 px/s ]
 Picked depth 1000, histogram {2: 38, 3: 136, 4: 94, ...: 174, 72: 2, 125: 2, 803: 2}, 128/576 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:20<00:00, 51231.75px/s]
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:00:23 < 0:00:00 , 47,318 px/s ]
 Compute: Mandelbrot: DONE, with precision 140 bits, 61.112 MiB, in 24.277 s
 
 Render: {[PNG, GRAYSCALE_REVERSE, LAVA]}
@@ -809,9 +809,9 @@ $ poetry run tranz --no-db --no-date image mandel " -0.74303" "0.126433" "0.0161
 
 1024 x 1024 Mandelbrot, 10^2.191 magnitude...
 Compute: {[MANDELBROT: (-74303/100000, 126433/1000000) ± 1611/100000] : [1024, 1024, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 576/576 [00:00<00:00, 1242.29px/s]
+Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , ? px/s ]
 Picked depth 24049, histogram {24: 3, 25: 25, 26: 29, ...: 375, 27749: 1, 31174: 1, 31451: 1}, 141/576 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [01:36<00:00, 10867.85px/s]
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:01:36 < 0:00:00 , 13,736 px/s ]
 Compute: Mandelbrot: DONE, with precision 140 bits, 83.736 MiB, in 1.658 min
 
 Render: {[PNG, SAHARA, none]}
@@ -832,9 +832,9 @@ $ poetry run tranz --no-db --set imaginary --no-date image mandel " -0.7436499" 
 
 1024 x 1024 Mandelbrot w/ SET 'imaginary', 10^3.530 magnitude...
 Compute: {[MANDELBROT: (-7436499/10000000, 3297051/25000000) ± 73801/100000000] : [1024, 1024, AUTO] : imaginary}
-Pre: 100%|█████████████████████████████████████████████| 576/576 [00:00<00:00, 53067.96px/s]
+Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , ? px/s ]
 Picked depth 1000, histogram {37: 15, 38: 28, 39: 30, ...: 500, 438: 1, 509: 1, 765: 1}, 0/576 set points
-Img: 100%|█████████████████████████████████████████████| 1048576/1048576 [00:09<00:00, 115152.65px/s]
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:00:09 < 0:00:00 , 105,565 px/s ]
 Compute: Mandelbrot: DONE, with precision 140 bits, 75.760 MiB, in 10.341 s
 
 Render: {[PNG, SAHARA, GRAYSCALE_REVERSE]}
@@ -862,30 +862,32 @@ ZOOM: <GIF: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73
 73801/1000000000]
 
 Making 4 depth computations...
-Depth: 100%|█████████████████████████████████████████████| 4/4 [00:03<00:00,  1.32fr/s]
-4 depth computations done in 3.080 s
+Depth 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4/4  [ 0:00:01 < 0:00:00 , 4 fr/s ]
+4 depth computations done in 1.126 s
 
-Iter:   0%|                                              | 0/41431 [00:00<?, ?it/s]Marker Frame 1 / 40 - depth 1001
+Iter:   0%|                                              | 0/41431 [00:00<?, ?it/s]
+Marker Frame 1 / 40 - depth 1001
 220 x 220 Mandelbrot, 10^3.530 magnitude...
 Compute: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, 1001]}
-Img: 100%|█████████████████████████████████████████████| 48400/48400 [00:01<00:00, 29531.69px/s]
-Compute: Mandelbrot: DONE, with precision 140 bits, 7.025 MiB, in 2.455 s
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 48,400/48,400  [ 0:00:00 < 0:00:00 , 116,211 px/s ]
+Compute: Mandelbrot: DONE, with precision 140 bits, 7.025 MiB, in 655.291 ms
 
-Iter:   2%|██                                            | 1001/41431 [00:02<01:51, 362.12it/s]Frame 2 / 40 - depth 1002
+Iter:   2%|██                                            | 200/8270 [00:00<00:30, 260.69it/s]
+Frame 2 / 40 - depth 1002
 [...builds frames 2–40...]
 
-Iter: 100%|█████████████████████████████████████████████| 41431/41431 [02:03<00:00, 334.84it/s]
+Iter: 100%|█████████████████████████████████████████████| 8270/8270 [00:40<00:00, 204.32it/s]
 ZOOM: Color norm: built from 2 marker frames
 
 Render: {[PNG, SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}
-Render: 100%|█████████████████████████████████████████████| 40/40 [00:09<00:00,  4.01fr/s]
+Render 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40/40  [ 0:00:04 < 0:00:00 , 9 fr/s ]
 Render: DONE
 
 Success: GIF 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab' in 3.080 s (depth) + 2.062 min (frames) + 10.597 s (render)
 Saved GIF to 'mandel-e631ffec80dd902e375e.gif', 1.757 MiB
 ```
 
-To make that an MP4, just add `--anim mp4` to the command.
+To make that an MP4, just add `--anim mp4` to the command. (The unfortunate mix of progress bar styles is inevitable for now in animations, but only the global progress will be "old-style" in the whole CLI.)
 
 #### Julia Suzana (×1)
 
@@ -898,9 +900,9 @@ $ poetry run tranz --no-db --no-date --palette electric image -s 1024 julia
 
 838 x 1024 Julia, 10^0.000 magnitude...
 Compute: {[JULIA: (0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)] : [838, 1024, AUTO]}
-Pre: 100%|█████████████████████████████████████████████| 576/576 [00:03<00:00, 155.45px/s]
+Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:01 < 0:00:00 , 461 px/s ]
 Picked depth 1000, histogram {2: 12, 3: 44, 4: 64, ...: 176, 364: 2, 462: 2, 1323: 2}, 274/576 set points
-Img: 100%|█████████████████████████████████████████████| 858112/858112 [00:27<00:00, 30648.53px/s]
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 858,112/858,112  [ 0:00:30 < 0:00:00 , 27,505 px/s ]
 Compute: Julia: DONE, with precision 140 bits, 23.736 MiB, in 33.330 s
 
 Render: {[PNG, ELECTRIC, none]}
@@ -919,9 +921,9 @@ $ poetry run tranz --no-db --palette electric --set max --set-palette sunset --n
 
 512 x 377 Julia w/ SET 'max', 10^2.630 magnitude...
 Compute: {[JULIA: (-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)] : [512, 377, AUTO] : max}
-Pre: 100%|█████████████████████████████████████████████| 576/576 [00:03<00:00, 145.69px/s]
+Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:01 < 0:00:00 , 290 px/s ]
 Picked depth 1000, histogram {43: 3, 44: 31, 45: 30, ...: 245, 425: 1, 431: 1, 1175: 1}, 264/576 set points
-Img: 100%|█████████████████████████████████████████████| 193024/193024 [00:06<00:00, 30599.33px/s]
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 193,024/193,024  [ 0:00:07 < 0:00:00 , 26,532 px/s ]
 Compute: Julia: DONE, with precision 140 bits, 31.086 MiB, in 11.617 s
 
 Render: {[PNG, ELECTRIC, SUNSET]}

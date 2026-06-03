@@ -1719,7 +1719,7 @@ class Image:
     return (buf.getvalue(), img_data_hash)
 
 
-def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[str, str]:  # noqa: C901
+def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[str, str]:  # noqa: C901, PLR0912
   """Create a metadata dictionary for the image.
 
   Args:
