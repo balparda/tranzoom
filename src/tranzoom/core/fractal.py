@@ -26,8 +26,6 @@ from concurrent import futures
 
 from tranzoom.core import fractalfast, frame, image
 
-# automated search for iter
-
 _ITER_OUTLIER_SKIP: int = 3  # skip up to this many extreme-outlier pixels in the probe
 _ITER_SAFETY_FACTOR: float = 1.5  # we multiply the estimated iter by this to be safe
 
@@ -81,11 +79,10 @@ def ComputeFractal(
     )
     params = dataclasses.replace(params, depth=max_iter)  # update params with the new max_iter
   # log the start of the render (not pre-computation anymore here)
-  optimized: bool = fractalfast.__file__.lower().endswith(('.so', '.pyd'))
   logging.info(
     f'{params.frm.fractal.value.upper()} using {n_processes} process(es) '
     f'for {"PRE " if is_preprocess else ""}rendering '
-    f'- {"OPTIMIZED CYTHON" if optimized else "PURE PYTHON"}'
+    f'- {"CYTHON fractalfast.py" if fractalfast.CYTHON else "PURE PYTHON fractalfast.py"}'
   )
   # create inputs
   inp: list[image.FractalTaskInput] = [
