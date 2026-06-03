@@ -73,10 +73,34 @@ _fractalfast_ext = Extension(
   library_dirs=_gmp_library_dirs(),
   libraries=['gmp', 'mpfr', 'mpc'],
 )
+_fractalc_ext = Extension(
+  'tranzoom.core.fractalc',
+  sources=['src/tranzoom/core/fractalc.pyx'],
+  include_dirs=sys.path,
+  library_dirs=_gmp_library_dirs(),
+  libraries=['gmp', 'mpfr', 'mpc'],
+)
 
 setup(
+  name='fractalfast',
   ext_modules=cythonize(
     _fractalfast_ext,
+    # include_path=sys.path: Cython needs to find gmpy2.pxd (also in site-packages/gmpy2/)
+    # so it can resolve `gmpy2.mpfr`/`gmpy2.mpq` annotations as the declared C extension
+    # types; annotation_typing=True (the Cython 3.x default) makes this happen automatically.
+    include_path=sys.path,
+    compiler_directives={
+      'language_level': '3',
+    },
+  ),
+  package_dir={'': 'src'},
+  zip_safe=False,
+)
+
+setup(
+  name='fractalc',
+  ext_modules=cythonize(
+    _fractalc_ext,
     # include_path=sys.path: Cython needs to find gmpy2.pxd (also in site-packages/gmpy2/)
     # so it can resolve `gmpy2.mpfr`/`gmpy2.mpq` annotations as the declared C extension
     # types; annotation_typing=True (the Cython 3.x default) makes this happen automatically.

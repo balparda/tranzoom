@@ -41,10 +41,10 @@ ci: cov integration precommit docs req
 	@echo "CI checks passed! Generated docs & requirements.txt."
 
 cython:
-	@echo "Building Cython extension"
+	@echo "Building Cython extensions"
 	poetry run python build_ext.py build_ext --inplace
-	@echo "Done. fractalfast extension built alongside src/tranzoom/core/fractalfast.py"
+	@echo "Done: fractal* extensions built"
 
 clean-cython:
 	@echo "Removing Cython build artifacts"
-	rm -rf build/ src/tranzoom/core/fractalfast.c src/tranzoom/core/fractalfast*.so src/tranzoom/core/fractalfast*.pyd
+	rm -rf build/ src/tranzoom/core/*.c src/tranzoom/core/*.so src/tranzoom/core/*.pyd

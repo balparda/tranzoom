@@ -52,6 +52,8 @@ if cython.compiled:  # True only when compiled with Cython; False in plain Pytho
 
   import_gmpy2()
 
+CYTHON: bool = cython.compiled
+
 # gmpy2.mpfr constants
 _MPFR_ZERO: gmpy2.mpfr = gmpy2.mpfr('0')
 _MPFR_SIXTEENTH: gmpy2.mpfr = gmpy2.mpfr('0.0625')
@@ -638,12 +640,12 @@ def NormalizeSmoothEscape(n: int, nu: float) -> tuple[int, float]:
         smooth escape part.
 
   Raises:
-    RuntimeError: if the normalized smooth escape part is not in [0,1) after normalization
+    image.Error: if the normalized smooth escape part is not in [0,1) after normalization
 
   """
   # if nu is not finite consider it an error
   if not math.isfinite(nu):
-    raise RuntimeError(f'nu is not a valid number {nu=}, bug! report')
+    raise image.Error(f'nu is not a valid number {nu=}, bug! report')
   # get the integer shift to apply to n, and the new nu in [0,1)
   shift: int = math.floor(nu)
   n += shift
@@ -655,7 +657,7 @@ def NormalizeSmoothEscape(n: int, nu: float) -> tuple[int, float]:
   # ensure n is not negative, in case the shift made it negative
   n = max(0, n)
   if not (0.0 <= nu < 1.0):
-    raise RuntimeError(f'Normalized smooth escape range 0 <= {nu=} < 1, {n=}, bug! report')
+    raise image.Error(f'Normalized smooth escape range 0 <= {nu=} < 1, {n=}, bug! report')
   return (n, nu)
 
 
@@ -675,10 +677,10 @@ def EncodeIntFloatTo64(i: int, f: float) -> int:
     int: The encoded uint64 containing both the int and float.
 
   Raises:
-    RuntimeError: inputs out of range or other encoding issues
+    image.Error: inputs out of range or other encoding issues
 
   """
   try:
     return cast('int', image.PACK_Q.unpack(image.PACK_IF.pack(i, f))[0])
   except (struct.error, OverflowError) as err:
-    raise RuntimeError(f'Error encoding {i=} and {f=} to uint64: {err}') from err
+    raise image.Error(f'Error encoding {i=} and {f=} to uint64: {err}') from err
