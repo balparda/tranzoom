@@ -20,6 +20,7 @@ from typing import NoReturn
 
 import click
 import gmpy2
+import tqdm
 import tqdm.rich
 import typer
 from tqdm.std import TqdmExperimentalWarning
@@ -536,16 +537,17 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     total_depth: int = sum(
       _FrameEstimatedIters(*_DepthAndStatsForFrame(j)) for j in range(len(all_frames))
     )
-    with warnings.catch_warnings():
-      warnings.simplefilter('ignore', category=TqdmExperimentalWarning)
-      cmp_bar: tqdm.rich.tqdm[NoReturn] = tqdm.rich.tqdm(
-        total=total_depth,
-        desc='Iter',
-        unit='it',
-        dynamic_ncols=True,
-        smoothing=0.1,
-        colour='magenta',
-      )
+    cmp_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
+      # BEWARE: the tqdm-rich.tqdm bar is visually nicer BUT it cannot live with another bar because
+      # they will both fight for the same console space (the current line), so bars that are meant
+      # to have sub-bars (like here) need to be "regular" tqdm.tqdm instead
+      total=total_depth,
+      desc='Iter',
+      unit='it',
+      dynamic_ncols=True,
+      smoothing=0.1,
+      colour='magenta',
+    )
     with timer.Timer(emit_log=False) as frames_tmr:
       for idx, frm in enumerate(all_frames):
         max_iter, stats = _DepthAndStatsForFrame(idx)
@@ -588,6 +590,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
         ):
           config.console.print('\n[bright_blue](DB checkpoint)[/]')
           db.Save()  # commit to disk every N computations
+        # write a space and update the bar, and we're done with this frame
         config.console.print()
         cmp_bar.update(_FrameEstimatedIters(max_iter, stats))  # update progress bar
     # we have all frames; if we're using DB and have done computations, make sure it is all saved
