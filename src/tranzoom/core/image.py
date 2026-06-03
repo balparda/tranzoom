@@ -1813,17 +1813,21 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
     )
   # add any stats that aren't just noise
   if img.stats:
-    if img.stats.max_lo != _MPFR_FOUR or img.stats.max_hi != _MPFR_ZERO:
+    if img.stats.max_lo:
       img_meta[META_IMAGE_STATS_MAX_LO_KEY] = str(img.stats.max_lo)
+    if img.stats.max_hi:
       img_meta[META_IMAGE_STATS_MAX_HI_KEY] = str(img.stats.max_hi)
-    if img.stats.min_lo != _MPFR_FOUR or img.stats.min_hi != _MPFR_ZERO:
+    if img.stats.min_lo:
       img_meta[META_IMAGE_STATS_MIN_LO_KEY] = str(img.stats.min_lo)
+    if img.stats.min_hi:
       img_meta[META_IMAGE_STATS_MIN_HI_KEY] = str(img.stats.min_hi)
-    if img.stats.ang_lo != _MPFR_ONE or img.stats.ang_hi != _MPFR_ZERO:
+    if img.stats.ang_lo:
       img_meta[META_IMAGE_STATS_ANG_LO_KEY] = str(img.stats.ang_lo)
+    if img.stats.ang_hi:
       img_meta[META_IMAGE_STATS_ANG_HI_KEY] = str(img.stats.ang_hi)
-    if img.stats.imag_lo != _MPFR_ONE or img.stats.imag_hi != _MPFR_ZERO:
+    if img.stats.imag_lo:
       img_meta[META_IMAGE_STATS_IMAG_LO_KEY] = str(img.stats.imag_lo)
+    if img.stats.imag_hi:
       img_meta[META_IMAGE_STATS_IMAG_HI_KEY] = str(img.stats.imag_hi)
   # Julia
   if frm.fractal == frame.Fractal.JULIA:
