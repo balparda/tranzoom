@@ -296,7 +296,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     f'with {zoom_params.n_frames} frames ({len(all_markers)} markers, '
     f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%, and {len(all_depth)} depth frames, '
     f'{100.0 * len(all_depth) / zoom_params.n_frames:.2f}%), '
-    f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step...'
+    f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step, '
+    f'{fractal.CORE_COMPUTATION}...'
   )
   config.console.print(f'[yellow]ZOOM:[/] {zoom_params} ... {all_frames[-1]}\n')
   if zoom_params.scalar_magnification_per_step > image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
