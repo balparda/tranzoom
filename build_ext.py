@@ -26,12 +26,14 @@ Notes:
 
 from __future__ import annotations
 
+import pathlib
 import subprocess
 import sys
-from pathlib import Path
 
-from Cython.Build import cythonize
-from setuptools import Extension, setup
+import setuptools  # pyright: ignore[reportMissingModuleSource]
+from Cython.Build import (  # pyright: ignore[reportMissingImports]
+  cythonize,  # pyright: ignore[reportUnknownVariableType]
+)
 
 
 def _gmp_library_dirs() -> list[str]:
@@ -48,13 +50,13 @@ def _gmp_library_dirs() -> list[str]:
   # Homebrew (macOS, both Apple Silicon /opt/homebrew and Intel /usr/local)
   for pkg in ('gmp', 'mpfr', 'libmpc'):
     try:
-      prefix = subprocess.run(
+      prefix: str = subprocess.run(
         ['brew', '--prefix', pkg],
         capture_output=True,
         text=True,
         check=True,
       ).stdout.strip()
-      lib_dir = Path(prefix) / 'lib'
+      lib_dir: pathlib.Path = pathlib.Path(prefix) / 'lib'
       if lib_dir.is_dir():
         dirs.append(str(lib_dir))
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -66,14 +68,16 @@ def _gmp_library_dirs() -> list[str]:
 # include_dirs=sys.path: C compiler needs to find gmpy2.h (lives in site-packages/gmpy2/).
 # library_dirs: add Homebrew keg-only paths so the linker can find libgmp/libmpfr/libmpc.
 # libraries: link against GMP, MPFR, and MPC shared libraries required by the C-API.
-_fractalfast_ext = Extension(
+
+_fractalfast_ext = setuptools.Extension(
   'tranzoom.core.fractalfast',
   sources=['src/tranzoom/core/fractalfast.py'],
   include_dirs=sys.path,
   library_dirs=_gmp_library_dirs(),
   libraries=['gmp', 'mpfr', 'mpc'],
 )
-_fractalc_ext = Extension(
+
+_fractalc_ext = setuptools.Extension(
   'tranzoom.core.fractalc',
   sources=['src/tranzoom/core/fractalc.pyx'],
   include_dirs=sys.path,
@@ -81,13 +85,10 @@ _fractalc_ext = Extension(
   libraries=['gmp', 'mpfr', 'mpc'],
 )
 
-setup(
+setuptools.setup(
   name='fractalfast',
-  ext_modules=cythonize(
+  ext_modules=cythonize(  # type: ignore[no-untyped-call]
     _fractalfast_ext,
-    # include_path=sys.path: Cython needs to find gmpy2.pxd (also in site-packages/gmpy2/)
-    # so it can resolve `gmpy2.mpfr`/`gmpy2.mpq` annotations as the declared C extension
-    # types; annotation_typing=True (the Cython 3.x default) makes this happen automatically.
     include_path=sys.path,
     compiler_directives={
       'language_level': '3',
@@ -97,16 +98,19 @@ setup(
   zip_safe=False,
 )
 
-setup(
+setuptools.setup(
   name='fractalc',
-  ext_modules=cythonize(
+  ext_modules=cythonize(  # type: ignore[no-untyped-call]
     _fractalc_ext,
-    # include_path=sys.path: Cython needs to find gmpy2.pxd (also in site-packages/gmpy2/)
-    # so it can resolve `gmpy2.mpfr`/`gmpy2.mpq` annotations as the declared C extension
-    # types; annotation_typing=True (the Cython 3.x default) makes this happen automatically.
     include_path=sys.path,
     compiler_directives={
       'language_level': '3',
+      'boundscheck': False,
+      'wraparound': False,
+      'initializedcheck': False,
+      'nonecheck': False,
+      'cdivision': True,
+      'infer_types': True,
     },
   ),
   package_dir={'': 'src'},
