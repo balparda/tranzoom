@@ -145,6 +145,7 @@ src = [ "scripts", "src", "tests", "tests_integration" ]
 
 extend-exclude = [
   "typings/**/__init__.pyi",  # typically stub files created by pyright
+  "src/tranzoom/core/fractalc.pyx",
 ]
 
 # Strongly recommended if you run Ruff via pre-commit (or any tool that passes
@@ -289,6 +290,7 @@ exclude = [
   "**/dist",
   "**/build",
   "**/node_modules",
+  "src/tranzoom/core/fractalc.pyx",
 ]
 
 executionEnvironments = [
@@ -328,5 +330,6 @@ typeguard-collection-check-strategy = "ALL_ITEMS"
 omit = [
   "*/__init__.py",  # keep these free of real code!
   "*/__main__.py",
-  "*/template.py",
+  "*/_template.py",
+  "build_ext.py",
 ]
