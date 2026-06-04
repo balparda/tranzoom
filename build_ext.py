@@ -6,9 +6,9 @@ Run from the repository root via `make cython` (or directly):
 
   poetry run python build_ext.py build_ext --inplace
 
-This compiles src/tranzoom/core/fractalfast.py into a native .so (macOS/Linux)
-or .pyd (Windows) extension, placed alongside the source file. Python's import
-system automatically prefers the compiled extension over the pure-Python fallback.
+This compiles src/tranzoom/core/fractalfast.py (hybrid) and src/tranzoom/core/fractalc.pyx (full Cython)
+into native extensions (.so on macOS/Linux, .pyd on Windows) placed alongside the sources.
+Python’s import system automatically prefers the compiled extensions over the pure-Python fallback.
 
 Notes:
   - The pure-Python src/tranzoom/core/fractalfast.py is always the source of truth;
