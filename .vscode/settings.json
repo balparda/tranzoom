@@ -230,6 +230,7 @@
     "movflags",
     "mpfr",
     "msgspec",
+    "MSVC",
     "musllinux",
     "mycli",
     "myconfig",

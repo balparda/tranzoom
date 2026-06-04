@@ -97,6 +97,15 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │ --threads                                        INTEGER RANGE [1<=x<=12]                           Number of threads to use for rendering; default is  │
 │                                                                                                     None, which means to use all available CPU cores;   │
 │                                                                                                     will be limited to 12 threads                       │
+│ --opt                                                                         MIN optimization level to use for computation;      │
+│                                                                                                     available levels: ['cython', 'hybrid', 'python'];   │
+│                                                                                                     the default is None, which means to use the max     │
+│                                                                                                     available optimization; if option is given then     │
+│                                                                                                     behavior is: given CYTHON, but CYTHON not           │
+│                                                                                                     available, will raise an Error; given HYBRID, but   │
+│                                                                                                     HYBRID not available, will raise an Error; given    │
+│                                                                                                     PYTHON, but loaded HYBRID, will use HYBRID (but not │
+│                                                                                                     CYTHON), no errors                                  │
 │ --model               -m                         TEXT                                               LLM vision model to load and use: the model must be │
 │                                                                                                     compatible with the LMStudio client libraries and   │
 │                                                                                                     must support vision; will NOT get the model for     │
