@@ -44,7 +44,6 @@ from gmpy2 cimport *
 cdef extern from 'gmp.h':
   void mpq_init(mpq_t) nogil
   void mpq_clear(mpq_t) nogil
-  void mpq_set(mpq_t, mpq_srcptr) nogil
   void mpq_set_si(mpq_t, long, unsigned long) nogil
   void mpq_add '__gmpq_add'(mpq_t, mpq_srcptr, mpq_srcptr) nogil
   void mpq_sub '__gmpq_sub'(mpq_t, mpq_srcptr, mpq_srcptr) nogil
@@ -53,11 +52,6 @@ cdef extern from 'gmp.h':
 
 
 cdef extern from 'mpfr.h':
-  ctypedef long mpfr_prec_t
-  ctypedef int mpfr_rnd_t
-
-  int MPFR_RNDN
-
   void mpfr_init2(mpfr_t, mpfr_prec_t)
   void mpfr_clear(mpfr_t)
 
