@@ -717,7 +717,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       finally:
         # we are done, close the progress bar, free memory
         p_bar.close()
-      del all_img_obj  # this should help free all generated images from memory
       # we can finally compute the hash
       video_hash = hashes.Hash256(
         # stable if the image data and order does not change
@@ -727,6 +726,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       meta: dict[str, str] = image.MakeImageMeta(  # use destination frame (final) as reference
         _SmartImage(zoom_params.n_frames - 1), render, video_hash
       )
+      del all_img_obj  # this should help free all generated images from memory
       # add video-specific metadata
       meta[image.META_IMAGE_ANIMATION_KEY] = zoom_params.tp.value.lower()
       meta.update(
