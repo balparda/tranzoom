@@ -25,7 +25,7 @@ import warnings
 from collections import abc
 from typing import NoReturn, cast
 
-import cython  # pyright: ignore[reportMissingTypeStubs]
+import cython  # type: ignore[import-untyped]
 import gmpy2
 import tqdm.rich
 from tqdm.std import TqdmExperimentalWarning
