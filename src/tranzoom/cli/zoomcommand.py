@@ -344,7 +344,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       config.console.print()
 
   # DB
-  img: image.Image
   did_comp: bool
   depth_tmr: timer.Timer | None = None
   all_img_obj: dict[int, image.Image] = {}  # to keep images if not streaming
@@ -362,6 +361,9 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       )
     # see if we have a cache of this zoom
     zoom_data: frdb.ZoomData | None = db.FindZoom(zoom_params)
+    import pdb
+
+    pdb.set_trace()
     if zoom_data:
       video_hash = zoom_data['data_hash'] or ''
       old_path: pathlib.Path | None = (
@@ -536,7 +538,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
 
     # produce the frames
     total_depth: int = sum(
-      _FrameEstimatedIters(*_DepthAndStatsForFrame(j)) for j in range(len(all_frames))
+      _FrameEstimatedIters(*_DepthAndStatsForFrame(j)) for j in range(zoom_params.n_frames)
     )
     cmp_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
       # BEWARE: the tqdm-rich.tqdm bar is visually nicer BUT it cannot live with another bar because
@@ -571,6 +573,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
             cmp_bar.update(_FrameEstimatedIters(max_iter, stats))  # update progress bar
             continue
         # we really need to compute: feed frame to the producer
+        img: image.Image
         params, img, did_comp = db.DoComputation(
           params,  # send frm
           max_threads=config.max_threads,
@@ -646,9 +649,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           smoothing=0.1,
           colour='yellow',
         )
-      # keep the last frame, for later metadata
-      last_img: image.Image = img  # pyright: ignore[reportPossiblyUnboundVariable]
-      del img  # pyright: ignore[reportPossiblyUnboundVariable]
+      # start try..finally for the progress bar
       try:
 
         def _StreamingRenderFrame(i: int) -> bytes:
@@ -726,8 +727,9 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
         ('|'.join(all_hash[i] for i in range(zoom_params.n_frames))).encode('ascii')
       ).hex()
       # create metadata
-      meta: dict[str, str] = image.MakeImageMeta(last_img, render, video_hash)  # use dest. frame
-      del last_img
+      meta: dict[str, str] = image.MakeImageMeta(  # use destination frame (final) as reference
+        _SmartImage(zoom_params.n_frames - 1), render, video_hash
+      )
       # add video-specific metadata
       meta[image.META_IMAGE_ANIMATION_KEY] = zoom_params.tp.value.lower()
       meta.update(

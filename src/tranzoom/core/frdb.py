@@ -906,6 +906,7 @@ class FractalDatabase:
     zoom_hash: str = zoom.sha
     if zoom_hash in self._db['videos']:
       # we have an entry: we assume it is mostly correct, but update the path
+      self._db['videos'][zoom_hash]['data_hash'] = data_hash  # update hash (in case it changed)
       self._db['videos'][zoom_hash]['tm'] = tm  # always update timestamp
       self._db['videos'][zoom_hash]['rendered_path'] = path  # update path (in case it changed)
       logging.info(f'AddZoomToDB: updated existing zoom {zoom_hash!r} in DB, path {path!r}')
