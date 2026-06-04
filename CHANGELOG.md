@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
+  - [1.7.0 - 2026-06-04](#170---2026-06-04)
   - [1.6.3 - 2026-06-03](#163---2026-06-03)
   - [1.6.2 - 2026-06-02](#162---2026-06-02)
   - [1.6.1 - 2026-06-01](#161---2026-06-01)
@@ -36,6 +37,17 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future fixes.
+
+## 1.7.0 - 2026-06-04
+
+- Added
+  - CYTHON! TBD
+
+- Changed
+  - TBD
+
+- Fixed
+  - TBD
 
 ## 1.6.3 - 2026-06-03
 
