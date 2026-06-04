@@ -6,9 +6,10 @@ Run from the repository root via `make cython` (or directly):
 
   poetry run python build_ext.py build_ext --inplace
 
-This compiles src/tranzoom/core/fractalfast.py (hybrid) and src/tranzoom/core/fractalc.pyx (full Cython)
-into native extensions (.so on macOS/Linux, .pyd on Windows) placed alongside the sources.
-Python’s import system automatically prefers the compiled extensions over the pure-Python fallback.
+This compiles src/tranzoom/core/fractalfast.py (hybrid) and src/tranzoom/core/fractalc.pyx
+(full Cython) into native extensions (.so on macOS/Linux, .pyd on Windows) placed alongside the
+sources. Python's import system automatically prefers the compiled extensions over the pure-Python
+fallback.
 
 Notes:
   - The pure-Python src/tranzoom/core/fractalfast.py is always the source of truth;
@@ -86,33 +87,29 @@ _fractalc_ext = setuptools.Extension(
 )
 
 setuptools.setup(
-  name='fractalfast',
-  ext_modules=cythonize(  # type: ignore[no-untyped-call]
-    _fractalfast_ext,
-    include_path=sys.path,
-    compiler_directives={
-      'language_level': '3',
-    },
-  ),
-  package_dir={'': 'src'},
-  zip_safe=False,
-)
-
-setuptools.setup(
-  name='fractalc',
-  ext_modules=cythonize(  # type: ignore[no-untyped-call]
-    _fractalc_ext,
-    include_path=sys.path,
-    compiler_directives={
-      'language_level': '3',
-      'boundscheck': False,
-      'wraparound': False,
-      'initializedcheck': False,
-      'nonecheck': False,
-      'cdivision': True,
-      'infer_types': True,
-    },
-  ),
+  name='tranzoom',
+  ext_modules=[
+    *cythonize(  # type: ignore[no-untyped-call]
+      _fractalfast_ext,
+      include_path=sys.path,
+      compiler_directives={
+        'language_level': '3',
+      },
+    ),
+    *cythonize(  # type: ignore[no-untyped-call]
+      _fractalc_ext,
+      include_path=sys.path,
+      compiler_directives={
+        'language_level': '3',
+        'boundscheck': False,
+        'wraparound': False,
+        'initializedcheck': False,
+        'nonecheck': False,
+        'cdivision': True,
+        'infer_types': True,
+      },
+    ),
+  ],
   package_dir={'': 'src'},
   zip_safe=False,
 )
