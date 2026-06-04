@@ -7,7 +7,7 @@ install:
 	poetry config virtualenvs.in-project true
 	poetry env use python3.12
 	poetry sync
-	poetry run python build_ext.py build_ext --inplace
+	poetry run python build_ext.py build_ext --inplace || echo "Cython build skipped (compiler/libs missing)"
 	poetry run tranz --help
 
 fmt:
