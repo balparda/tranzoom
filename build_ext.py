@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-"""Build script for the optional Cython-accelerated fractalfast extension.
+"""Build script for the optional Cython-accelerated fractalfast/fractalc extensions.
 
 Run from the repository root via `make cython` (or directly):
 
