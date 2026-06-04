@@ -14,6 +14,10 @@
 # Mac-specific
 .DS_Store
 
+# Cython build artifacts (compiled extension + intermediate C file)
+src/tranzoom/core/fractalfast.c
+src/tranzoom/core/fractalc.c
+
 # END project-specific ignores
 # the ones below are from the standard Python.gitignore template in Github
 # Byte-compiled / optimized / DLL files

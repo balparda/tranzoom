@@ -45,8 +45,10 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
   params: frame.ComputationParameters,
   render: image.RenderParameters,
   out: image.ImageOutputConfig,
+  *,
   max_threads: int | None,
   model: str = '',
+  optimization: frame.Optimization | None = None,
   spec_tokens: int | None = None,
   seed: int | None = None,
   context: int = 0,
@@ -64,7 +66,6 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
   max_steps: int = 0,
   iterm: bool = False,
   target_weight: float = 0.0,
-  *,
   print_comm: abc.Callable[[str], None],
   manual: bool = False,
   force: bool = False,
@@ -84,6 +85,11 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
     max_threads (int | None): Optional maximum number of threads to use for rendering; if None,
         use all available CPU cores.
     model (str): The AI model identifier to use for the search; ignored when manual=True.
+    optimization (frame.Optimization | None, optional): The optimization level to use for
+        computation. Defaults to None, which means to use the max available optimization.
+        If given then behavior is: given CYTHON, not available will raise an Error;
+        given HYBRID, not available will give an Error; given PYTHON, but loaded HYBRID,
+        will use HYBRID (but not CYTHON)
     spec_tokens (int | None): Optional number of tokens for the model specification; if None,
         use the model's default; ignored when manual=True.
     seed (int | None): Optional random seed for the model; if None, use a random seed; ignored
@@ -189,7 +195,16 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
         # render the image for the current frame
         print_comm('')
         params, _, img_data, _, full_path = db.CoreComputeImage(
-          params, render, out, count, zoom_tm, max_threads, iterm, print_comm, force=force
+          params,
+          render,
+          out,
+          add_serial=count,
+          tm=zoom_tm,
+          max_threads=max_threads,
+          iterm=iterm,
+          print_comm=print_comm,
+          optimization=optimization,
+          force=force,
         )
         print_comm('Press [bold][red]Ctrl+C[/][/] to stop at any time.')
         if not manual:

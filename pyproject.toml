@@ -12,7 +12,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 
 name = "tranzoom"
-version = "1.6.3"  # also update src/tranzoom/__init__.py
+version = "1.7.0"  # also update src/tranzoom/__init__.py
 
 description = "Fractal manipulation with LLMs"
 license = "Apache-2.0"
@@ -49,12 +49,14 @@ dependencies = [
 
   "click==8.3.3",  # TODO: >=8.4 is waiting for typer type-stubs compatibility (probably >0.25.1)
   "cryptography>=48.0",
+  "cython>=3.2",
   "gmpy2>=2.3",
   "ImageIO>=2.37",
   "imageio-ffmpeg>=0.6",
   "numpy>=2.4",
   "Pillow>=12.2",
   "rich>=15.0",
+  "setuptools>=82.0",
   "tqdm>=4.67",
   "transai>=1.3.0",
   "transcrypto>=2.6.1",
@@ -127,6 +129,7 @@ typeguard = "^4.5"
 # project-specific dev-only
 gmpy2-stubs = "^2.2"
 types-tqdm = "^4.67"
+types-setuptools = "^82.0"
 
 [tool.poetry.requires-plugins]
 poetry-plugin-export = "^1.10"
@@ -142,6 +145,7 @@ src = [ "scripts", "src", "tests", "tests_integration" ]
 
 extend-exclude = [
   "typings/**/__init__.pyi",  # typically stub files created by pyright
+  "src/tranzoom/core/fractalc.pyx",
 ]
 
 # Strongly recommended if you run Ruff via pre-commit (or any tool that passes
@@ -224,6 +228,13 @@ preview = true  # if you want new features being previewed
 
 [tool.ruff.lint.per-file-ignores]
 
+"build_ext.py" = [
+  "INP001",   # root-level build script, not part of a Python package
+  "S404",     # subprocess module is acceptable in a build script
+  "S603",     # subprocess call with trusted, literal input args
+  "S607",     # partial executable path is acceptable for `brew` in a build script
+]
+
 "scripts*/**/*.py" = [
   "S101",     # Use of `assert` detected
   "PT018",    # Assertion should be broken down into multiple parts
@@ -279,6 +290,7 @@ exclude = [
   "**/dist",
   "**/build",
   "**/node_modules",
+  "src/tranzoom/core/fractalc.pyx",
 ]
 
 executionEnvironments = [
@@ -318,5 +330,6 @@ typeguard-collection-check-strategy = "ALL_ITEMS"
 omit = [
   "*/__init__.py",  # keep these free of real code!
   "*/__main__.py",
-  "*/template.py",
+  "*/_template.py",
+  "build_ext.py",
 ]

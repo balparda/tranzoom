@@ -32,11 +32,8 @@ from tranzoom import tranz
 from tranzoom.cli import base
 from tranzoom.core import ai, fractal, frame, frdb, image
 
-_MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the fractal score
+_AI_QUERY_WEIGHT: float = 0.8  # how much to weight the AI query vs the manual score
 _N_FRAMES_PER_DB_SAVE: int = 5  # how many frames to compute before saving to DB
-
-# gmpy2.mpq constants
-_MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 
 
 zoom_app = typer.Typer(
@@ -147,25 +144,26 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
       params,
       render,
       out,
-      config.max_threads,
-      config.model,
-      config.spec_tokens,
-      config.seed,
-      config.context,
-      config.temperature,
-      config.gpu,
-      config.gpu_layers,
-      config.fp16,
-      config.use_mmap,
-      config.flash,
-      config.kv_cache,
-      config.timeout,
-      query.strip() if query else None,
-      reason,
-      memory,
-      config.max_steps,
-      config.iterm,
-      _MANUAL_QUERY_WEIGHT,
+      max_threads=config.max_threads,
+      model=config.model,
+      optimization=config.python_optimization,
+      spec_tokens=config.spec_tokens,
+      seed=config.seed,
+      context=config.context,
+      temperature=config.temperature,
+      gpu=config.gpu,
+      gpu_layers=config.gpu_layers,
+      fp16=config.fp16,
+      use_mmap=config.use_mmap,
+      flash=config.flash,
+      kv_cache=config.kv_cache,
+      timeout=config.timeout,
+      query=query.strip() if query else None,
+      reason=reason,
+      memory=memory,
+      max_steps=config.max_steps,
+      iterm=config.iterm,
+      target_weight=_AI_QUERY_WEIGHT,
       print_comm=config.console.print,
       force=config.img_force_redo,
     )
@@ -209,7 +207,8 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
       params,
       render,
       out,
-      config.max_threads,
+      max_threads=config.max_threads,
+      optimization=config.python_optimization,
       max_steps=config.max_steps,
       iterm=config.iterm,
       print_comm=config.console.print,
@@ -296,7 +295,8 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     f'with {zoom_params.n_frames} frames ({len(all_markers)} markers, '
     f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%, and {len(all_depth)} depth frames, '
     f'{100.0 * len(all_depth) / zoom_params.n_frames:.2f}%), '
-    f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step...'
+    f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step, '
+    f'{fractal.OptimizationToUse(config.python_optimization)[1]}...'
   )
   config.console.print(f'[yellow]ZOOM:[/] {zoom_params} ... {all_frames[-1]}\n')
   if zoom_params.scalar_magnification_per_step > image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
@@ -344,7 +344,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       config.console.print()
 
   # DB
-  img: image.Image
   did_comp: bool
   depth_tmr: timer.Timer | None = None
   all_img_obj: dict[int, image.Image] = {}  # to keep images if not streaming
@@ -405,6 +404,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
             set_points=params.set_points,
             progress_bar=False,
             n_processes=n_threads,
+            optimization=config.python_optimization,
             print_comm=config.console.print,
           )
           depth_computations[idx] = (frm, max_iter, max_iter, stats)
@@ -535,7 +535,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
 
     # produce the frames
     total_depth: int = sum(
-      _FrameEstimatedIters(*_DepthAndStatsForFrame(j)) for j in range(len(all_frames))
+      _FrameEstimatedIters(*_DepthAndStatsForFrame(j)) for j in range(zoom_params.n_frames)
     )
     cmp_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
       # BEWARE: the tqdm-rich.tqdm bar is visually nicer BUT it cannot live with another bar because
@@ -570,9 +570,11 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
             cmp_bar.update(_FrameEstimatedIters(max_iter, stats))  # update progress bar
             continue
         # we really need to compute: feed frame to the producer
+        img: image.Image
         params, img, did_comp = db.DoComputation(
           params,  # send frm
           max_threads=config.max_threads,
+          optimization=config.python_optimization,
           stats=stats,
           print_comm=config.console.print,
           force=config.img_force_redo,
@@ -644,9 +646,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
           smoothing=0.1,
           colour='yellow',
         )
-      # keep the last frame, for later metadata
-      last_img: image.Image = img  # pyright: ignore[reportPossiblyUnboundVariable]
-      del img  # pyright: ignore[reportPossiblyUnboundVariable]
+      # start try..finally for the progress bar
       try:
 
         def _StreamingRenderFrame(i: int) -> bytes:
@@ -717,15 +717,16 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       finally:
         # we are done, close the progress bar, free memory
         p_bar.close()
-      del all_img_obj  # this should help free all generated images from memory
       # we can finally compute the hash
       video_hash = hashes.Hash256(
         # stable if the image data and order does not change
         ('|'.join(all_hash[i] for i in range(zoom_params.n_frames))).encode('ascii')
       ).hex()
       # create metadata
-      meta: dict[str, str] = image.MakeImageMeta(last_img, render, video_hash)  # use dest. frame
-      del last_img
+      meta: dict[str, str] = image.MakeImageMeta(  # use destination frame (final) as reference
+        _SmartImage(zoom_params.n_frames - 1), render, video_hash
+      )
+      del all_img_obj  # this should help free all generated images from memory
       # add video-specific metadata
       meta[image.META_IMAGE_ANIMATION_KEY] = zoom_params.tp.value.lower()
       meta.update(

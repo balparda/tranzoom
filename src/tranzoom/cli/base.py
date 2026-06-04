@@ -440,6 +440,19 @@ MAX_THREADS_OPTION: typer.models.OptionInfo = typer.Option(
     f'CPU cores; will be limited to {frame.MAX_CONCURRENCE} threads'
   ),
 )
+PYTHON_OPTIMIZATION_OPTION: typer.models.OptionInfo = typer.Option(
+  None,
+  '--opt',
+  help=(
+    'MIN optimization level to use for computation; '
+    f'available levels: {sorted(o.value for o in frame.Optimization)}; '
+    'the default is None, which means to use the max available optimization; '
+    'if option is given then behavior is: '
+    'given CYTHON, but CYTHON not available, will raise an Error; '
+    'given HYBRID, but HYBRID not available, will raise an Error; '
+    'given PYTHON, but loaded HYBRID, will use HYBRID (but not CYTHON), no errors'
+  ),
+)
 MAX_STEPS_OPTION: typer.models.OptionInfo = typer.Option(
   0,
   '-n',
@@ -696,6 +709,7 @@ class TranZoomConfig(clibase.CLIConfig):
   set_pal: palette.Palette
   set_points: frame.SetHighlightAlgorithm | None
   max_threads: int | None
+  python_optimization: frame.Optimization | None
   model: str
   spec_tokens: int | None
   seed: int | None
@@ -1050,6 +1064,7 @@ def ProduceFractalImage(
     max_threads=config.max_threads,
     iterm=config.iterm,
     print_comm=config.console.print,
+    optimization=config.python_optimization,
     force=config.img_force_redo,
   )
   # save the image to disk if requested

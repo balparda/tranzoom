@@ -17,6 +17,7 @@ Built with:
 
 - **Python 3.12+** with **Poetry** for dependency management
 - **gmpy2** for arbitrary-precision (`mpq`/`mpfr`) complex-plane arithmetic
+- **Cython** (optional) for accelerated computation via gmpy2 C-API (≈2× speedup for deep zooms)
 - **Pillow** for PNG image output
 - **imageio** + **imageio-ffmpeg** + **numpy** for GIF and MP4 animation export
 - **tqdm** for progress bars during rendering
@@ -76,6 +77,7 @@ Built with:
   - [Project Design](#project-design)
     - [Modules / packages](#modules--packages)
     - [Performance characteristics](#performance-characteristics)
+      - [Three-tier optimization system](#three-tier-optimization-system)
   - [Development Instructions](#development-instructions)
     - [File structure](#file-structure)
     - [Development Setup](#development-setup)
@@ -86,6 +88,13 @@ Built with:
       - [Create environment and install dependencies](#create-environment-and-install-dependencies)
       - [Optional: VSCode setup](#optional-vscode-setup)
     - [Build](#build)
+    - [Optional: Cython acceleration](#optional-cython-acceleration)
+      - [Architecture](#architecture)
+      - [Prerequisites](#prerequisites)
+      - [Build the extensions](#build-the-extensions)
+      - [Verify what loaded](#verify-what-loaded)
+      - [Reverting to pure Python](#reverting-to-pure-python)
+      - [Forcing a specific optimization level](#forcing-a-specific-optimization-level)
     - [Run locally](#run-locally)
     - [Testing](#testing)
       - [Unit tests / Coverage](#unit-tests--coverage)
@@ -108,6 +117,7 @@ Built with:
     - [Enable debug output](#enable-debug-output)
     - [`gmpy2` installation issues](#gmpy2-installation-issues)
     - [Rendering is very slow](#rendering-is-very-slow)
+    - [Cython compilation issues](#cython-compilation-issues)
 
 ## License
 
@@ -122,6 +132,8 @@ Unless required by applicable law or agreed to in writing, software distributed 
 This project includes or depends on third-party software (see `requirements.txt` and `pyproject.toml`). Key dependencies include:
 
 - [gmpy2](https://gmpy2.readthedocs.io/) — Apache-2.0 compatible
+- [Cython](https://cython.org/) — Apache-2.0 license
+- [setuptools](https://setuptools.pypa.io/) — MIT license
 - [Pillow](https://python-pillow.github.io/) — HPND license
 - [tqdm](https://github.com/tqdm/tqdm) — MPL-2.0 / MIT
 - [pydantic](https://docs.pydantic.dev/) — MIT
@@ -152,6 +164,8 @@ Or install from the repository for development (see [Development Setup](#develop
 
 - **[python 3.12+](https://python.org/)** — [documentation](https://docs.python.org/3.12/)
 - **[gmpy2 2.3+](https://pypi.org/project/gmpy2/)** — Arbitrary-precision arithmetic using GMP/MPFR/MPC — [documentation](https://gmpy2.readthedocs.io/en/latest/)
+- **[Cython 3.2+](https://pypi.org/project/Cython/)** — Optional acceleration via C compilation; runtime dependency (≥1.7.0) — [documentation](https://cython.readthedocs.io/)
+- **[setuptools 82.0+](https://pypi.org/project/setuptools/)** — Build system for Cython extensions; runtime dependency (≥1.7.0) — [documentation](https://setuptools.pypa.io/)
 - **[Pillow 12.2+](https://pypi.org/project/Pillow/)** — PNG image generation — [documentation](https://pillow.readthedocs.io/)
 - **[imageio 2.37+](https://pypi.org/project/imageio/)** — GIF and image sequence I/O — [documentation](https://imageio.readthedocs.io/)
 - **[imageio-ffmpeg 0.6+](https://pypi.org/project/imageio-ffmpeg/)** — MP4 video export via FFmpeg — [documentation](https://github.com/imageio/imageio-ffmpeg)
@@ -173,6 +187,8 @@ Starting with version 1.1.0, tranZoom can use local LLM vision models to autonom
 Starting with version 1.4.0, tranZoom can render animated GIF and MP4 zoom animations with the `tranz zoom auto` command — a straight zoom-in path toward any target frame, with configurable frame count, FPS, and duration.
 
 Starting with version 1.5.0, the fractal renderer uses **smooth coloring**: each exterior pixel stores both an integer escape count `n` and a fractional value `nu ∈ [0, 1)` derived from the normalized iteration count formula, packed into 8 bytes per pixel. This eliminates discrete color bands and produces smooth gradients at all zoom depths. The database now caches both the raw computed pixel data and the rendered PNGs, so revisiting a frame or re-rendering with a new palette is fast — the expensive fractal computation is only performed once.
+
+Starting with version 1.7.0, tranZoom offers **three-tier Cython optimization**: pure Python (always available), hybrid mode (`fractalfast.py` compiled with Cython's pure-Python mode), and full Cython (`fractalc.pyx` using gmpy2 C-API directly). Full Cython provides ~2× speedup over pure Python for deep-zoom, high-precision renders. Users can compile locally with `make cython` for acceleration; PyPI wheels ship pure-Python fallbacks for maximum portability.
 
 Starting with version 1.6.1, tranZoom estimates file sizes and memory requirements before starting any expensive operation and warns when estimates exceed configurable thresholds (50 MB for a single image, 2 GB for an animation, 20 GB RAM for a single image render, 32 GB RAM for a full animation render). The `tranz zoom auto` command now streams frames from disk on demand during animation rendering (when the DB is enabled) to reduce peak memory, and periodically checkpoints the DB to protect against data loss during long renders.
 
@@ -396,6 +412,7 @@ Available subgroup / command combinations:
 | `--version` | Show version and exit | off |
 | `-v`, `-vv`, `-vvv`, `--verbose` | Verbosity (nothing=*ERROR*, `-v`=*WARNING*, `-vv`=*INFO*, `-vvv`=*DEBUG*) | *ERROR* |
 | `--color`/`--no-color` | Force enable/disable colored output (respects `NO_COLOR` env var if not provided) | `--color` |
+| `--opt` | Minimum optimization level (`python`, `hybrid`, `cython`); default uses best available | best available |
 | `--threads` | Number of worker processes for rendering (1–N, default: all available cores) | all cores |
 | `-o`/`--out` | Output directory path | current directory |
 | `--prefix` | Filename prefix | None = `mandel`/`julia` |
@@ -1009,6 +1026,18 @@ Rendering is CPU-bound. Time scales roughly with `width × height × max_iter ×
 
 The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image and reuses them across rows, which is an important optimization since `mpfr` construction is expensive at high precision.
 
+#### Three-tier optimization system
+
+tranZoom (≥1.7.0) provides three computation modes with progressively better performance:
+
+1. **Pure Python** (`--opt python`): Always available, no compilation required; pure-Python `fractalfast.py` fallback; slowest but most portable; ideal for quick testing or platforms without C compiler.
+
+2. **Hybrid** (`--opt hybrid`): Cython [pure-Python mode](https://cython.readthedocs.io/en/latest/src/tutorial/pure.html); `fractalfast.py` compiled to native extension using PEP-484/526 type annotations; ~30–50% faster than pure Python; Python-level gmpy2 API with Cython optimizations; best balance of portability and performance.
+
+3. **Full Cython** (`--opt cython`): Direct gmpy2 C-API usage via `fractalc.pyx`; raw GMP/MPFR/MPC C calls with explicit `mpfr_t` manipulation; bypasses Python object overhead entirely; ~2× faster than pure Python for deep-zoom, high-precision renders; maximum performance; requires C compiler and GMP/MPFR/MPC libraries at build time.
+
+The default (`--opt` not specified) automatically uses the **best available** optimization. PyPI wheels ship pure-Python fallbacks; users can compile locally with `make cython` for acceleration (see [Optional: Cython acceleration](#optional-cython-acceleration) under Development Instructions).
+
 ## Development Instructions
 
 ### File structure
@@ -1018,6 +1047,7 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 ├── CHANGELOG.md                  ⟸ latest changes/releases
 ├── LICENSE
 ├── Makefile
+├── build_ext.py                  ⟸ Cython build script (see `make cython`; optional, gitignored output)
 ├── tranz.md                      ⟸ auto-generated CLI doc (by `make docs` or `make ci`)
 ├── poetry.lock                   ⟸ maintained by Poetry; do not manually edit
 ├── pyproject.toml                ⟸ most important configurations live here
@@ -1053,8 +1083,10 @@ The `Mandelbrot()` function pre-computes all X-axis `mpfr` values once per image
 │       ├── core/
 │       │   ├── __init__.py
 │       │   ├── ai.py             ⟸ ZoomLoop() and ManualLoop() — zoom session logic
-│       │   ├── fractal.py        ⟸ Mandelbrot() renderer
-│       │   ├── frame.py          ⟸ Frame class, Fractal enum; base for computation
+│       │   ├── fractal.py        ⟸ ComputeFractal() renderer; three-tier optimization loader
+│       │   ├── fractalfast.py    ⟸ Hybrid Cython mode (pure-Python fallback)
+│       │   ├── fractalc.pyx      ⟸ Full Cython mode (gmpy2 C-API); optional
+│       │   ├── frame.py          ⟸ Frame class, Fractal enum, Optimization enum; base for computation
 |       |   ├── frdb.py           ⟸ Fractal DB/persistence objects; DoComputation()/DoRender() rendering primitives
 │       │   ├── image.py          ⟸ Image class, overlays, iTerm2, metadata helpers
 │       │   ├── palette.py        ⟸ Palette definitions
@@ -1166,6 +1198,85 @@ This repo ships a `.vscode/settings.json` configured to use `./.venv/bin/python`
 ```sh
 poetry build   # builds wheel + sdist in dist/
 ```
+
+### Optional: Cython acceleration
+
+tranZoom provides **three computation modes** (pure Python, hybrid, full Cython) with progressively better performance. Pure Python is always available; the other two require local compilation.
+
+#### Architecture
+
+- **`fractalfast.py`**: Pure Python with Cython-compatible type annotations; can run interpreted or be compiled to native extension ("hybrid" mode); always present as fallback; uses Python-level gmpy2 API.
+
+- **`fractalc.pyx`**: Pure Cython source using gmpy2 C-API directly; raw GMP/MPFR/MPC C calls with explicit `mpfr_t` / `mpq_t` structures; bypasses Python object overhead; provides maximum performance ("full Cython" mode); optional — if import fails, tranZoom falls back to hybrid or pure Python.
+
+Both implement the same four exported functions: `MandelbrotComputation()`, `JuliaComputation()`, `NormalizeSmoothEscape()`, `EncodeIntFloatTo64()`.
+
+The `fractal.py` loader tries to import `fractalc` (full Cython) first; if unavailable, uses `fractalfast` (which may be compiled as hybrid or interpreted as pure Python).
+
+This is purely a **local development optimization** — compiled `.so`/`.pyd` files are never committed to the repository, and the installed PyPI wheel always ships pure-Python fallbacks. Users can compile locally for ~2× speedup.
+
+#### Prerequisites
+
+- C compiler: Clang (macOS/Xcode), GCC (Linux), or MSVC (Windows)
+- GMP, MPFR, MPC libraries:
+  - macOS: `brew install gmp mpfr libmpc`
+  - Ubuntu/Debian: `sudo apt-get install libgmp-dev libmpfr-dev libmpc-dev`
+  - Fedora/RHEL: `sudo dnf install gmp-devel mpfr-devel libmpc-devel`
+
+#### Build the extensions
+
+`cython` and `setuptools` are runtime dependencies (≥1.7.0), so after `poetry sync` you already have everything needed:
+
+```sh
+make cython
+# equivalent to:
+poetry run python build_ext.py build_ext --inplace
+```
+
+This compiles **both** `fractalfast.py` (hybrid mode) and `fractalc.pyx` (full Cython) to native extensions:
+
+- `src/tranzoom/core/fractalfast.cpython-<ver>-<platform>.so` (macOS/Linux) or `.pyd` (Windows)
+- `src/tranzoom/core/fractalc.cpython-<ver>-<platform>.so` (macOS/Linux) or `.pyd` (Windows)
+
+The intermediate `.c` files and the `build/` directory are gitignored.
+
+The `build_ext.py` script auto-discovers Homebrew GMP/MPFR/MPC paths on macOS (both Apple Silicon `/opt/homebrew` and Intel `/usr/local`); on Linux it relies on system library paths.
+
+#### Verify what loaded
+
+```python
+from tranzoom.core import fractalfast, fractal
+
+# Check if fractalfast was compiled (hybrid mode)
+print(f'fractalfast.CYTHON = {fractalfast.CYTHON}')  # True if compiled
+print(f'fractalfast.__file__ = {fractalfast.__file__}')  # should end in .so/.pyd if compiled
+
+# Check what optimization is available
+opt, opt_msg = fractal.OptimizationToUse(None)
+print(f'Best available: {opt_msg}')  # "CYTHON OPTIMIZED" / "PYTHON/CY HYBRID" / "PURE PYTHON"
+```
+
+The default behavior (no `--opt` flag) uses the best available: full Cython if both compiled, hybrid if only `fractalfast` compiled, pure Python if neither compiled.
+
+#### Reverting to pure Python
+
+```sh
+make clean-cython
+```
+
+This removes the compiled extensions and the intermediate `.c` files. On the next import, Python falls back to the `.py` source automatically — no code changes required.
+
+#### Forcing a specific optimization level
+
+Use the global `--opt` flag:
+
+```sh
+poetry run tranz --opt python image mandel    # force pure Python (ignores compiled extensions)
+poetry run tranz --opt hybrid image mandel    # require hybrid (error if not compiled)
+poetry run tranz --opt cython image mandel    # require full Cython (error if not compiled)
+```
+
+If the requested level is unavailable, the command will fail with an error. Exception: `--opt python` with hybrid loaded will use hybrid (not an error because it is guaranteed the same python file).
 
 ### Run locally
 
@@ -1351,6 +1462,45 @@ poetry sync
 - Reduce image size: `tranz -w 256 -h 256 image mandel ...`
 - `max_iter` is auto-scaled with zoom depth; very deep zooms are inherently slow
 - Very high precision (> 1000 bits, i.e., zoom > ~10^300) will always be slow — this is expected
+- Consider compiling with Cython for ~2× speedup: `make cython` (see [Optional: Cython acceleration](#optional-cython-acceleration))
+
+### Cython compilation issues
+
+If `make cython` fails:
+
+1. **Missing C compiler**: Install Xcode Command Line Tools (macOS), `build-essential` (Ubuntu/Debian), or MSVC (Windows):
+
+   ```sh
+   # macOS:
+   xcode-select --install
+
+   # Ubuntu/Debian:
+   sudo apt-get install build-essential
+   ```
+
+2. **Missing GMP/MPFR/MPC libraries**: See [`gmpy2` installation issues](#gmpy2-installation-issues) above.
+
+3. **Homebrew library path issues (macOS)**: The `build_ext.py` script auto-discovers Homebrew paths, but if it fails:
+
+   ```sh
+   # Verify libraries are installed:
+   brew list gmp mpfr libmpc
+
+   # Check library paths:
+   brew --prefix gmp
+   brew --prefix mpfr
+   brew --prefix libmpc
+   ```
+
+4. **Import warning "Could not import fractalc.py Cython"**: This is expected if Cython compilation failed or was not run; tranZoom falls back to hybrid or pure Python automatically. Run `make cython` to enable full optimization.
+
+5. **Verify what loaded**: Check which optimization level is active:
+
+   ```sh
+   poetry run python -c "from tranzoom.core import fractal; print(fractal.OptimizationToUse(None))"
+   ```
+
+   Should print `(Optimization.CYTHON, 'CYTHON OPTIMIZED')` if full Cython loaded, `(Optimization.HYBRID, 'PYTHON/CY HYBRID')` if only hybrid loaded, or `(Optimization.PYTHON, 'PURE PYTHON')` if neither compiled.
 
 ---
 

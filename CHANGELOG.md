@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
+  - [1.7.0 - 2026-06-04](#170---2026-06-04)
   - [1.6.3 - 2026-06-03](#163---2026-06-03)
   - [1.6.2 - 2026-06-02](#162---2026-06-02)
   - [1.6.1 - 2026-06-01](#161---2026-06-01)
@@ -36,6 +37,30 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future fixes.
+
+## 1.7.0 - 2026-06-04
+
+- Added
+  - **Full Cython optimization** (`fractalc.pyx`): new pure-Cython module (1346 lines) with direct gmpy2 C-API usage for maximum performance; implements `MandelbrotComputation()` and `JuliaComputation()` using raw GMP/MPFR/MPC C calls with explicit `mpfr_t` and `mpq_t` manipulation; bypasses Python object overhead entirely for inner computation loops; provides up to ~2× speedup over hybrid mode for deep-zoom, high-precision renders; automatically loaded when available, falls back to hybrid/Python if import fails.
+  - **Hybrid Cython mode** (`fractalfast.py`): enhanced pure-Python module (676 lines) now structured for Cython's pure-Python mode; can be compiled to native extension using type annotations that Cython optimizes; provides intermediate performance between pure Python and full Cython; exports `CYTHON` boolean to detect compilation status; always present as pure-Python fallback.
+  - **Three-tier optimization system** (`frame.py`, `fractal.py`): new `Optimization` enum with three levels: `PYTHON` (pure Python, no compilation), `HYBRID` (Cython pure-Python mode, compiled `fractalfast.py`), and `CYTHON` (full Cython, compiled `fractalc.pyx`); `OptimizationToUse()` function determines available optimization at runtime; `ComputeFractal()` and `FractalAdaptiveIterations()` accept optional `optimization` parameter to specify minimum required level.
+  - **CLI optimization option** (`tranz.py`, `base.py`): new global `--opt` flag to specify minimum optimization level for computation; options: `python`, `hybrid`, `cython`; default `None` uses maximum available; if requested level is unavailable, raises error (except `python` with `hybrid` loaded uses `hybrid`); affects all render and zoom commands.
+  - **Cython build system** (`build_ext.py`): new build script for compiling both `fractalfast.py` and `fractalc.pyx` to native extensions; auto-discovers Homebrew GMP/MPFR/MPC library paths on macOS; links against `libgmp`, `libmpfr`, `libmpc` C libraries; uses `setuptools` + `Cython.Build.cythonize`; run via `make cython` (or `poetry run python build_ext.py build_ext --inplace`); produces `.so` (macOS/Linux) or `.pyd` (Windows) extensions placed alongside source files.
+  - **`make cython` and `make clean-cython` targets** (`Makefile`): `make cython` compiles both Cython modules to native extensions; `make clean-cython` removes build artifacts (`.c`, `.so`, `.pyd`, `build/` directory); compiled extensions are gitignored; `make install` now runs `make cython` automatically.
+  - **Benchmark script** (`scripts/benchmark.py`): micro-benchmark comparing pure Python, hybrid, and full Cython performance for `EncodeIntFloatTo64()` calls; reports timing for encode/decode operations and combined workflow; used for performance regression testing during development.
+
+- Changed
+  - **Runtime dependencies** (`pyproject.toml`): added `cython>=3.2` and `setuptools>=82.0` as runtime dependencies (were dev-only); Cython compilation now supported out-of-the-box for users who install from PyPI; wheels still ship pure-Python fallbacks, but users can compile locally with `make cython` for acceleration.
+  - **Fractal computation loader** (`fractal.py`): module-level import now loads `fractalfast` (pure-Python or hybrid), then attempts to import `fractalc` (full Cython); `PY_MANDELBROT_COMPUTATION`, `PY_JULIA_COMPUTATION`, `PY_NORM_ESCAPE`, `PY_ENCODE_INT_64` always available from `fractalfast`; `CY_MANDELBROT_COMPUTATION`, `CY_JULIA_COMPUTATION`, `CY_NORM_ESCAPE`, `CY_ENCODE_INT_64` set to `None` if `fractalc` import fails; `OptimizationToUse()` determines best available at runtime.
+  - **Ruff exclusions** (`pyproject.toml`): `fractalc.pyx` excluded from Ruff linting (not valid Python syntax); `build_ext.py` allowed subprocess usage for Homebrew detection (S404, S603, S607) and no `__init__.py` required (INP001).
+  - **Pyright exclusions** (`pyproject.toml`): `fractalc.pyx` excluded from Pyright type checking; pure Cython syntax incompatible with Python type checker.
+  - **Test coverage exclusions** (`pyproject.toml`): `build_ext.py` excluded from coverage reporting; build scripts not part of runtime code coverage.
+  - **Integration test determinism** (`tests_integration/test_installed_cli.py`): all integration test CLI calls now include `--opt python` to force pure-Python computation; ensures deterministic pixel-perfect output hashes regardless of Cython availability; prevents CI flakiness when Cython extensions are present; TODO added for future Cython-specific tests.
+  - **Performance section** (`README.md`): updated to reflect three-tier optimization system; documented Cython acceleration as optional but recommended for deep zooms; added note that PyPI wheels ship pure-Python but users can compile locally.
+
+- Fixed
+  - **Import warning message** (`fractal.py`): when `fractalc` import fails, warning now correctly states "will be limited to PYTHON/CY HYBRID computation" if hybrid is loaded, or "PURE PYTHON computation" if not; previously always said "PYTHON/CY HYBRID" even when pure Python was the only option.
+  - 2 bugs on animation DB saving and loading partially done animations.
 
 ## 1.6.3 - 2026-06-03
 
