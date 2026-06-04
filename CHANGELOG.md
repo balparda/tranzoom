@@ -60,6 +60,7 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - **Import warning message** (`fractal.py`): when `fractalc` import fails, warning now correctly states "will be limited to PYTHON/CY HYBRID computation" if hybrid is loaded, or "PURE PYTHON computation" if not; previously always said "PYTHON/CY HYBRID" even when pure Python was the only option.
+  - 2 bugs on animation DB saving and loading partially done animations.
 
 ## 1.6.3 - 2026-06-03
 

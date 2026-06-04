@@ -361,9 +361,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
       )
     # see if we have a cache of this zoom
     zoom_data: frdb.ZoomData | None = db.FindZoom(zoom_params)
-    import pdb
-
-    pdb.set_trace()
     if zoom_data:
       video_hash = zoom_data['data_hash'] or ''
       old_path: pathlib.Path | None = (
