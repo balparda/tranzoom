@@ -115,6 +115,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   set_pal: palette.Palette = base.SET_PALETTE_OPTION,  # type: ignore[assignment]
   set_points: frame.SetHighlightAlgorithm | None = base.COLOR_SET_POINTS_OPTION,  # type: ignore[assignment]
   max_threads: int | None = base.MAX_THREADS_OPTION,  # type: ignore[assignment]
+  python_optimization: frame.Optimization | None = base.PYTHON_OPTIMIZATION_OPTION,  # type: ignore[assignment]
   # AI parameters from transai (EXCEPT model which is overridden to be a vision model!):
   model: str = base.MODEL_OPTION,  # type: ignore[assignment]
   spec_tokens: int | None = transai.SPEC_TOKENS_OPTION,  # type: ignore[assignment]
@@ -176,6 +177,7 @@ def Main(  # documentation is help/epilog/args # noqa: D103
     set_pal=set_pal,
     set_points=set_points,
     max_threads=max_threads,
+    python_optimization=python_optimization,
     model=model,
     spec_tokens=spec_tokens,
     seed=seed,

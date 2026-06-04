@@ -31,10 +31,7 @@ really ugly ways.
 
 import warnings
 import tqdm.rich
-import struct
 from tranzoom.core import frame, image
-from typing import cast
-import math
 from tqdm import TqdmExperimentalWarning
 
 from libc.stdlib cimport malloc, free
@@ -93,7 +90,6 @@ cdef extern from 'mpfr.h':
 
 
 import_gmpy2()
-
 
 
 cdef inline void mpfr_min_set(mpfr_t out, mpfr_t a, mpfr_t b) noexcept:
@@ -246,7 +242,7 @@ def MandelbrotComputation(object inp):
     int n_task
     Py_ssize_t width, height, depth
     Py_ssize_t px, py, px_count
-    Py_ssize_t escaped_at, extra_i
+    Py_ssize_t escaped_at
     int n_interior = 0
     double smooth_escape
 
@@ -555,7 +551,7 @@ def MandelbrotComputation(object inp):
             mpfr_add(mag_z2, zx2, zy2, MPFR_RNDN)
 
             if mpfr_greater_p(mag_z2, four):
-              for extra_i in range(frame.SMOOTH_EXTRA_ITERS):
+              for _ in range(frame.SMOOTH_EXTRA_ITERS):
                 escaped_at += 1
 
                 # zy = 2 * zx * zy + cy
@@ -821,7 +817,7 @@ def JuliaComputation(object inp):
     int n_task
     Py_ssize_t width, height, depth
     Py_ssize_t px, py, px_count
-    Py_ssize_t escaped_at, extra_i
+    Py_ssize_t escaped_at
     int n_interior = 0
     double smooth_escape
 
@@ -981,8 +977,9 @@ def JuliaComputation(object inp):
       mpfr_set(imag_delta, zero, MPFR_RNDN)
 
       # Julia fixed c-parameter.
-      mpfr_set(c_re, MPFR(<mpfr>inp.params.frm.point_re), MPFR_RNDN)
-      mpfr_set(c_im, MPFR(<mpfr>inp.params.frm.point_im), MPFR_RNDN)
+      # point_re / point_im are frame coordinates, so they are mpq, not mpfr.
+      mpfr_set_q(c_re, MPQ(<mpq>inp.params.frm.point_re), MPFR_RNDN)
+      mpfr_set_q(c_im, MPQ(<mpq>inp.params.frm.point_im), MPFR_RNDN)
 
       if inp.stats is not None:
         if (
@@ -1098,7 +1095,7 @@ def JuliaComputation(object inp):
             mpfr_add(mag_z2, zx2, zy2, MPFR_RNDN)
 
             if mpfr_greater_p(mag_z2, four):
-              for extra_i in range(frame.SMOOTH_EXTRA_ITERS):
+              for _ in range(frame.SMOOTH_EXTRA_ITERS):
                 escaped_at += 1
 
                 # zy = 2 * zx * zy + c_im

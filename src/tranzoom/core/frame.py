@@ -122,6 +122,14 @@ class SetHighlightAlgorithm(enum.Enum):
   IMAGINARY = 'imaginary'
 
 
+class Optimization(enum.Enum):
+  """Python Optimization options enum."""
+
+  PYTHON = 'python'
+  HYBRID = 'hybrid'
+  CYTHON = 'cython'
+
+
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class SerializingFractalObject(abstract_abc.ABC):
   """Base class for useful fractal objects that can be serialized to JSON with a hash."""

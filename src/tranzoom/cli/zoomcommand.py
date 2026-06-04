@@ -32,11 +32,8 @@ from tranzoom import tranz
 from tranzoom.cli import base
 from tranzoom.core import ai, fractal, frame, frdb, image
 
-_MANUAL_QUERY_WEIGHT: float = 0.8  # how much to weight the manual query vs the fractal score
+_AI_QUERY_WEIGHT: float = 0.8  # how much to weight the AI query vs the manual score
 _N_FRAMES_PER_DB_SAVE: int = 5  # how many frames to compute before saving to DB
-
-# gmpy2.mpq constants
-_MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 
 
 zoom_app = typer.Typer(
@@ -147,25 +144,26 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
       params,
       render,
       out,
-      config.max_threads,
-      config.model,
-      config.spec_tokens,
-      config.seed,
-      config.context,
-      config.temperature,
-      config.gpu,
-      config.gpu_layers,
-      config.fp16,
-      config.use_mmap,
-      config.flash,
-      config.kv_cache,
-      config.timeout,
-      query.strip() if query else None,
-      reason,
-      memory,
-      config.max_steps,
-      config.iterm,
-      _MANUAL_QUERY_WEIGHT,
+      max_threads=config.max_threads,
+      model=config.model,
+      optimization=config.python_optimization,
+      spec_tokens=config.spec_tokens,
+      seed=config.seed,
+      context=config.context,
+      temperature=config.temperature,
+      gpu=config.gpu,
+      gpu_layers=config.gpu_layers,
+      fp16=config.fp16,
+      use_mmap=config.use_mmap,
+      flash=config.flash,
+      kv_cache=config.kv_cache,
+      timeout=config.timeout,
+      query=query.strip() if query else None,
+      reason=reason,
+      memory=memory,
+      max_steps=config.max_steps,
+      iterm=config.iterm,
+      target_weight=_AI_QUERY_WEIGHT,
       print_comm=config.console.print,
       force=config.img_force_redo,
     )
@@ -209,7 +207,8 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
       params,
       render,
       out,
-      config.max_threads,
+      max_threads=config.max_threads,
+      optimization=config.python_optimization,
       max_steps=config.max_steps,
       iterm=config.iterm,
       print_comm=config.console.print,
@@ -297,7 +296,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
     f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%, and {len(all_depth)} depth frames, '
     f'{100.0 * len(all_depth) / zoom_params.n_frames:.2f}%), '
     f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step, '
-    f'{fractal.CORE_COMPUTATION}...'
+    f'{fractal.OptimizationToUse(config.python_optimization)[1]}...'
   )
   config.console.print(f'[yellow]ZOOM:[/] {zoom_params} ... {all_frames[-1]}\n')
   if zoom_params.scalar_magnification_per_step > image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
@@ -406,6 +405,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
             set_points=params.set_points,
             progress_bar=False,
             n_processes=n_threads,
+            optimization=config.python_optimization,
             print_comm=config.console.print,
           )
           depth_computations[idx] = (frm, max_iter, max_iter, stats)
@@ -574,6 +574,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR
         params, img, did_comp = db.DoComputation(
           params,  # send frm
           max_threads=config.max_threads,
+          optimization=config.python_optimization,
           stats=stats,
           print_comm=config.console.print,
           force=config.img_force_redo,

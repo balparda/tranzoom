@@ -26,26 +26,55 @@ from concurrent import futures
 
 from tranzoom.core import fractalfast, frame, image
 
-# load the Cython versions of the computations if available, otherwise fall back to the pure Python
-# versions in fractalfast.py; we do this at the module level so that the ComputeFractal function
-# can just call the appropriate computation without worrying about which implementation is used;
-# we also compile the vanilla fractalfast.py so that is a hybrid version, and we detect that with
-# the var fractalfast.CYTHON
-MANDELBROT_COMPUTATION: image.FractalComputation = fractalfast.MandelbrotComputation
-JULIA_COMPUTATION: image.FractalComputation = fractalfast.JuliaComputation
-CORE_COMPUTATION: str = 'PYTHON/CYTHON HYBRID' if fractalfast.CYTHON else 'PURE PYTHON'
+# load the Python computation, which may be either the pure Python or the Hybrid (Cython-optimized)
+# version depending on `cython.compiled` which we set into `fractalfast.CYTHON`; these are the
+# 4 methods in fractalfast.py and none other accessible from outside:
+PY_MANDELBROT_COMPUTATION: image.FractalComputation = fractalfast.MandelbrotComputation
+PY_JULIA_COMPUTATION: image.FractalComputation = fractalfast.JuliaComputation
+PY_NORM_ESCAPE: abc.Callable[[int, float], tuple[int, float]] = fractalfast.NormalizeSmoothEscape
+PY_ENCODE_INT_64: abc.Callable[[int, float], int] = fractalfast.EncodeIntFloatTo64
+# and some helpers --- DO NOT use directly, call OptimizationToUse()
+_PY_OPTIMIZATION: frame.Optimization = (
+  frame.Optimization.HYBRID if fractalfast.CYTHON else frame.Optimization.PYTHON
+)
+_PY_OPTIMIZATION_STR: str = (
+  'PYTHON/CY HYBRID' if _PY_OPTIMIZATION == frame.Optimization.HYBRID else 'PURE PYTHON'
+)
+
 # we already have either the pure Python or the Hybrid, we try to load the full Cython version
+CY_MANDELBROT_COMPUTATION: image.FractalComputation | None = None
+CY_JULIA_COMPUTATION: image.FractalComputation | None = None
+CY_NORM_ESCAPE: abc.Callable[[int, float], tuple[int, float]] | None = None
+CY_ENCODE_INT_64: abc.Callable[[int, float], int] | None = None
 try:
   from tranzoom.core import (  # type: ignore[attr-defined]
     fractalc,  # pyright: ignore[reportUnknownVariableType, reportAttributeAccessIssue]
   )
 
-  # if load succeeded attach the Cython versions
-  MANDELBROT_COMPUTATION = fractalc.MandelbrotComputation  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
-  JULIA_COMPUTATION = fractalc.JuliaComputation  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
-  CORE_COMPUTATION = 'CYTHON'  # pyright: ignore[reportConstantRedefinition]
+  # if load succeeded attach the Cython versions to the constants
+  CY_MANDELBROT_COMPUTATION = fractalc.MandelbrotComputation  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
+  CY_JULIA_COMPUTATION = fractalc.JuliaComputation  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
+  CY_NORM_ESCAPE = fractalc.NormalizeSmoothEscape  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
+  CY_ENCODE_INT_64 = fractalc.EncodeIntFloatTo64  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
 except ImportError:
-  logging.warning(f'Could not import fractalc.py Cython, will use {CORE_COMPUTATION} instead')
+  logging.warning(
+    f'Could not import fractalc.py Cython, will be limited to {_PY_OPTIMIZATION_STR} '
+    'computation: try running "make cython" in the project root to enable optimized computation...'
+  )
+# and some helpers --- DO NOT use directly, call OptimizationToUse()
+_CY_OPTIMIZATION: frame.Optimization = (
+  frame.Optimization.CYTHON
+  if (
+    CY_MANDELBROT_COMPUTATION is not None
+    and CY_JULIA_COMPUTATION is not None
+    and CY_NORM_ESCAPE is not None
+    and CY_ENCODE_INT_64 is not None
+  )
+  else _PY_OPTIMIZATION
+)
+_CY_OPTIMIZATION_STR: str = (
+  'CYTHON OPTIMIZED' if _CY_OPTIMIZATION == frame.Optimization.CYTHON else _PY_OPTIMIZATION_STR
+)
 
 
 # iter constants
@@ -57,11 +86,50 @@ class Error(image.Error):
   """Base fractal exception."""
 
 
+def OptimizationToUse(
+  optimization: frame.Optimization | None,
+) -> tuple[frame.Optimization, str]:
+  """Determine the optimization level to use for computation based on the requested and available.
+
+  Args:
+    optimization (frame.Optimization | None): The requested min optimization level, or None to
+        use the max available
+
+  Returns:
+    tuple[frame.Optimization, str]: A tuple containing the optimization level to use for
+        computation and a string describing the optimization level.
+
+  Raises:
+    Error: If the required optimization level is not available.
+
+  """
+  # decide on the optimization level
+  actual_opt: frame.Optimization = _CY_OPTIMIZATION  # this is the best available
+  actual_opt_msg: str = _CY_OPTIMIZATION_STR  # also best available
+  if optimization is None:
+    return (actual_opt, actual_opt_msg)
+  if optimization == frame.Optimization.CYTHON:
+    if actual_opt != frame.Optimization.CYTHON:
+      raise Error('Cython optimization requested but not available')
+  elif optimization == frame.Optimization.HYBRID:
+    if _PY_OPTIMIZATION != frame.Optimization.HYBRID:
+      raise Error('Hybrid optimization requested but not available')
+    actual_opt = _PY_OPTIMIZATION  # has to be Hybrid
+    actual_opt_msg = _PY_OPTIMIZATION_STR
+  elif optimization == frame.Optimization.PYTHON:
+    actual_opt = _PY_OPTIMIZATION  # could be Hybrid...
+    actual_opt_msg = _PY_OPTIMIZATION_STR
+  else:
+    raise Error(f'Invalid optimization level: {optimization}; bug! report!')
+  return (actual_opt, actual_opt_msg)
+
+
 def ComputeFractal(
   params: frame.ComputationParameters,
   *,
   progress_bar: bool = True,
   n_processes: int | None = None,
+  optimization: frame.Optimization | None = None,
   stats: image.FractalStats | None = None,
   print_comm: abc.Callable[[str], None] = print,
 ) -> tuple[frame.ComputationParameters, image.Image]:
@@ -72,6 +140,11 @@ def ComputeFractal(
     progress_bar (bool, optional): Whether to show a progress bar. Defaults to True.
     n_processes (int | None, optional): The number of processes to use for rendering. Defaults
         to None, which means to use all available CPU cores. Will be limited to MAX_CONCURRENCE.
+    optimization (frame.Optimization | None, optional): The optimization level to use for
+        computation. Defaults to None, which means to use the max available optimization.
+        If given then behavior is: given CYTHON, not available will raise an Error;
+        given HYBRID, not available will give an Error; given PYTHON, but loaded HYBRID,
+        will use HYBRID (but not CYTHON)
     stats (image.FractalStats | None, optional): Optional pre-collected stats from a sample run.
     print_comm (Callable[[str], None], optional): A callable to print messages. Defaults to print.
 
@@ -98,13 +171,34 @@ def ComputeFractal(
       set_points=params.set_points,
       progress_bar=progress_bar,
       n_processes=n_processes,
+      optimization=optimization,
       print_comm=print_comm,
     )
     params = dataclasses.replace(params, depth=max_iter)  # update params with the new max_iter
+  # decide on the optimization level
+  actual_opt: frame.Optimization
+  actual_opt_msg: str
+  actual_opt, actual_opt_msg = OptimizationToUse(optimization)
+  # get the right computation function based on the optimization level and the fractal type
+  computation: image.FractalComputation
+  if actual_opt == frame.Optimization.CYTHON:
+    if CY_MANDELBROT_COMPUTATION is None or CY_JULIA_COMPUTATION is None:
+      raise Error('Cython optimization should be loaded at this point; bug; report!')
+    computation = (
+      CY_MANDELBROT_COMPUTATION
+      if params.frm.fractal == frame.Fractal.MANDELBROT
+      else CY_JULIA_COMPUTATION
+    )
+  else:
+    computation = (
+      PY_MANDELBROT_COMPUTATION
+      if params.frm.fractal == frame.Fractal.MANDELBROT
+      else PY_JULIA_COMPUTATION
+    )
   # log the start of the render (not pre-computation anymore here)
   logging.info(
     f'{params.frm.fractal.value.upper()} using {n_processes} process(es) '
-    f'for {"PRE " if is_preprocess else ""}rendering - {CORE_COMPUTATION}'
+    f'for {"PRE " if is_preprocess else ""}rendering - {actual_opt_msg}'
   )
   # create inputs
   inp: list[image.FractalTaskInput] = [
@@ -119,9 +213,6 @@ def ComputeFractal(
   ]
   # execute in processes
   results: list[image.FractalTaskOutput]
-  computation: image.FractalComputation = (
-    MANDELBROT_COMPUTATION if params.frm.fractal == frame.Fractal.MANDELBROT else JULIA_COMPUTATION
-  )
   if n_processes == 1:
     # no multiprocessing, just run the single task directly in this process (also good for debug)
     results = [computation(inp[0])]
@@ -174,6 +265,7 @@ def FractalAdaptiveIterations(
   set_points: frame.SetHighlightAlgorithm | None,
   progress_bar: bool,
   n_processes: int,
+  optimization: frame.Optimization | None = None,
   print_comm: abc.Callable[[str], None],
 ) -> tuple[int, image.FractalStats]:
   """Estimate a suitable max_iter for the full image by rendering a small test image.
@@ -196,6 +288,11 @@ def FractalAdaptiveIterations(
         interior Set points, either None, or one of the SetHighlightAlgorithm values
     progress_bar (bool): Whether to show a progress bar during the test render.
     n_processes (int): The number of processes to use for the test render.
+    optimization (frame.Optimization | None, optional): The optimization level to use for
+        computation. Defaults to None, which means to use the max available optimization.
+        If given then behavior is: given CYTHON, not available will raise an Error;
+        given HYBRID, not available will give an Error; given PYTHON, but loaded HYBRID,
+        will use HYBRID (but not CYTHON)
     print_comm (Callable[[str], None]): A callable to print messages
 
   Returns:
@@ -220,6 +317,7 @@ def FractalAdaptiveIterations(
       ),
       progress_bar=progress_bar,
       n_processes=n_processes,
+      optimization=optimization,
       print_comm=print_comm,
     )[1]  # we only need the image, not the updated params, from this test render
     # estimate the needed iterations for the full image based on the smallest image; check stats

@@ -953,12 +953,13 @@ class FractalDatabase:
     params: frame.ComputationParameters,
     render: image.RenderParameters,
     out: image.ImageOutputConfig,
+    *,
     add_serial: int | None,
     tm: int | None,
     max_threads: int | None,
     iterm: bool,
     print_comm: abc.Callable[[str], None],
-    *,
+    optimization: frame.Optimization | None = None,
     force: bool = False,
   ) -> tuple[frame.ComputationParameters, image.Image | None, bytes, str, pathlib.Path]:
     """Compute a fractal image and return the result unsaved; the shared rendering primitive.
@@ -987,6 +988,11 @@ class FractalDatabase:
       max_threads (int | None): Maximum threads for parallel rendering; None means all CPUs.
       iterm (bool): If True, print the image inline in iTerm2 after rendering.
       print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
+      optimization (frame.Optimization | None, optional): The optimization level to use for
+        computation. Defaults to None, which means to use the max available optimization.
+        If given then behavior is: given CYTHON, not available will raise an Error;
+        given HYBRID, not available will give an Error; given PYTHON, but loaded HYBRID,
+        will use HYBRID (but not CYTHON)
       force (bool): If True, will force re-computation of the image even if it is found in the DB
 
     Returns:
@@ -1012,7 +1018,11 @@ class FractalDatabase:
     # computation
     img: image.Image
     params, img, _ = self.DoComputation(
-      params, max_threads=max_threads, print_comm=print_comm, force=force
+      params,
+      max_threads=max_threads,
+      optimization=optimization,
+      print_comm=print_comm,
+      force=force,
     )
     print_comm('')
     # render
@@ -1036,6 +1046,7 @@ class FractalDatabase:
     params: frame.ComputationParameters,
     *,
     max_threads: int | None,
+    optimization: frame.Optimization | None = None,
     stats: image.FractalStats | None = None,
     print_comm: abc.Callable[[str], None],
     force: bool = False,
@@ -1048,6 +1059,11 @@ class FractalDatabase:
       params (frame.ComputationParameters): The computation parameters for the frame, including
           width, height, and other settings.
       max_threads (int | None): Maximum threads for parallel rendering; None means all CPUs.
+      optimization (frame.Optimization | None, optional): The optimization level to use for
+        computation. Defaults to None, which means to use the max available optimization.
+        If given then behavior is: given CYTHON, not available will raise an Error;
+        given HYBRID, not available will give an Error; given PYTHON, but loaded HYBRID,
+        will use HYBRID (but not CYTHON)
       stats (image.FractalStats | None, optional): Optional pre-collected stats from a sample run.
       print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
       force (bool): If True, will force re-computation of the image even if it is found in the DB
@@ -1066,7 +1082,8 @@ class FractalDatabase:
     print_comm(
       f'{params.width} x {params.height} '
       f'{params.frm.fractal.value.capitalize()}{set_param}, '
-      f'10^{params.frm.magnification[1]:.3f} magnitude, {fractal.CORE_COMPUTATION}...'
+      f'10^{params.frm.magnification[1]:.3f} magnitude, '
+      f'{fractal.OptimizationToUse(optimization)[1]}...'
     )
     print_comm(f'[yellow]Compute:[/] {params}')
     # do we know about this render?
@@ -1099,6 +1116,7 @@ class FractalDatabase:
           params,  # remember that this params will be updated with the actual depth now!
           progress_bar=True,
           n_processes=max_threads,
+          optimization=optimization,
           stats=stats,
           print_comm=print_comm,
         )

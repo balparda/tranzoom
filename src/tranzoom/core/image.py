@@ -1186,7 +1186,7 @@ class Image:
         the pixel at coordinates (x, y) is stored at index (y * width + x) in the array.
     stats (FractalStats | None): Optional stats about the fractal, collected during rendering;
         DO NOT COUNT on this being present unless this was a sample 16.16 render
-        (see fractal._FractalAdaptiveIterations) where the stats are collected.
+        (see fractal.FractalAdaptiveIterations) where the stats are collected.
     ext_hist (Image.Histogram | None): Histogram for exterior (escaped) pixels; None until
         RebuildHistograms() is called.
     int_hist (Image.Histogram | None): Histogram for interior (Set) pixels, with values
