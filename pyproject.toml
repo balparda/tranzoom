@@ -22,7 +22,7 @@ build-backend = "poetry.core.masonry.api"
 name = "tranzoom"
 version = "1.8.0"  # also update src/tranzoom/__init__.py
 
-description = "Fractal manipulation with LLMs"
+description = "Mandelbrot/Julia Fractal generation and manipulation with AI/LLMs"
 license = "Apache-2.0"
 authors = [
   { name = "Daniel Balparda", email = "balparda@github.com" },

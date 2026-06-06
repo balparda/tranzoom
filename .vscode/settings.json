@@ -146,6 +146,7 @@
     "distlib",
     "dmypy",
     "docstrings",
+    "Dores",
     "elif",
     "ensurepath",
     "envrc",
