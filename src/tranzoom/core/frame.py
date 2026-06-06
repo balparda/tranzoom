@@ -303,7 +303,7 @@ class Frame(SerializingFractalObject):
       return f'[{fractal_str}: ({cx}, {cy}) {deltas}]'
     if self.fractal == Fractal.JULIA:
       return f'[{fractal_str}: ({cx}, {cy}) {deltas} @ ({self.point_re}, {self.point_im})]'
-    raise Error(f'Unknown fractal type: {self.fractal}')
+    raise Error(f'Unknown fractal type: {self.fractal}')  # pragma: no cover
 
   @property
   def center(self) -> tuple[gmpy2.mpq, gmpy2.mpq]:
