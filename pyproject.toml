@@ -265,7 +265,7 @@ preview = true  # if you want new features being previewed
 ####################################################################################################
 [tool.mypy]
 
-python_version = "3.14"
+python_version = "3.12"
 mypy_path = [ "src", "typings" ]
 
 warn_unused_ignores = false  # VSCode always has more to say, so this is important
@@ -286,7 +286,7 @@ strict = true
 [tool.pyright]
 
 typeCheckingMode = "strict"
-pythonVersion = "3.14"
+pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
 
