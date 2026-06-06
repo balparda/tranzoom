@@ -2,7 +2,9 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # tranZoom
 
-Fractal manipulation with LLMs
+Mandelbrot/Julia Fractal generation and manipulation with AI/LLMs.
+
+PyPI: <https://pypi.org/project/tranzoom/>
 
 - **Primary use case:** Render ultra-deep [Mandelbrot Set](https://en.wikipedia.org/wiki/Mandelbrot_set) and [Julia Set](https://en.wikipedia.org/wiki/Julia_set) fractal images with arbitrary precision and use AI/LLMs to guide fractal zoom sequences
 - **Works with:** Local filesystem (PNG output), complex-plane coordinates, local LLM vision models (via LMStudio + `transai`)
@@ -11,7 +13,10 @@ Fractal manipulation with LLMs
 
 **tranZoom** is a Python CLI tool for rendering the Mandelbrot set and Julia Sets at virtually unlimited zoom depth using arbitrary-precision arithmetic (`gmpy2`), and for navigating fractals using AI. The goal is to be able to zoom so deep that standard double-precision floating point becomes meaningless — tranZoom automatically computes the required precision and renders faithfully at any scale. The `tranz zoom ai` command uses local LLM vision models (via `transai` / LMStudio) to evaluate each rendered frame, score nine sectors for visual interest, and autonomously navigate toward the most promising region of the fractal.
 
-Since version 1.0.0 it is a PyPI package: <https://pypi.org/project/tranzoom/>
+***Dedications:***
+
+- *Daniel Balparda <balparda@github.com>:* ***to my mother*** **Maria Suzana B. C.,** ***who showed me the beauty hidden in fractals, primes, and numbers too vast for the mind to hold — yet somehow still small beside her love.***
+- *Bella Keri <BellaKeri@github.com>:* ***to my mother*** **Maria das Dores S.,** ***who taught me that wonder is a lifelong practice, and that every new thing learned is another light brought into the world.***
 
 Built with:
 
