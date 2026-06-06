@@ -7,12 +7,10 @@ install:
 	poetry install
 
 init:
-	@echo "Initializing Poetry environment with in-project virtualenv and Python 3.12"
+	@echo "Initializing Poetry environment with in-project virtualenv and Python 3.14"
 	poetry config virtualenvs.in-project true
-	poetry env use python3.12
+	poetry env use python3.14
 	poetry sync
-	poetry run python build_ext.py build_ext --inplace || echo "Cython build skipped (compiler/libs missing)"
-	poetry run tranz --help
 
 fmt:
 	poetry run ruff format .

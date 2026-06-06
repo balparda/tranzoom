@@ -20,7 +20,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 
 name = "tranzoom"
-version = "1.7.0"  # also update src/tranzoom/__init__.py
+version = "1.8.0"  # also update src/tranzoom/__init__.py
 
 description = "Fractal manipulation with LLMs"
 license = "Apache-2.0"
@@ -156,7 +156,7 @@ poetry-plugin-export = "^1.10"
 ####################################################################################################
 [tool.ruff]
 
-target-version = "py312"
+target-version = "py314"
 line-length = 100
 indent-width = 2
 
@@ -265,7 +265,7 @@ preview = true  # if you want new features being previewed
 ####################################################################################################
 [tool.mypy]
 
-python_version = "3.12"
+python_version = "3.14"
 mypy_path = [ "src", "typings" ]
 
 warn_unused_ignores = false  # VSCode always has more to say, so this is important
@@ -286,7 +286,7 @@ strict = true
 [tool.pyright]
 
 typeCheckingMode = "strict"
-pythonVersion = "3.12"
+pythonVersion = "3.14"
 venvPath = "."
 venv = ".venv"
 

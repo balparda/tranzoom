@@ -900,7 +900,7 @@ Render: {[PNG, SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 824462012
 Render 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40/40  [ 0:00:04 < 0:00:00 , 9 fr/s ]
 Render: DONE
 
-Success: GIF 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab' in 3.080 s (depth) + 2.062 min (frames) + 10.597 s (render)
+Success: GIF 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab' in 1.409 s (depth) + 33.911 s (frames) + 6.087 s (render)
 Saved GIF to 'mandel-e631ffec80dd902e375e.gif', 1.757 MiB
 ```
 
@@ -1117,14 +1117,14 @@ On **Linux**:
 sudo apt-get update && sudo apt-get upgrade
 sudo apt-get install git python3 python3-dev python3-venv build-essential software-properties-common
 sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt-get update
-sudo apt-get install python3.12  # or python3.13 or python3.14
+sudo apt-get install python3.14  # or python3.12 or python3.13
 ```
 
 On **macOS**:
 
 ```sh
 brew update && brew upgrade && brew cleanup -s
-brew install git python@3.12  # or python3.13 or python3.14
+brew install git python@3.14  # or python3.12 or python3.13
 ```
 
 Note: `gmpy2` requires the GMP, MPFR, and MPC C libraries. On macOS: `brew install gmp mpfr mpc`. On Linux: `sudo apt-get install libgmp-dev libmpfr-dev libmpc-dev`.
@@ -1162,7 +1162,7 @@ cd tranzoom
 #### Create environment and install dependencies
 
 ```sh
-poetry env use python3.12    # creates the .venv with the correct Python version
+poetry env use python3.14    # creates the .venv with the correct Python version
 poetry sync                  # install all dependencies from poetry.lock
 poetry env info              # verify environment
 poetry run tranz --help      # smoke test
