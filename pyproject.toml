@@ -333,6 +333,7 @@ markers = [
 
 ]
 
+# TODO: in ci.yaml/3.14 we get "PytestConfigWarning: Unknown config option" for these 3:
 typeguard-packages = [ "tranzoom", "scripts" ]
 typeguard-forward-ref-policy = "ERROR"
 typeguard-collection-check-strategy = "ALL_ITEMS"
