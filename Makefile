@@ -1,12 +1,13 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: install init fmt lint type test integration cov flakes cython clean-cython precommit docs req build ci
+.PHONY: install init fmt lint type test integration cov flakes precommit docs req clean-cython build ci
 
 install:
 	poetry install
 
 init:
+	@echo "Initializing Poetry environment with in-project virtualenv and Python 3.12"
 	poetry config virtualenvs.in-project true
 	poetry env use python3.12
 	poetry sync
@@ -34,15 +35,6 @@ cov:
 flakes:
 	poetry run pytest --flake-finder --flake-runs=100 -q tests
 
-cython:
-	@echo "Building Cython extensions"
-	poetry run scripts/build_extensions.py
-	@echo "Done: fractal* extensions built"
-
-clean-cython:
-	@echo "Removing Cython build artifacts: c/so/pyd/dylib files and build/ directory"
-	rm -rf build/ src/tranzoom/core/*.c src/tranzoom/core/*.so src/tranzoom/core/*.pyd src/tranzoom/core/*.dylib
-
 precommit:
 	poetry run pre-commit run --all-files
 
@@ -51,10 +43,16 @@ docs:
 	poetry run tranz markdown > tranz.md
 
 req:
+	@echo "Generating requirements.txt from Poetry dependencies"
 	poetry export --format requirements.txt --without-hashes --output requirements.txt
 
-build:
+clean-cython:
+	@echo "Removing Cython build artifacts: c/so/pyd/dylib files and build/ directory"
+	rm -rf build/ src/tranzoom/core/*.c src/tranzoom/core/*.so src/tranzoom/core/*.pyd src/tranzoom/core/*.dylib
+
+build: clean-cython
+	@echo "Building source and wheel distributions with Poetry"
 	poetry build --clean -vv
 
-ci: clean-cython cython cov integration precommit docs req build
-	@echo "CI checks passed! Generated docs & requirements.txt."
+ci: build cov integration precommit docs req build
+	@echo "Success: Built. CI checks passed! Lint. Generated docs & requirements.txt."

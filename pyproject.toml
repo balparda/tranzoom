@@ -6,8 +6,12 @@
 [build-system]
 
 requires = [
-  "Cython>=3.2",  # if you change here, also change "dependencies" below
+
   "poetry-core>=2.4.1",
+
+  # required for Cython compilation of fractalc.pyx at build time
+  "Cython>=3.2",  # if you change here, also change "dependencies" below
+  "gmpy2>=2.3",  # if you change here, also change "dependencies" below
   "setuptools>=82.0",  # if you change here, also change "dependencies" below
 ]
 build-backend = "poetry.core.masonry.api"
@@ -54,7 +58,7 @@ dependencies = [
   "click==8.3.3",  # TODO: >=8.4 is waiting for typer type-stubs compatibility (probably >0.25.1)
   "cryptography>=48.0",
   "Cython>=3.2",  # if you change here, also change "requires" above
-  "gmpy2>=2.3",
+  "gmpy2>=2.3",  # if you change here, also change "requires" above
   "ImageIO>=2.37",
   "imageio-ffmpeg>=0.6",
   "numpy>=2.4",
@@ -243,13 +247,6 @@ preview = true  # if you want new features being previewed
 
 [tool.ruff.lint.per-file-ignores]
 
-"build_ext.py" = [
-  "INP001",   # root-level build script, not part of a Python package
-  "S404",     # subprocess module is acceptable in a build script
-  "S603",     # subprocess call with trusted, literal input args
-  "S607",     # partial executable path is acceptable for `brew` in a build script
-]
-
 "scripts*/**/*.py" = [
   "S101",     # Use of `assert` detected
   "PT018",    # Assertion should be broken down into multiple parts
@@ -346,5 +343,4 @@ omit = [
   "*/__init__.py",  # keep these free of real code!
   "*/__main__.py",
   "*/_template.py",
-  "build_ext.py",
 ]

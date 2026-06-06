@@ -42,27 +42,9 @@ def test_installed_cli_smoke(tmp_path: pathlib.Path) -> None:
     vpy, bin_dir, expected_version, _APP_NAMES
   )
   # basic command smoke tests
-  _CompileCython(vpy)
   _MandelbrotSeahorseTailCall(cli_paths)
   _AnimatedSeahorseTailCall(cli_paths)
   _JuliaSuzanaWaveCall(cli_paths)
-
-
-def _CompileCython(python_path: pathlib.Path) -> None:
-  """Call the installed CLI to render the Seahorse Tail image, check the output file and metadata.
-
-  Should be 100% equivalent to the `scripts/make_examples.sh` line to "Render Seahorse Tail".
-  """
-  r = tbase.Run(
-    # call python directly to compile; if cached, this is a quick call
-    [
-      str(python_path),
-      'build_ext.py',
-      'build_ext',
-      '--inplace',
-    ]
-  )
-  assert r.returncode == 0, f'compilation failed:\n{r.stderr}'
 
 
 def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
@@ -199,7 +181,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
         '--no-date',  # --no-date makes the filename deterministic (hash-only)
         '--db',  # DB makes this a streaming DB-rich generation
         '--opt',
-        'python',  # TODO: does NOT pass as CYTHON?????? WHY????
+        'cython',
         '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
         tmp_dir,
         '--db-path',  # make sure DB will be in temp too!
@@ -325,7 +307,7 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path]) -> None:
         '--db',
         '--force',
         '--opt',
-        'python',
+        'cython',
         '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
         tmp_dir,
         '--db-path',  # make sure DB will be in temp too!
