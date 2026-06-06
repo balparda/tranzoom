@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
+  - [1.8.0 - 2026-06-06](#180---2026-06-06)
   - [1.7.0 - 2026-06-04](#170---2026-06-04)
   - [1.6.3 - 2026-06-03](#163---2026-06-03)
   - [1.6.2 - 2026-06-02](#162---2026-06-02)
@@ -37,6 +38,21 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future fixes.
+
+## 1.8.0 - 2026-06-06
+
+- Added
+  - **Automated Cython wheel building** (`pyproject.toml`, `build_extensions.py`): Poetry now automatically builds Cython extensions when creating wheels via `poetry build`; the `[tool.poetry.build]` section specifies `scripts/build_extensions.py` as the build script; this ensures wheels include compiled `.so`/`.pyd`/`.dylib` files for maximum performance out-of-the-box; no separate `make cython` step needed before `poetry build`.
+  - **Wheel-aware integration tests** (`tests_integration/test_installed_cli.py`): integration test now assumes the package is already installed in the current environment (by CI workflow or manual `poetry build` + `pip install dist/*.whl`); test uses `shutil.which('tranz')` to locate the installed console script instead of building/installing a wheel itself; simpler test logic with clear documentation on how to run locally.
+
+- Changed
+  - **Build system dependencies** (`pyproject.toml`): `Cython`, `gmpy2`, and `setuptools` added to `[build-system] requires` section; these are now explicitly declared as build-time dependencies needed for wheel compilation; ensures Poetry installs them automatically when running `poetry build`; still remain in `[project.dependencies]` for runtime use and in-place development compilation with `make cython`.
+  - **CI workflow** (`.github/workflows/ci.yaml`): integration job now explicitly builds wheel with `poetry build -f wheel --clean`, installs it into a clean venv (`.venv-wheel-test`), then runs pytest from that venv; test validates the wheel's console scripts work correctly in a fresh environment; separates wheel building from test execution for clearer CI structure.
+  - **Wheel includes extensions** (`pyproject.toml`): `include` section updated to bundle compiled extensions (`.so`, `.pyd`, `.dylib`) in wheels; sdist includes Cython source files (`.pyx`) and generated C files (`.c`) for source builds; wheels ship with pre-compiled extensions for immediate performance on supported platforms.
+  - **Integration test documentation** (`README.md`): updated testing section to reflect new workflow where wheel is built separately, then installed, then tested; local development instructions now show explicit steps: `poetry build -f wheel --clean`, then `pip install dist/*.whl`, then `pytest tests_integration/`; clarifies that CI automates this entire sequence.
+
+- Fixed
+  - **Removed obsolete wheel-building code** (`tests_integration/test_installed_cli.py`): removed calls to `config.EnsureAndInstallWheel()` and `config.EnsureConsoleScriptsPrintExpectedVersion()` from transcrypto; these were redundant since the CI workflow already builds/installs the wheel before running tests; test now directly uses the already-installed CLI via `shutil.which('tranz')`.
 
 ## 1.7.0 - 2026-06-04
 

@@ -1,16 +1,27 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Integration tests: build wheel, install into a fresh venv, run the installed CLI.
+"""Integration tests: test the installed CLI from a wheel.
 
 Why this exists (vs normal unit tests):
 - Unit tests (CliRunner) validate CLI wiring while running from the source tree.
-- This test validates *packaging*: the wheel builds, installs, and the console script works.
+- This test validates *packaging*: the wheel builds correctly, installs correctly, and the console
+  scripts work when invoked in a clean environment.
 
 What we verify:
-- `mandel --version` prints the expected version.
-- `mandel gen` renders a Seahorse Tail image with deterministic output and verifies it
-- `zoom --version` prints the expected version.
+- `tranz --version` prints the expected version.
+- `tranz image mandel` renders a Seahorse Tail image with deterministic output and metadata.
+- `tranz zoom` renders an animated GIF with correct frames and metadata.
+
+How to run locally:
+1. Build wheel: `poetry build -f wheel --clean`
+2. Install into test venv:
+   `python -m venv .venv-wheel-test && .venv-wheel-test/bin/python -m pip install dist/*.whl`
+3. Run tests:
+   `.venv-wheel-test/bin/python -m pip install pytest`
+   `.venv-wheel-test/bin/python -m pytest tests_integration/`
+
+In CI: the wheel is built and installed by the workflow before running these tests.
 """
 
 # TODO: add specific CYTHON tests where the same small images are generated with both pipelines
@@ -18,36 +29,40 @@ What we verify:
 from __future__ import annotations
 
 import pathlib
+import shutil
 import tempfile
 
 import pytest
 from transcrypto.utils import base as tbase
-from transcrypto.utils import config
 
 import tranzoom
 from tranzoom.cli import base
 from tranzoom.core import image
 
-_APP_NAMES: set[str] = {'tranz'}  # this is the console scripts names
-
 
 @pytest.mark.slow
 @pytest.mark.integration
-def test_installed_cli_smoke(tmp_path: pathlib.Path) -> None:
-  """Build wheel, install into a clean venv, run the installed CLIs."""
-  repo_root: pathlib.Path = pathlib.Path(__file__).resolve().parents[1]
+def test_installed_cli_smoke() -> None:
+  """Test the installed CLI from the current environment."""
+  # find the installed console script; will raise if not found
+  cli_path: str | None = shutil.which('tranz')
+  if cli_path is None:
+    pytest.fail(
+      'Console script "tranz" not found in PATH; ensure the wheel is installed in current venv'
+    )
+  cli: pathlib.Path = pathlib.Path(cli_path)
+  # verify version
+  result = tbase.Run([str(cli), '--version'])
   expected_version: str = tranzoom.__version__
-  vpy, bin_dir = config.EnsureAndInstallWheel(repo_root, tmp_path, expected_version, _APP_NAMES)
-  cli_paths: dict[str, pathlib.Path] = config.EnsureConsoleScriptsPrintExpectedVersion(
-    vpy, bin_dir, expected_version, _APP_NAMES
-  )
+  if (actual := result.stdout.strip()) != expected_version:
+    pytest.fail(f'CLI version mismatch: expected {expected_version!r}, got {actual!r}')
   # basic command smoke tests
-  _MandelbrotSeahorseTailCall(cli_paths)
-  _AnimatedSeahorseTailCall(cli_paths)
-  _JuliaSuzanaWaveCall(cli_paths)
+  _MandelbrotSeahorseTailCall(cli)
+  _AnimatedSeahorseTailCall(cli)
+  _JuliaSuzanaWaveCall(cli)
 
 
-def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
+def _MandelbrotSeahorseTailCall(cli: pathlib.Path) -> None:
   """Call the installed CLI to render the Seahorse Tail image, check the output file and metadata.
 
   Should be 100% equivalent to the `scripts/make_examples.sh` line to "Render Seahorse Tail".
@@ -57,7 +72,7 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
     r = tbase.Run(
       # call the console script directly to test the installed CLI
       [
-        str(cli_paths['tranz']),
+        str(cli),
         '--no-date',  # --no-date makes the filename deterministic (hash-only)
         '--db',
         '--force',
@@ -167,7 +182,7 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
     }
 
 
-def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
+def _AnimatedSeahorseTailCall(cli: pathlib.Path) -> None:
   """Call the installed CLI to render the Seahorse Tail GIF image, check the GIF file and metadata.
 
   Should be 100% equivalent to `scripts/make_examples.sh` line to "Render Animated Seahorse Tail".
@@ -177,7 +192,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
     r = tbase.Run(
       # call the console script directly to test the installed CLI
       [
-        str(cli_paths['tranz']),
+        str(cli),
         '--no-date',  # --no-date makes the filename deterministic (hash-only)
         '--db',  # DB makes this a streaming DB-rich generation
         '--opt',
@@ -292,7 +307,7 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
     }
 
 
-def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path]) -> None:
+def _JuliaSuzanaWaveCall(cli: pathlib.Path) -> None:
   """Call the installed CLI to render the Julia Suzana Wave image, check the output file / metadata.
 
   Should be 100% equivalent to the `scripts/make_examples.sh` line to "Render Julia Suzana Wave".
@@ -302,7 +317,7 @@ def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path]) -> None:
     r = tbase.Run(
       # call the console script directly to test the installed CLI
       [
-        str(cli_paths['tranz']),
+        str(cli),
         '--no-date',  # --no-date makes the filename deterministic (hash-only)
         '--db',
         '--force',

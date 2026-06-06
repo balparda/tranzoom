@@ -310,6 +310,7 @@
     "seafoam",
     "setuptools",
     "shellingham",
+    "shutil",
     "simplefilter",
     "socksio",
     "sphinxcontrib",
