@@ -244,3 +244,107 @@ def test_frame_hash_stability_and_serialization_consistency(
 def test_depth_smoothing(inp: list[int], out: list[int]) -> None:
   """Test."""
   assert frame.SmoothDepths(inp) == out
+
+
+def test_frame_errors() -> None:
+  """Test."""
+  with pytest.raises(frame.Error, match=r'Unknown fractal type'):
+    frame.Frame(
+      fractal='sss',  # type: ignore[arg-type]
+      top_re=gmpy2.mpq(2),
+      top_im=gmpy2.mpq(2),
+      bottom_re=gmpy2.mpq(3),
+      bottom_im=gmpy2.mpq(1),
+      point_re=gmpy2.mpq(0),
+      point_im=gmpy2.mpq(0),
+    )
+  with pytest.raises(frame.Error, match=r'top_re.*must be < bottom_re'):
+    frame.Frame(
+      fractal=frame.Fractal('mandelbrot'),
+      top_re=gmpy2.mpq(3),
+      top_im=gmpy2.mpq(2),
+      bottom_re=gmpy2.mpq(2),
+      bottom_im=gmpy2.mpq(1),
+      point_re=gmpy2.mpq(0),
+      point_im=gmpy2.mpq(0),
+    )
+  with pytest.raises(frame.Error, match=r'top_im.*must be > bottom_im'):
+    frame.Frame(
+      fractal=frame.Fractal('mandelbrot'),
+      top_re=gmpy2.mpq(-2),
+      top_im=gmpy2.mpq(-1),
+      bottom_re=gmpy2.mpq(2),
+      bottom_im=gmpy2.mpq(1),
+      point_re=gmpy2.mpq(0),
+      point_im=gmpy2.mpq(0),
+    )
+  with pytest.raises(
+    frame.Error, match=r'Mandelbrot frames should not have a non-zero point coordinate'
+  ):
+    frame.Frame(
+      fractal=frame.Fractal('mandelbrot'),
+      top_re=gmpy2.mpq(-2),
+      top_im=gmpy2.mpq(2),
+      bottom_re=gmpy2.mpq(2),
+      bottom_im=gmpy2.mpq(1),
+      point_re=gmpy2.mpq(1),
+      point_im=gmpy2.mpq(0),
+    )
+  with pytest.raises(
+    frame.Error, match=r'Mandelbrot frames should not have a non-zero point coordinate'
+  ):
+    frame.Frame(
+      fractal=frame.Fractal('mandelbrot'),
+      top_re=gmpy2.mpq(-2),
+      top_im=gmpy2.mpq(2),
+      bottom_re=gmpy2.mpq(2),
+      bottom_im=gmpy2.mpq(1),
+      point_re=gmpy2.mpq(0),
+      point_im=gmpy2.mpq(2),
+    )
+
+
+def test_frame_asserts() -> None:
+  """Test."""
+  # mandelbrot frame
+  frm = frame.Frame(
+    fractal=frame.Fractal('mandelbrot'),
+    top_re=gmpy2.mpq('-2/3'),
+    top_im=gmpy2.mpq('1/2'),
+    bottom_re=gmpy2.mpq('4/5'),
+    bottom_im=gmpy2.mpq('1/4'),
+    point_re=gmpy2.mpq(0),
+    point_im=gmpy2.mpq(0),
+  )
+  assert str(frm) == '[MANDELBROT: (1/15, 3/8) ± (22/15, 1/4)]'
+  assert frm.center == (gmpy2.mpq(1, 15), gmpy2.mpq(3, 8))
+  assert frm.size == (gmpy2.mpq(22, 15), gmpy2.mpq(1, 4))
+  assert not frm.is_square
+  # mandelbrot frame, square
+  frm = frame.Frame(
+    fractal=frame.Fractal('mandelbrot'),
+    top_re=gmpy2.mpq(-4),
+    top_im=gmpy2.mpq(4),
+    bottom_re=gmpy2.mpq(4),
+    bottom_im=gmpy2.mpq(-4),
+    point_re=gmpy2.mpq(0),
+    point_im=gmpy2.mpq(0),
+  )
+  assert frm.is_square
+  assert str(frm) == '[MANDELBROT: (0, 0) ± 8]'
+  assert frm.center == (gmpy2.mpq(0), gmpy2.mpq(0))
+  assert frm.size == (gmpy2.mpq(8), gmpy2.mpq(8))
+  # julia frame
+  frm = frame.Frame(
+    fractal=frame.Fractal('julia'),
+    top_re=gmpy2.mpq(-2),
+    top_im=gmpy2.mpq(2),
+    bottom_re=gmpy2.mpq(2),
+    bottom_im=gmpy2.mpq(1),
+    point_re=gmpy2.mpq('1/2'),
+    point_im=gmpy2.mpq('15/17'),
+  )
+  assert str(frm) == '[JULIA: (0, 3/2) ± (4, 1) @ (1/2, 15/17)]'
+  assert frm.center == (gmpy2.mpq(0), gmpy2.mpq(3, 2))
+  assert frm.size == (gmpy2.mpq(4), gmpy2.mpq(1))
+  assert not frm.is_square
