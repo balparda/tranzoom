@@ -2050,7 +2050,7 @@ def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDi
           raw_hash = str(mp4_meta[META_IMAGE_HASH_KEY])
         else:
           logging.error('DO NOT trust this MP4 hash')
-      except json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError:
+      except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError):
         logging.error('MP4 comment metadata not valid JSON, ignoring; DO NOT trust this MP4 hash')  # noqa: TRY400
     if not raw_hash:
       logging.error(
@@ -2080,7 +2080,7 @@ def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDi
             raw_hash = str(pil_info[META_IMAGE_HASH_KEY])
           else:
             logging.error('DO NOT trust this GIF hash')
-        except json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError:
+        except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError):
           # if comment is not valid JSON, just keep the original pil_info
           logging.error('GIF image has comment metadata but it is not valid JSON, ignoring it')  # noqa: TRY400
           logging.error('DO NOT trust this GIF hash')  # noqa: TRY400

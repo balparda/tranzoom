@@ -43,7 +43,7 @@ def _GMPLibraryDirs() -> list[str]:
       lib_dir: pathlib.Path = pathlib.Path(prefix) / 'lib'
       if lib_dir.is_dir():
         dirs.append(str(lib_dir))
-    except subprocess.CalledProcessError, FileNotFoundError:
+    except (subprocess.CalledProcessError, FileNotFoundError):
       pass  # brew unavailable or package not installed; linker falls back to system paths
   return dirs
 
