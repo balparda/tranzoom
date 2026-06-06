@@ -3,23 +3,14 @@
 
 """Integration tests: test the installed CLI from a wheel.
 
-Why this exists (vs normal unit tests):
-- Unit tests (CliRunner) validate CLI wiring while running from the source tree.
-- This test validates *packaging*: the wheel builds correctly, installs correctly, and the console
-  scripts work when invoked in a clean environment.
-
 What we verify:
 - `tranz --version` prints the expected version.
 - `tranz image mandel` renders a Seahorse Tail image with deterministic output and metadata.
 - `tranz zoom` renders an animated GIF with correct frames and metadata.
 
 How to run locally:
-1. Build wheel: `poetry build -f wheel --clean`
-2. Install into test venv:
-   `python -m venv .venv-wheel-test && .venv-wheel-test/bin/python -m pip install dist/*.whl`
-3. Run tests:
-   `.venv-wheel-test/bin/python -m pip install pytest`
-   `.venv-wheel-test/bin/python -m pytest tests_integration/`
+1. Build wheel: `make build`
+2. Run tests: `make integration`
 
 In CI: the wheel is built and installed by the workflow before running these tests.
 """
@@ -30,6 +21,7 @@ from __future__ import annotations
 
 import pathlib
 import shutil
+import subprocess  # noqa: S404
 import tempfile
 
 import pytest
@@ -52,14 +44,19 @@ def test_installed_cli_smoke() -> None:
     )
   cli: pathlib.Path = pathlib.Path(cli_path)
   # verify version
-  result = tbase.Run([str(cli), '--version'])
-  expected_version: str = tranzoom.__version__
-  if (actual := result.stdout.strip()) != expected_version:
-    pytest.fail(f'CLI version mismatch: expected {expected_version!r}, got {actual!r}')
+  _VersionCall(cli)
   # basic command smoke tests
   _MandelbrotSeahorseTailCall(cli)
   _AnimatedSeahorseTailCall(cli)
   _JuliaSuzanaWaveCall(cli)
+
+
+def _VersionCall(cli: pathlib.Path) -> None:
+  result: subprocess.CompletedProcess[str] = tbase.Run([str(cli), '--version'])
+  assert result.returncode == 0, f'tranz --version failed:\n{result.stderr}'
+  expected_version: str = tranzoom.__version__
+  if (actual := result.stdout.strip()) != expected_version:
+    pytest.fail(f'CLI version mismatch: expected {expected_version!r}, got {actual!r}')
 
 
 def _MandelbrotSeahorseTailCall(cli: pathlib.Path) -> None:
@@ -69,7 +66,7 @@ def _MandelbrotSeahorseTailCall(cli: pathlib.Path) -> None:
   """
   with tempfile.TemporaryDirectory() as tmp_dir:
     # render a Seahorse Tail image
-    r = tbase.Run(
+    r: subprocess.CompletedProcess[str] = tbase.Run(
       # call the console script directly to test the installed CLI
       [
         str(cli),
@@ -189,7 +186,7 @@ def _AnimatedSeahorseTailCall(cli: pathlib.Path) -> None:
   """
   with tempfile.TemporaryDirectory() as tmp_dir:
     # render a Seahorse Tail Animated image
-    r = tbase.Run(
+    r: subprocess.CompletedProcess[str] = tbase.Run(
       # call the console script directly to test the installed CLI
       [
         str(cli),
@@ -314,7 +311,7 @@ def _JuliaSuzanaWaveCall(cli: pathlib.Path) -> None:
   """
   with tempfile.TemporaryDirectory() as tmp_dir:
     # render a Julia Suzana Wave image
-    r = tbase.Run(
+    r: subprocess.CompletedProcess[str] = tbase.Run(
       # call the console script directly to test the installed CLI
       [
         str(cli),

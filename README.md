@@ -1332,34 +1332,7 @@ deactivate
 
 #### Integration / e2e tests
 
-Integration tests verify that the installed CLI works correctly. The test assumes the package is already installed in the current environment.
-
-**To run integration tests locally:**
-
-1. Build a wheel (with Cython extensions automatically compiled):
-
-   ```sh
-   poetry build -f wheel --clean
-   ```
-
-2. Install the wheel into a test virtualenv:
-
-   ```sh
-   python -m venv .venv-wheel-test
-   .venv-wheel-test/bin/python -m pip install --upgrade pip
-   .venv-wheel-test/bin/python -m pip install dist/*.whl
-   ```
-
-3. Run tests from that virtualenv:
-
-   ```sh
-   .venv-wheel-test/bin/python -m pip install pytest
-   .venv-wheel-test/bin/python -m pytest -vvvv tests_integration/
-   ```
-
-**In CI:** The workflow automatically builds the wheel, installs it into `.venv-wheel-test`, and runs pytest from that environment.
-
-The integration test uses `shutil.which('tranz')` to locate the installed console script and verifies it produces correct output.
+Integration tests verify that the installed CLI works correctly. The test assumes the package is already installed in the current environment. Run: `make integration`.
 
 ### Linting / formatting / static analysis
 

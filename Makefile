@@ -52,5 +52,5 @@ build: clean-cython
 	@echo "Building source and wheel distributions with Poetry"
 	poetry build --clean -vv
 
-ci: build cov integration precommit docs req build
-	@echo "Success: Built. CI checks passed! Lint. Generated docs & requirements.txt."
+ci: build cov integration precommit docs req
+	@echo "Success: Built. CI checks passed! Lint (precommit). Generated docs & requirements.txt."
