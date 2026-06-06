@@ -346,6 +346,7 @@
     "virtualenv",
     "virtualenvs",
     "webassets",
+    "wheeltest",
     "xdist",
     "xmlschema",
     "yourcli",
