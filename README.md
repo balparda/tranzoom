@@ -90,6 +90,7 @@ Built with:
     - [Build](#build)
     - [Optional: Cython acceleration](#optional-cython-acceleration)
       - [Architecture](#architecture)
+      - [Wheels and distribution](#wheels-and-distribution)
       - [Prerequisites](#prerequisites)
       - [Build the extensions](#build-the-extensions)
       - [Verify what loaded](#verify-what-loaded)
@@ -180,19 +181,9 @@ Or install from the repository for development (see [Development Setup](#develop
 
 ### What this tool is
 
-tranZoom is a command-line fractal renderer focused on extreme zoom depth for [Mandelbrot Set](https://en.wikipedia.org/wiki/Mandelbrot_set) and [Julia Set](https://en.wikipedia.org/wiki/Julia_set). Standard double-precision (`float64`) floating point has only about 15–16 significant decimal digits, so any zoom below roughly 1e-14 of the full Mandelbrot set will produce incorrect images due to precision loss. tranZoom uses `gmpy2.mpq` (exact rational arithmetic) to represent frame coordinates and `gmpy2.mpfr` (arbitrary-precision floating point) for the escape-time computations, automatically determining how many bits of precision are needed for any given zoom level. Starting with version 1.3.0, tranZoom also renders Julia Sets — the same arbitrary-precision engine works for any complex-constant Julia iteration.
+tranZoom is a command-line fractal renderer focused on extreme zoom depth for [Mandelbrot Set](https://en.wikipedia.org/wiki/Mandelbrot_set) and [Julia Set](https://en.wikipedia.org/wiki/Julia_set). Standard double-precision (`float64`) floating point has only about 15–16 significant decimal digits, so any zoom below roughly 1e-14 of the full Mandelbrot set will produce incorrect images due to precision loss. tranZoom uses `gmpy2.mpq` (exact rational arithmetic) to represent frame coordinates and `gmpy2.mpfr` (arbitrary-precision floating point) for the escape-time computations, automatically determining how many bits of precision are needed for any given zoom level.
 
-Starting with version 1.1.0, tranZoom can use local LLM vision models to autonomously guide the zoom — identifying visually interesting regions, scoring nine sectors of the current frame, and navigating toward the most promising sector at each step. A manual mode is also available for human-guided zoom sessions with the same iterative frame navigation. Both AI and manual zoom support Mandelbrot and Julia Sets.
-
-Starting with version 1.4.0, tranZoom can render animated GIF and MP4 zoom animations with the `tranz zoom auto` command — a straight zoom-in path toward any target frame, with configurable frame count, FPS, and duration.
-
-Starting with version 1.5.0, the fractal renderer uses **smooth coloring**: each exterior pixel stores both an integer escape count `n` and a fractional value `nu ∈ [0, 1)` derived from the normalized iteration count formula, packed into 8 bytes per pixel. This eliminates discrete color bands and produces smooth gradients at all zoom depths. The database now caches both the raw computed pixel data and the rendered PNGs, so revisiting a frame or re-rendering with a new palette is fast — the expensive fractal computation is only performed once.
-
-Starting with version 1.7.0, tranZoom offers **three-tier Cython optimization**: pure Python (always available), hybrid mode (`fractalfast.py` compiled with Cython's pure-Python mode), and full Cython (`fractalc.pyx` using gmpy2 C-API directly). Full Cython provides ~2× speedup over pure Python for deep-zoom, high-precision renders. Users can compile locally with `make cython` for acceleration; PyPI wheels ship pure-Python fallbacks for maximum portability.
-
-Starting with version 1.6.1, tranZoom estimates file sizes and memory requirements before starting any expensive operation and warns when estimates exceed configurable thresholds (50 MB for a single image, 2 GB for an animation, 20 GB RAM for a single image render, 32 GB RAM for a full animation render). The `tranz zoom auto` command now streams frames from disk on demand during animation rendering (when the DB is enabled) to reduce peak memory, and periodically checkpoints the DB to protect against data loss during long renders.
-
-Starting with version 1.6.2, tranZoom computes the optimal iteration depth adaptively for each animation frame rather than applying a single global depth. Before the main render pass, a set of "depth key frames" is pre-sampled at ≈2× zoom intervals; their raw depths are smoothed in log-space with a robust centered FIR filter (`SmoothDepths()`), and non-key frames receive linearly interpolated depths. This produces animations that are both faster to render (no over-deep frames) and more visually consistent (no jarring quality jumps between successive frames). Depth results are cached in the DB, so re-renders skip the pre-pass entirely.
+TranZoom can use local LLM vision models to autonomously guide the zoom — identifying visually interesting regions. A manual mode is also available for human-guided zoom sessions with the same iterative frame navigation. Both AI and manual zoom support Mandelbrot and Julia Sets. TranZoom can render animated GIF and MP4 zoom animations with the `tranz zoom auto` command — a straight zoom-in path toward any target frame, with configurable frame count, FPS, and duration.
 
 The tool can save all computations to a local DB. If allowed, it will use these saved computations to save time in any new computation. This DB can be encrypted.
 
@@ -900,7 +891,7 @@ Render: {[PNG, SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 824462012
 Render 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40/40  [ 0:00:04 < 0:00:00 , 9 fr/s ]
 Render: DONE
 
-Success: GIF 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab' in 3.080 s (depth) + 2.062 min (frames) + 10.597 s (render)
+Success: GIF 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab' in 1.409 s (depth) + 33.911 s (frames) + 6.087 s (render)
 Saved GIF to 'mandel-e631ffec80dd902e375e.gif', 1.757 MiB
 ```
 
@@ -1036,7 +1027,7 @@ tranZoom (≥1.7.0) provides three computation modes with progressively better p
 
 3. **Full Cython** (`--opt cython`): Direct gmpy2 C-API usage via `fractalc.pyx`; raw GMP/MPFR/MPC C calls with explicit `mpfr_t` manipulation; bypasses Python object overhead entirely; ~2× faster than pure Python for deep-zoom, high-precision renders; maximum performance; requires C compiler and GMP/MPFR/MPC libraries at build time.
 
-The default (`--opt` not specified) automatically uses the **best available** optimization. PyPI wheels ship pure-Python fallbacks; users can compile locally with `make cython` for acceleration (see [Optional: Cython acceleration](#optional-cython-acceleration) under Development Instructions).
+The default (`--opt` not specified) automatically uses the **best available** optimization. Starting with version 1.8.0, wheels built with `poetry build` include pre-compiled Cython extensions automatically.
 
 ## Development Instructions
 
@@ -1047,7 +1038,8 @@ The default (`--opt` not specified) automatically uses the **best available** op
 ├── CHANGELOG.md                  ⟸ latest changes/releases
 ├── LICENSE
 ├── Makefile
-├── build_ext.py                  ⟸ Cython build script (see `make cython`; optional, gitignored output)
+├── scripts/
+│   ├── build_extensions.py       ⟸ Cython build script (see `make cython`; optional, gitignored output)
 ├── tranz.md                      ⟸ auto-generated CLI doc (by `make docs` or `make ci`)
 ├── poetry.lock                   ⟸ maintained by Poetry; do not manually edit
 ├── pyproject.toml                ⟸ most important configurations live here
@@ -1117,14 +1109,14 @@ On **Linux**:
 sudo apt-get update && sudo apt-get upgrade
 sudo apt-get install git python3 python3-dev python3-venv build-essential software-properties-common
 sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt-get update
-sudo apt-get install python3.12  # or python3.13 or python3.14
+sudo apt-get install python3.14  # or python3.12 or python3.13
 ```
 
 On **macOS**:
 
 ```sh
 brew update && brew upgrade && brew cleanup -s
-brew install git python@3.12  # or python3.13 or python3.14
+brew install git python@3.14  # or python3.12 or python3.13
 ```
 
 Note: `gmpy2` requires the GMP, MPFR, and MPC C libraries. On macOS: `brew install gmp mpfr mpc`. On Linux: `sudo apt-get install libgmp-dev libmpfr-dev libmpc-dev`.
@@ -1162,8 +1154,7 @@ cd tranzoom
 #### Create environment and install dependencies
 
 ```sh
-poetry env use python3.12    # creates the .venv with the correct Python version
-poetry sync                  # install all dependencies from poetry.lock
+make init
 poetry env info              # verify environment
 poetry run tranz --help      # smoke test
 make ci                      # should pass on clean repo
@@ -1213,7 +1204,11 @@ Both implement the same four exported functions: `MandelbrotComputation()`, `Jul
 
 The `fractal.py` loader tries to import `fractalc` (full Cython) first; if unavailable, uses `fractalfast` (which may be compiled as hybrid or interpreted as pure Python).
 
-This is purely a **local development optimization** — compiled `.so`/`.pyd` files are never committed to the repository, and the installed PyPI wheel always ships pure-Python fallbacks. Users can compile locally for ~2× speedup.
+#### Wheels and distribution
+
+`poetry build` automatically compiles Cython extensions and includes them in the wheel. When you install a wheel built locally or from source, you get pre-compiled extensions for immediate performance. PyPI wheels (when published) may ship pure-Python fallbacks for maximum portability across platforms, but building from source or using `poetry build` locally will always produce a wheel with compiled extensions for ~2× speedup.
+
+Compiled `.so`/`.pyd` files are never committed to the repository — they're generated at build time and included in the wheel.
 
 #### Prerequisites
 
@@ -1225,22 +1220,26 @@ This is purely a **local development optimization** — compiled `.so`/`.pyd` fi
 
 #### Build the extensions
 
-`cython` and `setuptools` are runtime dependencies (≥1.7.0), so after `poetry sync` you already have everything needed:
-
 ```sh
-make cython
-# equivalent to:
-poetry run python build_ext.py build_ext --inplace
+make build
 ```
 
-This compiles **both** `fractalfast.py` (hybrid mode) and `fractalc.pyx` (full Cython) to native extensions:
+This compiles **both** `fractalfast.py` (hybrid mode) and `fractalc.pyx` (full Cython) to native extensions directly in the source tree:
 
 - `src/tranzoom/core/fractalfast.cpython-<ver>-<platform>.so` (macOS/Linux) or `.pyd` (Windows)
 - `src/tranzoom/core/fractalc.cpython-<ver>-<platform>.so` (macOS/Linux) or `.pyd` (Windows)
 
+**For distribution (wheel building):**
+
+```sh
+poetry build   # automatically compiles extensions via scripts/build_extensions.py
+```
+
+The `[tool.poetry.build]` section in `pyproject.toml` specifies `scripts/build_extensions.py` as the build script, so `poetry build` automatically compiles Cython extensions and includes them in the wheel. No separate `make cython` step is needed before `poetry build`.
+
 The intermediate `.c` files and the `build/` directory are gitignored.
 
-The `build_ext.py` script auto-discovers Homebrew GMP/MPFR/MPC paths on macOS (both Apple Silicon `/opt/homebrew` and Intel `/usr/local`); on Linux it relies on system library paths.
+The `scripts/build_extensions.py` script auto-discovers Homebrew GMP/MPFR/MPC paths on macOS (both Apple Silicon `/opt/homebrew` and Intel `/usr/local`); on Linux it relies on system library paths.
 
 #### Verify what loaded
 
@@ -1333,13 +1332,7 @@ deactivate
 
 #### Integration / e2e tests
 
-Integration tests build a wheel, install it into a fresh temporary virtualenv, and run the console scripts. Run with:
-
-```sh
-make integration
-# or:
-poetry run pytest -m integration -q
-```
+Integration tests verify that the installed CLI works correctly. The test assumes the package is already installed in the current environment. Run: `make integration`.
 
 ### Linting / formatting / static analysis
 
@@ -1480,7 +1473,7 @@ If `make cython` fails:
 
 2. **Missing GMP/MPFR/MPC libraries**: See [`gmpy2` installation issues](#gmpy2-installation-issues) above.
 
-3. **Homebrew library path issues (macOS)**: The `build_ext.py` script auto-discovers Homebrew paths, but if it fails:
+3. **Homebrew library path issues (macOS)**: The `scripts/build_extensions.py` script auto-discovers Homebrew paths, but if it fails:
 
    ```sh
    # Verify libraries are installed:

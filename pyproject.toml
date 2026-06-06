@@ -5,14 +5,22 @@
 ####################################################################################################
 [build-system]
 
-requires = [ "poetry-core>=2.3" ]
+requires = [
+
+  "poetry-core>=2.4.1",
+
+  # required for Cython compilation of fractalc.pyx at build time
+  "Cython>=3.2",  # if you change here, also change "dependencies" below
+  "gmpy2>=2.3",  # if you change here, also change "dependencies" below
+  "setuptools>=82.0",  # if you change here, also change "dependencies" below
+]
 build-backend = "poetry.core.masonry.api"
 
 ####################################################################################################
 [project]
 
 name = "tranzoom"
-version = "1.7.0"  # also update src/tranzoom/__init__.py
+version = "1.8.0"  # also update src/tranzoom/__init__.py
 
 description = "Fractal manipulation with LLMs"
 license = "Apache-2.0"
@@ -49,15 +57,15 @@ dependencies = [
 
   "click==8.3.3",  # TODO: >=8.4 is waiting for typer type-stubs compatibility (probably >0.25.1)
   "cryptography>=48.0",
-  "cython>=3.2",
-  "gmpy2>=2.3",
+  "Cython>=3.2",  # if you change here, also change "requires" above
+  "gmpy2>=2.3",  # if you change here, also change "requires" above
   "ImageIO>=2.37",
   "imageio-ffmpeg>=0.6",
   "numpy>=2.4",
   "Pillow>=12.2",
   "rich>=15.0",
-  "setuptools>=82.0",
-  "tqdm>=4.67",
+  "setuptools>=82.0",  # if you change here, also change "requires" above
+  "tqdm>=4.68",
   "transai>=1.3.0",
   "transcrypto>=2.6.1",
 
@@ -100,9 +108,20 @@ requires-poetry = "^2.1"
 
 packages = [{ include = "tranzoom", from = "src" }]
 include = [
+
   { path = "src/tranzoom/py.typed", format = "sdist" },
+  { path = "src/tranzoom/core/*.c", format = "sdist" },
+  { path = "src/tranzoom/core/*.pyx", format = "sdist" },
+
   { path = "src/tranzoom/py.typed", format = "wheel" },
+  { path = "src/tranzoom/core/*.so", format = "wheel" },
+  { path = "src/tranzoom/core/*.pyd", format = "wheel" },
+  { path = "src/tranzoom/core/*.dylib", format = "wheel" },
+
 ]
+
+[tool.poetry.build]
+script = "scripts/build_extensions.py"
 
 ####################################################################################################
 [tool.poetry.dependencies]
@@ -123,7 +142,7 @@ pytest = "^9.0"
 pytest-cov = "^7.1"
 pytest-flakefinder = "^1.1"
 pre-commit = "^4.6"
-ruff = "^0.15.15"
+ruff = "^0.15.16"
 typeguard = "^4.5"
 
 # project-specific dev-only
@@ -137,7 +156,7 @@ poetry-plugin-export = "^1.10"
 ####################################################################################################
 [tool.ruff]
 
-target-version = "py312"
+target-version = "py312"  # keep at 3.12!
 line-length = 100
 indent-width = 2
 
@@ -228,13 +247,6 @@ preview = true  # if you want new features being previewed
 
 [tool.ruff.lint.per-file-ignores]
 
-"build_ext.py" = [
-  "INP001",   # root-level build script, not part of a Python package
-  "S404",     # subprocess module is acceptable in a build script
-  "S603",     # subprocess call with trusted, literal input args
-  "S607",     # partial executable path is acceptable for `brew` in a build script
-]
-
 "scripts*/**/*.py" = [
   "S101",     # Use of `assert` detected
   "PT018",    # Assertion should be broken down into multiple parts
@@ -321,6 +333,7 @@ markers = [
 
 ]
 
+# TODO: in ci.yaml/3.14 we get "PytestConfigWarning: Unknown config option" for these 3:
 typeguard-packages = [ "tranzoom", "scripts" ]
 typeguard-forward-ref-policy = "ERROR"
 typeguard-collection-check-strategy = "ALL_ITEMS"
@@ -331,5 +344,4 @@ omit = [
   "*/__init__.py",  # keep these free of real code!
   "*/__main__.py",
   "*/_template.py",
-  "build_ext.py",
 ]

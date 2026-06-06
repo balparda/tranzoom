@@ -32,8 +32,8 @@ jobs:
       - name: Install Poetry
         run: pip install poetry
 
-      - name: Install deps
-        run: poetry install
+      - name: Install deps (but do not build Cython extensions)
+        run: poetry install --no-root --with dev
 
       - name: Lint
         run: poetry run ruff check .
@@ -48,7 +48,7 @@ jobs:
         run: poetry run pytest --typeguard-packages=tranzoom --cov=src --cov-report=term-missing -q tests
 
   integration:
-    needs: test
+    # needs: test  # TODO: do we need this??
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -68,33 +68,23 @@ jobs:
           python-version: ${{ matrix.python-version }}
           # no pip cache in this job: keeps disk usage down
 
-      - name: Install Poetry
-        run: pip install --no-cache-dir poetry
-
-      - name: Install deps
-        run: poetry install --no-cache
-
       - name: Install GMP/MPFR/MPC libraries
         run: |
           sudo apt-get update
           sudo apt-get install -y libgmp-dev libmpfr-dev libmpc-dev
 
-      - name: Build clean Cython extensions
-        run: |
-          rm -rf build/ src/tranzoom/core/*.c src/tranzoom/core/*.so src/tranzoom/core/*.pyd
-          poetry run python build_ext.py build_ext --inplace
-
-      - name: Free up disk space
-        run: |
-          df -h
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo rm -rf /usr/share/dotnet
-          sudo docker system prune -a -f
-          df -h
+      - name: Install Poetry and build dependencies for wheel building
+        run: pip install --no-cache-dir poetry
 
       - name: Build wheel
-        run: poetry build -f wheel
+        run: poetry build --clean -vv
 
-      - name: Integration tests (installed CLI)
-        run: poetry run pytest -q tests_integration
+      - name: Install built wheel into test venv and run integration tests against installed wheel
+        run: |
+          python -m venv .venv-wheel-test
+          . .venv-wheel-test/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install dist/*.whl
+          python -m pip install pytest
+          python -m pytest -vvvv tests_integration/test_installed_cli.py
+          deactivate

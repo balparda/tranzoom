@@ -1,16 +1,18 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Integration tests: build wheel, install into a fresh venv, run the installed CLI.
-
-Why this exists (vs normal unit tests):
-- Unit tests (CliRunner) validate CLI wiring while running from the source tree.
-- This test validates *packaging*: the wheel builds, installs, and the console script works.
+"""Integration tests: test the installed CLI from a wheel.
 
 What we verify:
-- `mandel --version` prints the expected version.
-- `mandel gen` renders a Seahorse Tail image with deterministic output and verifies it
-- `zoom --version` prints the expected version.
+- `tranz --version` prints the expected version.
+- `tranz image mandel` renders a Seahorse Tail image with deterministic output and metadata.
+- `tranz zoom` renders an animated GIF with correct frames and metadata.
+
+How to run locally:
+1. Build wheel: `make build`
+2. Run tests: `make integration`
+
+In CI: the wheel is built and installed by the workflow before running these tests.
 """
 
 # TODO: add specific CYTHON tests where the same small images are generated with both pipelines
@@ -18,64 +20,56 @@ What we verify:
 from __future__ import annotations
 
 import pathlib
+import shutil
+import subprocess  # noqa: S404
 import tempfile
 
 import pytest
 from transcrypto.utils import base as tbase
-from transcrypto.utils import config
 
 import tranzoom
 from tranzoom.cli import base
 from tranzoom.core import image
 
-_APP_NAMES: set[str] = {'tranz'}  # this is the console scripts names
-
 
 @pytest.mark.slow
 @pytest.mark.integration
-def test_installed_cli_smoke(tmp_path: pathlib.Path) -> None:
-  """Build wheel, install into a clean venv, run the installed CLIs."""
-  repo_root: pathlib.Path = pathlib.Path(__file__).resolve().parents[1]
-  expected_version: str = tranzoom.__version__
-  vpy, bin_dir = config.EnsureAndInstallWheel(repo_root, tmp_path, expected_version, _APP_NAMES)
-  cli_paths: dict[str, pathlib.Path] = config.EnsureConsoleScriptsPrintExpectedVersion(
-    vpy, bin_dir, expected_version, _APP_NAMES
-  )
+def test_installed_cli_smoke() -> None:
+  """Test the installed CLI from the current environment."""
+  # find the installed console script; will raise if not found
+  cli_path: str | None = shutil.which('tranz')
+  if cli_path is None:
+    pytest.fail(
+      'Console script "tranz" not found in PATH; ensure the wheel is installed in current venv'
+    )
+  cli: pathlib.Path = pathlib.Path(cli_path)
+  # verify version
+  _VersionCall(cli)
   # basic command smoke tests
-  _CompileCython(vpy)
-  _MandelbrotSeahorseTailCall(cli_paths)
-  _AnimatedSeahorseTailCall(cli_paths)
-  _JuliaSuzanaWaveCall(cli_paths)
+  _MandelbrotSeahorseTailCall(cli)
+  _AnimatedSeahorseTailCall(cli)
+  _JuliaSuzanaWaveCall(cli)
 
 
-def _CompileCython(python_path: pathlib.Path) -> None:
-  """Call the installed CLI to render the Seahorse Tail image, check the output file and metadata.
-
-  Should be 100% equivalent to the `scripts/make_examples.sh` line to "Render Seahorse Tail".
-  """
-  r = tbase.Run(
-    # call python directly to compile; if cached, this is a quick call
-    [
-      str(python_path),
-      'build_ext.py',
-      'build_ext',
-      '--inplace',
-    ]
-  )
-  assert r.returncode == 0, f'compilation failed:\n{r.stderr}'
+def _VersionCall(cli: pathlib.Path) -> None:
+  result: subprocess.CompletedProcess[str] = tbase.Run([str(cli), '--version'])
+  assert result.returncode == 0, f'tranz --version failed:\n{result.stderr}'
+  expected_version: str = tranzoom.__version__
+  if (actual := result.stdout.strip()) != expected_version:
+    pytest.fail(f'CLI version mismatch: expected {expected_version!r}, got {actual!r}')
 
 
-def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
+def _MandelbrotSeahorseTailCall(cli: pathlib.Path) -> None:
   """Call the installed CLI to render the Seahorse Tail image, check the output file and metadata.
 
   Should be 100% equivalent to the `scripts/make_examples.sh` line to "Render Seahorse Tail".
   """
   with tempfile.TemporaryDirectory() as tmp_dir:
     # render a Seahorse Tail image
-    r = tbase.Run(
+    r: subprocess.CompletedProcess[str] = tbase.Run(
       # call the console script directly to test the installed CLI
       [
-        str(cli_paths['tranz']),
+        str(cli),
         '--no-date',  # --no-date makes the filename deterministic (hash-only)
         '--db',
         '--force',
@@ -185,21 +179,21 @@ def _MandelbrotSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
     }
 
 
-def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
+def _AnimatedSeahorseTailCall(cli: pathlib.Path) -> None:
   """Call the installed CLI to render the Seahorse Tail GIF image, check the GIF file and metadata.
 
   Should be 100% equivalent to `scripts/make_examples.sh` line to "Render Animated Seahorse Tail".
   """
   with tempfile.TemporaryDirectory() as tmp_dir:
     # render a Seahorse Tail Animated image
-    r = tbase.Run(
+    r: subprocess.CompletedProcess[str] = tbase.Run(
       # call the console script directly to test the installed CLI
       [
-        str(cli_paths['tranz']),
+        str(cli),
         '--no-date',  # --no-date makes the filename deterministic (hash-only)
         '--db',  # DB makes this a streaming DB-rich generation
         '--opt',
-        'python',  # TODO: does NOT pass as CYTHON?????? WHY????
+        'cython',
         '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
         tmp_dir,
         '--db-path',  # make sure DB will be in temp too!
@@ -310,22 +304,22 @@ def _AnimatedSeahorseTailCall(cli_paths: dict[str, pathlib.Path]) -> None:
     }
 
 
-def _JuliaSuzanaWaveCall(cli_paths: dict[str, pathlib.Path]) -> None:
+def _JuliaSuzanaWaveCall(cli: pathlib.Path) -> None:
   """Call the installed CLI to render the Julia Suzana Wave image, check the output file / metadata.
 
   Should be 100% equivalent to the `scripts/make_examples.sh` line to "Render Julia Suzana Wave".
   """
   with tempfile.TemporaryDirectory() as tmp_dir:
     # render a Julia Suzana Wave image
-    r = tbase.Run(
+    r: subprocess.CompletedProcess[str] = tbase.Run(
       # call the console script directly to test the installed CLI
       [
-        str(cli_paths['tranz']),
+        str(cli),
         '--no-date',  # --no-date makes the filename deterministic (hash-only)
         '--db',
         '--force',
         '--opt',
-        'python',
+        'cython',
         '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
         tmp_dir,
         '--db-path',  # make sure DB will be in temp too!
