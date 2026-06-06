@@ -32,8 +32,8 @@ jobs:
       - name: Install Poetry
         run: pip install poetry
 
-      - name: Install deps
-        run: poetry install
+      - name: Install deps (but do not build Cython extensions)
+        run: poetry install --no-root --with dev
 
       - name: Lint
         run: poetry run ruff check .
