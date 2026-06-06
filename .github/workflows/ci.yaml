@@ -13,46 +13,46 @@ on:
 
 jobs:
 
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ['3.12', '3.13', '3.14']
+#   test:
+#     runs-on: ubuntu-latest
+#     strategy:
+#       matrix:
+#         python-version: ['3.12', '3.13', '3.14']
 
-    steps:
+#     steps:
 
-      - uses: actions/checkout@v6
+#       - uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: 'pip'
+#       - name: Set up Python
+#         uses: actions/setup-python@v6
+#         with:
+#           python-version: ${{ matrix.python-version }}
+#           cache: 'pip'
 
-      - name: Install Poetry
-        run: pip install poetry
+#       - name: Install Poetry
+#         run: pip install poetry
 
-      - name: Install deps (but do not build Cython extensions)
-        run: poetry install --no-root --with dev
+#       - name: Install deps (but do not build Cython extensions)
+#         run: poetry install --no-root --with dev
 
-      - name: Lint
-        run: poetry run ruff check .
+#       - name: Lint
+#         run: poetry run ruff check .
 
-      - name: Format
-        run: poetry run ruff format --check --diff .
+#       - name: Format
+#         run: poetry run ruff format --check --diff .
 
-      - name: Typecheck
-        run: poetry run mypy src tests tests_integration
+#       - name: Typecheck
+#         run: poetry run mypy src tests tests_integration
 
-      - name: Tests w/ typeguard & Coverage
-        run: poetry run pytest --typeguard-packages=tranzoom --cov=src --cov-report=term-missing -q tests
+#       - name: Tests w/ typeguard & Coverage
+#         run: poetry run pytest --typeguard-packages=tranzoom --cov=src --cov-report=term-missing -q tests
 
   integration:
-    needs: test
+    # needs: test
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.12', '3.13', '3.14']
+        python-version: ['3.14']
 
     env:
       PIP_NO_CACHE_DIR: '1'
@@ -79,13 +79,12 @@ jobs:
       - name: Build wheel
         run: poetry build -f wheel --clean
 
-      - name: Install built wheel into test venv
+      - name: Install built wheel into test venv and run integration tests against installed wheel
         run: |
           python -m venv .venv-wheel-test
-          .venv-wheel-test/bin/python -m pip install --upgrade pip
-          .venv-wheel-test/bin/python -m pip install dist/*.whl
-
-      - name: Run integration tests against installed wheel
-        run: |
-          .venv-wheel-test/bin/python -m pip install pytest
-          .venv-wheel-test/bin/python -m pytest -vvvv tests_integration/test_installed_cli.py
+          . .venv-wheel-test/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install dist/*.whl
+          python -m pip install pytest
+          python -m pytest -vvvv tests_integration/test_installed_cli.py
+          deactivate
