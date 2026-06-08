@@ -13,6 +13,7 @@ import base64
 import bisect
 import dataclasses
 import enum
+import fractions
 import io
 import json
 import logging
@@ -966,7 +967,7 @@ class ZoomParameters(frame.SerializingFractalObject):
       raise Error(f'ZoomParameters {params.sha!r} does not match expected {check_hash!r}')
     return params
 
-  def Frames(  # noqa: PLR0914
+  def Frames(
     self,
   ) -> tuple[list[frame.Frame], list[tuple[int, frame.Frame]], list[tuple[int, frame.Frame]]]:
     """Get the Frames. Could be a property, but is a method to remind this is an expensive-ish call.
@@ -986,12 +987,13 @@ class ZoomParameters(frame.SerializingFractalObject):
     rdx: gmpy2.mpq
     rdy: gmpy2.mpq
     mpq_mag: gmpy2.mpq = self.scalar_magnification_per_step
-    reduced_frm: frame.Frame
     all_frames: list[frame.Frame] = [self.img.frm]  # start with initial frame, keep as-is
     # reproduce the zoom run with full precision
     frm: frame.Frame = self.img.frm
     max_denominator: int
-    max_error_dim: gmpy2.mpq = _MPQ_ZERO
+    err_x: float
+    err_y: float
+    max_error_dim: float = 0.0
     with timer.Timer('frame generation'):
       # float magnification tracking: avoids 30k-bit precision mpfr computation in every loop step;
       # frm.magnification[1] is only used to compute max_denominator for limit_denominator, so
@@ -1014,12 +1016,13 @@ class ZoomParameters(frame.SerializingFractalObject):
         if i and not i % 10:
           # we have to keep the mpq in check; use precomputed float mag (avoids 30k-bit mpfr call)
           max_denominator = 10_000_000 * (10 ** math.ceil(cur_mag_log10 + 1e-9))
-          dx, dy = frm.size  # cache to avoid calling the property twice
+          dx, dy = frm.size
           frm = frame.Frame.FromCenter(
             frm.fractal,
             *frm.center,
-            dx.limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
-            height=dy.limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
+            # don't call dx|dy.limit_denominator(max_denominator) read LimitMPQDenominator() pydoc!!
+            LimitMPQDenominator(dx, max_denominator=max_denominator)[0],
+            height=LimitMPQDenominator(dy, max_denominator=max_denominator)[0],
             point_re=frm.point_re,
             point_im=frm.point_im,
           )
@@ -1028,28 +1031,27 @@ class ZoomParameters(frame.SerializingFractalObject):
         # instead, causing math.ceil to return 4 rather than 5, making max_denominator 10x too
         # small, so 1e-9 before ceil means "within a billionth of an integer rounds up to it"
         max_denominator = 10_000 * (10 ** math.ceil(cur_mag_log10 + 1e-9))
-        dx, dy = frm.size  # cache once: used for limit_denominator below and error check below
-        reduced_frm = frame.Frame.FromCenter(
-          frm.fractal,
-          *frm.center,
-          dx.limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
-          height=dy.limit_denominator(max_denominator=max_denominator),  # type: ignore[attr-defined]
-          point_re=frm.point_re,
-          point_im=frm.point_im,
-        )
-        all_frames.append(reduced_frm)
-        # test error (dx, dy already cached above)
-        rdx, rdy = reduced_frm.size
-        error_x: gmpy2.mpq = abs(dx - rdx) / dx
-        error_y: gmpy2.mpq = abs(dy - rdy) / dy
-        if error_x > MAX_TOLERATED_FRAME_MAG_ERROR or error_y > MAX_TOLERATED_FRAME_MAG_ERROR:
+        dx, dy = frm.size
+        # don't call dx|dy.limit_denominator(max_denominator) read LimitMPQDenominator() pydoc!!
+        rdx, err_x = LimitMPQDenominator(dx, max_denominator=max_denominator)
+        rdy, err_y = LimitMPQDenominator(dy, max_denominator=max_denominator)
+        max_error_dim = max(max_error_dim, err_x, err_y)
+        # test error
+        if max_error_dim > MAX_TOLERATED_FRAME_MAG_ERROR:
           raise Error(
-            f'Frame {i + 2} has size {frm.size} but reduced frame has size {reduced_frm.size}, '
-            f'which is {float(gmpy2.mpq(100) * error_x):.6f}% different in width '
-            f'and {float(gmpy2.mpq(100) * error_y):.6f}% '
-            'different in height, which is above the tolerated error threshold. This is a bug!'
+            f'Frame {i + 2} has size {frm.size} but reduced frame has size {(rdx, rdy)}, '
+            f'which is {100.0 * err_x:.6f}% different in width '
+            f'and {100.0 * err_y:.6f}% '
+            f'different in height, which is above the tolerated error threshold, '
+            f'{100.0 * MAX_TOLERATED_FRAME_MAG_ERROR:.6f}%. This is a bug! (workaround: zoom with '
+            'smaller jumps, i.e., any/some of: less zoom mag, more frames, more fps, more duration)'
           )
-        max_error_dim = max(max_error_dim, error_x, error_y)
+        # accept rdx/rdy as the new frame size for the reduced frame: make the frame
+        all_frames.append(
+          frame.Frame.FromCenter(
+            frm.fractal, *frm.center, rdx, height=rdy, point_re=frm.point_re, point_im=frm.point_im
+          )
+        )
     # done adding frames, final check: directly compute the actual magnification achieved
     # to make sure the accumulated error is within the tolerated threshold
     actual_mag: gmpy2.mpfr = cast(
@@ -2818,3 +2820,53 @@ def Decode64ToIntFloat(x: int) -> tuple[int, float]:
     return PACK_IF.unpack(PACK_Q.pack(x))
   except (struct.error, OverflowError) as e:
     raise Error(f'Error decoding uint64 to int and float: {e}') from e
+
+
+def LimitMPQDenominator(x: gmpy2.mpq, max_denominator: int) -> tuple[gmpy2.mpq, float]:
+  """Limit the denominator of a gmpy2.mpq rational number to a maximum value.
+
+  Works by converting the gmpy2.mpq to a fractions.Fraction, using its limit_denominator() method,
+  and then converting back to gmpy2.mpq. This is needed because, there **IS** a limit_denominator()
+  method in gmpy2.mpq, but I have found bugs where it corrupts the mpq object. This horror story
+  below is a real thing that happened in the real world after calling gmpy2.mpq.limit_denominator():
+
+    -> pdb.set_trace()
+    > /Users/balparda/py/tranzoom/src/tranzoom/core/image.py(1047)Frames()
+    -> error_x: gmpy2.mpq = abs(dx - rdx) / dx
+    (Pdb) dx
+    mpq(1,509709994281253475634230198920704424381256103515625000000000000000000000000000000000000
+          000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+          000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+          0000000000000000000000000000000000000)
+    (Pdb) n
+    ZeroDivisionError: division or modulo by zero
+    > /Users/balparda/py/tranzoom/src/tranzoom/core/image.py(1047)Frames()
+    -> error_x: gmpy2.mpq = abs(dx - rdx) / dx
+    (Pdb) dx
+    mpq(0,1)
+
+  As can be seen, the mpq object got corrupted and turned into 0, which caused a ZeroDivisionError
+  later on. The key fact in the investigation is that `dx - rdx` mutates `dx` in place
+  (or dx points to corrupted internal state)! The ID `id(dx)` remains the same, but it mutates.
+  For an immutable numeric type, that is impossible at the Python level. And this is pure gmpy2,
+  NOT Cython compiled code (in use in fractal.py/fractalc.pyx). This is a plain gmpy2.mpq bug.
+
+  Args:
+    x (gmpy2.mpq): The gmpy2.mpq rational number to limit.
+    max_denominator (int): The maximum allowed denominator.
+
+  Returns:
+    tuple[gmpy2.mpq, float]: The gmpy2.mpq rational number with the limited denominator
+        and the relative error introduced by limiting the denominator.
+
+  """
+  # get trivial case out of the way, and avoid divide by zero later
+  if x == _MPQ_ZERO:
+    return (x, 0.0)
+  # convert to fractions.Fraction
+  f_x: fractions.Fraction = fractions.Fraction(int(x.numerator), int(x.denominator))
+  # limit
+  f_x = f_x.limit_denominator(max_denominator)
+  # convert back to gmpy2.mpq and return
+  r_x: gmpy2.mpq = gmpy2.mpq(f_x.numerator, f_x.denominator)
+  return (r_x, float(abs(x - r_x) / abs(x)))
