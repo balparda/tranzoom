@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: install init fmt lint type test integration cov flakes precommit docs req clean-cython build ci
+.PHONY: install init fmt lint type test integration cov flakes precommit docs req clean-cython timages demo build ci
 
 install:
 	poetry install
@@ -48,9 +48,15 @@ clean-cython:
 	@echo "Removing Cython build artifacts: c/so/pyd/dylib files and build/ directory"
 	rm -rf build/ src/tranzoom/core/*.c src/tranzoom/core/*.so src/tranzoom/core/*.pyd src/tranzoom/core/*.dylib
 
+timages:
+	scripts/make_test_images.sh
+
+demo:
+	scripts/make_demo_images.sh
+
 build: clean-cython
 	@echo "Building source and wheel distributions with Poetry"
 	poetry build --clean -vv
 
-ci: build cov integration precommit docs req
+ci: timages build cov integration precommit docs req
 	@echo "Success: Built. CI checks passed! Lint (precommit). Generated docs & requirements.txt."
