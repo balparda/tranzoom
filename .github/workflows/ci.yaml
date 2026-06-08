@@ -74,10 +74,9 @@ jobs:
           sudo apt-get install -y libgmp-dev libmpfr-dev libmpc-dev
 
       - name: Install Poetry and build dependencies for wheel building
-        run: pip install --no-cache-dir poetry
-
-      - name: Build wheel
-        run: poetry build --clean -vv
+        run: |
+          pip install --no-cache-dir poetry
+          poetry build --clean -vv
 
       - name: Install built wheel into test venv and run integration tests against installed wheel
         run: |

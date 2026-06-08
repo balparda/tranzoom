@@ -221,4 +221,4 @@ from tranzoom.cli import (  # noqa: E402, I001
 @clibase.CLIErrorGuard
 def Markdown(*, ctx: click.Context) -> None:  # documentation is help/epilog/args # noqa: D103
   config: base.TranZoomConfig = ctx.obj
-  config.console.print(clibase.GenerateTyperHelpMarkdown(app, prog_name='tranz'))
+  config.console.print(clibase.GenerateTyperHelpMarkdown(app, prog_name='tranz'), soft_wrap=True)

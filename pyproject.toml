@@ -20,7 +20,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 
 name = "tranzoom"
-version = "1.8.1"  # also update src/tranzoom/__init__.py
+version = "1.8.2"  # also update src/tranzoom/__init__.py
 
 description = "Mandelbrot/Julia Fractal generation and manipulation with AI/LLMs"
 license = "Apache-2.0"
@@ -66,8 +66,8 @@ dependencies = [
   "rich>=15.0",
   "setuptools>=82.0",  # if you change here, also change "requires" above
   "tqdm>=4.68",
-  "transai>=1.3.0",
-  "transcrypto>=2.6.1",
+  "transai>=1.3.1",
+  "transcrypto>=2.6.3",
 
   # TODO: pinned version because 0.26 is a mess, inline click and tests give a message that
   #    can only be fixed by disabling typeguard; probably have to fix clibase/transcrypto up
@@ -104,7 +104,7 @@ PyPI = "https://pypi.org/project/tranzoom/"
 ####################################################################################################
 [tool.poetry]
 
-requires-poetry = "^2.1"
+requires-poetry = "^2.4.1"
 
 packages = [{ include = "tranzoom", from = "src" }]
 include = [
@@ -147,7 +147,7 @@ typeguard = "^4.5"
 
 # project-specific dev-only
 gmpy2-stubs = "^2.2"
-types-tqdm = "^4.67"
+types-tqdm = "^4.68"
 types-setuptools = "^82.0"
 
 [tool.poetry.requires-plugins]
@@ -229,6 +229,7 @@ ignore = [
 
   "TRY003",  # Avoid specifying long messages outside the exception class
   "TRY300",  # Consider moving this statement to an `else` block
+  "TRY400",  # Use `logging.exception` instead of `logging.error`
   "EM101",   # Exception must not use a string literal, assign to variable first
   "EM102",   # Exception must not use an f-string literal, assign to variable first
 
