@@ -48,12 +48,13 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 
 # global CLI data, and some test stuff
 
-# if `tests/data/images/demo-mandel-seahorse-tail.png` internal data changes this will change!
-# this indicates that the mathematical computation or the setting of colors has changed;
+# if any of these hashes change: the mathematical computation or the setting of colors has changed!
 # this should NOT change over metadata changes, as it is computed from raw pixel data
+# PNG - really only change if core computation changes, so these are more important to be stable
 SEAHORSE_TAIL_HASH: str = 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9'
-SEAHORSE_ANIMATED_HASH: str = 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab'
 SUZANA_WAVE_HASH: str = 'ea6ecb1b230c24d2af80535874744686bb7fc1f68fad8adea9e176be843829a4'
+# GIF - these may change for core computation, or if the animation frame machinery changes
+SEAHORSE_ANIMATED_HASH: str = 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab'
 T_GIF_SEAHORSE_HASH: str = 'd7eaaa6f57344ed6cd4716d73917407db373051738ee74f74fd23f7b5004a443'
 T_GIF_SEEDS_300_HASH: str = '9ffd8f480d179780282c2101c7e98d0b70df8afeba66574b758ade09e1e00f88'
 T_GIF_JULIA_SUZANA_HASH: str = '412e7335fb62f220ba3fea142f8f33463d9d76cb00506e6dda823e247546b7a8'
