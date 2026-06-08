@@ -39,24 +39,14 @@ def test_installed_cli_smoke() -> None:
   # find the installed console script; will raise if not found
   cli_path: str | None = shutil.which('tranz')
   if cli_path is None:
-    pytest.fail(
-      'Console script "tranz" not found in PATH; ensure the wheel is installed in current venv'
-    )
+    pytest.fail('Console script "tranz" not found in PATH')
   cli: pathlib.Path = pathlib.Path(cli_path)
   # verify version
-  _VersionCall(cli)
+  tbase.VersionCallCheck(cli, tranzoom.__version__)
   # basic command smoke tests
   _MandelbrotSeahorseTailCall(cli)
   _AnimatedSeahorseTailCall(cli)
   _JuliaSuzanaWaveCall(cli)
-
-
-def _VersionCall(cli: pathlib.Path) -> None:
-  result: subprocess.CompletedProcess[str] = tbase.Run([str(cli), '--version'])
-  assert result.returncode == 0, f'tranz --version failed:\n{result.stderr}'
-  expected_version: str = tranzoom.__version__
-  if (actual := result.stdout.strip()) != expected_version:
-    pytest.fail(f'CLI version mismatch: expected {expected_version!r}, got {actual!r}')
 
 
 def _MandelbrotSeahorseTailCall(cli: pathlib.Path) -> None:
