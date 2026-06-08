@@ -15,13 +15,9 @@
 # Each command prints before it runs (set -x xtrace) so output is self-documenting
 set -euxo pipefail
 
-# First priority is to generate the ones used in the tests!
-# Render Seahorse Tail original
-poetry run tranz --no-db --force --set imaginary --no-date --no-hash --prefix "demo-mandel-seahorse-tail" -o tests/data/images image mandel " -0.7436499" "0.13188204" "0.00073801"
-# Render Animated Seahorse Tail zoom
-poetry run tranz --no-db --force --no-date --no-hash --prefix "demo-mandel-seahorse-tail-anim" -o tests/data/images zoom -s 220 --mark "(-5578776469/7500000000,8244620127/62500000000)" auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4
-# Render Julia Suzana Wave
-poetry run tranz --no-db --force --set max --no-date --no-hash --prefix "demo-julia-suzana-wave" -o tests/data/images --palette "electric" --set-palette sunset image -s 512 julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
+####################################################################################################
+# Demo Images (don't care for stability: only re-generate when visuals change enough for a human to notice)
+####################################################################################################
 
 # Render the Full / Default Mandelbrot set
 poetry run tranz --no-db --force --no-date --no-hash --prefix "demo-mandel-whole-set" -o tests/data/images image mandel
@@ -32,14 +28,14 @@ poetry run tranz --no-db --force --no-date --no-hash --prefix "demo-mandel-seaho
 
 # Render Seahorse Tail all palettes (but original is above, already done)
 for palette in sahara lava electric sunset aurora plasma forest coral gold toxic iris ember rgrayscale grayscale; do
-  poetry run tranz --no-db --force --no-date --no-hash --prefix "demo-mandel-seahorse-tail-${palette}" -o tests/data/images --palette "${palette}" image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
+  poetry run tranz --no-db --force --palette "${palette}" --no-date --no-hash --prefix "demo-mandel-seahorse-tail-${palette}" -o tests/data/images image -w 512 -h 512 mandel " -0.7436499" "0.13188204" "0.00073801"
 done
 
 # Render MP4 Animated Seahorse Tail video
 poetry run tranz --no-db --force --no-date --no-hash --prefix "demo-mandel-seahorse-tail-video" -o tests/data/images zoom -s 512 auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4 --anim mp4
 
 # Render Julia Suzana
-poetry run tranz --no-db --force --no-date --no-hash --prefix "demo-julia-suzana" -o tests/data/images --palette "electric" image -s 1024 julia
+poetry run tranz --no-db --force --palette "electric" --no-date --no-hash --prefix "demo-julia-suzana" -o tests/data/images image -s 1024 julia
 
 # generate the 16 images in the POWERS OF 1000 zoom sequence
 
