@@ -311,6 +311,7 @@ JULIA_RE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
 )
 JULIA_RE_OPTION: typer.models.OptionInfo = typer.Option(
   frame.DEFAULT_JULIA_RE,
+  '--julia-re',
   help=(
     'Real part of the Julia Set constant; '
     'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
@@ -331,6 +332,7 @@ JULIA_IM_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
 )
 JULIA_IM_OPTION: typer.models.OptionInfo = typer.Option(
   frame.DEFAULT_JULIA_IM,
+  '--julia-im',
   help=(
     'Imaginary part of the Julia Set constant; '
     'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
