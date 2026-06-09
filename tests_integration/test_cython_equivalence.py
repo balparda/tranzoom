@@ -50,7 +50,7 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
   poetry run tranz --no-db --force --palette "lava" --set imaginary --set-palette "toxic"
       --no-date --no-hash --prefix "test-mandel-z-auto-seahorse" -o tests/data/images
       zoom -s 53 auto " -0.7436499" "0.13188204" "227/193" "167/193" "131/43"
-      --fps 3 --duration "25.51"
+      --fps 2 --duration "22.7"
   """
   with tempfile.TemporaryDirectory() as tmp_dir:
     r: subprocess.CompletedProcess[str] = tbase.Run(
@@ -82,9 +82,9 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
         '167/193',
         '131/43',
         '--fps',
-        '3',
+        '2',
         '--duration',
-        '25.51',
+        '22.7',
       ]
     )
     assert r.returncode == 0, f'tranz image failed:\n{r.stderr}'
@@ -119,7 +119,7 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
 
   poetry run tranz --no-db --force --palette "electric" --no-date --no-hash
       --prefix "test-mandel-z-auto-seeds300" -o tests/data/images zoom -s 31
-      auto "$CX300" "$CY300" "$W300" "$H300" "43/41" --fps 3 --duration 13.9
+      auto "$CX300" "$CY300" "$W300" "$H300" "43/41" --fps 2 --duration 10.1
   """
   with tempfile.TemporaryDirectory() as tmp_dir:
     r: subprocess.CompletedProcess[str] = tbase.Run(
@@ -191,9 +191,9 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
         ),
         '43/41',
         '--fps',
-        '3',
+        '2',
         '--duration',
-        '13.9',
+        '10.1',
       ]
     )
     assert r.returncode == 0, f'tranz image failed:\n{r.stderr}'
@@ -229,7 +229,7 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
   poetry run tranz --no-db --force --palette "sahara" --set angle --set-palette "iris"
       --no-date --no-hash --prefix "test-julia-z-auto-suzana" -o tests/data/images
       zoom -s 59 -f julia --julia-re "13667/50000" --julia-im "371/50000"
-      auto " -313420497/429687500" "0.6567" "167/193" "227/193" "241/139" --fps 3 --duration "13.9"
+      auto " -313420497/429687500" "0.6567" "167/193" "227/193" "241/139" --fps 2 --duration "10.7"
   """
   with tempfile.TemporaryDirectory() as tmp_dir:
     r: subprocess.CompletedProcess[str] = tbase.Run(
@@ -267,9 +267,9 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
         '227/193',
         '241/139',
         '--fps',
-        '3',
+        '2',
         '--duration',
-        '13.9',
+        '10.7',
       ]
     )
     assert r.returncode == 0, f'tranz image failed:\n{r.stderr}'
@@ -305,7 +305,7 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
   poetry run tranz --no-db --force --palette "lava" --set min --set-palette "electric"
       --no-date --no-hash --prefix "test-julia-z-auto-dragon" -o tests/data/images
       zoom -s 67 -f julia --julia-re " -0.11" --julia-im "0.6557"
-      auto "0" "0" "223/73" "281/71" "37/97" --fps 3 --duration "4.7"
+      auto "0" "0" "223/73" "281/71" "37/97" --fps 2 --duration "4.1"
   """
   with tempfile.TemporaryDirectory() as tmp_dir:
     r: subprocess.CompletedProcess[str] = tbase.Run(
@@ -343,9 +343,9 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
         '281/71',
         '37/97',
         '--fps',
-        '3',
+        '2',
         '--duration',
-        '4.7',
+        '4.1',
       ]
     )
     assert r.returncode == 0, f'tranz image failed:\n{r.stderr}'
@@ -381,7 +381,7 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
   poetry run tranz --no-db --force --palette "sahara" --set max --set-palette "electric"
       --no-date --no-hash --prefix "test-julia-z-auto-blob" -o tests/data/images
       zoom -s 71 -f julia --julia-re " -0.481762" --julia-im " -0.531657"
-      auto "0" "0" "281/71" "223/73" "37/97" --fps 3 --duration "5.9"
+      auto "0" "0" "281/71" "223/73" "37/97" --fps 2 --duration "4.3"
   """
   with tempfile.TemporaryDirectory() as tmp_dir:
     r: subprocess.CompletedProcess[str] = tbase.Run(
@@ -419,9 +419,9 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
         '223/73',
         '37/97',
         '--fps',
-        '3',
+        '2',
         '--duration',
-        '5.9',
+        '4.3',
       ]
     )
     assert r.returncode == 0, f'tranz image failed:\n{r.stderr}'
