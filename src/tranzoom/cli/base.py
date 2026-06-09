@@ -60,7 +60,8 @@ T_GIF_SEEDS_300_HASH: str = '9ffd8f480d179780282c2101c7e98d0b70df8afeba66574b758
 T_GIF_JULIA_SUZANA_HASH: str = '412e7335fb62f220ba3fea142f8f33463d9d76cb00506e6dda823e247546b7a8'
 T_GIF_JULIA_DRAGON_HASH: str = '0bd7702d935807f8b3800ada8889b2c5a3c7900b13ad8007129290dd35dfdd15'
 T_GIF_JULIA_BLOB_HASH: str = '8dac7752359973ab50301529b43af0d4bd6737c22881642aa74e3d8771ffade7'
-# this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
+# this is tested from `tests/cli/base_test.py`, `tests_integration/test_installed_cli.py`, and
+# `tests_integration/test_cython_equivalence.py`!
 
 # CLI options that can be re-used
 
