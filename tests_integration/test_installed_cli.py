@@ -22,59 +22,30 @@ from tranzoom.cli import base
 from tranzoom.core import image
 
 
-@pytest.mark.slow
-@pytest.mark.integration
-def test_version() -> None:
-  """Test the installed CLI from the current environment."""
-  # find the installed console script; will raise if not found
+@pytest.fixture
+def cli() -> pathlib.Path:
+  """Find the installed console script; will raise if not found.
+
+  Returns:
+      pathlib.Path: path to the installed console script.
+
+  """
   cli_path: str | None = shutil.which('tranz')
   if cli_path is None:
     pytest.fail('Console script "tranz" not found in PATH')
-  # test
-  cli: pathlib.Path = pathlib.Path(cli_path)
+  return pathlib.Path(cli_path)
+
+
+@pytest.mark.slow
+@pytest.mark.integration
+def test_version(cli: pathlib.Path) -> None:
+  """Test the installed CLI from the current environment."""
   tbase.VersionCallCheck(cli, tranzoom.__version__)
 
 
 @pytest.mark.slow
 @pytest.mark.integration
-def test_mandelbrot_seahorse_tail() -> None:
-  """Test the installed CLI from the current environment."""
-  # find the installed console script; will raise if not found
-  cli_path: str | None = shutil.which('tranz')
-  if cli_path is None:
-    pytest.fail('Console script "tranz" not found in PATH')
-  # test
-  cli: pathlib.Path = pathlib.Path(cli_path)
-  _MandelbrotSeahorseTailCall(cli)
-
-
-@pytest.mark.slow
-@pytest.mark.integration
-def test_animated_seahorse_tail() -> None:
-  """Test the installed CLI from the current environment."""
-  # find the installed console script; will raise if not found
-  cli_path: str | None = shutil.which('tranz')
-  if cli_path is None:
-    pytest.fail('Console script "tranz" not found in PATH')
-  # test
-  cli: pathlib.Path = pathlib.Path(cli_path)
-  _AnimatedSeahorseTailCall(cli)
-
-
-@pytest.mark.slow
-@pytest.mark.integration
-def test_julia_suzana_wave() -> None:
-  """Test the installed CLI from the current environment."""
-  # find the installed console script; will raise if not found
-  cli_path: str | None = shutil.which('tranz')
-  if cli_path is None:
-    pytest.fail('Console script "tranz" not found in PATH')
-  # test
-  cli: pathlib.Path = pathlib.Path(cli_path)
-  _JuliaSuzanaWaveCall(cli)
-
-
-def _MandelbrotSeahorseTailCall(cli: pathlib.Path) -> None:
+def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
   """Call the installed CLI to render the Seahorse Tail image, check the output file and metadata.
 
   Should be 100% equivalent to the `scripts/make_examples.sh` line to "Render Seahorse Tail".
@@ -198,7 +169,9 @@ def _MandelbrotSeahorseTailCall(cli: pathlib.Path) -> None:
     }
 
 
-def _AnimatedSeahorseTailCall(cli: pathlib.Path) -> None:
+@pytest.mark.slow
+@pytest.mark.integration
+def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
   """Call the installed CLI to render the Seahorse Tail GIF image, check the GIF file and metadata.
 
   Should be 100% equivalent to `scripts/make_examples.sh` line to "Render Animated Seahorse Tail".
@@ -327,7 +300,9 @@ def _AnimatedSeahorseTailCall(cli: pathlib.Path) -> None:
     }
 
 
-def _JuliaSuzanaWaveCall(cli: pathlib.Path) -> None:
+@pytest.mark.slow
+@pytest.mark.integration
+def test_julia_suzana_wave(cli: pathlib.Path) -> None:
   """Call the installed CLI to render the Julia Suzana Wave image, check the output file / metadata.
 
   Should be 100% equivalent to the `scripts/make_examples.sh` line to "Render Julia Suzana Wave".

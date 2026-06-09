@@ -21,77 +21,30 @@ from tranzoom.cli import base
 from tranzoom.core import image
 
 
-@pytest.mark.slow
-@pytest.mark.integration
-def test_python_cython_equivalence_seahorse() -> None:
-  """Test Python/Cython equivalence: Seahorse."""
-  # find the installed console script; will raise if not found
+@pytest.fixture
+def cli() -> pathlib.Path:
+  """Find the installed console script; will raise if not found.
+
+  Returns:
+      pathlib.Path: path to the installed console script.
+
+  """
   cli_path: str | None = shutil.which('tranz')
   if cli_path is None:
     pytest.fail('Console script "tranz" not found in PATH')
-  cli: pathlib.Path = pathlib.Path(cli_path)
-  # test the CLI computations are PYTHON/CYTHON EQUIVALENT and AGNOSTIC
-  for opt in ('python', 'cython'):
-    _MandelSeahorseCall(cli, opt)
-
-
-@pytest.mark.slow
-@pytest.mark.integration
-def test_python_cython_equivalence_seeds300() -> None:
-  """Test Python/Cython equivalence: Seeds300."""
-  # find the installed console script; will raise if not found
-  cli_path: str | None = shutil.which('tranz')
-  if cli_path is None:
-    pytest.fail('Console script "tranz" not found in PATH')
-  cli: pathlib.Path = pathlib.Path(cli_path)
-  # test the CLI computations are PYTHON/CYTHON EQUIVALENT and AGNOSTIC
-  for opt in ('python', 'cython'):
-    _MandelSeeds300Call(cli, opt)
+  return pathlib.Path(cli_path)
 
 
 @pytest.mark.slow
 @pytest.mark.integration
-def test_python_cython_equivalence_suzana() -> None:
-  """Test Python/Cython equivalence: Suzana."""
-  # find the installed console script; will raise if not found
-  cli_path: str | None = shutil.which('tranz')
-  if cli_path is None:
-    pytest.fail('Console script "tranz" not found in PATH')
-  cli: pathlib.Path = pathlib.Path(cli_path)
-  # test the CLI computations are PYTHON/CYTHON EQUIVALENT and AGNOSTIC
-  for opt in ('python', 'cython'):
-    _JuliaSuzanaCall(cli, opt)
-
-
-@pytest.mark.slow
-@pytest.mark.integration
-def test_python_cython_equivalence_dragon() -> None:
-  """Test Python/Cython equivalence: Dragon."""
-  # find the installed console script; will raise if not found
-  cli_path: str | None = shutil.which('tranz')
-  if cli_path is None:
-    pytest.fail('Console script "tranz" not found in PATH')
-  cli: pathlib.Path = pathlib.Path(cli_path)
-  # test the CLI computations are PYTHON/CYTHON EQUIVALENT and AGNOSTIC
-  for opt in ('python', 'cython'):
-    _JuliaDragonCall(cli, opt)
-
-
-@pytest.mark.slow
-@pytest.mark.integration
-def test_python_cython_equivalence_blob() -> None:
-  """Test Python/Cython equivalence: Blob."""
-  # find the installed console script; will raise if not found
-  cli_path: str | None = shutil.which('tranz')
-  if cli_path is None:
-    pytest.fail('Console script "tranz" not found in PATH')
-  cli: pathlib.Path = pathlib.Path(cli_path)
-  # test the CLI computations are PYTHON/CYTHON EQUIVALENT and AGNOSTIC
-  for opt in ('python', 'cython'):
-    _JuliaBlobCall(cli, opt)
-
-
-def _MandelSeahorseCall(cli: pathlib.Path, opt: str) -> None:
+@pytest.mark.parametrize(
+  'opt',
+  [
+    'python',
+    'cython',
+  ],
+)
+def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None:
   """Call the CLI to render the Mandelbrot Seahorse, check result matches dimensions & hash.
 
   poetry run tranz --no-db --force --palette "lava" --set imaginary --set-palette "toxic"
@@ -152,7 +105,16 @@ def _MandelSeahorseCall(cli: pathlib.Path, opt: str) -> None:
     assert hsh == base.T_GIF_SEAHORSE_HASH
 
 
-def _MandelSeeds300Call(cli: pathlib.Path, opt: str) -> None:
+@pytest.mark.slow
+@pytest.mark.integration
+@pytest.mark.parametrize(
+  'opt',
+  [
+    'python',
+    'cython',
+  ],
+)
+def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None:
   """Call the CLI to render the Mandelbrot Seeds300, check result matches dimensions & hash.
 
   poetry run tranz --no-db --force --palette "electric" --no-date --no-hash
@@ -252,7 +214,16 @@ def _MandelSeeds300Call(cli: pathlib.Path, opt: str) -> None:
     assert hsh == base.T_GIF_SEEDS_300_HASH
 
 
-def _JuliaSuzanaCall(cli: pathlib.Path, opt: str) -> None:
+@pytest.mark.slow
+@pytest.mark.integration
+@pytest.mark.parametrize(
+  'opt',
+  [
+    'python',
+    'cython',
+  ],
+)
+def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
   """Call the CLI to render the Julia Suzana, check result matches dimensions & hash.
 
   poetry run tranz --no-db --force --palette "sahara" --set angle --set-palette "iris"
@@ -319,7 +290,16 @@ def _JuliaSuzanaCall(cli: pathlib.Path, opt: str) -> None:
     assert hsh == base.T_GIF_JULIA_SUZANA_HASH
 
 
-def _JuliaDragonCall(cli: pathlib.Path, opt: str) -> None:
+@pytest.mark.slow
+@pytest.mark.integration
+@pytest.mark.parametrize(
+  'opt',
+  [
+    'python',
+    'cython',
+  ],
+)
+def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
   """Call the CLI to render the Julia Dragon, check result matches dimensions & hash.
 
   poetry run tranz --no-db --force --palette "lava" --set min --set-palette "electric"
@@ -386,7 +366,16 @@ def _JuliaDragonCall(cli: pathlib.Path, opt: str) -> None:
     assert hsh == base.T_GIF_JULIA_DRAGON_HASH
 
 
-def _JuliaBlobCall(cli: pathlib.Path, opt: str) -> None:
+@pytest.mark.slow
+@pytest.mark.integration
+@pytest.mark.parametrize(
+  'opt',
+  [
+    'python',
+    'cython',
+  ],
+)
+def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
   """Call the CLI to render the Julia Blob, check result matches dimensions & hash.
 
   poetry run tranz --no-db --force --palette "sahara" --set max --set-palette "electric"
