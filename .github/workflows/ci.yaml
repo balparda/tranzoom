@@ -48,7 +48,6 @@ jobs:
         run: poetry run pytest --typeguard-packages=tranzoom --cov=src --cov-report=term-missing -q tests
 
   integration:
-    # needs: test  # TODO: do we need this??
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -85,5 +84,5 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install dist/*.whl
           python -m pip install pytest
-          python -m pytest -vvvv tests_integration/test_installed_cli.py
+          python -m pytest -vvvv -q tests_integration
           deactivate

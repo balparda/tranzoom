@@ -48,13 +48,20 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 
 # global CLI data, and some test stuff
 
-# if `tests/data/images/demo-mandel-seahorse-tail.png` internal data changes this will change!
-# this indicates that the mathematical computation or the setting of colors has changed;
+# if any of these hashes change: the mathematical computation or the setting of colors has changed!
 # this should NOT change over metadata changes, as it is computed from raw pixel data
+# PNG - really only change if core computation changes, so these are more important to be stable
 SEAHORSE_TAIL_HASH: str = 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9'
-SEAHORSE_ANIMATED_HASH: str = 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab'
 SUZANA_WAVE_HASH: str = 'ea6ecb1b230c24d2af80535874744686bb7fc1f68fad8adea9e176be843829a4'
-# this is tested from `tests/cli/base_test.py` & `tests_integration/test_installed_cli.py`!
+# GIF - these may change for core computation, or if the animation frame machinery changes
+SEAHORSE_ANIMATED_HASH: str = 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab'
+T_GIF_SEAHORSE_HASH: str = '8c63aab31b9efafeb8f1415932b7c363d5953abd1c88152a19ac83100b1a15c5'
+T_GIF_SEEDS_300_HASH: str = '10dc540880f300d8fbe3a57d35a4c1db5ba78a07ad6c856f11eab13e7160bbf2'
+T_GIF_JULIA_SUZANA_HASH: str = 'a370516f1fc3ddd99f6455d65af57ba0bb9eeb6acfa4c8c63df11b037f6bd6d5'
+T_GIF_JULIA_DRAGON_HASH: str = '7c8cf16eda84606c9917f8ceb35a62c813e7928ee134e5e76285d64a2d9b71e4'
+T_GIF_JULIA_BLOB_HASH: str = 'fc0b2bc404e7532a87b6aad1e4196ba97f4109bfa0e44863bf80152bcde11c9d'
+# this is tested from `tests/cli/base_test.py`, `tests_integration/test_installed_cli.py`, and
+# `tests_integration/test_cython_equivalence.py`!
 
 # CLI options that can be re-used
 
@@ -311,6 +318,7 @@ JULIA_RE_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
 )
 JULIA_RE_OPTION: typer.models.OptionInfo = typer.Option(
   frame.DEFAULT_JULIA_RE,
+  '--julia-re',
   help=(
     'Real part of the Julia Set constant; '
     'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
@@ -331,6 +339,7 @@ JULIA_IM_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
 )
 JULIA_IM_OPTION: typer.models.OptionInfo = typer.Option(
   frame.DEFAULT_JULIA_IM,
+  '--julia-im',
   help=(
     'Imaginary part of the Julia Set constant; '
     'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '

@@ -1,21 +1,11 @@
 # SPDX-FileCopyrightText: Copyright 2026 <balparda@github.com> & <BellaKeri@github.com>
 # SPDX-License-Identifier: Apache-2.0
-
 """Integration tests: test the installed CLI from a wheel.
 
-What we verify:
-- `tranz --version` prints the expected version.
-- `tranz image mandel` renders a Seahorse Tail image with deterministic output and metadata.
-- `tranz zoom` renders an animated GIF with correct frames and metadata.
-
-How to run locally:
-1. Build wheel: `make build`
-2. Run tests: `make integration`
+How to run locally: `make build`, then `make integration`
 
 In CI: the wheel is built and installed by the workflow before running these tests.
 """
-
-# TODO: add specific CYTHON tests where the same small images are generated with both pipelines
 
 from __future__ import annotations
 
@@ -32,24 +22,30 @@ from tranzoom.cli import base
 from tranzoom.core import image
 
 
-@pytest.mark.slow
-@pytest.mark.integration
-def test_installed_cli_smoke() -> None:
-  """Test the installed CLI from the current environment."""
-  # find the installed console script; will raise if not found
+@pytest.fixture
+def cli() -> pathlib.Path:
+  """Find the installed console script; will raise if not found.
+
+  Returns:
+      pathlib.Path: path to the installed console script.
+
+  """
   cli_path: str | None = shutil.which('tranz')
   if cli_path is None:
     pytest.fail('Console script "tranz" not found in PATH')
-  cli: pathlib.Path = pathlib.Path(cli_path)
-  # verify version
+  return pathlib.Path(cli_path)
+
+
+@pytest.mark.slow
+@pytest.mark.integration
+def test_version(cli: pathlib.Path) -> None:
+  """Test the installed CLI from the current environment."""
   tbase.VersionCallCheck(cli, tranzoom.__version__)
-  # basic command smoke tests
-  _MandelbrotSeahorseTailCall(cli)
-  _AnimatedSeahorseTailCall(cli)
-  _JuliaSuzanaWaveCall(cli)
 
 
-def _MandelbrotSeahorseTailCall(cli: pathlib.Path) -> None:
+@pytest.mark.slow
+@pytest.mark.integration
+def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
   """Call the installed CLI to render the Seahorse Tail image, check the output file and metadata.
 
   Should be 100% equivalent to the `scripts/make_examples.sh` line to "Render Seahorse Tail".
@@ -88,6 +84,10 @@ def _MandelbrotSeahorseTailCall(cli: pathlib.Path) -> None:
     )
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
+    w: int
+    h: int
+    hsh: str
+    info: tbase.JSONDict
     w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
     assert w == h == 1024, f'Expected image dimensions 1024x1024, got {w} x {h}'
     assert hsh == base.SEAHORSE_TAIL_HASH
@@ -169,7 +169,9 @@ def _MandelbrotSeahorseTailCall(cli: pathlib.Path) -> None:
     }
 
 
-def _AnimatedSeahorseTailCall(cli: pathlib.Path) -> None:
+@pytest.mark.slow
+@pytest.mark.integration
+def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
   """Call the installed CLI to render the Seahorse Tail GIF image, check the GIF file and metadata.
 
   Should be 100% equivalent to `scripts/make_examples.sh` line to "Render Animated Seahorse Tail".
@@ -215,6 +217,10 @@ def _AnimatedSeahorseTailCall(cli: pathlib.Path) -> None:
     )
     assert output_image.exists(), f'Expected output gif not found: {output_image}'
     # check the image data
+    w: int
+    h: int
+    hsh: str
+    info: tbase.JSONDict
     w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
     assert w == h == 220, f'Expected image dimensions 220 x 220, got {w} x {h}'
     assert hsh == base.SEAHORSE_ANIMATED_HASH
@@ -294,7 +300,9 @@ def _AnimatedSeahorseTailCall(cli: pathlib.Path) -> None:
     }
 
 
-def _JuliaSuzanaWaveCall(cli: pathlib.Path) -> None:
+@pytest.mark.slow
+@pytest.mark.integration
+def test_julia_suzana_wave(cli: pathlib.Path) -> None:
   """Call the installed CLI to render the Julia Suzana Wave image, check the output file / metadata.
 
   Should be 100% equivalent to the `scripts/make_examples.sh` line to "Render Julia Suzana Wave".
@@ -340,6 +348,10 @@ def _JuliaSuzanaWaveCall(cli: pathlib.Path) -> None:
     output_image: pathlib.Path = pathlib.Path(tmp_dir) / f'julia-{base.SUZANA_WAVE_HASH[:20]}.png'
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
+    w: int
+    h: int
+    hsh: str
+    info: tbase.JSONDict
     w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
     assert w == 512, f'Expected image dimensions 512 x 377, got {w} x {h}'
     assert h == 377, f'Expected image dimensions 512 x 377, got {w} x {h}'
