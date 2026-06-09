@@ -18,11 +18,11 @@ import warnings
 from collections import abc
 from typing import NoReturn
 
-import click
 import gmpy2
 import tqdm
 import tqdm.rich
 import typer
+import typer._click.core
 from tqdm.std import TqdmExperimentalWarning
 from transcrypto.cli import clibase
 from transcrypto.core import hashes
@@ -63,7 +63,7 @@ tranz.app.add_typer(zoom_app, name='zoom')
 @clibase.CLIErrorGuard
 def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
   *,
-  ctx: click.Context,
+  ctx: typer._click.core.Context,
   # note that these are the zoom image options, with default of 512x512
   fractal_type: frame.Fractal = base.FRACTAL_TYPE_OPTION,  # type: ignore[assignment]
   img_width: int = base.IMAGE_ZOOM_WIDTH_OPTION,  # type: ignore[assignment]
@@ -121,7 +121,7 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
 @clibase.CLIErrorGuard
 def AI(  # documentation is help/epilog/args  # noqa: D103
   *,
-  ctx: click.Context,
+  ctx: typer._click.core.Context,
   center_re: str = base.FRAME_CENTER_RE_ARGUMENT,  # type: ignore[assignment]
   center_im: str = base.FRAME_CENTER_IM_ARGUMENT,  # type: ignore[assignment]
   f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]
@@ -187,7 +187,7 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
 @clibase.CLIErrorGuard
 def Manual(  # documentation is help/epilog/args  # noqa: D103
   *,
-  ctx: click.Context,
+  ctx: typer._click.core.Context,
   center_re: str = base.FRAME_CENTER_RE_ARGUMENT,  # type: ignore[assignment]
   center_im: str = base.FRAME_CENTER_IM_ARGUMENT,  # type: ignore[assignment]
   f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]
@@ -234,7 +234,7 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
 @clibase.CLIErrorGuard
 def Auto(  # documentation is help/epilog/args  # noqa: C901, D103, PLR0912, PLR0914, PLR0915
   *,
-  ctx: click.Context,
+  ctx: typer._click.core.Context,
   center_re: str = base.FRAME_CENTER_RE_ARGUMENT,  # type: ignore[assignment]
   center_im: str = base.FRAME_CENTER_IM_ARGUMENT,  # type: ignore[assignment]
   f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]

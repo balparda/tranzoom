@@ -8,8 +8,8 @@ import json
 import pathlib
 import shutil
 
-import click
 import typer
+import typer._click.core
 from transcrypto.cli import clibase
 from transcrypto.utils import timer
 
@@ -39,7 +39,7 @@ tranz.app.add_typer(config_app, name='config')
 @clibase.CLIErrorGuard
 def Get(  # documentation is help/epilog/args  # noqa: D103
   *,
-  ctx: click.Context,
+  ctx: typer._click.core.Context,
 ) -> None:
   # read
   config: base.TranZoomConfig = ctx.obj
@@ -72,7 +72,7 @@ def Get(  # documentation is help/epilog/args  # noqa: D103
 @clibase.CLIErrorGuard
 def Set(  # documentation is help/epilog/args  # noqa: D103
   *,
-  ctx: click.Context,
+  ctx: typer._click.core.Context,
   key: str = base.CONFIG_KEY_ARGUMENT,  # type: ignore[assignment]
   value: str = base.CONFIG_VALUE_ARGUMENT,  # type: ignore[assignment]
 ) -> None:
@@ -129,7 +129,7 @@ def Set(  # documentation is help/epilog/args  # noqa: D103
 @clibase.CLIErrorGuard
 def DeleteDatabase(  # documentation is help/epilog/args  # noqa: D103
   *,
-  ctx: click.Context,
+  ctx: typer._click.core.Context,
 ) -> None:
   # read
   config: base.TranZoomConfig = ctx.obj

@@ -14,9 +14,9 @@ import dataclasses
 import json
 import pathlib
 
-import click
 import gmpy2
 import typer
+import typer._click.core
 from transcrypto.cli import clibase
 from transcrypto.core import hashes
 from transcrypto.utils import saferandom
@@ -53,7 +53,7 @@ tranz.app.add_typer(image_app, name='image')
 @clibase.CLIErrorGuard
 def ImageOptions(  # documentation is in help/epilog  # noqa: D103
   *,
-  ctx: click.Context,
+  ctx: typer._click.core.Context,
   # note that these are the image options, with default of 1024x1024
   img_width: int = base.IMAGE_WIDTH_OPTION,  # type: ignore[assignment]
   img_height: int = base.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
@@ -103,7 +103,7 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
 @clibase.CLIErrorGuard
 def Mandel(  # documentation is help/epilog/args  # noqa: D103
   *,
-  ctx: click.Context,
+  ctx: typer._click.core.Context,
   center_re: str = base.FRAME_CENTER_RE_ARGUMENT,  # type: ignore[assignment]
   center_im: str = base.FRAME_CENTER_IM_ARGUMENT,  # type: ignore[assignment]
   f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]
@@ -143,7 +143,7 @@ def Mandel(  # documentation is help/epilog/args  # noqa: D103
 @clibase.CLIErrorGuard
 def Julia(  # documentation is help/epilog/args  # noqa: D103
   *,
-  ctx: click.Context,
+  ctx: typer._click.core.Context,
   point_re: str = base.JULIA_RE_ARGUMENT,  # type: ignore[assignment]
   point_im: str = base.JULIA_IM_ARGUMENT,  # type: ignore[assignment]
   center_re: str = base.JULIA_CENTER_RE_ARGUMENT,  # type: ignore[assignment]
@@ -188,7 +188,7 @@ def Julia(  # documentation is help/epilog/args  # noqa: D103
 @clibase.CLIErrorGuard
 def Read(  # documentation is help/epilog/args  # noqa: D103
   *,
-  ctx: click.Context,
+  ctx: typer._click.core.Context,
   image_path: pathlib.Path = base.IMAGE_PATH_INPUT_ARGUMENT,  # type: ignore[assignment]
 ) -> None:
   config: base.TranZoomConfig = ctx.obj
@@ -229,7 +229,7 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
 @clibase.CLIErrorGuard
 def Clean(  # documentation is help/epilog/args  # noqa: D103
   *,
-  ctx: click.Context,
+  ctx: typer._click.core.Context,
   image_path: pathlib.Path = base.IMAGE_PATH_INPUT_ARGUMENT,  # type: ignore[assignment]
   leave_hashes: bool = base.CLEANUP_LEAVE_HASHES_OPTION,  # type: ignore[assignment]
   clean_path: bool = base.CLEANUP_CLEAN_PATH_OPTION,  # type: ignore[assignment]
