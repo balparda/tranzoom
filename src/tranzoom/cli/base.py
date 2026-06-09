@@ -55,11 +55,11 @@ SEAHORSE_TAIL_HASH: str = 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f1
 SUZANA_WAVE_HASH: str = 'ea6ecb1b230c24d2af80535874744686bb7fc1f68fad8adea9e176be843829a4'
 # GIF - these may change for core computation, or if the animation frame machinery changes
 SEAHORSE_ANIMATED_HASH: str = 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab'
-T_GIF_SEAHORSE_HASH: str = 'd7eaaa6f57344ed6cd4716d73917407db373051738ee74f74fd23f7b5004a443'
-T_GIF_SEEDS_300_HASH: str = '9ffd8f480d179780282c2101c7e98d0b70df8afeba66574b758ade09e1e00f88'
-T_GIF_JULIA_SUZANA_HASH: str = '412e7335fb62f220ba3fea142f8f33463d9d76cb00506e6dda823e247546b7a8'
-T_GIF_JULIA_DRAGON_HASH: str = '0bd7702d935807f8b3800ada8889b2c5a3c7900b13ad8007129290dd35dfdd15'
-T_GIF_JULIA_BLOB_HASH: str = '8dac7752359973ab50301529b43af0d4bd6737c22881642aa74e3d8771ffade7'
+T_GIF_SEAHORSE_HASH: str = '8c63aab31b9efafeb8f1415932b7c363d5953abd1c88152a19ac83100b1a15c5'
+T_GIF_SEEDS_300_HASH: str = '10dc540880f300d8fbe3a57d35a4c1db5ba78a07ad6c856f11eab13e7160bbf2'
+T_GIF_JULIA_SUZANA_HASH: str = 'a370516f1fc3ddd99f6455d65af57ba0bb9eeb6acfa4c8c63df11b037f6bd6d5'
+T_GIF_JULIA_DRAGON_HASH: str = '7c8cf16eda84606c9917f8ceb35a62c813e7928ee134e5e76285d64a2d9b71e4'
+T_GIF_JULIA_BLOB_HASH: str = 'fc0b2bc404e7532a87b6aad1e4196ba97f4109bfa0e44863bf80152bcde11c9d'
 # this is tested from `tests/cli/base_test.py`, `tests_integration/test_installed_cli.py`, and
 # `tests_integration/test_cython_equivalence.py`!
 

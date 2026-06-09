@@ -39,8 +39,8 @@ def test_computation_integrity_hashes_of_test_images(img: str, w: int, h: int, h
   i_h: int
   i_hsh: str
   i_w, i_h, i_hsh, _ = image.GetBasicDataFromImage((_IMAGES_DIR / img).read_bytes())
-  assert w == i_w, f'Width mismatch for {img}: expected {w}, got {i_w}; BUG!'
-  assert h == i_h, f'Height mismatch for {img}: expected {h}, got {i_h}; BUG!'
-  assert hsh == i_hsh, (
+  assert i_w == w, f'Width mismatch for {img}: expected {w}, got {i_w}; BUG!'
+  assert i_h == h, f'Height mismatch for {img}: expected {h}, got {i_h}; BUG!'
+  assert i_hsh == hsh, (
     f'Hash mismatch for {img}: expected {hsh}, got {i_hsh}; did the computation machinery change?'
   )

@@ -49,14 +49,14 @@ H300="127/6100000000000000000000000000000000000000000000000000000000000000000000
 
 # these are meant to stress the mandelbrot/julia math python/cython implementations
 # 1: superficial Mandelbrot zoom, with set[IMAGINARY]
-poetry run tranz --no-db --force --palette "lava" --set imaginary --set-palette "toxic" --no-date --no-hash --prefix "test-mandel-z-auto-seahorse" -o tests/data/images zoom -s 53 auto " -0.7436499" "0.13188204" "227/193" "167/193" "131/43" --fps 3 --duration "25.51"
+poetry run tranz --no-db --force --palette "lava" --set imaginary --set-palette "toxic" --no-date --no-hash --prefix "test-mandel-z-auto-seahorse" -o tests/data/images zoom -s 53 auto " -0.7436499" "0.13188204" "227/193" "167/193" "131/43" --fps 2 --duration "22.7"
 # 2: ultra-deep Mandelbrot zoom, no set
-poetry run tranz --no-db --force --palette "electric" --no-date --no-hash --prefix "test-mandel-z-auto-seeds300" -o tests/data/images zoom -s 31 auto "$CX300" "$CY300" "$W300" "$H300" "43/41" --fps 3 --duration 13.9
+poetry run tranz --no-db --force --palette "electric" --no-date --no-hash --prefix "test-mandel-z-auto-seeds300" -o tests/data/images zoom -s 31 auto "$CX300" "$CY300" "$W300" "$H300" "43/41" --fps 2 --duration "10.1"
 # 3: ultra-deep Mandelbrot with mini-brot and set coloring
 # TODO: still missing a mini-brot ultra zoom so we can stress the set math
 # 4: julia zoom, Suzana point, with set[ANGLE]
-poetry run tranz --no-db --force --palette "sahara" --set angle --set-palette "iris" --no-date --no-hash --prefix "test-julia-z-auto-suzana" -o tests/data/images zoom -s 59 -f julia --julia-re "13667/50000" --julia-im "371/50000" auto " -313420497/429687500" "0.6567" "167/193" "227/193" "241/139" --fps 3 --duration "13.9"
+poetry run tranz --no-db --force --palette "sahara" --set angle --set-palette "iris" --no-date --no-hash --prefix "test-julia-z-auto-suzana" -o tests/data/images zoom -s 59 -f julia --julia-re "13667/50000" --julia-im "371/50000" auto " -313420497/429687500" "0.6567" "167/193" "227/193" "241/139" --fps 2 --duration "10.7"
 # 5: julia zoom, different "Dragon" point, with set[MIN]
-poetry run tranz --no-db --force --palette "lava" --set min --set-palette "electric" --no-date --no-hash --prefix "test-julia-z-auto-dragon" -o tests/data/images zoom -s 67 -f julia --julia-re " -0.11" --julia-im "0.6557" auto "0" "0" "223/73" "281/71" "37/97" --fps 3 --duration "4.7"
+poetry run tranz --no-db --force --palette "lava" --set min --set-palette "electric" --no-date --no-hash --prefix "test-julia-z-auto-dragon" -o tests/data/images zoom -s 67 -f julia --julia-re " -0.11" --julia-im "0.6557" auto "0" "0" "223/73" "281/71" "37/97" --fps 2 --duration "4.1"
 # 6: julia zoom, different "Blob" point, with set[MAX]
-poetry run tranz --no-db --force --palette "sahara" --set max --set-palette "electric" --no-date --no-hash --prefix "test-julia-z-auto-blob" -o tests/data/images zoom -s 71 -f julia --julia-re " -0.481762" --julia-im " -0.531657" auto "0" "0" "281/71" "223/73" "37/97" --fps 3 --duration "5.9"
+poetry run tranz --no-db --force --palette "sahara" --set max --set-palette "electric" --no-date --no-hash --prefix "test-julia-z-auto-blob" -o tests/data/images zoom -s 71 -f julia --julia-re " -0.481762" --julia-im " -0.531657" auto "0" "0" "281/71" "223/73" "37/97" --fps 2 --duration "4.3"
