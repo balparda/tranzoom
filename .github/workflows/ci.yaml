@@ -48,7 +48,6 @@ jobs:
         run: poetry run pytest --typeguard-packages=tranzoom --cov=src --cov-report=term-missing -q tests
 
   integration:
-    # needs: test  # TODO: do we need this??
     runs-on: ubuntu-latest
     strategy:
       matrix:
