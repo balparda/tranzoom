@@ -55,18 +55,18 @@ cdef extern from 'mpfr.h':
   void mpfr_init2(mpfr_t, mpfr_prec_t)
   void mpfr_clear(mpfr_t)
 
-  int mpfr_set(mpfr_t, mpfr_srcptr, mpfr_rnd_t)
-  int mpfr_set_ui(mpfr_t, unsigned long, mpfr_rnd_t)
-  int mpfr_set_si(mpfr_t, long, mpfr_rnd_t)
-  int mpfr_set_d(mpfr_t, double, mpfr_rnd_t)
-  int mpfr_set_q(mpfr_t, mpq_srcptr, mpfr_rnd_t)
-
   int mpfr_const_pi(mpfr_t, mpfr_rnd_t)
 
-  int mpfr_floor(mpfr_t, mpfr_srcptr)
+  int mpfr_cmp(mpfr_srcptr, mpfr_srcptr)
+  int mpfr_cmp_ui(mpfr_srcptr, unsigned long)
+  int mpfr_less_p(mpfr_srcptr, mpfr_srcptr)
+  int mpfr_greater_p(mpfr_srcptr, mpfr_srcptr)
+  int mpfr_lessequal_p(mpfr_srcptr, mpfr_srcptr)
+  int mpfr_greaterequal_p(mpfr_srcptr, mpfr_srcptr)
+  int mpfr_zero_p(mpfr_srcptr)
   int mpfr_fits_slong_p(mpfr_srcptr, mpfr_rnd_t)
-  long mpfr_get_si(mpfr_srcptr, mpfr_rnd_t)
 
+  int mpfr_floor(mpfr_t, mpfr_srcptr)
   int mpfr_add(mpfr_t, mpfr_srcptr, mpfr_srcptr, mpfr_rnd_t)
   int mpfr_sub(mpfr_t, mpfr_srcptr, mpfr_srcptr, mpfr_rnd_t)
   int mpfr_mul(mpfr_t, mpfr_srcptr, mpfr_srcptr, mpfr_rnd_t)
@@ -76,15 +76,15 @@ cdef extern from 'mpfr.h':
   int mpfr_log(mpfr_t, mpfr_srcptr, mpfr_rnd_t)
   int mpfr_log2(mpfr_t, mpfr_srcptr, mpfr_rnd_t)
   int mpfr_atan2(mpfr_t, mpfr_srcptr, mpfr_srcptr, mpfr_rnd_t)
-  double mpfr_get_d(mpfr_srcptr, mpfr_rnd_t)
 
-  int mpfr_cmp(mpfr_srcptr, mpfr_srcptr)
-  int mpfr_cmp_ui(mpfr_srcptr, unsigned long)
-  int mpfr_less_p(mpfr_srcptr, mpfr_srcptr)
-  int mpfr_greater_p(mpfr_srcptr, mpfr_srcptr)
-  int mpfr_lessequal_p(mpfr_srcptr, mpfr_srcptr)
-  int mpfr_greaterequal_p(mpfr_srcptr, mpfr_srcptr)
-  int mpfr_zero_p(mpfr_srcptr)
+  double mpfr_get_d(mpfr_srcptr, mpfr_rnd_t)
+  long mpfr_get_si(mpfr_srcptr, mpfr_rnd_t)
+
+  int mpfr_set(mpfr_t, mpfr_srcptr, mpfr_rnd_t)
+  int mpfr_set_ui(mpfr_t, unsigned long, mpfr_rnd_t)
+  int mpfr_set_si(mpfr_t, long, mpfr_rnd_t)
+  int mpfr_set_d(mpfr_t, double, mpfr_rnd_t)
+  int mpfr_set_q(mpfr_t, mpq_srcptr, mpfr_rnd_t)
 
 
 import_gmpy2()

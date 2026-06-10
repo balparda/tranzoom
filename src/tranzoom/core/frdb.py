@@ -20,7 +20,7 @@ from transcrypto.utils import human, timer
 from tranzoom import __version__
 from tranzoom.core import fractal, frame, image
 
-# TODO: commands to look at data in the DB
+# TODO: commands to look/inspect the DB data, print DB stats, etc
 # DB constants
 
 _DB_FILE_NAME = 'tranZ_DB.json'  # default DB file name

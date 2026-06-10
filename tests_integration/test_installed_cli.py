@@ -60,7 +60,7 @@ def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
         '--db',
         '--force',
         '--opt',
-        'python',
+        'cython',
         '--out',  # --out directs output to tmp_dir so we can assert on the exact file produced
         tmp_dir,
         '--db-path',  # make sure DB will be in temp too!
@@ -135,26 +135,27 @@ def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
         '2047391: 1048375, 2048632: 1048376}'
       ),
       'tranZoom:image:set:count': '200',
-      'tranZoom:image:set:n:min': '2773383',
-      'tranZoom:image:set:n:max': '14144995',
-      'tranZoom:image:set:nu:min': '0.0',
-      'tranZoom:image:set:nu:max': '0.0',
-      'tranZoom:image:set:bucket:min': '5679888384',
-      'tranZoom:image:set:bucket:max': '28968949760',
+      'tranZoom:image:set:n:min': '59557928',
+      'tranZoom:image:set:n:max': '303761451',
+      'tranZoom:image:set:nu:min': '0.005359342787414789',
+      'tranZoom:image:set:nu:max': '0.9978883266448975',
+      'tranZoom:image:set:bucket:min': '121974638155',
+      'tranZoom:image:set:bucket:max': '622103451658',
       'tranZoom:image:set:hist:linear': (
-        '{2773383: 1, 3024301: 1, 3110372: 1, ...: 194, 14071028: 1, 14132599: 1, 14144995: 1}'
+        '{59557928: 1, 64946349: 1, 66794710: 1, ...: 194, 302173019: 1, '
+        '303495239: 1, 303761451: 1}'
       ),
       'tranZoom:image:set:hist:linear:cumulative': (
-        '{2773383: 1, 3024301: 2, 3110372: 3, ...: 19497, 14071028: 198, 14132599: 199, '
-        '14144995: 200}'
+        '{59557928: 1, 64946349: 2, 66794710: 3, ...: 19497, 302173019: 198, '
+        '303495239: 199, 303761451: 200}'
       ),
       'tranZoom:image:set:hist:bucket': (
-        '{5679888384: 1, 6193768448: 1, 6370041856: 1, ...: 194, 28817465344: 1, '
-        '28943562752: 1, 28968949760: 1}'
+        '{121974638155: 1, 133010124615: 1, 136795567844: 1, ...: 194, '
+        '618850344931: 1, 621558250452: 1, 622103451658: 1}'
       ),
       'tranZoom:image:set:hist:bucket:cumulative': (
-        '{5679888384: 1, 6193768448: 2, 6370041856: 3, ...: 19497, 28817465344: 198, '
-        '28943562752: 199, 28968949760: 200}'
+        '{121974638155: 1, 133010124615: 2, 136795567844: 3, ...: 19497, '
+        '618850344931: 198, 621558250452: 199, 622103451658: 200}'
       ),
       'tranZoom:image:stats:imag_lo': '0.027733821348360696858581004102225914175833148',
       'tranZoom:image:stats:imag_hi': '0.14144994797569664128062592939633699605100723',
@@ -267,12 +268,12 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
         '2220863: 48379, 2227517: 48380}'
       ),
       'tranZoom:image:set:count': '20',
-      'tranZoom:image:set:n:min': '100000000',
-      'tranZoom:image:set:n:max': '100000000',
+      'tranZoom:image:set:n:min': '2147483647',
+      'tranZoom:image:set:n:max': '2147483647',
       'tranZoom:image:set:nu:min': '0.0',
       'tranZoom:image:set:nu:max': '0.0',
-      'tranZoom:image:set:bucket:min': '204800000000',
-      'tranZoom:image:set:bucket:max': '204800000000',
+      'tranZoom:image:set:bucket:min': '4398046509056',
+      'tranZoom:image:set:bucket:max': '4398046509056',
       'tranZoom:render:overlay': 'none',
       'tranZoom:render:palette': 'sahara',
       'tranZoom:render:set_palette': 'none',
@@ -402,25 +403,25 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
       ),
       'tranZoom:image:set:count': '86451',
       'tranZoom:image:set:n:min': '1',
-      'tranZoom:image:set:n:max': '100000000',
+      'tranZoom:image:set:n:max': '2147483647',
       'tranZoom:image:set:nu:min': '0.0',
-      'tranZoom:image:set:nu:max': '0.0',
+      'tranZoom:image:set:nu:max': '0.9999693632125854',
       'tranZoom:image:set:bucket:min': '2048',
-      'tranZoom:image:set:bucket:max': '204800000000',
+      'tranZoom:image:set:bucket:max': '4398046509056',
       'tranZoom:image:set:hist:linear': (
-        '{1: 1, 10590: 1, 21180: 1, ...: 85187, 99989180: 1, 99999294: 1, 100000000: 1259}'
+        '{1: 1, 227414: 1, 454834: 1, ...: 85187, 2147251284: 1, 2147468473: 1, 2147483647: 1259}'
       ),
       'tranZoom:image:set:hist:linear:cumulative': (
-        '{1: 1, 10590: 2, 21180: 3, ...: 3611351558, 99989180: 85191, 99999294: 85192, '
-        '100000000: 86451}'
+        '{1: 1, 227414: 2, 454834: 3, ...: 3627575241, 2147251284: 85191, '
+        '2147468473: 85192, 2147483647: 86451}'
       ),
       'tranZoom:image:set:hist:bucket': (
-        '{2048: 1, 21688320: 1, 43376640: 1, ...: 85187, 204777840640: 1, '
-        '204798554112: 1, 204800000000: 1259}'
+        '{2048: 1, 465745059: 1, 931501089: 1, ...: 85187, 4397570629803: 1, '
+        '4398015433823: 1, 4398046509056: 1259}'
       ),
       'tranZoom:image:set:hist:bucket:cumulative': (
-        '{2048: 1, 21688320: 2, 43376640: 3, ...: 3611351558, 204777840640: 85191, '
-        '204798554112: 85192, 204800000000: 86451}'
+        '{2048: 1, 465745059: 2, 931501089: 3, ...: 3628696726, '
+        '4397570629803: 85191, 4398015433823: 85192, 4398046509056: 86451}'
       ),
       'tranZoom:image:stats:max_lo': '1.0303269913803812829799720484633954828318221',
       'tranZoom:image:stats:max_hi': '2.0404855784383760342353483617573930562163787',
