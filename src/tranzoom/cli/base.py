@@ -69,7 +69,18 @@ T_GIF_SEEDS_300_HASH: str = '10dc540880f300d8fbe3a57d35a4c1db5ba78a07ad6c856f11e
 T_GIF_JULIA_SUZANA_HASH: str = '55db8370c11152e65c6afc555c5eee494324a44017ea154fa2e2f64ced53ed30'
 T_GIF_JULIA_DRAGON_HASH: str = 'a44055a0e8cea2c68f068fb755bd5909247b8ac6b7a2b8d077dbbf8015375733'
 T_GIF_JULIA_BLOB_HASH: str = 'cc4b74f72a0d4c1daa015bd377826c21a410c63863a3181e0882403c965b40a7'
-# this is tested from `tests/cli/base_test.py`, `tests_integration/test_installed_cli.py`, and
+# SHA of all the frame's data - like above: computation or animation frame machinery changes
+TEST_IMAGE_DATA_HASHES: dict[str, tuple[int, str]] = {
+  # name: (number of frames, hash of all the frames)
+  # these are the hashes of the raw object data of the frame pickled to disk, not to be confused
+  # with the frames' hash we compute; both are data dependent only, but they WILL BE DIFFERENT
+  'seahorse': (45, 'tbd1'),
+  'seeds300': (20, 'b7b771ce478c594e1cd73271ec92127b1b2a40d8e1224e72e5f9cb2d77ea2e75'),
+  'suzana': (21, 'tbd3'),
+  'dragon': (8, 'tbd4'),
+  'blob': (8, 'tbd5'),
+}
+# these are tested from `tests/cli/base_test.py`, `tests_integration/test_installed_cli.py`, and
 # `tests_integration/test_cython_equivalence.py`!
 
 # CLI options that can be re-used
