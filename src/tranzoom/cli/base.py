@@ -11,9 +11,9 @@ import pathlib
 from collections import abc
 from typing import TypedDict, cast
 
-import click
 import gmpy2
 import typer
+import typer._click.exceptions
 from transcrypto.cli import clibase
 from transcrypto.core import aes
 from transcrypto.utils import base as tbase
@@ -23,11 +23,11 @@ from tranzoom import __version__
 from tranzoom.core import ai, frame, frdb, image, palette
 
 
-class Error(ai.Error, click.ClickException):
+class Error(ai.Error, typer._click.exceptions.ClickException):  # noqa: SLF001
   """Base CLI/click exception."""
 
 
-class UsageError(Error, click.UsageError):
+class UsageError(Error, typer._click.exceptions.UsageError):  # noqa: SLF001
   """Base CLI/click usage exception."""
 
 

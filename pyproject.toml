@@ -52,11 +52,10 @@ readme = "README.md"
 license-files = [ "LICENSE" ]
 
 dependencies = [
+
   # best place for project dependencies, if possible
   # development-only dependencies go in the [tool.poetry.group.dev.dependencies] section below
 
-  "click==8.3.3",  # TODO: >=8.4 is waiting for typer type-stubs compatibility (probably >0.25.1)
-  "cryptography>=48.0",
   "Cython>=3.2",  # if you change here, also change "requires" above
   "gmpy2>=2.3",  # if you change here, also change "requires" above
   "ImageIO>=2.37",
@@ -66,12 +65,9 @@ dependencies = [
   "rich>=15.0",
   "setuptools>=82.0",  # if you change here, also change "requires" above
   "tqdm>=4.68",
-  "transai>=1.3.1",
-  "transcrypto>=2.6.3",
-
-  # TODO: pinned version because 0.26 is a mess, inline click and tests give a message that
-  #    can only be fixed by disabling typeguard; probably have to fix clibase/transcrypto up
-  "typer==0.25.1",   # if this changes, also change: [tool.poetry.dependencies]
+  "transai>=1.3.3",
+  "transcrypto>=2.7",
+  "typer>=0.26.7",   # if this changes, also change: [tool.poetry.dependencies]
 
 ]
 
@@ -129,7 +125,7 @@ script = "scripts/build_extensions.py"
 # prefer to add dependencies inside the [project.dependencies] section
 
 python = "^3.12"  # if version changes, remember to change README.md
-typer = { version = "0.25.1", extras = ["all"] }
+typer = { version = "^0.26.7", extras = ["all"] }   # if this changes, also change: dependencies
 
 [tool.poetry.group.dev.dependencies]
 

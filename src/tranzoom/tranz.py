@@ -7,8 +7,8 @@ from __future__ import annotations
 import dataclasses
 import pathlib
 
-import click
 import typer
+import typer._click.core
 from rich import console as rich_console
 from transai import transai
 from transcrypto.cli import clibase
@@ -82,7 +82,7 @@ def Run() -> None:
 @clibase.CLIErrorGuard
 def Main(  # documentation is help/epilog/args # noqa: D103
   *,
-  ctx: click.Context,  # global context
+  ctx: typer._click.core.Context,  # global context
   version: bool = typer.Option(False, '--version', help='Show version and exit.'),
   verbose: int = typer.Option(
     0,
@@ -219,6 +219,8 @@ from tranzoom.cli import (  # noqa: E402, I001
   epilog=('Example:\n\n\n\n$ poetry run tranz markdown > tranz.md\n\n<<saves CLI doc>>'),
 )
 @clibase.CLIErrorGuard
-def Markdown(*, ctx: click.Context) -> None:  # documentation is help/epilog/args # noqa: D103
+def Markdown(  # documentation is help/epilog/args # noqa: D103
+  *, ctx: typer._click.core.Context
+) -> None:
   config: base.TranZoomConfig = ctx.obj
   config.console.print(clibase.GenerateTyperHelpMarkdown(app, prog_name='tranz'), soft_wrap=True)

@@ -7,10 +7,9 @@ from __future__ import annotations
 from unittest import mock
 
 import pytest
-from click import testing as click_testing
+import typer.testing
 from transcrypto.utils import config as app_config
 from transcrypto.utils import logging as cli_logging
-from typer import testing
 
 from tranzoom import tranz
 
@@ -22,17 +21,17 @@ def reset_cli() -> None:
   app_config.ResetConfig()
 
 
-def CallCLI(args: list[str]) -> click_testing.Result:
+def CallCLI(args: list[str]) -> typer.testing.Result:
   """Call the CLI with args.
 
   Args:
       args (list[str]): CLI arguments.
 
   Returns:
-      click_testing.Result: CLI result.
+      typer.testing.Result: CLI result.
 
   """
-  return testing.CliRunner().invoke(tranz.app, args)
+  return typer.testing.CliRunner().invoke(tranz.app, args)
 
 
 def PrintedValue(console_mock: mock.Mock) -> object:
@@ -52,7 +51,7 @@ def PrintedValue(console_mock: mock.Mock) -> object:
 
 def test_version_flag() -> None:
   """Test."""
-  result: click_testing.Result = CallCLI(['--version'])
+  result: typer.testing.Result = CallCLI(['--version'])
   assert result.exit_code == 0
   assert '.' in result.stdout
 
@@ -66,14 +65,14 @@ def test_run_function() -> None:
 
 def test_version_flag_ignores_extra_args() -> None:
   """Test."""
-  result: click_testing.Result = CallCLI(['--version', 'markdown'])
+  result: typer.testing.Result = CallCLI(['--version', 'markdown'])
   assert result.exit_code == 0
   assert '.' in result.stdout
 
 
 def test_markdown_command_generates_docs() -> None:
   """Test markdown command generates documentation."""
-  result: click_testing.Result = CallCLI(['markdown'])
+  result: typer.testing.Result = CallCLI(['markdown'])
   assert result.exit_code == 0, result.output
   # Verify it contains markdown-like content
   assert 'zoom' in result.stdout
