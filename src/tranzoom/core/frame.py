@@ -40,8 +40,8 @@ MAX_UINT32: int = 0xFFFFFFFF
 N_BYTES_UINT: int = 8  # we use array of uint64 to store pixel data / array.array('Q') / unsigned 64
 MIN_ITER: int = 1000  # minimum, but also a mark that we want to automatically calculate the depth
 HIGH_ITERS: list[int] = [100_000, 1_000_000, 10_000_000]  # these are very high iteration counts
-SET_INTERIOR_RESOLUTION: int = 100_000_000  # interior points max val [0..SET_INTERIOR_RESOLUTION]
 MAX_ITER: int = BIT_31 - 1  # ± 2_147_483_647, max for signed array('i'), sint32
+SET_INTERIOR_INT_MAX: int = MAX_ITER  # could be BIT_31, but lets keep abs() <= MAX_ITER
 SMOOTH_EXTRA_ITERS: int = 5  # iterations AFTER |z| > 2 to compute: eliminates color banding errors
 
 # file/memory size thresholds for warnings about large files or memory usage
@@ -60,8 +60,9 @@ _MPFR_BIG_PRECISION: int = 30_000  # ±10k decimal digits
 _MPFR_MAX_PRECISION: int = 300_000  # ±100k decimal digits
 _MPFR_MIN_GUARD_BITS: int = 88  # extra bits beyond the minimum needed to distinguish pixels
 MPFR_MAX_SET_Z: gmpy2.mpfr = gmpy2.mpfr('2')
-MPFR_SET_INTERIOR_RESOLUTION: gmpy2.mpfr = gmpy2.mpfr(SET_INTERIOR_RESOLUTION)
-MPFR_SET_INTERIOR_SCALE: gmpy2.mpfr = MPFR_SET_INTERIOR_RESOLUTION / MPFR_MAX_SET_Z
+MPFR_SET_INTERIOR_INT_MAX: gmpy2.mpfr = gmpy2.mpfr(SET_INTERIOR_INT_MAX)
+MPFR_SET_INTERIOR_INT_SPAN: gmpy2.mpfr = gmpy2.mpfr(SET_INTERIOR_INT_MAX - 1)
+MPFR_SET_INTERIOR_SCALE: gmpy2.mpfr = MPFR_SET_INTERIOR_INT_SPAN / MPFR_MAX_SET_Z
 
 # gmpy2.mpfr ultra-precision context factory
 PrecisionContext: abc.Callable[[], gmpy2.context] = lambda: gmpy2.local_context(

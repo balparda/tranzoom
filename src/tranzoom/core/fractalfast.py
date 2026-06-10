@@ -22,7 +22,6 @@ really ugly ways.
 import math
 import struct
 import warnings
-from collections import abc
 from typing import NoReturn, cast
 
 import cython  # type: ignore[import-untyped]
@@ -139,21 +138,6 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
         and inp.stats.imag_hi > inp.stats.imag_lo
       ):
         imag_delta = inp.stats.imag_hi - inp.stats.imag_lo  # pyright: ignore[reportOperatorIssue, reportUnknownVariableType]
-    # pre-compute normalization function used everywhere for set points
-    normalize: abc.Callable[[gmpy2.mpfr, gmpy2.mpfr, gmpy2.mpfr], int] = lambda v, lo, d: (
-      -min(  # negative to mark it as interior!
-        frame.SET_INTERIOR_RESOLUTION,  # clamp to the max
-        max(
-          1,  # clamped to at least 1, we can't have 0
-          int(  # converted to int
-            gmpy2.floor(  # scaled to [0,1], then to [0, SET_INTERIOR_RESOLUTION]
-              max(_MPFR_ZERO, min(_MPFR_ONE, (v - lo) / d)) * frame.MPFR_SET_INTERIOR_RESOLUTION
-            )
-          )
-          + 1,  # we want to start at 1, so add 1, -> [1, SET_INTERIOR_RESOLUTION + 1]
-        ),
-      )
-    )
     # create progress bar based on total pixels and the options
     has_procs: bool = inp.total_tasks > 1
     n_task: int = inp.n_task - 1  # convert to 0-based index for easier modulo math
@@ -198,7 +182,7 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
             # point is in the main cardioid, so it's an interior point, no escape
             # mark negative so as to mark it as interior
             n_interior += 1
-            img.escape[px_count] = EncodeIntFloatTo64(-frame.SET_INTERIOR_RESOLUTION, 0.0)
+            img.escape[px_count] = EncodeIntFloatTo64(-frame.SET_INTERIOR_INT_MAX, 0.0)
             p_bar.update(1)  # we touched a pixel, so update the progress bar
             continue
           # period-2 bulb test
@@ -207,7 +191,7 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
             # point is in the period-2 bulb, so it's an interior point, no escape
             # mark negative so as to mark it as interior
             n_interior += 1
-            img.escape[px_count] = EncodeIntFloatTo64(-frame.SET_INTERIOR_RESOLUTION, 0.0)
+            img.escape[px_count] = EncodeIntFloatTo64(-frame.SET_INTERIOR_INT_MAX, 0.0)
             p_bar.update(1)  # we touched a pixel, so update the progress bar
             continue
         # not in the main cardioid or period-2 bulb, do the full escape-time test in mpfr
@@ -267,17 +251,18 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
           # now, for every possible set px algorithms, we do the final computations
           if inp.params.set_points is None:
             # default coloring: just mark as interior with a special negative value
-            escaped_at = -frame.SET_INTERIOR_RESOLUTION  # negative to mark it as interior!
+            escaped_at = -frame.SET_INTERIOR_INT_MAX  # negative to mark it as interior!
+            smooth_escape = 0.0
           elif inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
             # track the min |z|^2; first the stats...
             min_lo = min(min_lo, min_z2)
             min_hi = max(min_hi, min_z2)
             # ...then the normalized value for coloring
             sqrt_min: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(min_z2))
-            escaped_at = (
-              normalize(sqrt_min, sqrt_lo2, sqrt_delta2)  # sqrt_lo2 & sqrt_delta2 are pre-computed
+            escaped_at, smooth_escape = (
+              NormalizeSmoothSet(sqrt_min, sqrt_lo2, sqrt_delta2)  # sqrt_lo2/delta2 pre-computed
               if stats_min
-              else normalize(sqrt_min, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
+              else NormalizeSmoothSet(sqrt_min, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
             )
           elif inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
             # track the max |z|^2; first the stats...
@@ -285,10 +270,10 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
             max_hi = max(max_hi, max_z2)
             # ...then the normalized value for coloring
             sqrt_max: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(max_z2))
-            escaped_at = (
-              normalize(sqrt_max, sqrt_lo, sqrt_delta)  # sqrt_lo & sqrt_delta are pre-computed
+            escaped_at, smooth_escape = (
+              NormalizeSmoothSet(sqrt_max, sqrt_lo, sqrt_delta)  # sqrt_lo/delta pre-computed
               if stats_max
-              else normalize(sqrt_max, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
+              else NormalizeSmoothSet(sqrt_max, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
             )
           elif inp.params.set_points == frame.SetHighlightAlgorithm.ANGLE:
             # angle stats for interior points; first the stats...
@@ -297,11 +282,11 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
             ang_lo = min(ang_lo, ang)
             ang_hi = max(ang_hi, ang)
             # ...then the normalized value for coloring
-            escaped_at = (
+            escaped_at, smooth_escape = (
               # ang_lo & ang_delta are pre-computed
-              normalize(ang, inp.stats.ang_lo, ang_delta)  # type: ignore[union-attr, arg-type]
+              NormalizeSmoothSet(ang, inp.stats.ang_lo, ang_delta)  # type: ignore[union-attr, arg-type]
               if stats_ang
-              else normalize(ang, _MPFR_ZERO, _MPFR_ONE)
+              else NormalizeSmoothSet(ang, _MPFR_ZERO, _MPFR_ONE)
             )
           elif inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY:
             # Imaginary Weight Average: mean(sin(arg(z))**2) over orbit; first the stats...
@@ -309,11 +294,11 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
             imag_lo = min(imag_lo, imag_mean)
             imag_hi = max(imag_hi, imag_mean)
             # ...then the normalized value for coloring
-            escaped_at = (
+            escaped_at, smooth_escape = (
               # imag_lo & imag_delta are pre-computed
-              normalize(imag_mean, inp.stats.imag_lo, imag_delta)  # type: ignore[union-attr, arg-type]
+              NormalizeSmoothSet(imag_mean, inp.stats.imag_lo, imag_delta)  # type: ignore[union-attr, arg-type]
               if stats_imag
-              else normalize(imag_mean, _MPFR_ZERO, _MPFR_ONE)
+              else NormalizeSmoothSet(imag_mean, _MPFR_ZERO, _MPFR_ONE)
             )
           else:
             raise image.Error(f'Unknown fractal type {inp.params.set_points=}; should never happen')
@@ -425,21 +410,6 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
         and inp.stats.imag_hi > inp.stats.imag_lo
       ):
         imag_delta = inp.stats.imag_hi - inp.stats.imag_lo  # pyright: ignore[reportOperatorIssue, reportUnknownVariableType]
-    # pre-compute normalization function used everywhere for set points
-    normalize: abc.Callable[[gmpy2.mpfr, gmpy2.mpfr, gmpy2.mpfr], int] = lambda v, lo, d: (
-      -min(  # negative to mark it as interior!
-        frame.SET_INTERIOR_RESOLUTION,  # clamp to the max
-        max(
-          1,  # clamped to at least 1, we can't have 0
-          int(  # converted to int
-            gmpy2.floor(  # scaled to [0,1], then to [0, SET_INTERIOR_RESOLUTION]
-              max(_MPFR_ZERO, min(_MPFR_ONE, (v - lo) / d)) * frame.MPFR_SET_INTERIOR_RESOLUTION
-            )
-          )
-          + 1,  # we want to start at 1, so add 1, -> [1, SET_INTERIOR_RESOLUTION + 1]
-        ),
-      )
-    )
     # create progress bar based on total pixels and the options
     has_procs: bool = inp.total_tasks > 1
     n_task: int = inp.n_task - 1  # convert to 0-based index for easier modulo math
@@ -542,17 +512,18 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
           # now, for every possible set px algorithms, we do the final computations
           if inp.params.set_points is None:
             # default coloring: just mark as interior with a special negative value
-            escaped_at = -frame.SET_INTERIOR_RESOLUTION  # negative to mark it as interior!
+            escaped_at = -frame.SET_INTERIOR_INT_MAX  # negative to mark it as interior!
+            smooth_escape = 0.0
           elif inp.params.set_points == frame.SetHighlightAlgorithm.MIN:
             # track the min |z|^2; first the stats...
             min_lo = min(min_lo, min_z2)
             min_hi = max(min_hi, min_z2)
             # ...then the normalized value for coloring
             sqrt_min: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(min_z2))
-            escaped_at = (
-              normalize(sqrt_min, sqrt_lo2, sqrt_delta2)  # sqrt_lo2 & sqrt_delta2 are pre-computed
+            escaped_at, smooth_escape = (
+              NormalizeSmoothSet(sqrt_min, sqrt_lo2, sqrt_delta2)  # sqrt_lo2/delta2 pre-computed
               if stats_min
-              else normalize(sqrt_min, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
+              else NormalizeSmoothSet(sqrt_min, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
             )
           elif inp.params.set_points == frame.SetHighlightAlgorithm.MAX:
             # track the max |z|^2; first the stats...
@@ -560,10 +531,10 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
             max_hi = max(max_hi, max_z2)
             # ...then the normalized value for coloring
             sqrt_max: gmpy2.mpfr = cast('gmpy2.mpfr', gmpy2.sqrt(max_z2))
-            escaped_at = (
-              normalize(sqrt_max, sqrt_lo, sqrt_delta)  # sqrt_lo & sqrt_delta are pre-computed
+            escaped_at, smooth_escape = (
+              NormalizeSmoothSet(sqrt_max, sqrt_lo, sqrt_delta)  # sqrt_lo/delta pre-computed
               if stats_max
-              else normalize(sqrt_max, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
+              else NormalizeSmoothSet(sqrt_max, _MPFR_ZERO, frame.MPFR_MAX_SET_Z)
             )
           elif inp.params.set_points == frame.SetHighlightAlgorithm.ANGLE:
             # angle stats for interior points; first the stats...
@@ -572,11 +543,11 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
             ang_lo = min(ang_lo, ang)
             ang_hi = max(ang_hi, ang)
             # ...then the normalized value for coloring
-            escaped_at = (
+            escaped_at, smooth_escape = (
               # ang_lo & ang_delta are pre-computed
-              normalize(ang, inp.stats.ang_lo, ang_delta)  # type: ignore[union-attr, arg-type]
+              NormalizeSmoothSet(ang, inp.stats.ang_lo, ang_delta)  # type: ignore[union-attr, arg-type]
               if stats_ang
-              else normalize(ang, _MPFR_ZERO, _MPFR_ONE)
+              else NormalizeSmoothSet(ang, _MPFR_ZERO, _MPFR_ONE)
             )
           elif inp.params.set_points == frame.SetHighlightAlgorithm.IMAGINARY:
             # Imaginary Weight Average: mean(sin(arg(z))**2) over orbit; first the stats...
@@ -584,11 +555,11 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
             imag_lo = min(imag_lo, imag_mean)
             imag_hi = max(imag_hi, imag_mean)
             # ...then the normalized value for coloring
-            escaped_at = (
+            escaped_at, smooth_escape = (
               # imag_lo & imag_delta are pre-computed
-              normalize(imag_mean, inp.stats.imag_lo, imag_delta)  # type: ignore[union-attr, arg-type]
+              NormalizeSmoothSet(imag_mean, inp.stats.imag_lo, imag_delta)  # type: ignore[union-attr, arg-type]
               if stats_imag
-              else normalize(imag_mean, _MPFR_ZERO, _MPFR_ONE)
+              else NormalizeSmoothSet(imag_mean, _MPFR_ZERO, _MPFR_ONE)
             )
           else:
             raise image.Error(f'Unknown fractal type {inp.params.set_points=}; should never happen')
@@ -646,9 +617,53 @@ def NormalizeSmoothEscape(n: int, nu: float) -> tuple[int, float]:
     nu += 1.0
   # ensure n is not negative, in case the shift made it negative
   n = max(0, n)
-  if not (0.0 <= nu < 1.0):
+  if not math.isfinite(nu) or not (0.0 <= nu < 1.0):
     raise image.Error(f'Normalized smooth escape range 0 <= {nu=} < 1, {n=}, bug! report')
   return (n, nu)
+
+
+def NormalizeSmoothSet(
+  val: gmpy2.mpfr, lo_bound: gmpy2.mpfr, lo_hi_range: gmpy2.mpfr
+) -> tuple[int, float]:
+  """Normalize a value for Set points to be in [1, SET_INTERIOR_INT_MAX] with a fractional part.
+
+  Args:
+    val (gmpy2.mpfr): The value to normalize, which can be any real number.
+    lo_bound (gmpy2.mpfr): The lower bound of the range for normalization.
+    lo_hi_range (gmpy2.mpfr): The size of the range for normalization (hi - lo).
+
+  Returns:
+    tuple[int, float]: A tuple of the integer part (in -[1, SET_INTERIOR_INT_MAX]) and the
+        fractional part (in [0,1)) of the normalized value.
+
+  Raises:
+    image.Error: on error
+
+  """
+  if lo_hi_range <= 0:
+    raise image.Error(f'Invalid normalization range: {lo_hi_range=}, should be > 0, bug! report')
+  # scale to [0, 1]
+  norm: gmpy2.mpfr = max(_MPFR_ZERO, min(_MPFR_ONE, (val - lo_bound) / lo_hi_range))
+  # re-scale/stretch to [1, 1 + MPFR_SET_INTERIOR_INT_SPAN] == [1, SET_INTERIOR_INT_MAX]
+  scaled: gmpy2.mpfr = _MPFR_ONE + norm * frame.MPFR_SET_INTERIOR_INT_SPAN
+  # convert to int, clamp to [1, SET_INTERIOR_INT_MAX]
+  whole: int = min(frame.SET_INTERIOR_INT_MAX, max(1, int(gmpy2.floor(scaled))))
+  # compute the fractional part
+  frac_mpfr: gmpy2.mpfr = scaled - gmpy2.mpfr(whole)
+  # defensive only: normal operation frac_mpfr is already in [0, 1)
+  if frac_mpfr < _MPFR_ZERO:
+    frac_mpfr = _MPFR_ZERO
+  elif frac_mpfr >= _MPFR_ONE:
+    if whole < frame.SET_INTERIOR_INT_MAX:
+      whole += 1
+      frac_mpfr -= _MPFR_ONE
+    else:
+      frac_mpfr = _MPFR_ZERO
+  # convert to float and check again
+  frac: float = float(frac_mpfr)
+  if not math.isfinite(frac) or not (0.0 <= frac < 1.0):
+    raise image.Error(f'Invalid normalized Set fractional part: {frac=}, {whole=}, {scaled=}')
+  return (-whole, frac)
 
 
 def EncodeIntFloatTo64(i: int, f: float) -> int:

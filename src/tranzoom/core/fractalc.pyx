@@ -63,6 +63,10 @@ cdef extern from 'mpfr.h':
 
   int mpfr_const_pi(mpfr_t, mpfr_rnd_t)
 
+  int mpfr_floor(mpfr_t, mpfr_srcptr)
+  int mpfr_fits_slong_p(mpfr_srcptr, mpfr_rnd_t)
+  long mpfr_get_si(mpfr_srcptr, mpfr_rnd_t)
+
   int mpfr_add(mpfr_t, mpfr_srcptr, mpfr_srcptr, mpfr_rnd_t)
   int mpfr_sub(mpfr_t, mpfr_srcptr, mpfr_srcptr, mpfr_rnd_t)
   int mpfr_mul(mpfr_t, mpfr_srcptr, mpfr_srcptr, mpfr_rnd_t)
@@ -98,54 +102,6 @@ cdef inline void mpfr_max_set(mpfr_t out, mpfr_t a, mpfr_t b) noexcept:
     mpfr_set(out, a, MPFR_RNDN)
   else:
     mpfr_set(out, b, MPFR_RNDN)
-
-
-cdef inline int normalize_mpfr(
-  mpfr_t v,
-  mpfr_t lo,
-  mpfr_t d,
-  mpfr_t tmp0,
-  mpfr_t tmp1,
-  mpfr_t zero,
-  mpfr_t one,
-  mpfr_t interior_resolution_mpfr,
-  int interior_resolution,
-) except -2147483648:
-  """
-  Equivalent of:
-
-    -min(SET_INTERIOR_RESOLUTION,
-      max(1, int(floor(max(0, min(1, (v - lo) / d)) * MPFR_SET_INTERIOR_RESOLUTION)) + 1)
-    )
-
-  Since mpfr_get_d followed by int() is fine here because the final output is deliberately
-  an integer bucket in [1, SET_INTERIOR_RESOLUTION].
-  """
-  cdef double scaled
-  cdef int bucket
-
-  # tmp0 = (v - lo) / d
-  mpfr_sub(tmp0, v, lo, MPFR_RNDN)
-  mpfr_div(tmp0, tmp0, d, MPFR_RNDN)
-
-  # clamp tmp0 to [0, 1]
-  if mpfr_less_p(tmp0, zero):
-    mpfr_set(tmp0, zero, MPFR_RNDN)
-  elif mpfr_greater_p(tmp0, one):
-    mpfr_set(tmp0, one, MPFR_RNDN)
-
-  # tmp1 = tmp0 * interior_resolution_mpfr
-  mpfr_mul(tmp1, tmp0, interior_resolution_mpfr, MPFR_RNDN)
-
-  scaled = mpfr_get_d(tmp1, MPFR_RNDN)
-  bucket = <int>scaled + 1
-
-  if bucket < 1:
-    bucket = 1
-  elif bucket > interior_resolution:
-    bucket = interior_resolution
-
-  return -bucket
 
 
 cdef inline double smooth_escape_fraction(
@@ -193,6 +149,90 @@ cdef inline void NormalizeSmoothEscape_c(Py_ssize_t *n, double *nu) except *:
     raise image.Error(f'Normalized smooth escape range 0 <= nu={nu[0]} < 1, n={n[0]}, bug! report')
 
 
+cdef inline void NormalizeSmoothSet_c(
+  mpfr_t v,
+  mpfr_t lo,
+  mpfr_t d,
+  mpfr_t tmp0,
+  mpfr_t tmp1,
+  mpfr_t tmp2,
+  mpfr_t zero,
+  mpfr_t one,
+  mpfr_t interior_span_mpfr,
+  long long interior_max,
+  Py_ssize_t *n,
+  double *nu,
+) except *:
+  """
+  Hot-path MPFR version of NormalizeSmoothSet().
+  """
+  cdef long whole_l
+  cdef long long whole
+  cdef double frac
+
+  if mpfr_lessequal_p(d, zero):
+    raise image.Error('Invalid normalization range, should be > 0, bug! report')
+
+  # tmp0 = (v - lo) / d
+  mpfr_sub(tmp0, v, lo, MPFR_RNDN)
+  mpfr_div(tmp0, tmp0, d, MPFR_RNDN)
+
+  # clamp tmp0 to [0, 1]
+  if mpfr_less_p(tmp0, zero):
+    mpfr_set(tmp0, zero, MPFR_RNDN)
+  elif mpfr_greater_p(tmp0, one):
+    mpfr_set(tmp0, one, MPFR_RNDN)
+
+  # tmp1 = 1 + tmp0 * interior_span_mpfr
+  mpfr_mul(tmp1, tmp0, interior_span_mpfr, MPFR_RNDN)
+  mpfr_add(tmp1, tmp1, one, MPFR_RNDN)
+
+  # tmp2 = floor(tmp1)
+  mpfr_floor(tmp2, tmp1)
+
+  # Convert bucket to integer.
+  #
+  # In the intended range this is <= 2^31, so it fits in long on LP64.
+  # If it does not fit in C long, saturate defensively.
+  if mpfr_fits_slong_p(tmp2, MPFR_RNDZ):
+    whole_l = mpfr_get_si(tmp2, MPFR_RNDZ)
+    whole = <long long>whole_l
+  else:
+    whole = interior_max
+
+  if whole < 1:
+    whole = 1
+  elif whole > interior_max:
+    whole = interior_max
+
+  # tmp2 = frac = scaled - whole
+  #
+  # Use double because all integers up to 2^53 are exactly representable;
+  # SET_INTERIOR_INT_MAX is 2^31.
+  mpfr_set_d(tmp2, <double>whole, MPFR_RNDN)
+  mpfr_sub(tmp2, tmp1, tmp2, MPFR_RNDN)
+
+  # Defensive only: normal operation gives 0 <= frac < 1.
+  if mpfr_less_p(tmp2, zero):
+    mpfr_set(tmp2, zero, MPFR_RNDN)
+  elif not mpfr_less_p(tmp2, one):
+    if whole < interior_max:
+      whole += 1
+      mpfr_sub(tmp2, tmp2, one, MPFR_RNDN)
+    else:
+      mpfr_set(tmp2, zero, MPFR_RNDN)
+
+  frac = mpfr_get_d(tmp2, MPFR_RNDN)
+
+  if not isfinite(frac) or not (0.0 <= frac < 1.0):
+    raise image.Error(
+      f'Invalid normalized Set fractional part: nu={frac}, whole={whole}'
+    )
+
+  n[0] = -<Py_ssize_t>whole
+  nu[0] = frac
+
+
 cdef inline uint64_t EncodeIntFloatTo64_c(int i, double f) noexcept:
   cdef:
     int32_t i32 = <int32_t>i
@@ -215,6 +255,7 @@ def NormalizeSmoothEscape(int n, double nu) -> tuple[int, float]:
   cdef double nnu = nu
   NormalizeSmoothEscape_c(&nn, &nnu)
   return (<int>nn, nnu)
+
 
 def EncodeIntFloatTo64(int i, double f) -> int:
   """Python-callable wrapper."""
@@ -368,7 +409,7 @@ def MandelbrotComputation(object inp):
       mpfr_set_ui(one, 1, MPFR_RNDN)
       mpfr_set_ui(two, 2, MPFR_RNDN)
       mpfr_set_ui(four, 4, MPFR_RNDN)
-      mpfr_set(interior_resolution_mpfr, MPFR(<mpfr>frame.MPFR_SET_INTERIOR_RESOLUTION), MPFR_RNDN)
+      mpfr_set(interior_resolution_mpfr, MPFR(<mpfr>frame.MPFR_SET_INTERIOR_INT_SPAN), MPFR_RNDN)
 
       mpfr_const_pi(mpfr_pi, MPFR_RNDN)
       mpfr_mul(mpfr_two_pi, two, mpfr_pi, MPFR_RNDN)
@@ -513,7 +554,7 @@ def MandelbrotComputation(object inp):
 
             if mpfr_lessequal_p(tmp0, tmp1):
               n_interior += 1
-              img.escape[px_count] = EncodeIntFloatTo64_c(-frame.SET_INTERIOR_RESOLUTION, 0.0)
+              img.escape[px_count] = EncodeIntFloatTo64_c(-frame.SET_INTERIOR_INT_MAX, 0.0)
               p_bar.update(1)
               continue
 
@@ -526,7 +567,7 @@ def MandelbrotComputation(object inp):
 
             if mpfr_lessequal_p(tmp0, sixteenth):
               n_interior += 1
-              img.escape[px_count] = EncodeIntFloatTo64_c(-frame.SET_INTERIOR_RESOLUTION, 0.0)
+              img.escape[px_count] = EncodeIntFloatTo64_c(-frame.SET_INTERIOR_INT_MAX, 0.0)
               p_bar.update(1)
               continue
 
@@ -603,7 +644,8 @@ def MandelbrotComputation(object inp):
             n_interior += 1
 
             if set_points is None:
-              escaped_at = -frame.SET_INTERIOR_RESOLUTION
+              escaped_at = -frame.SET_INTERIOR_INT_MAX
+              smooth_escape = 0.0
 
             elif set_points == frame.SetHighlightAlgorithm.MIN:
               if mpfr_less_p(min_z2, min_lo):
@@ -613,18 +655,20 @@ def MandelbrotComputation(object inp):
 
               mpfr_sqrt(sqrt_min, min_z2, MPFR_RNDN)
               if stats_min:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   sqrt_min, sqrt_lo2, sqrt_delta2,
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
               else:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   sqrt_min, zero, MPFR(<mpfr>frame.MPFR_MAX_SET_Z),
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
 
             elif set_points == frame.SetHighlightAlgorithm.MAX:
@@ -635,18 +679,20 @@ def MandelbrotComputation(object inp):
 
               mpfr_sqrt(sqrt_max, max_z2, MPFR_RNDN)
               if stats_max:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   sqrt_max, sqrt_lo, sqrt_delta,
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
               else:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   sqrt_max, zero, MPFR(<mpfr>frame.MPFR_MAX_SET_Z),
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
 
             elif set_points == frame.SetHighlightAlgorithm.ANGLE:
@@ -662,18 +708,20 @@ def MandelbrotComputation(object inp):
                 mpfr_set(ang_hi, ang, MPFR_RNDN)
 
               if stats_ang:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   ang, MPFR(<mpfr>inp.stats.ang_lo), ang_delta,
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
               else:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   ang, zero, one,
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
 
             elif set_points == frame.SetHighlightAlgorithm.IMAGINARY:
@@ -687,18 +735,20 @@ def MandelbrotComputation(object inp):
                 mpfr_set(imag_hi, imag_mean, MPFR_RNDN)
 
               if stats_imag:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   imag_mean, MPFR(<mpfr>inp.stats.imag_lo), imag_delta,
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
               else:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   imag_mean, zero, one,
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
 
             else:
@@ -946,7 +996,7 @@ def JuliaComputation(object inp):
       mpfr_set_ui(one, 1, MPFR_RNDN)
       mpfr_set_ui(two, 2, MPFR_RNDN)
       mpfr_set_ui(four, 4, MPFR_RNDN)
-      mpfr_set(interior_resolution_mpfr, MPFR(<mpfr>frame.MPFR_SET_INTERIOR_RESOLUTION), MPFR_RNDN)
+      mpfr_set(interior_resolution_mpfr, MPFR(<mpfr>frame.MPFR_SET_INTERIOR_INT_SPAN), MPFR_RNDN)
 
       mpfr_const_pi(mpfr_pi, MPFR_RNDN)
       mpfr_mul(mpfr_two_pi, two, mpfr_pi, MPFR_RNDN)
@@ -1147,7 +1197,8 @@ def JuliaComputation(object inp):
             n_interior += 1
 
             if set_points is None:
-              escaped_at = -frame.SET_INTERIOR_RESOLUTION
+              escaped_at = -frame.SET_INTERIOR_INT_MAX
+              smooth_escape = 0.0
 
             elif set_points == frame.SetHighlightAlgorithm.MIN:
               if mpfr_less_p(min_z2, min_lo):
@@ -1157,18 +1208,20 @@ def JuliaComputation(object inp):
 
               mpfr_sqrt(sqrt_min, min_z2, MPFR_RNDN)
               if stats_min:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   sqrt_min, sqrt_lo2, sqrt_delta2,
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
               else:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   sqrt_min, zero, MPFR(<mpfr>frame.MPFR_MAX_SET_Z),
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
 
             elif set_points == frame.SetHighlightAlgorithm.MAX:
@@ -1179,18 +1232,20 @@ def JuliaComputation(object inp):
 
               mpfr_sqrt(sqrt_max, max_z2, MPFR_RNDN)
               if stats_max:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   sqrt_max, sqrt_lo, sqrt_delta,
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
               else:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   sqrt_max, zero, MPFR(<mpfr>frame.MPFR_MAX_SET_Z),
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
 
             elif set_points == frame.SetHighlightAlgorithm.ANGLE:
@@ -1206,18 +1261,20 @@ def JuliaComputation(object inp):
                 mpfr_set(ang_hi, ang, MPFR_RNDN)
 
               if stats_ang:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   ang, MPFR(<mpfr>inp.stats.ang_lo), ang_delta,
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
               else:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   ang, zero, one,
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
 
             elif set_points == frame.SetHighlightAlgorithm.IMAGINARY:
@@ -1231,18 +1288,20 @@ def JuliaComputation(object inp):
                 mpfr_set(imag_hi, imag_mean, MPFR_RNDN)
 
               if stats_imag:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   imag_mean, MPFR(<mpfr>inp.stats.imag_lo), imag_delta,
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
               else:
-                escaped_at = normalize_mpfr(
+                NormalizeSmoothSet_c(
                   imag_mean, zero, one,
-                  tmp0, tmp1, zero, one,
+                  tmp0, tmp1, tmp2, zero, one,
                   interior_resolution_mpfr,
-                  frame.SET_INTERIOR_RESOLUTION,
+                  frame.SET_INTERIOR_INT_MAX,
+                  &escaped_at, &smooth_escape,
                 )
 
             else:

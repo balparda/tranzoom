@@ -1375,7 +1375,7 @@ class Image:
     next_int: Image.Histogram  # interior histogram of the following marker frame
     alpha: float  # blend weight in [0.0, 1.0]: 0.0 = use prev only, 1.0 = use next only
 
-    def InterpolateExt(self, n: int, nu: float) -> float:
+    def InterpolateExternal(self, n: int, nu: float) -> float:
       """Get the cross-frame-stable blended palette position for an exterior (escaped) pixel.
 
       Args:
@@ -1386,39 +1386,44 @@ class Image:
         float: Blended palette position in [0, 1).
 
       """
+      clamp: abc.Callable[[float], float] = lambda t: max(0.0, min(_ALMOST_ONE, t))
+      # previous, and trivial bottom case
+      t_prev: float = self.prev_ext.InterpolateBucket(n, nu) if self.prev_ext.count > 0 else 0.0
       if self.alpha <= 0.0:
-        return self.prev_ext.InterpolateBucket(n, nu)
+        return clamp(t_prev)
+      # next, and trivial top case
+      t_next: float = self.next_ext.InterpolateBucket(n, nu) if self.next_ext.count > 0 else 0.0
       if self.alpha >= 1.0:
-        return self.next_ext.InterpolateBucket(n, nu)
-      t_prev: float = self.prev_ext.InterpolateBucket(n, nu)
-      t_next: float = self.next_ext.InterpolateBucket(n, nu)
-      return t_prev + self.alpha * (t_next - t_prev)
+        return clamp(t_next)
+      # we are in the middle, so blend
+      return clamp(t_prev + self.alpha * (t_next - t_prev))
 
-    def InterpolateInt(self, key: int) -> float:
+    def InterpolateInternal(self, key: int, remainder: float) -> float:
       """Get the cross-frame-stable blended palette position for an interior (Set) pixel.
 
       Args:
         key (int): The positive interior key (the negated stored escape value: -escaped_at).
+        remainder (float): The fractional part of the interior key, used for smooth coloring.
 
       Returns:
         float: Blended palette position in [0, 1).
 
       """
+      clamp: abc.Callable[[float], float] = lambda t: max(0.0, min(_ALMOST_ONE, t))
+      # previous, and trivial bottom case
       t_prev: float = (
-        (self.prev_int.d_cumulative.get(key, 0) - 1) / self.prev_int.count
-        if self.prev_int.count > 0
-        else 0.0
+        self.prev_int.InterpolateBucket(key, remainder) if self.prev_int.count > 0 else 0.0
       )
       if self.alpha <= 0.0:
-        return max(0.0, min(_ALMOST_ONE, t_prev))
+        return clamp(t_prev)
+      # next, and trivial top case
       t_next: float = (
-        (self.next_int.d_cumulative.get(key, 0) - 1) / self.next_int.count
-        if self.next_int.count > 0
-        else 0.0
+        self.next_int.InterpolateBucket(key, remainder) if self.next_int.count > 0 else 0.0
       )
       if self.alpha >= 1.0:
-        return max(0.0, min(_ALMOST_ONE, t_next))
-      return max(0.0, min(_ALMOST_ONE, t_prev + self.alpha * (t_next - t_prev)))
+        return clamp(t_next)
+      # we are in the middle, so blend
+      return clamp(t_prev + self.alpha * (t_next - t_prev))
 
   @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
   class ZoomColorNorm:
@@ -1659,7 +1664,7 @@ class Image:
       if escaped_at >= 0 and self.ext_hist.count > 0:
         # exterior point: histogram-equalized position in palette
         t_ext: float = (
-          zoom_norm.InterpolateExt(escaped_at, f_nu)
+          zoom_norm.InterpolateExternal(escaped_at, f_nu)
           if zoom_norm is not None
           else self.ext_hist.InterpolateBucket(escaped_at, f_nu)
         )
@@ -1669,13 +1674,18 @@ class Image:
         if render.set_pal is None:
           raise Error('set_pal must be specified in RenderParameters when set_points is True')
         t_set: float = (
-          zoom_norm.InterpolateInt(-escaped_at)
+          zoom_norm.InterpolateInternal(-escaped_at, f_nu)  # in this case "nu" is remainder
           if zoom_norm is not None
-          else (self.int_hist.d_cumulative[-escaped_at] - 1) / self.int_hist.count
+          else self.int_hist.InterpolateBucket(-escaped_at, f_nu)  # in this case "nu" is remainder
         )
         rgb = _PixelPalette(t_set, render.set_pal)
+      elif escaped_at < 0 and (not self._params.set_points or not self.int_hist.count):
+        # interior point but no histogram data (e.g., all-interior image); render as black
+        rgb = (0, 0, 0)
       else:
+        # we should really not be getting here, but I am not bold enough to raise...
         rgb = (0, 0, 0)  # black: interior point (default) or all-interior image
+        logging.error(f'Invalid {escaped_at=} at pixel {i=}; bug! report!')
       pixels[i * 3], pixels[i * 3 + 1], pixels[i * 3 + 2] = rgb
     return bytes(pixels)
 
