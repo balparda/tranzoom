@@ -1286,6 +1286,35 @@ class FractalDatabase:
     return (img_data, img_hash, full_path(img_hash), True)
 
 
+def WarnUserAnimationParams(
+  zoom_params: image.ZoomParameters, *, print_comm: abc.Callable[[str], None]
+) -> None:
+  """Print warnings if the zoom parameters may lead to sub-optimal animation quality or size.
+
+  Args:
+    zoom_params (image.ZoomParameters): the zoom parameters to check
+    print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
+
+  """
+  # sanity checks and warnings before we start the expensive rendering loop
+  if zoom_params.scalar_magnification_per_step > image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
+    print_comm(
+      '[red]Warning: the zoom per frame is high: 10^(mag/(frames-1)) = '
+      f'10^({float(zoom_params.mag):.4f}/{zoom_params.n_steps}) = '
+      f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step. '
+      'The resulting animation may look jumpy! Please consider increasing the number of frames '
+      'or reducing the total magnification.[/]\n'
+    )
+  gif_sz: int
+  mp4_sz: int
+  gif_sz, mp4_sz = zoom_params.animation_sz_bytes()
+  if max(gif_sz, mp4_sz) > frame.THRESHOLD_LARGE_ANIMATION_BYTES:
+    print_comm(
+      f'[red]Warning: large animation file estimate: '
+      f'GIF ~{human.HumanizedBytes(gif_sz)}, MP4 ~{human.HumanizedBytes(mp4_sz)}[/]\n'
+    )
+
+
 def _DBLabel(db: _DBType) -> str:
   """Get a human-readable label for the database, for logging and display purposes.
 

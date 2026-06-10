@@ -1147,9 +1147,6 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
   config: TranZoomConfig,
   out: image.ImageOutputConfig,
   zoom_params: image.ZoomParameters,
-  all_frames: list[frame.Frame],
-  all_markers: list[tuple[int, frame.Frame]],
-  all_depth: list[tuple[int, frame.Frame]],
   save_frames: bool,
 ) -> tuple[pathlib.Path, int]:
   """Make the animation file, returning its path and size.
@@ -1158,9 +1155,6 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     config (TranZoomConfig): the shared config with all options.
     out (image.ImageOutputConfig): the image output config with all options for rendering.
     zoom_params (image.ZoomParameters): the parameters of the zoom to render.
-    all_frames (list[frame.Frame]): all frames in the zoom (from ZoomParameters.Frames()).
-    all_markers (list[tuple[int, frame.Frame]]): all marker frames (from ZoomParameters.Frames()).
-    all_depth (list[tuple[int, frame.Frame]]): all depth frames (from ZoomParameters.Frames()).
     save_frames (bool): whether to save the individual frames as images in the output directory.
 
   Returns:
@@ -1172,6 +1166,28 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
 
   """
   # TODO: split this monster method
+  # generate frames, markers, depth frames; do first because it can fail and we want to fail early
+  all_frames: list[frame.Frame]
+  all_markers: list[tuple[int, frame.Frame]]
+  all_depth: list[tuple[int, frame.Frame]]
+  all_frames, all_markers, all_depth = zoom_params.Frames()  # could go boom!
+  logging.debug(f'Marker frames: {[idx for idx, _ in all_markers]}')
+  # we should be good to go, all options check out; log and warn if needed
+  config.console.print(
+    f'\n{zoom_params.img.width} x {zoom_params.img.height} '
+    f'{zoom_params.render.escaped_pal.value!r} {zoom_params.img.frm.fractal.value.capitalize()!r} '
+    f'[magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/], '
+    f'{human.HumanizedSeconds(float(zoom_params.n_seconds))} long, '
+    f'at {float(zoom_params.fps):.2f} FPS, '
+    f'with {zoom_params.n_frames} frames ({len(all_markers)} markers, '
+    f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%, and {len(all_depth)} depth frames, '
+    f'{100.0 * len(all_depth) / zoom_params.n_frames:.2f}%), '
+    f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step, '
+    f'{fractal.OptimizationToUse(config.python_optimization)[1]}...'
+  )
+  config.console.print(f'[yellow]ZOOM:[/] {zoom_params} ... {all_frames[-1]}\n')
+  # sanity checks and warnings before we start the expensive rendering loop
+  frdb.WarnUserAnimationParams(zoom_params, print_comm=config.console.print)
   # create path callback missing only the hash
   timestamp: int = timer.Now()
   full_path: abc.Callable[[str], pathlib.Path] = lambda h: image.MakeImagePath(

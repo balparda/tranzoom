@@ -10,7 +10,6 @@ README.md has good examples for different zoom levels.
 from __future__ import annotations
 
 import dataclasses
-import logging
 import pathlib
 
 import gmpy2
@@ -21,7 +20,7 @@ from transcrypto.utils import human
 
 from tranzoom import tranz
 from tranzoom.cli import base
-from tranzoom.core import ai, fractal, frame, image
+from tranzoom.core import ai, frame, image
 
 _AI_QUERY_WEIGHT: float = 0.8  # how much to weight the AI query vs the manual score
 
@@ -266,45 +265,10 @@ def Auto(  # documentation is help/epilog/args  # noqa: D103
     duration=round(duration * image.VIDEO_DURATION_STORE_SCALE),
     loop=loop,
   )
-  all_frames: list[frame.Frame]
-  all_markers: list[tuple[int, frame.Frame]]
-  all_depth: list[tuple[int, frame.Frame]]
-  all_frames, all_markers, all_depth = zoom_params.Frames()  # last thing that could go boom!
-  logging.debug(f'Marker frames: {[idx for idx, _ in all_markers]}')
-  # we should be good to go, all options check out; log and warn if needed
-  config.console.print(
-    f'\n{params.width} x {params.height} {render.escaped_pal.value!r} '
-    f'{frm.fractal.value.capitalize()!r} [magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/]'
-    f', {human.HumanizedSeconds(float(zoom_params.n_seconds))} long, at {fps:.2f} FPS, '
-    f'with {zoom_params.n_frames} frames ({len(all_markers)} markers, '
-    f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%, and {len(all_depth)} depth frames, '
-    f'{100.0 * len(all_depth) / zoom_params.n_frames:.2f}%), '
-    f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step, '
-    f'{fractal.OptimizationToUse(config.python_optimization)[1]}...'
-  )
-  config.console.print(f'[yellow]ZOOM:[/] {zoom_params} ... {all_frames[-1]}\n')
-  if zoom_params.scalar_magnification_per_step > image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
-    config.console.print(
-      '[red]Warning: the zoom per frame is high: 10^(mag/(frames-1)) = '
-      f'10^({float(zoom_params.mag):.4f}/{zoom_params.n_steps}) = '
-      f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step. '
-      'The resulting animation may look jumpy! Please consider increasing the number of frames '
-      'or reducing the total magnification.[/]\n'
-    )
-  gif_sz: int
-  mp4_sz: int
-  gif_sz, mp4_sz = zoom_params.animation_sz_bytes()
-  if max(gif_sz, mp4_sz) > frame.THRESHOLD_LARGE_ANIMATION_BYTES:
-    config.console.print(
-      f'[red]Warning: large animation file estimate: '
-      f'GIF ~{human.HumanizedBytes(gif_sz)}, MP4 ~{human.HumanizedBytes(mp4_sz)}[/]\n'
-    )
   # call
   img_p: pathlib.Path
   img_sz: int
-  img_p, img_sz = base.ProduceFractalAnimation(
-    config, out, zoom_params, all_frames, all_markers, all_depth, save_frames
-  )
+  img_p, img_sz = base.ProduceFractalAnimation(config, out, zoom_params, save_frames)
   # log
   config.console.print(
     f'Saved {zoom_params.tp.value.upper()} to {str(img_p)!r}, {human.HumanizedBytes(img_sz)}\n'
