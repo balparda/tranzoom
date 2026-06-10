@@ -90,20 +90,6 @@ cdef extern from 'mpfr.h':
 import_gmpy2()
 
 
-cdef inline void mpfr_min_set(mpfr_t out, mpfr_t a, mpfr_t b) noexcept:
-  if mpfr_lessequal_p(a, b):
-    mpfr_set(out, a, MPFR_RNDN)
-  else:
-    mpfr_set(out, b, MPFR_RNDN)
-
-
-cdef inline void mpfr_max_set(mpfr_t out, mpfr_t a, mpfr_t b) noexcept:
-  if mpfr_greaterequal_p(a, b):
-    mpfr_set(out, a, MPFR_RNDN)
-  else:
-    mpfr_set(out, b, MPFR_RNDN)
-
-
 cdef inline double smooth_escape_fraction(
   mpfr_t mag_z2,
   mpfr_t half,
@@ -147,6 +133,14 @@ cdef inline void NormalizeSmoothEscape_c(Py_ssize_t *n, double *nu) except *:
 
   if not (0.0 <= nu[0] < 1.0):
     raise image.Error(f'Normalized smooth escape range 0 <= nu={nu[0]} < 1, n={n[0]}, bug! report')
+
+
+def NormalizeSmoothEscape(int n, double nu) -> tuple[int, float]:
+  """Python-callable wrapper."""
+  cdef Py_ssize_t nn = n
+  cdef double nnu = nu
+  NormalizeSmoothEscape_c(&nn, &nnu)
+  return (<int>nn, nnu)
 
 
 cdef inline void NormalizeSmoothSet_c(
@@ -233,6 +227,57 @@ cdef inline void NormalizeSmoothSet_c(
   nu[0] = frac
 
 
+def NormalizeSmoothSet(mpfr val, mpfr lo_bound, mpfr lo_hi_range) -> tuple[int, float]:
+  """Python-callable wrapper."""
+  cdef Py_ssize_t n
+  cdef double nu
+
+  cdef mpfr_t tmp0
+  cdef mpfr_t tmp1
+  cdef mpfr_t tmp2
+  cdef mpfr_t zero
+  cdef mpfr_t one
+  cdef mpfr_t interior_span_mpfr
+
+  cdef mpfr_prec_t prec = mpfr_get_prec(MPFR(val))
+
+  mpfr_init2(tmp0, prec)
+  mpfr_init2(tmp1, prec)
+  mpfr_init2(tmp2, prec)
+  mpfr_init2(zero, prec)
+  mpfr_init2(one, prec)
+  mpfr_init2(interior_span_mpfr, prec)
+
+  try:
+    mpfr_set_d(zero, 0.0, MPFR_RNDN)
+    mpfr_set_d(one, 1.0, MPFR_RNDN)
+    mpfr_set_d(interior_span_mpfr, <double>frame.SET_INTERIOR_INT_SPAN, MPFR_RNDN)
+
+    NormalizeSmoothSet_c(
+      MPFR(val),
+      MPFR(lo_bound),
+      MPFR(lo_hi_range),
+      tmp0,
+      tmp1,
+      tmp2,
+      zero,
+      one,
+      interior_span_mpfr,
+      <long long>frame.SET_INTERIOR_INT_MAX,
+      &n,
+      &nu,
+    )
+  finally:
+    mpfr_clear(tmp0)
+    mpfr_clear(tmp1)
+    mpfr_clear(tmp2)
+    mpfr_clear(zero)
+    mpfr_clear(one)
+    mpfr_clear(interior_span_mpfr)
+
+  return (<int>n, nu)
+
+
 cdef inline uint64_t EncodeIntFloatTo64_c(int i, double f) noexcept:
   cdef:
     int32_t i32 = <int32_t>i
@@ -247,14 +292,6 @@ cdef inline uint64_t EncodeIntFloatTo64_c(int i, double f) noexcept:
     ((<uint64_t>ibits & 0xffffffff) << 32) |
     (<uint64_t>fbits & 0xffffffff)
   )
-
-
-def NormalizeSmoothEscape(int n, double nu) -> tuple[int, float]:
-  """Python-callable wrapper."""
-  cdef Py_ssize_t nn = n
-  cdef double nnu = nu
-  NormalizeSmoothEscape_c(&nn, &nnu)
-  return (<int>nn, nnu)
 
 
 def EncodeIntFloatTo64(int i, double f) -> int:

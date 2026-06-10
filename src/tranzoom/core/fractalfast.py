@@ -53,6 +53,113 @@ _MPFR_TWO: gmpy2.mpfr = gmpy2.mpfr('2')
 _MPFR_FOUR: gmpy2.mpfr = gmpy2.mpfr('4')
 
 
+def NormalizeSmoothEscape(n: int, nu: float) -> tuple[int, float]:
+  """Normalize the smooth escape part to be in [0,1) and adjust n accordingly.
+
+  The smooth escape part is a fractional value that represents how far the orbit went beyond
+  the escape radius at the escape iteration. We want to ensure that the final escape value
+  is n + nu, where n is an integer and nu is in [0,1). This allows for smooth coloring
+  of the escape time.
+
+  Args:
+    n (int): The integer escape iteration count.
+    nu (float): The smooth escape part, which can be any real number.
+
+  Returns:
+    tuple[int, float]: A tuple of the adjusted integer escape iteration and the normalized
+        smooth escape part.
+
+  Raises:
+    image.Error: if the normalized smooth escape part is not in [0,1) after normalization
+
+  """
+  # if nu is not finite consider it an error
+  if not math.isfinite(nu):
+    raise image.Error(f'nu is not a valid number {nu=}, bug! report')
+  # get the integer shift to apply to n, and the new nu in [0,1)
+  shift: int = math.floor(nu)
+  n += shift
+  nu -= shift
+  # if nu is negative, we need to shift back the other way, to ensure nu is in [0,1)
+  if nu < 0.0:
+    n -= 1
+    nu += 1.0
+  # ensure n is not negative, in case the shift made it negative
+  n = max(0, n)
+  if not math.isfinite(nu) or not (0.0 <= nu < 1.0):
+    raise image.Error(f'Normalized smooth escape range 0 <= {nu=} < 1, {n=}, bug! report')
+  return (n, nu)
+
+
+def NormalizeSmoothSet(
+  val: gmpy2.mpfr, lo_bound: gmpy2.mpfr, lo_hi_range: gmpy2.mpfr
+) -> tuple[int, float]:
+  """Normalize a value for Set points to be in [1, SET_INTERIOR_INT_MAX] with a fractional part.
+
+  Args:
+    val (gmpy2.mpfr): The value to normalize, which can be any real number.
+    lo_bound (gmpy2.mpfr): The lower bound of the range for normalization.
+    lo_hi_range (gmpy2.mpfr): The size of the range for normalization (hi - lo).
+
+  Returns:
+    tuple[int, float]: A tuple of the integer part (in -[1, SET_INTERIOR_INT_MAX]) and the
+        fractional part (in [0,1)) of the normalized value.
+
+  Raises:
+    image.Error: on error
+
+  """
+  if lo_hi_range <= 0:
+    raise image.Error(f'Invalid normalization range: {lo_hi_range=}, should be > 0, bug! report')
+  # scale to [0, 1]
+  norm: gmpy2.mpfr = max(_MPFR_ZERO, min(_MPFR_ONE, (val - lo_bound) / lo_hi_range))
+  # re-scale/stretch to [1, 1 + MPFR_SET_INTERIOR_INT_SPAN] == [1, SET_INTERIOR_INT_MAX]
+  scaled: gmpy2.mpfr = _MPFR_ONE + norm * frame.MPFR_SET_INTERIOR_INT_SPAN
+  # convert to int, clamp to [1, SET_INTERIOR_INT_MAX]
+  whole: int = min(frame.SET_INTERIOR_INT_MAX, max(1, int(gmpy2.floor(scaled))))
+  # compute the fractional part
+  frac_mpfr: gmpy2.mpfr = scaled - gmpy2.mpfr(whole)
+  # defensive only: normal operation frac_mpfr is already in [0, 1)
+  if frac_mpfr < _MPFR_ZERO:
+    frac_mpfr = _MPFR_ZERO
+  elif frac_mpfr >= _MPFR_ONE:
+    if whole < frame.SET_INTERIOR_INT_MAX:
+      whole += 1
+      frac_mpfr -= _MPFR_ONE
+    else:
+      frac_mpfr = _MPFR_ZERO
+  # convert to float and check again
+  frac: float = float(frac_mpfr)
+  if not math.isfinite(frac) or not (0.0 <= frac < 1.0):
+    raise image.Error(f'Invalid normalized Set fractional part: {frac=}, {whole=}, {scaled=}')
+  return (-whole, frac)
+
+
+def EncodeIntFloatTo64(i: int, f: float) -> int:
+  """Encode a signed int32 and a float32 into a single uint64, by concatenating their bits.
+
+  This is benchmarked at ~1.6ns per call, ~160ms for a 1024x1024 image to encode all pixels.
+  struct.pack()/unpack() does range checks already, so we DO NOT check inputs, as that degrades
+  performance by a lot. We also use pre-compiled struct formats to speed this up.
+
+  Args:
+    i (int): The signed int32 to encode.
+    f (float): The float32 to encode; garbage in, garbage out: if the float is not
+        valid/finite (NaN or Inf), you will get the same garbage float back on Decode64ToIntFloat().
+
+  Returns:
+    int: The encoded uint64 containing both the int and float.
+
+  Raises:
+    image.Error: inputs out of range or other encoding issues
+
+  """
+  try:
+    return cast('int', image.PACK_Q.unpack(image.PACK_IF.pack(i, f))[0])
+  except (struct.error, OverflowError) as err:
+    raise image.Error(f'Error encoding {i=} and {f=} to uint64: {err}') from err
+
+
 def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  # noqa: C901, PLR0912, PLR0914, PLR0915
   """Compute the Mandelbrot image for the given task input. ONE THREAD FOR MULTIPROCESSING.
 
@@ -582,110 +689,3 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
       imag_hi=imag_hi if imag_hi >= imag_lo else None,
     )
     return image.FractalTaskOutput(img=img, n_task=inp.n_task, total_tasks=inp.total_tasks)
-
-
-def NormalizeSmoothEscape(n: int, nu: float) -> tuple[int, float]:
-  """Normalize the smooth escape part to be in [0,1) and adjust n accordingly.
-
-  The smooth escape part is a fractional value that represents how far the orbit went beyond
-  the escape radius at the escape iteration. We want to ensure that the final escape value
-  is n + nu, where n is an integer and nu is in [0,1). This allows for smooth coloring
-  of the escape time.
-
-  Args:
-    n (int): The integer escape iteration count.
-    nu (float): The smooth escape part, which can be any real number.
-
-  Returns:
-    tuple[int, float]: A tuple of the adjusted integer escape iteration and the normalized
-        smooth escape part.
-
-  Raises:
-    image.Error: if the normalized smooth escape part is not in [0,1) after normalization
-
-  """
-  # if nu is not finite consider it an error
-  if not math.isfinite(nu):
-    raise image.Error(f'nu is not a valid number {nu=}, bug! report')
-  # get the integer shift to apply to n, and the new nu in [0,1)
-  shift: int = math.floor(nu)
-  n += shift
-  nu -= shift
-  # if nu is negative, we need to shift back the other way, to ensure nu is in [0,1)
-  if nu < 0.0:
-    n -= 1
-    nu += 1.0
-  # ensure n is not negative, in case the shift made it negative
-  n = max(0, n)
-  if not math.isfinite(nu) or not (0.0 <= nu < 1.0):
-    raise image.Error(f'Normalized smooth escape range 0 <= {nu=} < 1, {n=}, bug! report')
-  return (n, nu)
-
-
-def NormalizeSmoothSet(
-  val: gmpy2.mpfr, lo_bound: gmpy2.mpfr, lo_hi_range: gmpy2.mpfr
-) -> tuple[int, float]:
-  """Normalize a value for Set points to be in [1, SET_INTERIOR_INT_MAX] with a fractional part.
-
-  Args:
-    val (gmpy2.mpfr): The value to normalize, which can be any real number.
-    lo_bound (gmpy2.mpfr): The lower bound of the range for normalization.
-    lo_hi_range (gmpy2.mpfr): The size of the range for normalization (hi - lo).
-
-  Returns:
-    tuple[int, float]: A tuple of the integer part (in -[1, SET_INTERIOR_INT_MAX]) and the
-        fractional part (in [0,1)) of the normalized value.
-
-  Raises:
-    image.Error: on error
-
-  """
-  if lo_hi_range <= 0:
-    raise image.Error(f'Invalid normalization range: {lo_hi_range=}, should be > 0, bug! report')
-  # scale to [0, 1]
-  norm: gmpy2.mpfr = max(_MPFR_ZERO, min(_MPFR_ONE, (val - lo_bound) / lo_hi_range))
-  # re-scale/stretch to [1, 1 + MPFR_SET_INTERIOR_INT_SPAN] == [1, SET_INTERIOR_INT_MAX]
-  scaled: gmpy2.mpfr = _MPFR_ONE + norm * frame.MPFR_SET_INTERIOR_INT_SPAN
-  # convert to int, clamp to [1, SET_INTERIOR_INT_MAX]
-  whole: int = min(frame.SET_INTERIOR_INT_MAX, max(1, int(gmpy2.floor(scaled))))
-  # compute the fractional part
-  frac_mpfr: gmpy2.mpfr = scaled - gmpy2.mpfr(whole)
-  # defensive only: normal operation frac_mpfr is already in [0, 1)
-  if frac_mpfr < _MPFR_ZERO:
-    frac_mpfr = _MPFR_ZERO
-  elif frac_mpfr >= _MPFR_ONE:
-    if whole < frame.SET_INTERIOR_INT_MAX:
-      whole += 1
-      frac_mpfr -= _MPFR_ONE
-    else:
-      frac_mpfr = _MPFR_ZERO
-  # convert to float and check again
-  frac: float = float(frac_mpfr)
-  if not math.isfinite(frac) or not (0.0 <= frac < 1.0):
-    raise image.Error(f'Invalid normalized Set fractional part: {frac=}, {whole=}, {scaled=}')
-  return (-whole, frac)
-
-
-def EncodeIntFloatTo64(i: int, f: float) -> int:
-  """Encode a signed int32 and a float32 into a single uint64, by concatenating their bits.
-
-  This is benchmarked at ~1.6ns per call, ~160ms for a 1024x1024 image to encode all pixels.
-  struct.pack()/unpack() does range checks already, so we DO NOT check inputs, as that degrades
-  performance by a lot. We also use pre-compiled struct formats to speed this up.
-
-  Args:
-    i (int): The signed int32 to encode.
-    f (float): The float32 to encode; garbage in, garbage out: if the float is not
-        valid/finite (NaN or Inf), you will get the same garbage float back on Decode64ToIntFloat().
-
-  Returns:
-    int: The encoded uint64 containing both the int and float.
-
-  Raises:
-    image.Error: inputs out of range or other encoding issues
-
-  """
-  try:
-    return cast('int', image.PACK_Q.unpack(image.PACK_IF.pack(i, f))[0])
-  except (struct.error, OverflowError) as err:
-    raise image.Error(f'Error encoding {i=} and {f=} to uint64: {err}') from err
