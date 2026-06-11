@@ -20,7 +20,7 @@ from transcrypto.utils import human, timer
 from tranzoom import __version__
 from tranzoom.core import fractal, frame, image
 
-# TODO: commands to look at data in the DB
+# TODO: commands to look/inspect the DB data, print DB stats, etc
 # DB constants
 
 _DB_FILE_NAME = 'tranZ_DB.json'  # default DB file name
@@ -1284,6 +1284,32 @@ class FractalDatabase:
       print_comm('')
       image.PrintITerm2(img_data)
     return (img_data, img_hash, full_path(img_hash), True)
+
+
+def WarnUserAnimationParams(
+  zoom_params: image.ZoomParameters, *, print_comm: abc.Callable[[str], None]
+) -> None:
+  """Print warnings if the zoom parameters may lead to sub-optimal animation quality or size.
+
+  Args:
+    zoom_params (image.ZoomParameters): the zoom parameters to check
+    print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
+
+  """
+  # sanity checks and warnings before we start the expensive rendering loop
+  if zoom_params.scalar_magnification_per_step > image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
+    print_comm(
+      f'{100.0 * (float(zoom_params.scalar_magnification_per_step) - 1.0):.4f}%/step. '
+      'or reducing the total magnification.[/]\n'
+    )
+  gif_sz: int
+  mp4_sz: int
+  gif_sz, mp4_sz = zoom_params.animation_sz_bytes()
+  if max(gif_sz, mp4_sz) > frame.THRESHOLD_LARGE_ANIMATION_BYTES:
+    print_comm(
+      f'[red]Warning: large animation file estimate: '
+      f'GIF ~{human.HumanizedBytes(gif_sz)}, MP4 ~{human.HumanizedBytes(mp4_sz)}[/]\n'
+    )
 
 
 def _DBLabel(db: _DBType) -> str:

@@ -15,6 +15,7 @@ import subprocess  # noqa: S404
 import tempfile
 
 import pytest
+from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 
 from tranzoom.cli import base
@@ -33,6 +34,26 @@ def cli() -> pathlib.Path:
   if cli_path is None:
     pytest.fail('Console script "tranz" not found in PATH')
   return pathlib.Path(cli_path)
+
+
+def _TestAllFramesDataOrFail(db_dir: str, name: str) -> None:
+  # open the raw data file by searching for the hash
+  expect_frames: int
+  expect_hash: str
+  expect_frames, expect_hash = base.TEST_IMAGE_DATA_HASHES[name]
+  db_path: pathlib.Path = pathlib.Path(db_dir)
+  for _, _, files in db_path.walk():
+    frame_hashes: list[str] = sorted(
+      hashes.FileHash(db_path / f).hex() for f in files if f.endswith('.Data')
+    )
+    n_frames: int = len(frame_hashes)
+    assert n_frames == expect_frames, f'{expect_frames=} data files (frames), found {n_frames}'
+    hsh: str = hashes.Hash256(('|'.join(frame_hashes)).encode('ascii')).hex()
+    assert hsh == expect_hash, f'{expect_hash=!r} data hash, found {hsh!r}'
+    break
+  else:
+    # loop completed without finding the directory, fail the test
+    pytest.fail('No data files found in output directory')
 
 
 @pytest.mark.slow
@@ -57,7 +78,7 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
       # call the console script directly to test the installed CLI
       [
         str(cli),
-        '--no-db',
+        '--db',
         '--force',
         '--opt',
         opt,
@@ -103,6 +124,7 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
     w, h, hsh, _ = image.GetBasicDataFromImage(output_image.read_bytes())
     assert (w, h) == (53, 39), f'Expected image dimensions 53x39, got {w} x {h}'
     assert hsh == base.T_GIF_SEAHORSE_HASH
+    _TestAllFramesDataOrFail(tmp_dir, 'seahorse')
 
 
 @pytest.mark.slow
@@ -126,7 +148,7 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
       # call the console script directly to test the installed CLI
       [
         str(cli),
-        '--no-db',
+        '--db',
         '--force',
         '--opt',
         opt,
@@ -212,6 +234,7 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
     w, h, hsh, _ = image.GetBasicDataFromImage(output_image.read_bytes())
     assert (w, h) == (31, 26), f'Expected image dimensions 31x26, got {w} x {h}'
     assert hsh == base.T_GIF_SEEDS_300_HASH
+    _TestAllFramesDataOrFail(tmp_dir, 'seeds300')
 
 
 @pytest.mark.slow
@@ -236,7 +259,7 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
       # call the console script directly to test the installed CLI
       [
         str(cli),
-        '--no-db',
+        '--db',
         '--force',
         '--opt',
         opt,
@@ -288,6 +311,7 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
     w, h, hsh, _ = image.GetBasicDataFromImage(output_image.read_bytes())
     assert (w, h) == (44, 59), f'Expected image dimensions 44x59, got {w} x {h}'
     assert hsh == base.T_GIF_JULIA_SUZANA_HASH
+    _TestAllFramesDataOrFail(tmp_dir, 'suzana')
 
 
 @pytest.mark.slow
@@ -312,7 +336,7 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
       # call the console script directly to test the installed CLI
       [
         str(cli),
-        '--no-db',
+        '--db',
         '--force',
         '--opt',
         opt,
@@ -364,6 +388,7 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
     w, h, hsh, _ = image.GetBasicDataFromImage(output_image.read_bytes())
     assert (w, h) == (52, 67), f'Expected image dimensions 52x67, got {w} x {h}'
     assert hsh == base.T_GIF_JULIA_DRAGON_HASH
+    _TestAllFramesDataOrFail(tmp_dir, 'dragon')
 
 
 @pytest.mark.slow
@@ -388,7 +413,7 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
       # call the console script directly to test the installed CLI
       [
         str(cli),
-        '--no-db',
+        '--db',
         '--force',
         '--opt',
         opt,
@@ -440,3 +465,4 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
     w, h, hsh, _ = image.GetBasicDataFromImage(output_image.read_bytes())
     assert (w, h) == (71, 55), f'Expected image dimensions 71x55, got {w} x {h}'
     assert hsh == base.T_GIF_JULIA_BLOB_HASH
+    _TestAllFramesDataOrFail(tmp_dir, 'blob')

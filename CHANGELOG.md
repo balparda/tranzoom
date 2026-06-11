@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
+  - [1.9.0 - 2026-06-11](#190---2026-06-11)
   - [1.8.0 - 2026-06-06](#180---2026-06-06)
   - [1.7.0 - 2026-06-04](#170---2026-06-04)
   - [1.6.3 - 2026-06-03](#163---2026-06-03)
@@ -39,6 +40,29 @@ This project follows a pragmatic versioning approach:
 - Fixed
   - Placeholder for future fixes.
 
+## 1.9.0 - 2026-06-11
+
+- Added
+  - **Smooth interior (Set) point coloring** (`image.py`, `fractalfast.py`, `fractalc.pyx`): interior points now support fractional remainder values for smooth coloring interpolation, eliminating harsh banding at set boundaries; `Histogram.InterpolateBucket()` method added to both exterior and interior histograms for unified smooth color mapping; `ZoomColorNorm.InterpolateInternal()` now accepts a `remainder` parameter for sub-integer color blending, matching the precision of exterior smooth coloring.
+  - **Test image generation scripts** (`scripts/make_test_images.sh`): new script automates generation of test animation GIFs for integration test suite; generates three Julia Set animations (blob, dragon, suzana) and two Mandelbrot animations (seahorse, seeds300) for deterministic integration test coverage; script uses `poetry run tranz --opt python` to ensure pixel-perfect reproducible output.
+  - **Demo image generation script** (`scripts/make_demo_images.sh`): renamed from `make_examples.sh`; generates all official demo images (full set, seahorse, seahorse tail, julia suzana, etc.) for documentation and README; used by `make demo` target.
+  - **New make targets** (`Makefile`): `make timages` runs test image generation script; `make demo` runs demo image generation script; facilitates local reproduction of test/demo content and integration test setup.
+  - **Cython equivalence tests** (`tests_integration/test_cython_equivalence.py`): new 468-line integration test module that validates pure Python and Cython fractal computation produce pixel-identical output; tests Mandelbrot/Julia rendering, interior coloring, smooth escape values, and histogram statistics across multiple zooms; prevents performance optimization regressions that silently change pixel output.
+
+- Changed
+  - **CLI animation code refactoring** (`cli/base.py`, `cli/zoomcommand.py`): large portion of zoom animation logic moved from `zoomcommand.py` (reduced by 539 lines) to `base.py` (expanded by 554 lines) for better code organization and reuse; animation computation, parameter handling, and rendering consolidated in a single module; helper functions like depth estimation and progress bars centralized.
+  - **Interior histogram interpolation** (`image.py`): `InterpolateInt()` method renamed to `InterpolateInternal()` for symmetry with `InterpolateExternal()` (formerly `InterpolateExt()`); method signature changed to accept `(key: int, remainder: float)` for smooth coloring instead of just `key`; internal histogram lookup now delegates to `Histogram.InterpolateBucket()` for consistent blending logic.
+  - **Frame constant canonicalization** (`frame.py`): new `CanonicalMPFR()` helper function added to canonicalize arbitrary-precision floats to a canonical form (base 2 with consistent representation); improves hashing and comparison of equivalent MPFR values; used internally for frame coordinate consistency.
+  - **Dependency updates** (`pyproject.toml`): `typer` bumped from pinned `0.25.1` to `>=0.26.7` (was previously pinned due to type stub issues; now compatible); `transai` bumped to `>=1.3.3`; `transcrypto` bumped to `>=2.7`; removed `click==8.3.3` and `cryptography>=48.0` dependencies (no longer needed after Typer update).
+  - **Fractal computation refactoring** (`fractalfast.py`, `fractalc.pyx`): ~434 lines changed in pure Python; interior statistics handling updated to use smooth remainder values; escape-time iteration refined to track fractional component for smooth coloring; Cython version receives equivalent changes.
+  - **Integration test structure** (`tests_integration/test_installed_cli.py`): simplified assertions and test organization; added Cython equivalence test module with comprehensive output validation across multiple render configurations.
+
+- Fixed
+  - **Interior point edge cases** (`image.py`): fixed bug where interior points with missing histogram data (e.g., all-interior images) would cause incorrect palette lookup; now explicitly handles `escaped_at < 0 and not histogram.count` case by rendering as black; improved error logging for invalid pixel states.
+  - **Smooth coloring blend clamping** (`image.py`): fixed potential out-of-range palette values in `InterpolateExternal()` and `InterpolateInternal()` by adding explicit clamping to `[0.0, _ALMOST_ONE]` range; prevents rare edge cases where histogram interpolation produces values slightly outside valid palette range.
+  - **Animation parameter calculation** (`base.py`): fixed animation depth estimation to correctly handle frames with mixed interior/exterior content; `_FrameEstimatedIters()` now accurately weights computational load as `d/5 + 4d × n_interior/(5 × n_px)` instead of treating all pixels equally.
+  - **Typer compatibility** (`cli/base.py`, `pyproject.toml`): resolved type stub compatibility issues that forced `typer==0.25.1` pinning; upgraded to `typer>=0.26.7` which has proper type checking support and modern Click integration; removed workarounds for older type stub limitations.
+
 ## 1.8.0 - 2026-06-06
 
 - Added
@@ -71,7 +95,7 @@ This project follows a pragmatic versioning approach:
   - **Ruff exclusions** (`pyproject.toml`): `fractalc.pyx` excluded from Ruff linting (not valid Python syntax); `build_ext.py` allowed subprocess usage for Homebrew detection (S404, S603, S607) and no `__init__.py` required (INP001).
   - **Pyright exclusions** (`pyproject.toml`): `fractalc.pyx` excluded from Pyright type checking; pure Cython syntax incompatible with Python type checker.
   - **Test coverage exclusions** (`pyproject.toml`): `build_ext.py` excluded from coverage reporting; build scripts not part of runtime code coverage.
-  - **Integration test determinism** (`tests_integration/test_installed_cli.py`): all integration test CLI calls now include `--opt python` to force pure-Python computation; ensures deterministic pixel-perfect output hashes regardless of Cython availability; prevents CI flakiness when Cython extensions are present; TODO added for future Cython-specific tests.
+  - **Integration test determinism** (`tests_integration/test_installed_cli.py`): all integration test CLI calls now include `--opt python` to force pure-Python computation; ensures deterministic pixel-perfect output hashes regardless of Cython availability; prevents CI flakiness when Cython extensions are present.
   - **Performance section** (`README.md`): updated to reflect three-tier optimization system; documented Cython acceleration as optional but recommended for deep zooms; added note that PyPI wheels ship pure-Python but users can compile locally.
 
 - Fixed
@@ -161,7 +185,7 @@ This project follows a pragmatic versioning approach:
   - **`JPEG_QUALITY`** (`image.py`): new public constant (`95`) for JPEG output quality.
   - **Richer PNG metadata keys** (`image.py`): renamed and added keys for better organization — `META_COMPUTATION_WIDTH_KEY`, `META_COMPUTATION_HEIGHT_KEY`, `META_COMPUTATION_SEARCH_DEPTH_KEY`, `META_COMPUTATION_COLOR_SET_KEY`, `META_COMPUTATION_HASH_KEY`, `META_FRAME_HASH_KEY`, `META_RENDER_HASH_KEY` (previously some of these were `META_IMAGE_WIDTH_KEY`, `META_IMAGE_HEIGHT_KEY`, etc.); all new keys are written by `MakeImageMeta`.
   - **`--readonly-db/--no-readonly-db` global flag** (`tranz.py`, `base.py`): new CLI flag to open the fractal DB in read-only mode (reads are allowed but no writes or saves occur); previously `db_read_only` was always `False` at the CLI level and was only settable programmatically.
-  - **Marker frames for zoom animations** (`image.py`, `zoomcommand.py`, `frdb.py`): `ZoomParameters.Frames()` now returns a `tuple[list[Frame], list[tuple[int, Frame]]]` — `(all_frames, marker_frames)` — where `marker_frames` is a subset of `all_frames` placed at regular 10× magnification intervals (one per `MAGNITUDE_PER_FRAME_MARKER` decade, default every 10× zoom) using an O(log n) bisect-based search; these replace the old TODO placeholder `[first, last]` and are stored in the DB via `AddZoomToDB`; marker frames are computed first before any regular frames to enable cross-frame color normalization.
+  - **Marker frames for zoom animations** (`image.py`, `zoomcommand.py`, `frdb.py`): `ZoomParameters.Frames()` now returns a `tuple[list[Frame], list[tuple[int, Frame]]]` — `(all_frames, marker_frames)` — where `marker_frames` is a subset of `all_frames` placed at regular 10× magnification intervals (one per `MAGNITUDE_PER_FRAME_MARKER` decade, default every 10× zoom) using an O(log n) bisect-based search; marker frames are computed first before any regular frames to enable cross-frame color normalization.
   - **`Image.ZoomColorNorm` / `Image.FrameColorNorm`** (`image.py`): two new inner classes for stable color normalization across zoom animations; `ZoomColorNorm` is built from the marker `Image` objects via `ZoomColorNorm.FromMarkers()` and provides per-frame `FrameColorNorm` anchors via `ForFrame()`; `AsPixels()` now accepts a `zoom_norm` parameter; this eliminates per-frame palette shifts that previously caused visible flickering in long animations.
   - **`RenderParameters.prev_marker` / `next_marker`** (`image.py`): two new optional `Frame` fields on `RenderParameters`, carrying the surrounding marker frames for `ZoomColorNorm` interpolation; included in the render key (hash) and serialized to JSON.
   - **`MAGNITUDE_PER_FRAME_MARKER` and `MAX_TOLERATED_MARKER_MAG_ERROR`** (`image.py`): two new constants — `MAGNITUDE_PER_FRAME_MARKER = mpq('1')` (one marker every 10× zoom) and `MAX_TOLERATED_MARKER_MAG_ERROR = 0.06` (6% max error for marker placement).
