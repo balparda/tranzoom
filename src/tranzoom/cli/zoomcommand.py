@@ -22,6 +22,8 @@ from tranzoom import tranz
 from tranzoom.cli import base
 from tranzoom.core import ai, frame, image
 
+# TODO: zoom animation can probably get pretty good scale up in both resolution and fps!
+
 _AI_QUERY_WEIGHT: float = 0.8  # how much to weight the AI query vs the manual score
 
 

@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
+  - [1.9.0 - 2026-06-11](#190---2026-06-11)
   - [1.8.0 - 2026-06-06](#180---2026-06-06)
   - [1.7.0 - 2026-06-04](#170---2026-06-04)
   - [1.6.3 - 2026-06-03](#163---2026-06-03)
@@ -38,6 +39,29 @@ This project follows a pragmatic versioning approach:
 
 - Fixed
   - Placeholder for future fixes.
+
+## 1.9.0 - 2026-06-11
+
+- Added
+  - **Smooth interior (Set) point coloring** (`image.py`, `fractalfast.py`, `fractalc.pyx`): interior points now support fractional remainder values for smooth coloring interpolation, eliminating harsh banding at set boundaries; `Histogram.InterpolateBucket()` method added to both exterior and interior histograms for unified smooth color mapping; `ZoomColorNorm.InterpolateInternal()` now accepts a `remainder` parameter for sub-integer color blending, matching the precision of exterior smooth coloring.
+  - **Test image generation scripts** (`scripts/make_test_images.sh`): new script automates generation of test animation GIFs for integration test suite; generates three Julia Set animations (blob, dragon, suzana) and two Mandelbrot animations (seahorse, seeds300) for deterministic integration test coverage; script uses `poetry run tranz --opt python` to ensure pixel-perfect reproducible output.
+  - **Demo image generation script** (`scripts/make_demo_images.sh`): renamed from `make_examples.sh`; generates all official demo images (full set, seahorse, seahorse tail, julia suzana, etc.) for documentation and README; used by `make demo` target.
+  - **New make targets** (`Makefile`): `make timages` runs test image generation script; `make demo` runs demo image generation script; facilitates local reproduction of test/demo content and integration test setup.
+  - **Cython equivalence tests** (`tests_integration/test_cython_equivalence.py`): new 468-line integration test module that validates pure Python and Cython fractal computation produce pixel-identical output; tests Mandelbrot/Julia rendering, interior coloring, smooth escape values, and histogram statistics across multiple zooms; prevents performance optimization regressions that silently change pixel output.
+
+- Changed
+  - **CLI animation code refactoring** (`cli/base.py`, `cli/zoomcommand.py`): large portion of zoom animation logic moved from `zoomcommand.py` (reduced by 539 lines) to `base.py` (expanded by 554 lines) for better code organization and reuse; animation computation, parameter handling, and rendering consolidated in a single module; helper functions like depth estimation and progress bars centralized.
+  - **Interior histogram interpolation** (`image.py`): `InterpolateInt()` method renamed to `InterpolateInternal()` for symmetry with `InterpolateExternal()` (formerly `InterpolateExt()`); method signature changed to accept `(key: int, remainder: float)` for smooth coloring instead of just `key`; internal histogram lookup now delegates to `Histogram.InterpolateBucket()` for consistent blending logic.
+  - **Frame constant canonicalization** (`frame.py`): new `CanonicalMPFR()` helper function added to canonicalize arbitrary-precision floats to a canonical form (base 2 with consistent representation); improves hashing and comparison of equivalent MPFR values; used internally for frame coordinate consistency.
+  - **Dependency updates** (`pyproject.toml`): `typer` bumped from pinned `0.25.1` to `>=0.26.7` (was previously pinned due to type stub issues; now compatible); `transai` bumped to `>=1.3.3`; `transcrypto` bumped to `>=2.7`; removed `click==8.3.3` and `cryptography>=48.0` dependencies (no longer needed after Typer update).
+  - **Fractal computation refactoring** (`fractalfast.py`, `fractalc.pyx`): ~434 lines changed in pure Python; interior statistics handling updated to use smooth remainder values; escape-time iteration refined to track fractional component for smooth coloring; Cython version receives equivalent changes.
+  - **Integration test structure** (`tests_integration/test_installed_cli.py`): simplified assertions and test organization; added Cython equivalence test module with comprehensive output validation across multiple render configurations.
+
+- Fixed
+  - **Interior point edge cases** (`image.py`): fixed bug where interior points with missing histogram data (e.g., all-interior images) would cause incorrect palette lookup; now explicitly handles `escaped_at < 0 and not histogram.count` case by rendering as black; improved error logging for invalid pixel states.
+  - **Smooth coloring blend clamping** (`image.py`): fixed potential out-of-range palette values in `InterpolateExternal()` and `InterpolateInternal()` by adding explicit clamping to `[0.0, _ALMOST_ONE]` range; prevents rare edge cases where histogram interpolation produces values slightly outside valid palette range.
+  - **Animation parameter calculation** (`base.py`): fixed animation depth estimation to correctly handle frames with mixed interior/exterior content; `_FrameEstimatedIters()` now accurately weights computational load as `d/5 + 4d × n_interior/(5 × n_px)` instead of treating all pixels equally.
+  - **Typer compatibility** (`cli/base.py`, `pyproject.toml`): resolved type stub compatibility issues that forced `typer==0.25.1` pinning; upgraded to `typer>=0.26.7` which has proper type checking support and modern Click integration; removed workarounds for older type stub limitations.
 
 ## 1.8.0 - 2026-06-06
 
