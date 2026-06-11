@@ -252,7 +252,7 @@ def NormalizeSmoothSet(mpfr val, mpfr lo_bound, mpfr lo_hi_range) -> tuple[int, 
   try:
     mpfr_set_d(zero, 0.0, MPFR_RNDN)
     mpfr_set_d(one, 1.0, MPFR_RNDN)
-    mpfr_set_d(interior_span_mpfr, <double>frame.SET_INTERIOR_INT_SPAN, MPFR_RNDN)
+    mpfr_set(interior_span_mpfr, MPFR(<mpfr>frame.MPFR_SET_INTERIOR_INT_SPAN), MPFR_RNDN)
 
     NormalizeSmoothSet_c(
       MPFR(val),
