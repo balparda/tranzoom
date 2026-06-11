@@ -74,11 +74,11 @@ TEST_IMAGE_DATA_HASHES: dict[str, tuple[int, str]] = {
   # name: (number of frames, hash of all the frames)
   # these are the hashes of the raw object data of the frame pickled to disk, not to be confused
   # with the frames' hash we compute; both are data dependent only, but they WILL BE DIFFERENT
-  'seahorse': (45, '477e57d51194a889abfa2221f05e1a8b4e7c26f37392f764c225d00ac884a161'),
+  'seahorse': (45, '1105b681fc059328833f9e79ef5d37059ee29b4995ad05d20e9a6610cfaf5313'),
   'seeds300': (20, 'b7b771ce478c594e1cd73271ec92127b1b2a40d8e1224e72e5f9cb2d77ea2e75'),
-  'suzana': (21, '2f7805305480965be62a240d4f0d53875fd90f163d2455816945d68207ad38f0'),
-  'dragon': (8, 'a6ec3bc09e14fe778c143794e39fe66d6d2121abceeb4a48014eb5d92a99f3d4'),
-  'blob': (8, '88e313b98ffc802d46f8d77f999a03e660147c3db96cc938feddb364af59ebab'),
+  'suzana': (21, '57fb14828e1adeebd6c8fa5d3fe7f75ac0a4cf8e5864235ff77dc89aa20dbca5'),
+  'dragon': (8, '23fbaca543e2e319ab621d964772b32b04dc5605160a83f031bee38444403f9a'),
+  'blob': (8, 'd7e54a7b817cca30ae14b9ad03d8c81bd72e8c8ece62fdf8dc569de7d030c917'),
 }
 # these are tested from `tests/cli/base_test.py`, `tests_integration/test_installed_cli.py`, and
 # `tests_integration/test_cython_equivalence.py`!

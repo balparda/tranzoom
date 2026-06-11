@@ -64,23 +64,6 @@ MPFR_SET_INTERIOR_INT_MAX: gmpy2.mpfr = gmpy2.mpfr(SET_INTERIOR_INT_MAX)
 MPFR_SET_INTERIOR_INT_SPAN: gmpy2.mpfr = gmpy2.mpfr(SET_INTERIOR_INT_MAX - 1)
 MPFR_SET_INTERIOR_SCALE: gmpy2.mpfr = MPFR_SET_INTERIOR_INT_SPAN / MPFR_MAX_SET_Z
 
-# gmpy2.mpfr ultra-precision context factory
-PrecisionContext: abc.Callable[[], gmpy2.context] = lambda: gmpy2.local_context(
-  gmpy2.context(), precision=_MPFR_BIG_PRECISION
-)
-
-# gmpy2.mpq constants
-_MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
-_MPQ_ONE: gmpy2.mpq = gmpy2.mpq('1')
-_MPQ_SQRT_TWO_NOT_EXACT: gmpy2.mpq = gmpy2.mpq('99/70')  # good enough for our purposes
-_MPQ_TWO: gmpy2.mpq = gmpy2.mpq('2')
-# constant to divide frame size when zooming one step
-DEFAULT_MPQ_ZOOM: gmpy2.mpq = gmpy2.mpq('2')  # 2x
-# fraction of frame size to move when moving in a cardinal direction
-DEFAULT_STEP_DIRECT: int = 3
-DEFAULT_MPQ_STEP_DIRECT: gmpy2.mpq = gmpy2.mpq(f'1/{DEFAULT_STEP_DIRECT}')
-DEFAULT_MPQ_STEP_DIAGONAL: gmpy2.mpq = DEFAULT_MPQ_STEP_DIRECT / _MPQ_SQRT_TWO_NOT_EXACT
-
 # Frame: the default frame is the one that shows the whole Mandelbrot set, which is centered at
 # -0.75+0j and has width 2.5; the height is the same as the width by default;
 # The set <https://en.wikipedia.org/wiki/Mandelbrot_set> is contained in the rectangle with corners
@@ -94,6 +77,35 @@ DEFAULT_JULIA_CENTER_RE: str = '0'
 DEFAULT_JULIA_CENTER_IM: str = '0'
 DEFAULT_JULIA_WIDTH: str = '1.8'
 DEFAULT_JULIA_HEIGHT: str = '2.2'
+
+
+# gmpy2.mpfr ultra-precision context factory
+PrecisionContext: abc.Callable[[], gmpy2.context] = lambda: gmpy2.local_context(
+  gmpy2.context(), precision=_MPFR_BIG_PRECISION
+)
+
+# gmpy2.mpfr canonicalization function: converts an mpfr to a canonical form with base 2
+# and the same precision, or returns None if the input is None; this ensures that equivalent
+# mpfr values have the same binary representation, which is important for hashing and comparison
+_BuildMPFR: abc.Callable[[gmpy2.mpfr, gmpy2.mpz, int], gmpy2.mpfr] = lambda x, x_mnt, x_exp: (
+  gmpy2.mpfr(x_mnt, x.precision) * gmpy2.exp2(x_exp)
+)
+CanonicalMPFR: abc.Callable[[gmpy2.mpfr | None], gmpy2.mpfr | None] = lambda x: (
+  None if x is None else _BuildMPFR(x, *x.as_mantissa_exp())
+)
+
+# gmpy2.mpq constants
+_MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
+_MPQ_ONE: gmpy2.mpq = gmpy2.mpq('1')
+_MPQ_SQRT_TWO_NOT_EXACT: gmpy2.mpq = gmpy2.mpq('99/70')  # good enough for our purposes
+_MPQ_TWO: gmpy2.mpq = gmpy2.mpq('2')
+# constant to divide frame size when zooming one step
+DEFAULT_MPQ_ZOOM: gmpy2.mpq = gmpy2.mpq('2')  # 2x
+
+# fraction of frame size to move when moving in a cardinal direction
+DEFAULT_STEP_DIRECT: int = 3
+DEFAULT_MPQ_STEP_DIRECT: gmpy2.mpq = gmpy2.mpq(f'1/{DEFAULT_STEP_DIRECT}')
+DEFAULT_MPQ_STEP_DIAGONAL: gmpy2.mpq = DEFAULT_MPQ_STEP_DIRECT / _MPQ_SQRT_TWO_NOT_EXACT
 
 
 class Error(tbase.Error):

@@ -418,14 +418,16 @@ def MandelbrotComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutpu
     img.stats = image.FractalStats(
       n_px=inp.params.width * inp.params.height,
       n_interior=n_interior,
-      max_lo=max_lo if max_hi >= max_lo else None,  # sentinel (4, 0) means no data collected
-      max_hi=max_hi if max_hi >= max_lo else None,
-      min_lo=min_lo if min_hi >= min_lo else None,  # sentinel (4, 0) means no data collected
-      min_hi=min_hi if min_hi >= min_lo else None,
-      ang_lo=ang_lo if ang_hi >= ang_lo else None,  # sentinel (1, 0) means no data collected
-      ang_hi=ang_hi if ang_hi >= ang_lo else None,
-      imag_lo=imag_lo if imag_hi >= imag_lo else None,  # sentinel (1, 0) means no data collected
-      imag_hi=imag_hi if imag_hi >= imag_lo else None,
+      # max & min: sentinel (4, 0) means no data collected
+      max_lo=frame.CanonicalMPFR(max_lo) if max_hi >= max_lo else None,
+      max_hi=frame.CanonicalMPFR(max_hi) if max_hi >= max_lo else None,
+      min_lo=frame.CanonicalMPFR(min_lo) if min_hi >= min_lo else None,
+      min_hi=frame.CanonicalMPFR(min_hi) if min_hi >= min_lo else None,
+      # angle & imaginary: sentinel (1, 0) means no data collected
+      ang_lo=frame.CanonicalMPFR(ang_lo) if ang_hi >= ang_lo else None,
+      ang_hi=frame.CanonicalMPFR(ang_hi) if ang_hi >= ang_lo else None,
+      imag_lo=frame.CanonicalMPFR(imag_lo) if imag_hi >= imag_lo else None,
+      imag_hi=frame.CanonicalMPFR(imag_hi) if imag_hi >= imag_lo else None,
     )
     return image.FractalTaskOutput(img=img, n_task=inp.n_task, total_tasks=inp.total_tasks)
 
@@ -679,13 +681,15 @@ def JuliaComputation(inp: image.FractalTaskInput) -> image.FractalTaskOutput:  #
     img.stats = image.FractalStats(
       n_px=inp.params.width * inp.params.height,
       n_interior=n_interior,
-      max_lo=max_lo if max_hi >= max_lo else None,  # sentinel (4, 0) means no data collected
-      max_hi=max_hi if max_hi >= max_lo else None,
-      min_lo=min_lo if min_hi >= min_lo else None,  # sentinel (4, 0) means no data collected
-      min_hi=min_hi if min_hi >= min_lo else None,
-      ang_lo=ang_lo if ang_hi >= ang_lo else None,  # sentinel (1, 0) means no data collected
-      ang_hi=ang_hi if ang_hi >= ang_lo else None,
-      imag_lo=imag_lo if imag_hi >= imag_lo else None,  # sentinel (1, 0) means no data collected
-      imag_hi=imag_hi if imag_hi >= imag_lo else None,
+      # max & min: sentinel (4, 0) means no data collected
+      max_lo=frame.CanonicalMPFR(max_lo) if max_hi >= max_lo else None,
+      max_hi=frame.CanonicalMPFR(max_hi) if max_hi >= max_lo else None,
+      min_lo=frame.CanonicalMPFR(min_lo) if min_hi >= min_lo else None,
+      min_hi=frame.CanonicalMPFR(min_hi) if min_hi >= min_lo else None,
+      # angle & imaginary: sentinel (1, 0) means no data collected
+      ang_lo=frame.CanonicalMPFR(ang_lo) if ang_hi >= ang_lo else None,
+      ang_hi=frame.CanonicalMPFR(ang_hi) if ang_hi >= ang_lo else None,
+      imag_lo=frame.CanonicalMPFR(imag_lo) if imag_hi >= imag_lo else None,
+      imag_hi=frame.CanonicalMPFR(imag_hi) if imag_hi >= imag_lo else None,
     )
     return image.FractalTaskOutput(img=img, n_task=inp.n_task, total_tasks=inp.total_tasks)

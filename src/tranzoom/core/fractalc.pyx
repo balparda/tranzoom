@@ -201,9 +201,9 @@ cdef inline void NormalizeSmoothSet_c(
 
   # tmp2 = frac = scaled - whole
   #
-  # Use mpfr_set_si to preserve exact integer representation (not mpfr_set_d which loses
-  # precision for large integers when converting through double). This ensures Python/Cython
-  # equivalence for the fractional part computation.
+  # whole is an integer bucket. Use the integer MPFR setter rather than routing
+  # through double. This is exact for the current SET_INTERIOR_INT_MAX range as
+  # long as it fits in C long, and it mirrors Python's gmpy2.mpfr(whole) intent
   mpfr_set_si(tmp2, <long>whole, MPFR_RNDN)
   mpfr_sub(tmp2, tmp1, tmp2, MPFR_RNDN)
 
@@ -801,17 +801,17 @@ def MandelbrotComputation(object inp):
         n_px=width * height,
         n_interior=n_interior,
 
-        max_lo=GMPy_MPFR_From_mpfr(max_lo) if mpfr_greaterequal_p(max_hi, max_lo) else None,
-        max_hi=GMPy_MPFR_From_mpfr(max_hi) if mpfr_greaterequal_p(max_hi, max_lo) else None,
+        max_lo=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(max_lo)) if mpfr_greaterequal_p(max_hi, max_lo) else None,
+        max_hi=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(max_hi)) if mpfr_greaterequal_p(max_hi, max_lo) else None,
 
-        min_lo=GMPy_MPFR_From_mpfr(min_lo) if mpfr_greaterequal_p(min_hi, min_lo) else None,
-        min_hi=GMPy_MPFR_From_mpfr(min_hi) if mpfr_greaterequal_p(min_hi, min_lo) else None,
+        min_lo=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(min_lo)) if mpfr_greaterequal_p(min_hi, min_lo) else None,
+        min_hi=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(min_hi)) if mpfr_greaterequal_p(min_hi, min_lo) else None,
 
-        ang_lo=GMPy_MPFR_From_mpfr(ang_lo) if mpfr_greaterequal_p(ang_hi, ang_lo) else None,
-        ang_hi=GMPy_MPFR_From_mpfr(ang_hi) if mpfr_greaterequal_p(ang_hi, ang_lo) else None,
+        ang_lo=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(ang_lo)) if mpfr_greaterequal_p(ang_hi, ang_lo) else None,
+        ang_hi=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(ang_hi)) if mpfr_greaterequal_p(ang_hi, ang_lo) else None,
 
-        imag_lo=GMPy_MPFR_From_mpfr(imag_lo) if mpfr_greaterequal_p(imag_hi, imag_lo) else None,
-        imag_hi=GMPy_MPFR_From_mpfr(imag_hi) if mpfr_greaterequal_p(imag_hi, imag_lo) else None,
+        imag_lo=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(imag_lo)) if mpfr_greaterequal_p(imag_hi, imag_lo) else None,
+        imag_hi=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(imag_hi)) if mpfr_greaterequal_p(imag_hi, imag_lo) else None,
       )
 
       return image.FractalTaskOutput(
@@ -1354,17 +1354,17 @@ def JuliaComputation(object inp):
         n_px=width * height,
         n_interior=n_interior,
 
-        max_lo=GMPy_MPFR_From_mpfr(max_lo) if mpfr_greaterequal_p(max_hi, max_lo) else None,
-        max_hi=GMPy_MPFR_From_mpfr(max_hi) if mpfr_greaterequal_p(max_hi, max_lo) else None,
+        max_lo=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(max_lo)) if mpfr_greaterequal_p(max_hi, max_lo) else None,
+        max_hi=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(max_hi)) if mpfr_greaterequal_p(max_hi, max_lo) else None,
 
-        min_lo=GMPy_MPFR_From_mpfr(min_lo) if mpfr_greaterequal_p(min_hi, min_lo) else None,
-        min_hi=GMPy_MPFR_From_mpfr(min_hi) if mpfr_greaterequal_p(min_hi, min_lo) else None,
+        min_lo=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(min_lo)) if mpfr_greaterequal_p(min_hi, min_lo) else None,
+        min_hi=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(min_hi)) if mpfr_greaterequal_p(min_hi, min_lo) else None,
 
-        ang_lo=GMPy_MPFR_From_mpfr(ang_lo) if mpfr_greaterequal_p(ang_hi, ang_lo) else None,
-        ang_hi=GMPy_MPFR_From_mpfr(ang_hi) if mpfr_greaterequal_p(ang_hi, ang_lo) else None,
+        ang_lo=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(ang_lo)) if mpfr_greaterequal_p(ang_hi, ang_lo) else None,
+        ang_hi=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(ang_hi)) if mpfr_greaterequal_p(ang_hi, ang_lo) else None,
 
-        imag_lo=GMPy_MPFR_From_mpfr(imag_lo) if mpfr_greaterequal_p(imag_hi, imag_lo) else None,
-        imag_hi=GMPy_MPFR_From_mpfr(imag_hi) if mpfr_greaterequal_p(imag_hi, imag_lo) else None,
+        imag_lo=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(imag_lo)) if mpfr_greaterequal_p(imag_hi, imag_lo) else None,
+        imag_hi=frame.CanonicalMPFR(GMPy_MPFR_From_mpfr(imag_hi)) if mpfr_greaterequal_p(imag_hi, imag_lo) else None,
       )
 
       return image.FractalTaskOutput(

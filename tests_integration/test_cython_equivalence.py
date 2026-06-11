@@ -56,7 +56,6 @@ def _TestAllFramesDataOrFail(db_dir: str, name: str) -> None:
     pytest.fail('No data files found in output directory')
 
 
-@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -128,7 +127,6 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
     _TestAllFramesDataOrFail(tmp_dir, 'seahorse')
 
 
-@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -239,7 +237,6 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
     _TestAllFramesDataOrFail(tmp_dir, 'seeds300')
 
 
-@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -317,7 +314,6 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
     _TestAllFramesDataOrFail(tmp_dir, 'suzana')
 
 
-@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.parametrize(

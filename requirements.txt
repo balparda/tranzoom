@@ -8,7 +8,7 @@ colorama==0.4.6 ; python_version >= "3.12" and python_version < "4.0" and platfo
 cryptography==48.0.1 ; python_version >= "3.12" and python_version < "4.0"
 cython==3.2.5 ; python_version >= "3.12" and python_version < "4.0"
 diskcache==5.6.3 ; python_version >= "3.12" and python_version < "4.0"
-filelock==3.29.1 ; python_version >= "3.12" and python_version < "4.0"
+filelock==3.29.3 ; python_version >= "3.12" and python_version < "4.0"
 fsspec==2026.4.0 ; python_version >= "3.12" and python_version < "4.0"
 func-timeout==4.3.5 ; python_version >= "3.12" and python_version < "4.0"
 gmpy2==2.3.0 ; python_version >= "3.12" and python_version < "4.0"
