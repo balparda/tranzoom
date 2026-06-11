@@ -201,9 +201,10 @@ cdef inline void NormalizeSmoothSet_c(
 
   # tmp2 = frac = scaled - whole
   #
-  # Use double because all integers up to 2^53 are exactly representable;
-  # SET_INTERIOR_INT_MAX is 2^31.
-  mpfr_set_d(tmp2, <double>whole, MPFR_RNDN)
+  # Use mpfr_set_si to preserve exact integer representation (not mpfr_set_d which loses
+  # precision for large integers when converting through double). This ensures Python/Cython
+  # equivalence for the fractional part computation.
+  mpfr_set_si(tmp2, <long>whole, MPFR_RNDN)
   mpfr_sub(tmp2, tmp1, tmp2, MPFR_RNDN)
 
   # Defensive only: normal operation gives 0 <= frac < 1.
