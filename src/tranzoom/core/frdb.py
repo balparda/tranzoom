@@ -1299,10 +1299,7 @@ def WarnUserAnimationParams(
   # sanity checks and warnings before we start the expensive rendering loop
   if zoom_params.scalar_magnification_per_step > image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
     print_comm(
-      '[red]Warning: the zoom per frame is high: 10^(mag/(frames-1)) = '
-      f'10^({float(zoom_params.mag):.4f}/{zoom_params.n_steps}) = '
-      f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step. '
-      'The resulting animation may look jumpy! Please consider increasing the number of frames '
+      f'{100.0 * (float(zoom_params.scalar_magnification_per_step) - 1.0):.4f}%/step. '
       'or reducing the total magnification.[/]\n'
     )
   gif_sz: int
