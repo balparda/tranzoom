@@ -118,6 +118,9 @@ META_ZOOM_SECONDS_KEY: str = f'{_app}:zoom:frame:seconds'  # gmpy2.mpq
 META_ZOOM_LOOP_KEY: str = f'{_app}:zoom:frame:loop'  # int; 0 means inf loop; meaningless for MP4
 META_ZOOM_STEPS_KEY: str = f'{_app}:zoom:frame:steps'  # int
 META_ZOOM_FPS_KEY: str = f'{_app}:zoom:frame:fps'  # gmpy2.mpq
+META_ZOOM_I_FPS_KEY: str = f'{_app}:zoom:frame:ifps'  # gmpy2.mpq
+META_ZOOM_I_FRAMES_KEY: str = f'{_app}:zoom:frame:i_frames'  # int
+META_ZOOM_ALL_FRAMES_KEY: str = f'{_app}:zoom:frame:all_frames'  # int
 META_ZOOM_MAGNITUDE_PER_STEP_KEY: str = f'{_app}:zoom:frame:magnitude_per_step'  # gmpy2.mpq
 META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str = f'{_app}:zoom:frame:magnification_per_step'  # gmpy2.mpq
 META_ZOOM_MARKER_INDEX_LIST_KEY: str = f'{_app}:zoom:marker:index'  # list[int]
@@ -618,25 +621,36 @@ class RenderParameters(frame.SerializingFractalObject):
     Raises:
       Error: on error
 
+    tp: FileType = FileType.PNG
+    escaped_pal: palette.Palette = palette.DEFAULT_PALETTE
+    set_pal: palette.Palette | None = None  # if None, this must be a non-Set-computation
+    mark_re: gmpy2.mpq = _MPQ_ZERO
+    mark_im: gmpy2.mpq = _MPQ_ZERO
+    mark_color: Color | None = None  # if None, no mark will be drawn
+    mark_width: int = DEFAULT_MARK_WIDTH
+    overlay: OverlayType | None = None  # overlay is independent of mark!
+    prev_marker: frame.Frame | None = None  # for zoom
+    next_marker: frame.Frame | None = None  # for zoom
+
     """
     # create the object
     try:
       params = RenderParameters(  # object creation will check the data is valid and consistent
-        tp=FileType(data['tp']),
-        escaped_pal=palette.Palette(data['escaped_pal']),
-        set_pal=palette.Palette(data['set_pal']) if data['set_pal'] is not None else None,
-        mark_re=gmpy2.mpq(str(data['mark_re'])),
-        mark_im=gmpy2.mpq(str(data['mark_im'])),
+        tp=FileType(data.get('tp', FileType.PNG.value)),
+        escaped_pal=palette.Palette(data.get('escaped_pal', palette.DEFAULT_PALETTE.value)),
+        set_pal=palette.Palette(data['set_pal']) if data.get('set_pal') else None,
+        mark_re=gmpy2.mpq(str(data.get('mark_re', '0'))),
+        mark_im=gmpy2.mpq(str(data.get('mark_im', '0'))),
         mark_color=(  # upper -> convert by name
-          Color[str(data['mark_color']).upper()] if data['mark_color'] is not None else None
+          Color[str(data['mark_color']).upper()] if data.get('mark_color') else None
         ),
-        mark_width=int(str(data['mark_width'])),
-        overlay=OverlayType(data['overlay']) if data['overlay'] is not None else None,
+        mark_width=int(str(data.get('mark_width', DEFAULT_MARK_WIDTH))),
+        overlay=OverlayType(data['overlay']) if data.get('overlay') else None,
         prev_marker=frame.Frame.FromJson(cast('tbase.JSONDict', data['prev_marker']))
-        if data['prev_marker']
+        if data.get('prev_marker')
         else None,
         next_marker=frame.Frame.FromJson(cast('tbase.JSONDict', data['next_marker']))
-        if data['next_marker']
+        if data.get('next_marker')
         else None,
       )
     except (KeyError, ValueError, TypeError, Error) as err:
@@ -674,9 +688,10 @@ class ZoomParameters(frame.SerializingFractalObject):
   mag: gmpy2.mpq  # destination magnitude
   n_frames: int  # number of frames in the animation
   duration: int  # round(duration in seconds * VIDEO_DURATION_STORE_SCALE): no float precision snafu
+  i_frames: int = 0  # number of interpolated frames to render between every two computed frames
   loop: int = 0  # number of loops for GIFs; 0 means infinite loop; ignored for non-GIFs
 
-  def __post_init__(self) -> None:
+  def __post_init__(self) -> None:  # noqa: C901
     """Check ZoomParameters for validity.
 
     Raises:
@@ -704,6 +719,12 @@ class ZoomParameters(frame.SerializingFractalObject):
     # check fps is valid: we already validated n_frames and duration that are used to compute fps
     if not (MIN_FPS <= self.fps <= MAX_FPS):
       raise Error(f'Frames per second must be between {MIN_FPS} and {MAX_FPS}, got {self.fps}')
+    # check i_frames is valid
+    if not (0 <= self.i_frames <= 3):  # noqa: PLR2004
+      raise Error(f'Interpolated frames must be between 0 and 3, got {self.i_frames}')
+    # check ifps is valid: it also has to be between MIN_FPS and MAX_FPS
+    if not (MIN_FPS <= self.ifps <= MAX_FPS):
+      raise Error(f'Final interpolated FPS must be between {MIN_FPS} and {MAX_FPS} got {self.ifps}')
     # check loop count is valid for GIFs
     if self.tp == AnimationType.GIF and not (MIN_LOOP <= self.loop <= MAX_LOOP):
       raise Error(f'Loop count for GIFs must be between {MIN_LOOP} and {MAX_LOOP}, got {self.loop}')
@@ -715,7 +736,8 @@ class ZoomParameters(frame.SerializingFractalObject):
 
     Format is:
       "<[ANIMATION_TYPE]: [RENDER_PARAMETERS] -> [COMPUTATION_PARAMETERS] / "
-      "(mag:[MAGNIFICATION], n:[N_FRAMES], d:[DURATION(sec)], fps:[FPS], l:[LOOP])>"
+      "(mag:[MAGNIFICATION], n:[N_FRAMES]|[ALL_FRAMES], "
+      "d:[DURATION(sec)], fps:([FPS])*[I_FRAMES+1], l:[LOOP])>"
 
     Returns:
       str: String representation of the ZoomParameters.
@@ -723,7 +745,8 @@ class ZoomParameters(frame.SerializingFractalObject):
     """
     return (
       f'<{self.tp.name.upper()}: {self.img} -> {self.render} / '
-      f'(mag:{self.mag}, n:{self.n_frames}, d:{self.n_seconds}, fps:{self.fps}, l:{self.loop})>'
+      f'(mag:{self.mag}, n:{self.n_frames}|{self.all_frames}, d:{self.n_seconds}, '
+      f'fps:({self.fps})*{self.i_frames + 1}, l:{self.loop})>'
     )
 
   @property
@@ -755,6 +778,29 @@ class ZoomParameters(frame.SerializingFractalObject):
 
     """
     return gmpy2.mpq(self.n_frames) / self.n_seconds
+
+  @property
+  def ifps(self) -> gmpy2.mpq:
+    """Get the interpolated frames per second for this animation. Exact.
+
+    Returns:
+      gmpy2.mpq: The interpolated frames per second for this animation.
+
+    """
+    return self.fps * gmpy2.mpq(self.i_frames + 1)
+
+  @property
+  def all_frames(self) -> int:
+    """Get the total number of frames, including interpolated frames, for this animation. Exact.
+
+    For every frame, except the last one, we render i_frames interpolated frames,
+    so total frames is: (n_frames - 1) * (i_frames + 1) + 1
+
+    Returns:
+      int: The total number of frames for this animation.
+
+    """
+    return ((self.n_frames - 1) * (self.i_frames + 1)) + 1
 
   @property
   def mag_per_step(self) -> gmpy2.mpq:
@@ -896,12 +942,12 @@ class ZoomParameters(frame.SerializingFractalObject):
     # optimize=True and delta-encodes unchanged pixels as transparent (disposal=1); for fractal
     # frames the smooth gradient interiors map well to 256-color palettes and LZW achieves
     # moderate compression; empirically ~0.125 bytes/pixel/frame on average (8:1 vs uncompressed)
-    gif_sz: int = self.n_frames * n_px // 8
+    gif_sz: int = self.all_frames * n_px // 8
     # MP4: H.264 (libx264) at CRF=16 (high quality, ~2x the bits of CRF=23), preset=slow
     # (WriteVideoMP4 parameters); fractal zooms have high temporal coherence (each frame is a
     # slightly zoomed version of the previous) which H.264 inter-frame prediction exploits very
     # well; empirically ~0.05 bytes/pixel/frame on average (20:1 vs uncompressed RGB)
-    mp4_sz: int = self.n_frames * n_px // 20
+    mp4_sz: int = self.all_frames * n_px // 20
     # metadata: ONE JSON block per file (NOT per frame) written as the GIF comment extension
     # or the MP4 container comment tag (json.dumps(meta) in WriteAnimatedGIF/WriteVideoMP4);
     # contains all zoom/computation/render/frame parameters; see png_sz_bytes formula;
@@ -916,7 +962,7 @@ class ZoomParameters(frame.SerializingFractalObject):
   def json(self) -> tbase.JSONDict:
     """Get a JSON-serializable dictionary representation of the ZoomParameters.
 
-    Keys: `tp`, `img`, `render`, `mag`, `n_frames`, `duration`, `loop`.
+    Keys: `tp`, `img`, `render`, `mag`, `n_frames`, `duration`, `i_frames`, `loop`.
 
     Returns:
       tbase.JSONDict: A dictionary representation of the ZoomParameters.
@@ -930,6 +976,7 @@ class ZoomParameters(frame.SerializingFractalObject):
       'mag': str(self.mag),
       'n_frames': self.n_frames,
       'duration': self.duration,
+      'i_frames': self.i_frames,
       'loop': self.loop,
     }
 
@@ -958,7 +1005,8 @@ class ZoomParameters(frame.SerializingFractalObject):
         mag=gmpy2.mpq(str(data['mag'])),
         n_frames=int(str(data['n_frames'])),
         duration=int(str(data['duration'])),
-        loop=int(str(data['loop'])),
+        i_frames=int(str(data.get('i_frames', '0'))),
+        loop=int(str(data.get('loop', '0'))),
       )
     except (KeyError, ValueError, TypeError, Error) as err:
       raise Error(f'Invalid ZoomParameters JSON data: {err}') from err

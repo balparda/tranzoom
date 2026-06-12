@@ -457,8 +457,8 @@ class Frame(SerializingFractalObject):
         top_im=gmpy2.mpq(str(data['top_im'])),
         bottom_re=gmpy2.mpq(str(data['bottom_re'])),
         bottom_im=gmpy2.mpq(str(data['bottom_im'])),
-        point_re=gmpy2.mpq(str(data['point_re'])),
-        point_im=gmpy2.mpq(str(data['point_im'])),
+        point_re=gmpy2.mpq(str(data.get('point_re', '0'))),
+        point_im=gmpy2.mpq(str(data.get('point_im', '0'))),
       )
     except (KeyError, ValueError, TypeError, Error) as err:
       raise Error(f'Invalid Frame JSON data: {err}') from err
@@ -920,7 +920,7 @@ class ComputationParameters(SerializingFractalObject):
         width=int(str(data['width'])),
         height=int(str(data['height'])),
         depth=int(str(data['depth'])),
-        set_points=SetHighlightAlgorithm(data['set_points']) if data['set_points'] else None,
+        set_points=SetHighlightAlgorithm(data['set_points']) if data.get('set_points') else None,
       )
     except (KeyError, ValueError, TypeError, Error) as err:
       raise Error(f'Invalid ComputationParameters JSON data: {err}') from err

@@ -28,6 +28,7 @@ from tranzoom.core import frame
     'sha1',
     'json2',
     'sha2',
+    # TODO: add txt, for both
   ),
   [
     (
