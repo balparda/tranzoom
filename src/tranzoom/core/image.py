@@ -700,7 +700,7 @@ class ZoomParameters(frame.SerializingFractalObject):
   i_frames: int = 0  # number of interpolated frames to render between every two computed frames
   loop: int = 0  # number of loops for GIFs; 0 means infinite loop; ignored for non-GIFs
 
-  def __post_init__(self) -> None:  # noqa: C901
+  def __post_init__(self) -> None:
     """Check ZoomParameters for validity.
 
     Raises:
@@ -729,10 +729,7 @@ class ZoomParameters(frame.SerializingFractalObject):
     if not (MIN_FPS <= self.fps <= MAX_FPS):
       raise Error(f'Frames per second must be between {MIN_FPS} and {MAX_FPS}, got {self.fps}')
     # check i_frames is valid
-    if not (0 <= self.i_frames <= MAX_INTERPOLATION_FRAMES):
-      raise Error(
-        f'Interpolated frames must be between 0 and {MAX_INTERPOLATION_FRAMES}, got {self.i_frames}'
-      )
+    ValidateIFrames(self.i_frames)
     # check ifps is valid: it also has to be between MIN_FPS and MAX_FPS
     if not (MIN_FPS <= self.ifps <= MAX_FPS):
       raise Error(f'Final interpolated FPS must be between {MIN_FPS} and {MAX_FPS} got {self.ifps}')
@@ -2942,3 +2939,17 @@ def LimitMPQDenominator(x: gmpy2.mpq, max_denominator: int) -> tuple[gmpy2.mpq, 
   # convert back to gmpy2.mpq and return
   r_x: gmpy2.mpq = gmpy2.mpq(f_x.numerator, f_x.denominator)
   return (r_x, float(abs(x - r_x) / abs(x)))
+
+
+def ValidateIFrames(i_frames: int) -> None:
+  """Validate the interpolation frames parameter.
+
+  Args:
+    i_frames (int): The number of interpolation frames to validate.
+
+  Raises:
+    Error: If i_frames is not between 0 and MAX_INTERPOLATION_FRAMES (inclusive).
+
+  """
+  if not (0 <= i_frames <= MAX_INTERPOLATION_FRAMES):
+    raise Error(f'Interpolation must be between 0 and {MAX_INTERPOLATION_FRAMES}, got {i_frames=}')

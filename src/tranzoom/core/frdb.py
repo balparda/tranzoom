@@ -18,7 +18,7 @@ from transcrypto.utils import config as app_config
 from transcrypto.utils import human, timer
 
 from tranzoom import __version__
-from tranzoom.core import fractal, frame, image
+from tranzoom.core import fractal, frame, image, zoom
 
 # TODO: commands to look/inspect the DB data, print DB stats, etc
 # DB constants
@@ -37,7 +37,7 @@ _PicklePrettyJSON: abc.Callable[[tbase.JSONDict], bytes] = lambda d: json.dumps(
 ).encode('utf-8')
 
 
-class Error(fractal.Error):
+class Error(zoom.Error):
   """Base fractal database exception."""
 
 

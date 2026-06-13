@@ -7,7 +7,6 @@ from __future__ import annotations
 import dataclasses
 import enum
 import logging
-import math
 import pathlib
 import tempfile
 import warnings
@@ -26,7 +25,7 @@ from transcrypto.utils import base as tbase
 from transcrypto.utils import human, timer
 
 from tranzoom import __version__
-from tranzoom.core import ai, fractal, frame, frdb, image, palette
+from tranzoom.core import ai, fractal, frame, frdb, image, palette, zoom
 
 
 class Error(ai.Error, typer._click.exceptions.ClickException):  # noqa: SLF001
@@ -1283,7 +1282,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     # produce the depth computations for all the depth frames: this will save us a lot of trouble
     max_iter: int
     idx: int
-    j: int
+    jj: int
     stats: image.FractalStats
     depth_computations: dict[int, tuple[frame.Frame, int, int, image.FractalStats]] = {}
     params: frame.ComputationParameters = zoom_params.img  # starting value, to replace frm & depth
@@ -1318,9 +1317,9 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
         smoothed_depths: list[int] = frame.SmoothDepths(jagged_depths)
         del jagged_depths
         logging.debug(f'Smoothed depths for depth frames: {smoothed_depths}')
-        for j, (idx, _) in enumerate(all_depth):
+        for jj, (idx, _) in enumerate(all_depth):
           frm, max_iter, _, stats = depth_computations[idx]
-          depth_computations[idx] = (frm, max_iter, smoothed_depths[j], stats)
+          depth_computations[idx] = (frm, max_iter, smoothed_depths[jj], stats)
         del smoothed_depths
         # this is our first milestone; add to DB; commit
         if streaming:
@@ -1422,7 +1421,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     # produce the frames
     n_frames_actually_computed: int = 0
     total_depth: int = sum(
-      _FrameEstimatedIters(*_DepthAndStatsForFrame(j)) for j in range(zoom_params.n_frames)
+      zoom.FrameEstimatedIters(*_DepthAndStatsForFrame(jj)) for jj in range(zoom_params.n_frames)
     )
     cmp_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
       # BEWARE: the tqdm-rich.tqdm bar is visually nicer BUT it cannot live with another bar because
@@ -1455,7 +1454,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           if cp and cp['raw_data_path']:
             all_params[idx] = params
             config.console.print('Computation in DB cache\n')
-            cmp_bar.update(_FrameEstimatedIters(max_iter, stats))  # update progress bar
+            cmp_bar.update(zoom.FrameEstimatedIters(max_iter, stats))  # update progress bar
             continue
         # we really need to compute: feed frame to the producer
         img: image.Image
@@ -1482,7 +1481,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           db.Save()  # commit to disk every N computations
         # write a space and update the bar, and we're done with this frame
         config.console.print()
-        cmp_bar.update(_FrameEstimatedIters(max_iter, stats))  # update progress bar
+        cmp_bar.update(zoom.FrameEstimatedIters(max_iter, stats))  # update progress bar
       del d_all_markers
     # we have all frames; if we're using DB and have done computations, make sure it is all saved
     cmp_bar.close()
@@ -1536,16 +1535,45 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           colour='yellow',
         )
       # start try..finally for the progress bar
+      all_hash: dict[int, str] = {}
       try:
 
-        def _StreamingRenderFrame(i: int) -> bytes:
-          """Render a single frame, returning the image data as bytes. Only one in memory at a time.
+        def _TwoFrameRenderStream() -> abc.Iterator[
+          tuple[zoom.RenderedZoomFrame, zoom.RenderedZoomFrame | None]
+        ]:
+          """Render base frames with a rolling [curr, next] window.
+
+          At most two rendered base-frame byte payloads are retained by this stream.
+
+          The stream shape is:
+            (frame0, frame1)
+            (frame1, frame2)
+            ...
+            (frameN-2, frameN-1)
+            (frameN-1, None)
+
+          Yields:
+            tuple[zoom.RenderedZoomFrame, zoom.RenderedZoomFrame | None]: A tuple of
+                the current frame and the next frame (or None if at the end)
+
+          """
+          curr_frame: zoom.RenderedZoomFrame = _StreamingRenderFrame(0)
+          next_frame: zoom.RenderedZoomFrame | None = _StreamingRenderFrame(1)  # (MIN_FRAMES is 3)
+          for i in range(zoom_params.n_frames):
+            yield (curr_frame, next_frame)
+            if next_frame is None:
+              break
+            curr_frame = next_frame
+            next_frame = _StreamingRenderFrame(i + 2) if i + 2 < zoom_params.n_frames else None
+
+        def _StreamingRenderFrame(i: int) -> zoom.RenderedZoomFrame:
+          """Render a single frame, returning the image data. Only one in memory at a time.
 
           Args:
             i (int): The index of the frame in the zoom sequence.
 
           Returns:
-            bytes: The rendered image data for the frame at index i.
+            zoom.RenderedZoomFrame: The rendered image data for the frame at index i.
 
           """
           img_data: bytes
@@ -1580,27 +1608,37 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           # update progress bar, return data
           if p_bar:
             p_bar.update(1)
-          return img_data
+          return zoom.RenderedZoomFrame(
+            idx=i, data=img_data, data_hash=data_hash, img_path=img_path
+          )
 
-        all_hash: dict[int, str] = {}
+        # render the video to a temporary path, using the two-frame stream to interpolate frames
         tmp_path: pathlib.Path = pathlib.Path(tmpdir) / f'temp_video.{zoom_params.tp.value.lower()}'
+        frame_bytes: abc.Iterable[bytes] = zoom.InterpolatedFrameStream(  # generator! memory!
+          # we must keep all of this as generators to save rendering memory
+          _TwoFrameRenderStream(),  # this will yield (curr, next) tuples of rendered frames
+          i_frames=zoom_params.render.i_pixels,
+          zoom_per_step=float(zoom_params.scalar_magnification_per_step),
+          width=zoom_params.img.width,
+          height=zoom_params.img.height,
+        )
         if zoom_params.tp == image.AnimationType.GIF:
           image.WriteAnimatedGIF(
-            (_StreamingRenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
+            frame_bytes,  # generator! memory!
             tmp_path,
             zoom_params.img.width,
             zoom_params.img.height,
-            zoom_params.n_frames,
+            zoom_params.all_frames,
             float(zoom_params.n_seconds),
             loop=zoom_params.loop,
           )
         elif zoom_params.tp == image.AnimationType.MP4:
           image.WriteVideoMP4(
-            (_StreamingRenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
+            frame_bytes,  # generator! memory!
             tmp_path,
             zoom_params.img.width,
             zoom_params.img.height,
-            zoom_params.n_frames,
+            zoom_params.all_frames,
             float(zoom_params.n_seconds),
           )
         else:
@@ -1674,22 +1712,3 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     f'{depth_tmr or "-"} (depth) + {frames_tmr} (frames) + {render_tmr} (render)'
   )
   return (video_path, video_path.stat().st_size)
-
-
-def _FrameEstimatedIters(d: int, s: image.FractalStats) -> int:
-  """Estimate a measure for how hard the iterations will be for this frame.
-
-  We will use the following approximation:
-    - 1/5 of depth, plus
-    - 4/5 of depth allocated as percentage of estimated set points (s.n_interior / s.n_px)
-
-  Args:
-    d (int): estimated depth for frame
-    s (image.FractalStats):  estimated stats for image
-
-  Returns:
-    int: estimated iteration count for frame, used for progress bar estimation;
-        (d // 5) <= estimate <= d
-
-  """
-  return d // 5 + math.floor((4.0 * d * s.n_interior) / (5.0 * s.n_px))
