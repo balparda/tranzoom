@@ -1261,7 +1261,10 @@ class FractalDatabase:
       # TODO: here is the place to interpolate the frame!
       # draw crosshair mark if specified in render parameters
       if render.mark_color is not None:
-        _, mark_pixel = params.CoordToPixel(render.mark_re, render.mark_im)
+        mark_pixel: tuple[int, int]
+        _, mark_pixel = params.CoordToPixel(
+          render.mark_re, render.mark_im, i_pixels=render.i_pixels
+        )
         print_comm(
           f'[cyan]Marking[/] coordinate ({render.mark_re}, {render.mark_im}) with '
           f'{render.mark_color.name.lower()!r} crosshair @{mark_pixel}/{render.mark_width}px'

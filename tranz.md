@@ -251,7 +251,7 @@ Usage: tranz [OPTIONS] COMMAND [ARGS]...
 │                                                                          tokens in parallel;     │
 │                                                                          default: None           │
 │                                                                          (disabled)              │
-│ --seed                -s                         INTEGER RANGE           A seed value for the    │
+│ --seed                                           INTEGER RANGE           A seed value for the    │
 │                                                  [2<=x<=2147483647]      random number generator │
 │                                                                          used to load the models │
 │                                                                          into memory; providing  │
@@ -519,10 +519,14 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
                                                                                                     
 ╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
 │ --width       -w      INTEGER RANGE [24<=x<=16384]         Width of the image; 24 ≤ w ≤ 16384;   │
-│                                                            default is 1024                       │
+│                                                            NOTE: if `--i-pixels` is given, the   │
+│                                                            effective width will be w*(i+1), so   │
+│                                                            keep that in mind; default is 1024    │
 │                                                                                   │
 │ --height      -h      INTEGER RANGE [24<=x<=16384]         Height of the image; 24 ≤ h ≤ 16384;  │
-│                                                            default is 1024                       │
+│                                                            NOTE: if `--i-pixels` is given, the   │
+│                                                            effective height will be h*(i+1), so  │
+│                                                            keep that in mind; default is 1024    │
 │                                                                                   │
 │ --size        -s      INTEGER RANGE [24<=x<=16384]         Size of the image: *overrides* both   │
 │                                                            `-w/--width` and `-h/--height` by     │
@@ -535,9 +539,20 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
 │                                                            (S, S), where x < S, and will make    │
 │                                                            the final image ratio/proportion be   │
 │                                                            the same as the frame; 24 ≤ S ≤       │
-│                                                            16384; default is None, i.e., follow  │
-│                                                            the explicit `-w/--width` and         │
+│                                                            16384; NOTE: if `--i-pixels` is       │
+│                                                            given, the effective Size will be     │
+│                                                            s*(i+1), so keep that in mind;        │
+│                                                            default is None, i.e., follow the     │
+│                                                            explicit `-w/--width` and             │
 │                                                            `-h/--height` options                 │
+│ --i-pixels            INTEGER RANGE [0<=x<=3]              Extra interpolated pixels for every   │
+│                                                            produced pixel; effectively, final    │
+│                                                            width=w*(i+1) and height=h*(i+1); 0 ≤ │
+│                                                            i ≤ 3; default is 0; so 0 is no       │
+│                                                            interpolation, 1 means add 1          │
+│                                                            interpolated pixel between every pair │
+│                                                            of pixels, etc                        │
+│                                                                                      │
 │ --iter        -i      INTEGER RANGE [1001<=x<=2147483647]  Maximum iterations (depth) to compute │
 │                                                            before determining escape; 1001 ≤     │
 │                                                            iter ≤ 2147483647; default is None    │
@@ -811,9 +826,18 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
 │                                                     S, will be either (S, x), (x, S) or (S, S),  │
 │                                                     where x < S, and will make the final image   │
 │                                                     ratio/proportion be the same as the frame;   │
-│                                                     24 ≤ S ≤ 16384; default is None, i.e.,       │
+│                                                     24 ≤ S ≤ 16384; NOTE: if `--i-pixels` is     │
+│                                                     given, the effective Size will be s*(i+1),   │
+│                                                     so keep that in mind; default is None, i.e., │
 │                                                     follow the explicit `-w/--width` and         │
 │                                                     `-h/--height` options                        │
+│ --i-pixels            INTEGER RANGE [0<=x<=3]       Extra interpolated pixels for every produced │
+│                                                     pixel; effectively, final width=w*(i+1) and  │
+│                                                     height=h*(i+1); 0 ≤ i ≤ 3; default is 0; so  │
+│                                                     0 is no interpolation, 1 means add 1         │
+│                                                     interpolated pixel between every pair of     │
+│                                                     pixels, etc                                  │
+│                                                                                      │
 │ --max-steps   -n      INTEGER RANGE           Maximum number of zoom steps to run; 0 means │
 │                                                     run until manually stopped (Ctrl+C); default │
 │                                                     is 0 (unlimited, run forever)                │
@@ -1008,7 +1032,20 @@ Usage: tranz zoom auto [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │                                                                    30.0 or None; pick 2 out of   │
 │                                                                    `--duration`, `--frames` and  │
 │                                                                    `--fps`, and the third will   │
-│                                                                    be computed; default is None  │
+│                                                                    be computed; NOTE: if         │
+│                                                                    `--i-frames` is given, the    │
+│                                                                    effective FPS will be         │
+│                                                                    fps*(i+1), so keep that in    │
+│                                                                    mind; default is None         │
+│ --i-frames                           INTEGER RANGE [0<=x<=7]       Extra interpolated frames for │
+│                                                                    every video frame;            │
+│                                                                    effectively, final            │
+│                                                                    FPS=fps*(i+1); 0 ≤ i ≤ 7;     │
+│                                                                    default is 0; so 0 is no      │
+│                                                                    interpolation, 1 means add 1  │
+│                                                                    interpolated frame between    │
+│                                                                    every pair of frames, etc     │
+│                                                                                      │
 │ --loop                               INTEGER RANGE [0<=x<=1000]    Number of loops for the GIF   │
 │                                                                    (NOT MP4!); 0 ≤ loop ≤ 1000;  │
 │                                                                    default is 0; zero (0) means  │

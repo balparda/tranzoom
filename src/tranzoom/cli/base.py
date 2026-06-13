@@ -1006,6 +1006,7 @@ def MakeRenderParameters(
     - config.pal
     - config.set_pal
     - config.set_points
+    - config.i_pixels
     - config.mark_coords
     - config.mark_color
     - config.mark_width
@@ -1025,7 +1026,9 @@ def MakeRenderParameters(
   """
   # add the mark? parse coordinates early to catch errors before expensive computation
   mark_coords: tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]] | None = (
-    params.CoordsTupleToPixel(config.mark_coords) if config.mark_coords else None
+    params.CoordsTupleToPixel(config.mark_coords, i_pixels=config.i_pixels)
+    if config.mark_coords
+    else None
   )
   # build render and output configuration objects
   render: image.RenderParameters = image.RenderParameters(
