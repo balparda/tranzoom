@@ -7,6 +7,7 @@ from __future__ import annotations
 import dataclasses
 import pathlib
 
+import transai.core.ai as trans_ai
 import typer
 import typer._click.core
 from rich import console as rich_console
@@ -119,7 +120,17 @@ def Main(  # documentation is help/epilog/args # noqa: D103
   # AI parameters from transai (EXCEPT model which is overridden to be a vision model!):
   model: str = base.MODEL_OPTION,  # type: ignore[assignment]
   spec_tokens: int | None = transai.SPEC_TOKENS_OPTION,  # type: ignore[assignment]
-  seed: int | None = transai.SEED_OPTION,  # type: ignore[assignment]
+  seed: int | None = typer.Option(
+    None,
+    '--seed',  # we copy this to remove the confusing "-s"
+    min=2,
+    max=trans_ai.AI_MAX_SEED,
+    help=(
+      'A seed value for the random number generator used to load the models into memory; '
+      'providing a seed ensures reproducibility of the results; '
+      'default: None (randomized seed)'
+    ),
+  ),
   context: int = transai.CONTEXT_OPTION,  # type: ignore[assignment]
   temperature: float = transai.TEMPERATURE_OPTION,  # type: ignore[assignment]
   gpu: float = transai.GPU_OPTION,  # type: ignore[assignment]
