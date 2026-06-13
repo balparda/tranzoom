@@ -64,6 +64,7 @@ META_COMPUTATION_COLOR_SET_KEY: str = f'{_app}:computation:color_set'  # SetHigh
 META_COMPUTATION_HASH_KEY: str = f'{_app}:computation:hash'  # str, like "abcdef1234567890" a SHA256
 META_RENDER_PALETTE_KEY: str = f'{_app}:render:palette'  # str, ex "sunset", one of palette.Palette
 META_RENDER_SET_PALETTE_KEY: str = f'{_app}:render:set_palette'  # str, interior Set palette name
+META_RENDER_I_PIXELS_KEY: str = f'{_app}:render:i_pixels'  # int, number of interpolated pixels
 META_RENDER_OVERLAY_KEY: str = f'{_app}:render:overlay'  # image.OverlayType or "none"
 META_RENDER_MARK_RE_KEY: str = f'{_app}:render:mark_re'  # gmpy2.mpq
 META_RENDER_MARK_IM_KEY: str = f'{_app}:render:mark_im'  # gmpy2.mpq
@@ -209,6 +210,7 @@ class OverlayType(enum.Enum):
   CARDINAL = 'cardinal'
 
 
+MAX_INTERPOLATION_FRAMES: int = 7  # sanity limit for number of interpolated frames
 DEFAULT_ANIMATION_TYPE: AnimationType = AnimationType.GIF
 JPEG_QUALITY: int = 95  # quality for JPEG output; ignored for PNG which is lossless
 
@@ -464,6 +466,7 @@ class RenderParameters(frame.SerializingFractalObject):
         default is palette.DEFAULT_PALETTE.
     set_pal (palette.Palette | None): Color palette for interior Set points; None means no
         Set palette (requires a non-Set computation); default is None.
+    i_pixels (int): Number of pixels to interpolate between each pixel; default is 0
     mark_re (gmpy2.mpq): Real part of the optional crosshair mark coordinate;
         default is 0; unused when mark_color is None.
     mark_im (gmpy2.mpq): Imaginary part of the optional crosshair mark coordinate;
@@ -480,6 +483,7 @@ class RenderParameters(frame.SerializingFractalObject):
   tp: FileType = FileType.PNG
   escaped_pal: palette.Palette = palette.DEFAULT_PALETTE
   set_pal: palette.Palette | None = None  # if None, this must be a non-Set-computation
+  i_pixels: int = 0  # for interpolation, number of pixels to interpolate between each pixel
   mark_re: gmpy2.mpq = _MPQ_ZERO
   mark_im: gmpy2.mpq = _MPQ_ZERO
   mark_color: Color | None = None  # if None, no mark will be drawn
@@ -506,6 +510,8 @@ class RenderParameters(frame.SerializingFractalObject):
       raise Error(f'Unknown escaped palette: {self.escaped_pal}')
     if self.set_pal is not None and self.set_pal not in palette.Palette:
       raise Error(f'Unknown set palette: {self.set_pal}')
+    # check i_pixels is valid
+    frame.ValidateIPixels(self.i_pixels)
     # check mark width is valid
     if not (MIN_MARK_WIDTH <= self.mark_width <= MAX_MARK_WIDTH):
       raise Error(
@@ -544,8 +550,9 @@ class RenderParameters(frame.SerializingFractalObject):
     """Get string representation of the RenderParameters.
 
     Format is:
-    - "{[<FILE_TYPE>: <ESCAPED_PALETTE>, <SET_PALETTE>]<MARK_IF_ANY><OVERLAY_IF_ANY>}"
+    - "{[<FILE_TYPE>*<PX+1>: <ESCAPED_PALETTE>, <SET_PALETTE>]<MARK_IF_ANY><OVERLAY_IF_ANY>}"
     - `<FILE_TYPE>` is the file type in uppercase, like "PNG".
+    - `<PX+1>` is the number of i_pixels + 1
     - `<ESCAPED_PALETTE>` is the name of the palette used for escaped points, in
         lowercase, like "sunset".
     - `<SET_PALETTE>` is the name of the palette used for interior Set points, in lowercase,
@@ -575,7 +582,7 @@ class RenderParameters(frame.SerializingFractalObject):
     )
     return (
       '{'
-      f'[{self.tp.name.upper()}, {self.escaped_pal.name}, '
+      f'[{self.tp.name.upper()}*{self.i_pixels + 1}: {self.escaped_pal.name}, '
       f'{self.set_pal.name if self.set_pal else "none"}]{mark}{overlay}{markers}'
       '}'
     )
@@ -596,6 +603,7 @@ class RenderParameters(frame.SerializingFractalObject):
       'tp': self.tp.value,
       'escaped_pal': self.escaped_pal.value,
       'set_pal': self.set_pal.value if self.set_pal else None,
+      'i_pixels': self.i_pixels,
       'mark_re': str(self.mark_re),
       'mark_im': str(self.mark_im),
       # BEWARE: we store the mark color as lowercase name, not the RGB value
@@ -639,6 +647,7 @@ class RenderParameters(frame.SerializingFractalObject):
         tp=FileType(data.get('tp', FileType.PNG.value)),
         escaped_pal=palette.Palette(data.get('escaped_pal', palette.DEFAULT_PALETTE.value)),
         set_pal=palette.Palette(data['set_pal']) if data.get('set_pal') else None,
+        i_pixels=int(str(data.get('i_pixels', '0'))),
         mark_re=gmpy2.mpq(str(data.get('mark_re', '0'))),
         mark_im=gmpy2.mpq(str(data.get('mark_im', '0'))),
         mark_color=(  # upper -> convert by name
@@ -720,8 +729,10 @@ class ZoomParameters(frame.SerializingFractalObject):
     if not (MIN_FPS <= self.fps <= MAX_FPS):
       raise Error(f'Frames per second must be between {MIN_FPS} and {MAX_FPS}, got {self.fps}')
     # check i_frames is valid
-    if not (0 <= self.i_frames <= 3):  # noqa: PLR2004
-      raise Error(f'Interpolated frames must be between 0 and 3, got {self.i_frames}')
+    if not (0 <= self.i_frames <= MAX_INTERPOLATION_FRAMES):
+      raise Error(
+        f'Interpolated frames must be between 0 and {MAX_INTERPOLATION_FRAMES}, got {self.i_frames}'
+      )
     # check ifps is valid: it also has to be between MIN_FPS and MAX_FPS
     if not (MIN_FPS <= self.ifps <= MAX_FPS):
       raise Error(f'Final interpolated FPS must be between {MIN_FPS} and {MAX_FPS} got {self.ifps}')
@@ -1869,6 +1880,7 @@ def MakeImageMeta(img: Image, render: RenderParameters, data_hash: str) -> dict[
     META_RENDER_PALETTE_KEY: render.escaped_pal.value,
     META_RENDER_SET_PALETTE_KEY: render.set_pal.value if render.set_pal else 'none',
     META_RENDER_OVERLAY_KEY: render.overlay.value if render.overlay else 'none',
+    META_RENDER_I_PIXELS_KEY: str(render.i_pixels),
     META_RENDER_MARK_RE_KEY: str(render.mark_re),
     META_RENDER_MARK_IM_KEY: str(render.mark_im),
     META_RENDER_MARK_COLOR_KEY: render.mark_color.name.lower() if render.mark_color else 'none',

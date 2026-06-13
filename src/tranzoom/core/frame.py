@@ -44,6 +44,10 @@ MAX_ITER: int = BIT_31 - 1  # ± 2_147_483_647, max for signed array('i'), sint3
 SET_INTERIOR_INT_MAX: int = MAX_ITER  # could be BIT_31, but lets keep abs() <= MAX_ITER
 SMOOTH_EXTRA_ITERS: int = 5  # iterations AFTER |z| > 2 to compute: eliminates color banding errors
 
+# image interpolation constants
+
+MAX_INTERPOLATION_PIXELS: int = 3  # sanity limit for interpolation pixels
+
 # file/memory size thresholds for warnings about large files or memory usage
 THRESHOLD_LARGE_PNG_BYTES: int = 50 * 1024 * 1024  # warn if single-frame PNG/JPG exceeds 50 MB
 THRESHOLD_LARGE_FRAME_MEMORY_BYTES: int = 20 * 1024 * 1024 * 1024  # warn if render RAM > 20 GB
@@ -714,6 +718,19 @@ class ComputationParameters(SerializingFractalObject):
     """
     return (self.width, self.height)
 
+  def Size(self, *, i_pixels: int = 0) -> tuple[int, int]:
+    """Get the real final (disk) size of the image as (width, height).
+
+    Args:
+      i_pixels (int): The number of extra pixels to add to each generated pixel, default is 0
+
+    Returns:
+      tuple[int, int]: The size of the image.
+
+    """
+    ValidateIPixels(i_pixels)
+    return (self.width * (i_pixels + 1), self.height * (i_pixels + 1))
+
   @property
   def disk_sz_bytes(self) -> int:
     """Estimate the size in bytes of one image.Image object as serialized to disk.
@@ -731,7 +748,7 @@ class ComputationParameters(SerializingFractalObject):
       int: Estimated bytes occupied by a single serialized Image on disk (no histograms).
 
     """
-    n_px: int = self.width * self.height
+    n_px: int = self.width * self.height  # we do not save i_pixels!
     # (1) escape array: exact -- width*height uint64 values at N_BYTES_UINT = 8 bytes each
     escape_sz: int = n_px * N_BYTES_UINT
     # (2) FractalStats (if present): 2 Python ints + 8 gmpy2.mpfr objects;
@@ -765,7 +782,7 @@ class ComputationParameters(SerializingFractalObject):
       int: Estimated bytes occupied by a single in-memory Image with histograms.
 
     """
-    n_px: int = self.width * self.height
+    n_px: int = self.width * self.height  # image object does not have i_pixels!
     # (1) escape array: exact -- width*height uint64 values at N_BYTES_UINT = 8 bytes each
     escape_sz: int = n_px * N_BYTES_UINT
     # (2) two Image.Histogram objects (ext_hist, int_hist); each histogram stores:
@@ -833,7 +850,7 @@ class ComputationParameters(SerializingFractalObject):
     per_proc_mpfr_sz: int = (self.width + n_working_mpfr) * mpfr_sz
     return MAX_CONCURRENCE * (per_proc_image_sz + per_proc_mpfr_sz)
 
-  def png_sz_bytes(self) -> tuple[int, int]:
+  def png_sz_bytes(self, *, i_pixels: int = 0) -> tuple[int, int]:
     """Estimate the on-disk size of the PNG and JPG output files in bytes.
 
     Both estimates include a metadata block for all frame/computation/render parameters
@@ -850,11 +867,18 @@ class ComputationParameters(SerializingFractalObject):
            smooth exterior very well; the sharp fractal boundary is a small fraction of
            total pixels, so JPEG is typically smaller than PNG for fractal images.
 
+    Args:
+      i_pixels (int): The number of extra pixels to add to each generated pixel, default is 0
+
     Returns:
       tuple[int, int]: Estimated file sizes as (png_bytes, jpg_bytes).
 
     """
-    n_px: int = self.width * self.height
+    # compute final saved image size
+    w: int
+    h: int
+    w, h = self.Size(i_pixels=i_pixels)
+    n_px: int = w * h
     # metadata overhead: all frame/computation/render/image parameters stored in tEXt chunks
     # (PNG) or EXIF comment (JPG); ~50 key-value pairs with ~5 KB fixed overhead (keys ~35
     # chars, hash values 64 chars, int/float values 1-20 chars) plus coordinate mpq strings
@@ -930,7 +954,7 @@ class ComputationParameters(SerializingFractalObject):
     return params
 
   def CoordToPixel(
-    self, re_inp: ExactInputType, im_inp: ExactInputType
+    self, re_inp: ExactInputType, im_inp: ExactInputType, *, i_pixels: int = 0
   ) -> tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]:
     """Convert complex-plane coordinates to pixel coordinates in the image.
 
@@ -946,6 +970,7 @@ class ComputationParameters(SerializingFractalObject):
     Args:
       re_inp (ExactInputType): Real part of the complex coordinate.
       im_inp (ExactInputType): Imaginary part of the complex coordinate.
+      i_pixels (int): The number of extra pixels to add to each generated pixel, default is 0.
 
     Returns:
       tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]: The (re, im) complex coordinates and
@@ -963,25 +988,27 @@ class ComputationParameters(SerializingFractalObject):
     ):
       raise Error(f'coordinates ({re}, {im}) are outside the frame {self.frm}')
     # do computation
+    w: int
+    h: int
+    w, h = self.Size(i_pixels=i_pixels)
     x: int = int(
-      gmpy2.floor(
-        (re - self.frm.top_re) / (self.frm.bottom_re - self.frm.top_re) * gmpy2.mpq(self.width)
-      )
+      gmpy2.floor((re - self.frm.top_re) / (self.frm.bottom_re - self.frm.top_re) * gmpy2.mpq(w))
     )
     y: int = int(
-      gmpy2.floor(
-        (self.frm.top_im - im) / (self.frm.top_im - self.frm.bottom_im) * gmpy2.mpq(self.height)
-      )
+      gmpy2.floor((self.frm.top_im - im) / (self.frm.top_im - self.frm.bottom_im) * gmpy2.mpq(h))
     )
-    return ((re, im), (min(max(x, 0), self.width - 1), min(max(y, 0), self.height - 1)))
+    return ((re, im), (min(max(x, 0), w - 1), min(max(y, 0), h - 1)))
 
-  def CoordsTupleToPixel(self, inp: str) -> tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]:
+  def CoordsTupleToPixel(
+    self, inp: str, *, i_pixels: int = 0
+  ) -> tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]:
     """Parse a complex-plane tuple coordinates to pixel coordinates in the image.
 
     See CoordToPixel() for more details.
 
     Args:
       inp (str): A string representing the complex coordinate in the format "(re, im)".
+      i_pixels (int): The number of extra pixels to add to each generated pixel, default is 0.
 
     Returns:
       tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]: The (re, im) complex coordinates and
@@ -999,7 +1026,7 @@ class ComputationParameters(SerializingFractalObject):
     if not co_re.startswith('(') or not co_im.endswith(')'):
       raise Error(f'Expected "(re,im)" input got {inp!r}')
     # convert the coordinate to pixel and draw the overlay
-    return self.CoordToPixel(co_re[1:], co_im[:-1])
+    return self.CoordToPixel(co_re[1:], co_im[:-1], i_pixels=i_pixels)
 
   @property
   def precision(self) -> int:
@@ -1302,3 +1329,17 @@ def ConcurrenceToUse(n_processes: int | None = None) -> int:
   if n_processes is not None and n_processes < 1:
     raise Error(f'{n_processes=} must be a positive integer or None')
   return min(n_processes or AVAILABLE_CPU, MAX_CONCURRENCE, AVAILABLE_CPU)  # never exceed CPU!
+
+
+def ValidateIPixels(i_pixels: int) -> None:
+  """Validate the interpolation pixels parameter.
+
+  Args:
+    i_pixels (int): The number of interpolation pixels to validate.
+
+  Raises:
+    Error: If i_pixels is not between 0 and MAX_INTERPOLATION_PIXELS (inclusive).
+
+  """
+  if not (0 <= i_pixels <= MAX_INTERPOLATION_PIXELS):
+    raise Error(f'Interpolation must be between 0 and {MAX_INTERPOLATION_PIXELS}, got {i_pixels=}')
