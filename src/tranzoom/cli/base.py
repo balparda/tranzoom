@@ -100,6 +100,7 @@ IMAGE_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
   max=frame.MAX_IMAGE_SIZE,
   help=(
     f'Width of the image; {frame.MIN_IMAGE_SIZE} ≤ w ≤ {frame.MAX_IMAGE_SIZE}; '
+    'NOTE: if `--i-pixels` is given, the effective width will be w*(i+1), so keep that in mind; '
     f'default is {frame.DEFAULT_IMAGE_SIZE}'
   ),
 )
@@ -111,6 +112,7 @@ IMAGE_HEIGHT_OPTION: typer.models.OptionInfo = typer.Option(
   max=frame.MAX_IMAGE_SIZE,
   help=(
     f'Height of the image; {frame.MIN_IMAGE_SIZE} ≤ h ≤ {frame.MAX_IMAGE_SIZE}; '
+    'NOTE: if `--i-pixels` is given, the effective height will be h*(i+1), so keep that in mind; '
     f'default is {frame.DEFAULT_IMAGE_SIZE}'
   ),
 )
@@ -126,7 +128,20 @@ IMAGE_SIZE_OPTION: typer.models.OptionInfo = typer.Option(
     'the final dimensions will be scaled accordingly and, given a size S, will be either '
     '(S, x), (x, S) or (S, S), where x < S, and will make the final image ratio/proportion be '
     f'the same as the frame; {frame.MIN_IMAGE_SIZE} ≤ S ≤ {frame.MAX_IMAGE_SIZE}; '
+    'NOTE: if `--i-pixels` is given, the effective Size will be s*(i+1), so keep that in mind; '
     'default is None, i.e., follow the explicit `-w/--width` and `-h/--height` options'
+  ),
+)
+IMAGE_INTERPOLATION_PIXELS_OPTION: typer.models.OptionInfo = typer.Option(
+  0,
+  '--i-pixels',
+  min=0,
+  max=frame.MAX_INTERPOLATION_PIXELS,
+  help=(
+    'Extra interpolated pixels for every produced pixel; '
+    'effectively, final width=w*(i+1) and height=h*(i+1); '
+    f'0 ≤ i ≤ {frame.MAX_INTERPOLATION_PIXELS}; default is 0; '
+    'so 0 is no interpolation, 1 means add 1 interpolated pixel between every pair of pixels, etc'
   ),
 )
 IMAGE_ZOOM_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
@@ -524,7 +539,7 @@ COLOR_SET_POINTS_OPTION: typer.models.OptionInfo = typer.Option(
 # AI Options
 MODEL_OPTION: typer.models.OptionInfo = typer.Option(
   DEFAULT_VISION_MODEL,
-  '-m',
+  '-m',  # transai has '-m', but also: '-t' (tokens), '-x' (temperature), '-g' (gpu)
   '--model',
   help=(
     'LLM vision model to load and use: '
@@ -603,6 +618,7 @@ ANIM_FPS_OPTION: typer.models.OptionInfo = typer.Option(
   help=(
     f'Frames per second (FPS) for the GIF/video; {image.MIN_FPS} ≤ fps ≤ {image.MAX_FPS} or None; '
     'pick 2 out of `--duration`, `--frames` and `--fps`, and the third will be computed; '
+    'NOTE: if `--i-frames` is given, the effective FPS will be fps*(i+1), so keep that in mind; '
     f'default is None'
   ),
 )
@@ -631,6 +647,17 @@ ANIM_SAVE_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
   help=(
     'If True, will save the intermediate frames of the animation; '
     'if False, intermediate frames will not be saved; default is False'
+  ),
+)
+ANIM_INTERPOLATION_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
+  0,
+  '--i-frames',
+  min=0,
+  max=image.MAX_INTERPOLATION_FRAMES,
+  help=(
+    f'Extra interpolated frames for every video frame; effectively, final FPS=fps*(i+1); '
+    f'0 ≤ i ≤ {image.MAX_INTERPOLATION_FRAMES}; default is 0; '
+    'so 0 is no interpolation, 1 means add 1 interpolated frame between every pair of frames, etc'
   ),
 )
 
@@ -756,6 +783,7 @@ class TranZoomConfig(clibase.CLIConfig):
   img_width: int = frame.DEFAULT_IMAGE_SIZE  # both `image` and `zoom` use, different defaults
   img_height: int = frame.DEFAULT_IMAGE_SIZE  # both `image` and `zoom` use, different defaults
   img_size: int | None = None  # for `image` and `zoom` commands, overrides width/height if given
+  i_pixels: int = 0  # for `image` and `zoom` commands
 
   max_iter: int | None = None  # for `image` command, also `zoom auto`
   mark_coords: str | None = None  # for `image` command, also `zoom auto`
@@ -1004,6 +1032,7 @@ def MakeRenderParameters(
   render: image.RenderParameters = image.RenderParameters(
     escaped_pal=config.pal,
     set_pal=None if config.set_points is None else config.set_pal,
+    i_pixels=config.i_pixels,
     mark_re=_MPQ_ZERO if mark_coords is None else mark_coords[0][0],
     mark_im=_MPQ_ZERO if mark_coords is None else mark_coords[0][1],
     mark_color=None if mark_coords is None else config.mark_color,
@@ -1189,8 +1218,8 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     f'{zoom_params.render.escaped_pal.value!r} {zoom_params.img.frm.fractal.value.capitalize()!r} '
     f'[magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/], '
     f'{human.HumanizedSeconds(float(zoom_params.n_seconds))} long, '
-    f'at {float(zoom_params.fps):.2f} FPS, '
-    f'with {zoom_params.n_frames} frames ({len(all_markers)} markers, '
+    f'at {float(zoom_params.fps):.2f}*{zoom_params.i_frames + 1} FPS, '
+    f'with {zoom_params.n_frames}/{zoom_params.all_frames} frames ({len(all_markers)} markers, '
     f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%, and {len(all_depth)} depth frames, '
     f'{100.0 * len(all_depth) / zoom_params.n_frames:.2f}%), '
     f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step, '
@@ -1597,6 +1626,9 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           image.META_ZOOM_LOOP_KEY: str(zoom_params.loop),
           image.META_ZOOM_STEPS_KEY: str(zoom_params.n_steps),
           image.META_ZOOM_FPS_KEY: str(zoom_params.fps),
+          image.META_ZOOM_I_FPS_KEY: str(zoom_params.ifps),
+          image.META_ZOOM_I_FRAMES_KEY: str(zoom_params.i_frames),
+          image.META_ZOOM_ALL_FRAMES_KEY: str(zoom_params.all_frames),
           image.META_ZOOM_MAGNITUDE_PER_STEP_KEY: str(zoom_params.mag_per_step),
           image.META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str(
             zoom_params.scalar_magnification_per_step

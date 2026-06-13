@@ -60,6 +60,7 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
   img_width: int = base.IMAGE_ZOOM_WIDTH_OPTION,  # type: ignore[assignment]
   img_height: int = base.IMAGE_ZOOM_HEIGHT_OPTION,  # type: ignore[assignment]
   img_size: int | None = base.IMAGE_SIZE_OPTION,  # type: ignore[assignment]
+  i_pixels: int = base.IMAGE_INTERPOLATION_PIXELS_OPTION,  # type: ignore[assignment]
   max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
   julia_re: str = base.JULIA_RE_OPTION,  # type: ignore[assignment]
   julia_im: str = base.JULIA_IM_OPTION,  # type: ignore[assignment]
@@ -82,6 +83,7 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
       img_width=img_width,
       img_height=img_height,
       img_size=img_size,
+      i_pixels=i_pixels,
       max_steps=max_steps,
       julia_re=julia_re,
       julia_im=julia_im,
@@ -235,6 +237,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: D103
   duration: float | None = base.ANIM_DURATION_OPTION,  # type: ignore[assignment]
   frames: int | None = base.ANIM_FRAMES_OPTION,  # type: ignore[assignment]
   fps: float | None = base.ANIM_FPS_OPTION,  # type: ignore[assignment]
+  i_frames: int = base.ANIM_INTERPOLATION_FRAMES_OPTION,  # type: ignore[assignment]
   loop: int = base.ANIM_LOOP_OPTION,  # type: ignore[assignment]
   save_frames: bool = base.ANIM_SAVE_FRAMES_OPTION,  # type: ignore[assignment]
 ) -> None:
@@ -265,6 +268,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: D103
     mag=gmpy2.mpq(dest_magnification_10),
     n_frames=frames,
     duration=round(duration * image.VIDEO_DURATION_STORE_SCALE),
+    i_frames=i_frames,
     loop=loop,
   )
   # call

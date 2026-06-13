@@ -58,6 +58,7 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
   img_width: int = base.IMAGE_WIDTH_OPTION,  # type: ignore[assignment]
   img_height: int = base.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
   img_size: int | None = base.IMAGE_SIZE_OPTION,  # type: ignore[assignment]
+  i_pixels: int = base.IMAGE_INTERPOLATION_PIXELS_OPTION,  # type: ignore[assignment]
   max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
   mark_coords: str | None = base.MARK_COORDINATES_OPTION,  # type: ignore[assignment]
   mark_color: str = base.MARK_COLOR_OPTION,  # type: ignore[assignment]
@@ -77,6 +78,7 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
       img_width=img_width,
       img_height=img_height,
       img_size=img_size,
+      i_pixels=i_pixels,
       max_iter=max_iter,
       mark_coords=mark_coords,
       mark_color=image.Color[col],
