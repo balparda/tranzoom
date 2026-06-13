@@ -203,7 +203,7 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
   # print header
   config.console.print()
   config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')
-  config.console.print(f'[green]{w} x {h}[/green] (wxh) / [cyan]{png_hash}[/cyan]')
+  config.console.print(f'[green]{w} \u00d7 {h}[/green] (w\u00d7h) / [cyan]{png_hash}[/cyan]')
   config.console.print()
   # expand JSON, if needed
   if image.META_LLM_RESULT_JSON_KEY in info:
@@ -258,7 +258,7 @@ def Clean(  # documentation is help/epilog/args  # noqa: D103
   # print header
   config.console.print()
   config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')
-  config.console.print(f'[green]{w} x {h}[/green] (wxh) / [cyan]{png_hash}[/cyan]')
+  config.console.print(f'[green]{w} \u00d7 {h}[/green] (w\u00d7h) / [cyan]{png_hash}[/cyan]')
   config.console.print()
   # convert bytes, keep hash meta if we were asked to do so
   config.console.print('  Format: ' + ('[green]JPG[/]' if jpeg else '[yellow]PNG[/]'))

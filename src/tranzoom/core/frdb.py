@@ -1081,7 +1081,7 @@ class FractalDatabase:
     # log
     set_param: str = '' if params.set_points is None else f' w/ SET {params.set_points.value!r}'
     print_comm(
-      f'{params.width} x {params.height} '
+      f'{params.width} \u00d7 {params.height} '
       f'{params.frm.fractal.value.capitalize()}{set_param}, '
       f'10^{params.frm.magnification[1]:.3f} magnitude, '
       f'{fractal.OptimizationToUse(optimization)[1]}...'
@@ -1251,10 +1251,14 @@ class FractalDatabase:
       logging.debug('DB miss: no render data')
     # we got to here, so we have to render the PNG data from the image object and add overlay/mark;
     # hash is computed from the raw PNG before any post-processing overlays
+    final_width: int
+    final_height: int
+    final_width, final_height = img.params.Size(i_pixels=render.i_pixels)
     with timer.Timer(emit_log=False) as tmr:
       img_data, img_hash = img.AsPNG(  # <<== this is the actual render!  <<==   <<==   <<==
         render, zoom_norm=zoom_norm, no_meta=no_meta
       )
+      # TODO: here is the place to interpolate the frame!
       # draw crosshair mark if specified in render parameters
       if render.mark_color is not None:
         _, mark_pixel = params.CoordToPixel(render.mark_re, render.mark_im)
@@ -1276,7 +1280,8 @@ class FractalDatabase:
       render_data = self.AddRenderToDB(params, render, ck, img_hash, str(full_path(img_hash)))
     # log
     print_comm(
-      f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE,[/] {img_hash!r} '
+      f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE '
+      f'({final_width} \u00d7 {final_height}),[/] {img_hash!r} '
       f'in {tmr}, {human.HumanizedBytes(len(img_data))}'
     )
     # print inline in iTerm2 if requested

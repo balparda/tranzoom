@@ -1213,8 +1213,14 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
   all_frames, all_markers, all_depth = zoom_params.Frames()  # could go boom!
   logging.debug(f'Marker frames: {[idx for idx, _ in all_markers]}')
   # we should be good to go, all options check out; log and warn if needed
+  final_width: int
+  final_height: int
+  final_width, final_height = zoom_params.img.Size(i_pixels=zoom_params.render.i_pixels)
+  real_sz_str: str = (
+    f' (on disk: {final_width} \u00d7 {final_height})' if zoom_params.render.i_pixels else ''
+  )
   config.console.print(
-    f'\n{zoom_params.img.width} x {zoom_params.img.height} '
+    f'\n{zoom_params.img.width} \u00d7 {zoom_params.img.height}{real_sz_str} '
     f'{zoom_params.render.escaped_pal.value!r} {zoom_params.img.frm.fractal.value.capitalize()!r} '
     f'[magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/], '
     f'{human.HumanizedSeconds(float(zoom_params.n_seconds))} long, '
