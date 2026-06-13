@@ -162,11 +162,12 @@ def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:render:overlay': 'none',
       'tranZoom:render:palette': 'sahara',
       'tranZoom:render:set_palette': 'rgrayscale',
+      'tranZoom:render:i_pixels': '0',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_re': '0',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': 'd28c88818cb8926c7e151d2e9d475cad85223349d22acf382decc4fb61915029',
+      'tranZoom:render:hash': '9ccb42f3ee157bcd52a191e532cd531b7d4fd191ad2883b232ba979c13e96a09',
     }
 
 
@@ -277,19 +278,23 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:render:overlay': 'none',
       'tranZoom:render:palette': 'sahara',
       'tranZoom:render:set_palette': 'none',
+      'tranZoom:render:i_pixels': '0',
       'tranZoom:render:mark_color': 'red',
       'tranZoom:render:mark_re': '-5578776469/7500000000',
       'tranZoom:render:mark_im': '8244620127/62500000000',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': '2e88ea6a9e35f8b66f61f0073446b911935c828c57a7355d49e34d967479178a',
+      'tranZoom:render:hash': 'b5467479fe084f34e58ccc671216eacb5da83dfb2b1200c0f811f923590598ad',
       'tranZoom:zoom:type': 'gif',
       'tranZoom:zoom:frame:initial:width_re': '73801/100000000',
       'tranZoom:zoom:frame:initial:height_im': '73801/100000000',
       'tranZoom:zoom:frame:magnitude': '1',
       'tranZoom:zoom:frame:frames': '40',
+      'tranZoom:zoom:frame:i_frames': '0',
+      'tranZoom:zoom:frame:all_frames': '40',
       'tranZoom:zoom:frame:seconds': '4',
       'tranZoom:zoom:frame:loop': '0',
       'tranZoom:zoom:frame:fps': '10',
+      'tranZoom:zoom:frame:ifps': '10',
       'tranZoom:zoom:frame:steps': '39',
       'tranZoom:zoom:frame:magnitude_per_step': '1/39',
       'tranZoom:zoom:frame:magnification_per_step': '4777501148913803/4503599627370496',
@@ -297,7 +302,7 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:zoom:depth:frames': (
         '[(0, 1000, 1001), (13, 1000, 1019), (26, 1000, 1034), (39, 1159, 1105)]'
       ),
-      'tranZoom:zoom:hash': 'e3e0d784d4694b805efb2aa52548605cff720a3ddc3c19f48e3a713785f2eb62',
+      'tranZoom:zoom:hash': '48fce30e32850f69ec2fba3e16154878fa66d3660e504c0b31301741f7b445b5',
     }
 
 
@@ -428,9 +433,10 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
       'tranZoom:render:overlay': 'none',
       'tranZoom:render:palette': 'electric',
       'tranZoom:render:set_palette': 'sunset',
+      'tranZoom:render:i_pixels': '0',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_re': '0',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': '27958fa5ac62470c6aef718044291a41e5deab55ddbf82ebf5dc3d898cdd2bad',
+      'tranZoom:render:hash': '1235957a8370bdc2c68b45dfa46233646b9cf8a30ad49dea7cb08f15a9ed7439',
     }

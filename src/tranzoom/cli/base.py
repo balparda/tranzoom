@@ -576,24 +576,24 @@ AI_OUTPUT_REASON_FIELD_OPTION: typer.models.OptionInfo = typer.Option(
 
 # Animation Options
 ANIM_DEST_MAGNIFICATION_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
-  image.DEFAULT_DEST_MAGNITUDE_10,
+  zoom.DEFAULT_DEST_MAGNITUDE_10,
   help=(
     'Magnification magnitude to go through in the animation zoom; '
     'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
     'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
-    f'{-image.MAX_ZOOM_MAGNITUDE_10} ≤ mag ≤ {image.MAX_ZOOM_MAGNITUDE_10}; '
+    f'{-zoom.MAX_ZOOM_MAGNITUDE_10} ≤ mag ≤ {zoom.MAX_ZOOM_MAGNITUDE_10}; '
     'ATTENTION!! this is exponential 10**mag, so a value of 2.0 means 10**2 = 100x zoom; '
-    f'default is {image.DEFAULT_DEST_MAGNITUDE_10}, '
-    f'i.e., {10 ** float(image.DEFAULT_DEST_MAGNITUDE_10):.2f}x zoom'
+    f'default is {zoom.DEFAULT_DEST_MAGNITUDE_10}, '
+    f'i.e., {10 ** float(zoom.DEFAULT_DEST_MAGNITUDE_10):.2f}x zoom'
   ),
 )
 ANIM_DURATION_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '--duration',
-  min=image.MIN_DURATION,
-  max=image.MAX_DURATION,
+  min=zoom.MIN_DURATION,
+  max=zoom.MAX_DURATION,
   help=(
-    f'GIF/video duration, in seconds; {image.MIN_DURATION} ≤ d ≤ {image.MAX_DURATION} or None; '
+    f'GIF/video duration, in seconds; {zoom.MIN_DURATION} ≤ d ≤ {zoom.MAX_DURATION} or None; '
     'pick 2 out of `--duration`, `--frames` and `--fps`, and the third will be computed; '
     f'default is None'
   ),
@@ -601,10 +601,10 @@ ANIM_DURATION_OPTION: typer.models.OptionInfo = typer.Option(
 ANIM_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '--frames',
-  min=image.MIN_FRAMES,
-  max=image.MAX_FRAMES,
+  min=zoom.MIN_FRAMES,
+  max=zoom.MAX_FRAMES,
   help=(
-    f'Number of frames in GIF/video; {image.MIN_FRAMES} ≤ fr ≤ {image.MAX_FRAMES} or None; '
+    f'Number of frames in GIF/video; {zoom.MIN_FRAMES} ≤ fr ≤ {zoom.MAX_FRAMES} or None; '
     'pick 2 out of `--duration`, `--frames` and `--fps`, and the third will be computed; '
     f'default is None'
   ),
@@ -612,32 +612,32 @@ ANIM_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
 ANIM_FPS_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '--fps',
-  min=image.MIN_FPS,
-  max=image.MAX_FPS,
+  min=zoom.MIN_FPS,
+  max=zoom.MAX_FPS,
   help=(
-    f'Frames per second (FPS) for the GIF/video; {image.MIN_FPS} ≤ fps ≤ {image.MAX_FPS} or None; '
+    f'Frames per second (FPS) for the GIF/video; {zoom.MIN_FPS} ≤ fps ≤ {zoom.MAX_FPS} or None; '
     'pick 2 out of `--duration`, `--frames` and `--fps`, and the third will be computed; '
     'NOTE: if `--i-frames` is given, the effective FPS will be fps*(i+1), so keep that in mind; '
     f'default is None'
   ),
 )
 ANIM_TYPE_OPTION: typer.models.OptionInfo = typer.Option(
-  image.DEFAULT_ANIMATION_TYPE,
+  zoom.DEFAULT_ANIMATION_TYPE,
   '--anim',
   help=(
     f'Type of animation to produce; possible values: '
-    f'{", ".join(repr(t.value) for t in image.AnimationType)}; '
-    f'default is "{image.DEFAULT_ANIMATION_TYPE.value}"'
+    f'{", ".join(repr(t.value) for t in zoom.AnimationType)}; '
+    f'default is "{zoom.DEFAULT_ANIMATION_TYPE.value}"'
   ),
 )
 ANIM_LOOP_OPTION: typer.models.OptionInfo = typer.Option(
-  image.DEFAULT_LOOP,
+  zoom.DEFAULT_LOOP,
   '--loop',
-  min=image.MIN_LOOP,
-  max=image.MAX_LOOP,
+  min=zoom.MIN_LOOP,
+  max=zoom.MAX_LOOP,
   help=(
-    f'Number of loops for the GIF (NOT MP4!); {image.MIN_LOOP} ≤ loop ≤ {image.MAX_LOOP}; '
-    f'default is {image.DEFAULT_LOOP}; zero (0) means infinite loops'
+    f'Number of loops for the GIF (NOT MP4!); {zoom.MIN_LOOP} ≤ loop ≤ {zoom.MAX_LOOP}; '
+    f'default is {zoom.DEFAULT_LOOP}; zero (0) means infinite loops'
   ),
 )
 ANIM_SAVE_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
@@ -652,10 +652,10 @@ ANIM_INTERPOLATION_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
   0,
   '--i-frames',
   min=0,
-  max=image.MAX_INTERPOLATION_FRAMES,
+  max=zoom.MAX_INTERPOLATION_FRAMES,
   help=(
     f'Extra interpolated frames for every video frame; effectively, final FPS=fps*(i+1); '
-    f'0 ≤ i ≤ {image.MAX_INTERPOLATION_FRAMES}; default is 0; '
+    f'0 ≤ i ≤ {zoom.MAX_INTERPOLATION_FRAMES}; default is 0; '
     'so 0 is no interpolation, 1 means add 1 interpolated frame between every pair of frames, etc'
   ),
 )
@@ -1185,7 +1185,7 @@ def MakePointFromCLIArgs(
 def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
   config: TranZoomConfig,
   out: image.ImageOutputConfig,
-  zoom_params: image.ZoomParameters,
+  zoom_params: zoom.ZoomParameters,
   save_frames: bool,
 ) -> tuple[pathlib.Path, int]:
   """Make the animation file, returning its path and size.
@@ -1193,7 +1193,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
   Args:
     config (TranZoomConfig): the shared config with all options.
     out (image.ImageOutputConfig): the image output config with all options for rendering.
-    zoom_params (image.ZoomParameters): the parameters of the zoom to render.
+    zoom_params (zoom.ZoomParameters): the parameters of the zoom to render.
     save_frames (bool): whether to save the individual frames as images in the output directory.
 
   Returns:
@@ -1622,8 +1622,8 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           width=zoom_params.img.width,
           height=zoom_params.img.height,
         )
-        if zoom_params.tp == image.AnimationType.GIF:
-          image.WriteAnimatedGIF(
+        if zoom_params.tp == zoom.AnimationType.GIF:
+          zoom.WriteAnimatedGIF(
             frame_bytes,  # generator! memory!
             tmp_path,
             zoom_params.img.width,
@@ -1632,8 +1632,8 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             float(zoom_params.n_seconds),
             loop=zoom_params.loop,
           )
-        elif zoom_params.tp == image.AnimationType.MP4:
-          image.WriteVideoMP4(
+        elif zoom_params.tp == zoom.AnimationType.MP4:
+          zoom.WriteVideoMP4(
             frame_bytes,  # generator! memory!
             tmp_path,
             zoom_params.img.width,
@@ -1690,10 +1690,10 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
       )
       # move the file!
       video_path = full_path(video_hash)
-      if zoom_params.tp == image.AnimationType.GIF:
-        image.ReWriteAnimatedGIFMeta(tmp_path, video_path, meta)
-      elif zoom_params.tp == image.AnimationType.MP4:
-        image.ReWriteVideoMP4Meta(tmp_path, video_path, meta)
+      if zoom_params.tp == zoom.AnimationType.GIF:
+        zoom.ReWriteAnimatedGIFMeta(tmp_path, video_path, meta)
+      elif zoom_params.tp == zoom.AnimationType.MP4:
+        zoom.ReWriteVideoMP4Meta(tmp_path, video_path, meta)
     # closed temporary directory, video is saved in final destination with final metadata
     config.console.print('[yellow]Render:[/] [green]DONE[/]\n')
     # we just freed the temporary directory; add to DB

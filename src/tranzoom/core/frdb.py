@@ -706,11 +706,11 @@ class FractalDatabase:
       raise Error(f'Inconsistent DB: found {render_hash=!r} in DB but not in renders; Report bug!')
     return (params, ck, frm_data, cp_data, cp_data['renders'][render_hash])
 
-  def FindZoom(self, zoom: image.ZoomParameters) -> ZoomData | None:
+  def FindZoom(self, zoom: zoom.ZoomParameters) -> ZoomData | None:
     """Find a zoom (video/GIF) in the database given its zoom parameters.
 
     Args:
-      zoom (image.ZoomParameters): the zoom parameters to look up
+      zoom (zoom.ZoomParameters): the zoom parameters to look up
 
     Returns:
       ZoomData | None: the ZoomData for the given zoom parameters, or None if not found
@@ -871,7 +871,7 @@ class FractalDatabase:
 
   def AddZoomToDB(
     self,
-    zoom: image.ZoomParameters,
+    zoom: zoom.ZoomParameters,
     tm: int,
     data_hash: str | None,
     path: str | None,
@@ -882,7 +882,7 @@ class FractalDatabase:
     """Add a zoom (video/GIF) to the DB.
 
     Args:
-      zoom (image.ZoomParameters): the zoom parameters to add; zoom is created with the sentinel
+      zoom (zoom.ZoomParameters): the zoom parameters to add; zoom is created with the sentinel
           value (if on AUTO) and does NOT update!
       tm (int): the timestamp of the video/GIF creation
       data_hash (str | None): the hash of the video/GIF data, used for indexing and deduplication
@@ -1292,17 +1292,17 @@ class FractalDatabase:
 
 
 def WarnUserAnimationParams(
-  zoom_params: image.ZoomParameters, *, print_comm: abc.Callable[[str], None]
+  zoom_params: zoom.ZoomParameters, *, print_comm: abc.Callable[[str], None]
 ) -> None:
   """Print warnings if the zoom parameters may lead to sub-optimal animation quality or size.
 
   Args:
-    zoom_params (image.ZoomParameters): the zoom parameters to check
+    zoom_params (zoom.ZoomParameters): the zoom parameters to check
     print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
 
   """
   # sanity checks and warnings before we start the expensive rendering loop
-  if zoom_params.scalar_magnification_per_step > image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
+  if zoom_params.scalar_magnification_per_step > zoom.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
     print_comm(
       f'{100.0 * (float(zoom_params.scalar_magnification_per_step) - 1.0):.4f}%/step. '
       'or reducing the total magnification.[/]\n'

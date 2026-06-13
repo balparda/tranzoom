@@ -7,6 +7,7 @@ from __future__ import annotations
 import abc as abstract_abc
 import dataclasses
 import enum
+import fractions
 import json
 import math
 import os
@@ -1329,6 +1330,56 @@ def ConcurrenceToUse(n_processes: int | None = None) -> int:
   if n_processes is not None and n_processes < 1:
     raise Error(f'{n_processes=} must be a positive integer or None')
   return min(n_processes or AVAILABLE_CPU, MAX_CONCURRENCE, AVAILABLE_CPU)  # never exceed CPU!
+
+
+def LimitMPQDenominator(x: gmpy2.mpq, max_denominator: int) -> tuple[gmpy2.mpq, float]:
+  """Limit the denominator of a gmpy2.mpq rational number to a maximum value.
+
+  Works by converting the gmpy2.mpq to a fractions.Fraction, using its limit_denominator() method,
+  and then converting back to gmpy2.mpq. This is needed because, there **IS** a limit_denominator()
+  method in gmpy2.mpq, but I have found bugs where it corrupts the mpq object. This horror story
+  below is a real thing that happened in the real world after calling gmpy2.mpq.limit_denominator():
+
+    -> pdb.set_trace()
+    > /Users/balparda/py/tranzoom/src/tranzoom/core/image.py(1047)Frames()
+    -> error_x: gmpy2.mpq = abs(dx - rdx) / dx
+    (Pdb) dx
+    mpq(1,509709994281253475634230198920704424381256103515625000000000000000000000000000000000000
+          000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+          000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+          0000000000000000000000000000000000000)
+    (Pdb) n
+    ZeroDivisionError: division or modulo by zero
+    > /Users/balparda/py/tranzoom/src/tranzoom/core/image.py(1047)Frames()
+    -> error_x: gmpy2.mpq = abs(dx - rdx) / dx
+    (Pdb) dx
+    mpq(0,1)
+
+  As can be seen, the mpq object got corrupted and turned into 0, which caused a ZeroDivisionError
+  later on. The key fact in the investigation is that `dx - rdx` mutates `dx` in place
+  (or dx points to corrupted internal state)! The ID `id(dx)` remains the same, but it mutates.
+  For an immutable numeric type, that is impossible at the Python level. And this is pure gmpy2,
+  NOT Cython compiled code (in use in fractal.py/fractalc.pyx). This is a plain gmpy2.mpq bug.
+
+  Args:
+    x (gmpy2.mpq): The gmpy2.mpq rational number to limit.
+    max_denominator (int): The maximum allowed denominator.
+
+  Returns:
+    tuple[gmpy2.mpq, float]: The gmpy2.mpq rational number with the limited denominator
+        and the relative error introduced by limiting the denominator.
+
+  """
+  # get trivial case out of the way, and avoid divide by zero later
+  if x == _MPQ_ZERO:
+    return (x, 0.0)
+  # convert to fractions.Fraction
+  f_x: fractions.Fraction = fractions.Fraction(int(x.numerator), int(x.denominator))
+  # limit
+  f_x = f_x.limit_denominator(max_denominator)
+  # convert back to gmpy2.mpq and return
+  r_x: gmpy2.mpq = gmpy2.mpq(f_x.numerator, f_x.denominator)
+  return (r_x, float(abs(x - r_x) / abs(x)))
 
 
 def ValidateIPixels(i_pixels: int) -> None:

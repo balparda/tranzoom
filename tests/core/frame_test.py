@@ -123,7 +123,10 @@ COMPUTATION_STR_3: str = (
       '877b0d190c32be56d7ac6fc7e9daafc5fda739d2ec3550b67790cf261f3ef683',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
       '[JULIA: (-159/713, 64/133) ± (364/713, 366/133) @ (3/2, -11/19)]',
-      '{[JULIA: (-159/713, 64/133) ± (364/713, 366/133) @ (3/2, -11/19)] : [2048, 2048, 8888] : max}',
+      (
+        '{[JULIA: (-159/713, 64/133) ± (364/713, 366/133) @ (3/2, -11/19)] : '
+        '[2048, 2048, 8888] : max}'
+      ),
     ),
   ],
 )
