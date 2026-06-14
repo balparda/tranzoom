@@ -7,7 +7,6 @@ from __future__ import annotations
 import dataclasses
 import enum
 import logging
-import math
 import pathlib
 import tempfile
 import warnings
@@ -26,7 +25,7 @@ from transcrypto.utils import base as tbase
 from transcrypto.utils import human, timer
 
 from tranzoom import __version__
-from tranzoom.core import ai, fractal, frame, frdb, image, palette
+from tranzoom.core import ai, fractal, frame, frdb, image, palette, zoom
 
 
 class Error(ai.Error, typer._click.exceptions.ClickException):  # noqa: SLF001
@@ -100,6 +99,7 @@ IMAGE_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
   max=frame.MAX_IMAGE_SIZE,
   help=(
     f'Width of the image; {frame.MIN_IMAGE_SIZE} ≤ w ≤ {frame.MAX_IMAGE_SIZE}; '
+    'NOTE: if `--i-pixels` is given, the effective width will be w*(i+1), so keep that in mind; '
     f'default is {frame.DEFAULT_IMAGE_SIZE}'
   ),
 )
@@ -111,6 +111,7 @@ IMAGE_HEIGHT_OPTION: typer.models.OptionInfo = typer.Option(
   max=frame.MAX_IMAGE_SIZE,
   help=(
     f'Height of the image; {frame.MIN_IMAGE_SIZE} ≤ h ≤ {frame.MAX_IMAGE_SIZE}; '
+    'NOTE: if `--i-pixels` is given, the effective height will be h*(i+1), so keep that in mind; '
     f'default is {frame.DEFAULT_IMAGE_SIZE}'
   ),
 )
@@ -126,7 +127,20 @@ IMAGE_SIZE_OPTION: typer.models.OptionInfo = typer.Option(
     'the final dimensions will be scaled accordingly and, given a size S, will be either '
     '(S, x), (x, S) or (S, S), where x < S, and will make the final image ratio/proportion be '
     f'the same as the frame; {frame.MIN_IMAGE_SIZE} ≤ S ≤ {frame.MAX_IMAGE_SIZE}; '
+    'NOTE: if `--i-pixels` is given, the effective Size will be s*(i+1), so keep that in mind; '
     'default is None, i.e., follow the explicit `-w/--width` and `-h/--height` options'
+  ),
+)
+IMAGE_INTERPOLATION_PIXELS_OPTION: typer.models.OptionInfo = typer.Option(
+  0,
+  '--i-pixels',
+  min=0,
+  max=frame.MAX_INTERPOLATION_PIXELS,
+  help=(
+    'Extra interpolated pixels for every produced pixel; '
+    'effectively, final width=w*(i+1) and height=h*(i+1); '
+    f'0 ≤ i ≤ {frame.MAX_INTERPOLATION_PIXELS}; default is 0; '
+    'so 0 is no interpolation, 1 means add 1 interpolated pixel between every pair of pixels, etc'
   ),
 )
 IMAGE_ZOOM_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
@@ -524,7 +538,7 @@ COLOR_SET_POINTS_OPTION: typer.models.OptionInfo = typer.Option(
 # AI Options
 MODEL_OPTION: typer.models.OptionInfo = typer.Option(
   DEFAULT_VISION_MODEL,
-  '-m',
+  '-m',  # transai has '-m', but also: '-t' (tokens), '-x' (temperature), '-g' (gpu)
   '--model',
   help=(
     'LLM vision model to load and use: '
@@ -562,24 +576,24 @@ AI_OUTPUT_REASON_FIELD_OPTION: typer.models.OptionInfo = typer.Option(
 
 # Animation Options
 ANIM_DEST_MAGNIFICATION_ARGUMENT: typer.models.ArgumentInfo = typer.Argument(
-  image.DEFAULT_DEST_MAGNITUDE_10,
+  zoom.DEFAULT_DEST_MAGNITUDE_10,
   help=(
     'Magnification magnitude to go through in the animation zoom; '
     'this can be a float (ex: "0.34") or a fraction of ints (rational number, ex: "123/451") and '
     'the number will be fed directly to multi-precision arithmetic so no precision is lost; '
-    f'{-image.MAX_ZOOM_MAGNITUDE_10} ≤ mag ≤ {image.MAX_ZOOM_MAGNITUDE_10}; '
+    f'{-zoom.MAX_ZOOM_MAGNITUDE_10} ≤ mag ≤ {zoom.MAX_ZOOM_MAGNITUDE_10}; '
     'ATTENTION!! this is exponential 10**mag, so a value of 2.0 means 10**2 = 100x zoom; '
-    f'default is {image.DEFAULT_DEST_MAGNITUDE_10}, '
-    f'i.e., {10 ** float(image.DEFAULT_DEST_MAGNITUDE_10):.2f}x zoom'
+    f'default is {zoom.DEFAULT_DEST_MAGNITUDE_10}, '
+    f'i.e., {10 ** float(zoom.DEFAULT_DEST_MAGNITUDE_10):.2f}x zoom'
   ),
 )
 ANIM_DURATION_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '--duration',
-  min=image.MIN_DURATION,
-  max=image.MAX_DURATION,
+  min=zoom.MIN_DURATION,
+  max=zoom.MAX_DURATION,
   help=(
-    f'GIF/video duration, in seconds; {image.MIN_DURATION} ≤ d ≤ {image.MAX_DURATION} or None; '
+    f'GIF/video duration, in seconds; {zoom.MIN_DURATION} ≤ d ≤ {zoom.MAX_DURATION} or None; '
     'pick 2 out of `--duration`, `--frames` and `--fps`, and the third will be computed; '
     f'default is None'
   ),
@@ -587,10 +601,10 @@ ANIM_DURATION_OPTION: typer.models.OptionInfo = typer.Option(
 ANIM_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '--frames',
-  min=image.MIN_FRAMES,
-  max=image.MAX_FRAMES,
+  min=zoom.MIN_FRAMES,
+  max=zoom.MAX_FRAMES,
   help=(
-    f'Number of frames in GIF/video; {image.MIN_FRAMES} ≤ fr ≤ {image.MAX_FRAMES} or None; '
+    f'Number of frames in GIF/video; {zoom.MIN_FRAMES} ≤ fr ≤ {zoom.MAX_FRAMES} or None; '
     'pick 2 out of `--duration`, `--frames` and `--fps`, and the third will be computed; '
     f'default is None'
   ),
@@ -598,31 +612,32 @@ ANIM_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
 ANIM_FPS_OPTION: typer.models.OptionInfo = typer.Option(
   None,
   '--fps',
-  min=image.MIN_FPS,
-  max=image.MAX_FPS,
+  min=zoom.MIN_FPS,
+  max=zoom.MAX_FPS,
   help=(
-    f'Frames per second (FPS) for the GIF/video; {image.MIN_FPS} ≤ fps ≤ {image.MAX_FPS} or None; '
+    f'Frames per second (FPS) for the GIF/video; {zoom.MIN_FPS} ≤ fps ≤ {zoom.MAX_FPS} or None; '
     'pick 2 out of `--duration`, `--frames` and `--fps`, and the third will be computed; '
+    'NOTE: if `--i-frames` is given, the effective FPS will be fps*(i+1), so keep that in mind; '
     f'default is None'
   ),
 )
 ANIM_TYPE_OPTION: typer.models.OptionInfo = typer.Option(
-  image.DEFAULT_ANIMATION_TYPE,
+  zoom.DEFAULT_ANIMATION_TYPE,
   '--anim',
   help=(
     f'Type of animation to produce; possible values: '
-    f'{", ".join(repr(t.value) for t in image.AnimationType)}; '
-    f'default is "{image.DEFAULT_ANIMATION_TYPE.value}"'
+    f'{", ".join(repr(t.value) for t in zoom.AnimationType)}; '
+    f'default is "{zoom.DEFAULT_ANIMATION_TYPE.value}"'
   ),
 )
 ANIM_LOOP_OPTION: typer.models.OptionInfo = typer.Option(
-  image.DEFAULT_LOOP,
+  zoom.DEFAULT_LOOP,
   '--loop',
-  min=image.MIN_LOOP,
-  max=image.MAX_LOOP,
+  min=zoom.MIN_LOOP,
+  max=zoom.MAX_LOOP,
   help=(
-    f'Number of loops for the GIF (NOT MP4!); {image.MIN_LOOP} ≤ loop ≤ {image.MAX_LOOP}; '
-    f'default is {image.DEFAULT_LOOP}; zero (0) means infinite loops'
+    f'Number of loops for the GIF (NOT MP4!); {zoom.MIN_LOOP} ≤ loop ≤ {zoom.MAX_LOOP}; '
+    f'default is {zoom.DEFAULT_LOOP}; zero (0) means infinite loops'
   ),
 )
 ANIM_SAVE_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
@@ -631,6 +646,17 @@ ANIM_SAVE_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
   help=(
     'If True, will save the intermediate frames of the animation; '
     'if False, intermediate frames will not be saved; default is False'
+  ),
+)
+ANIM_INTERPOLATION_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
+  0,
+  '--i-frames',
+  min=0,
+  max=zoom.MAX_INTERPOLATION_FRAMES,
+  help=(
+    f'Extra interpolated frames for every video frame; effectively, final FPS=fps*(i+1); '
+    f'0 ≤ i ≤ {zoom.MAX_INTERPOLATION_FRAMES}; default is 0; '
+    'so 0 is no interpolation, 1 means add 1 interpolated frame between every pair of frames, etc'
   ),
 )
 
@@ -756,6 +782,7 @@ class TranZoomConfig(clibase.CLIConfig):
   img_width: int = frame.DEFAULT_IMAGE_SIZE  # both `image` and `zoom` use, different defaults
   img_height: int = frame.DEFAULT_IMAGE_SIZE  # both `image` and `zoom` use, different defaults
   img_size: int | None = None  # for `image` and `zoom` commands, overrides width/height if given
+  i_pixels: int = 0  # for `image` and `zoom` commands
 
   max_iter: int | None = None  # for `image` command, also `zoom auto`
   mark_coords: str | None = None  # for `image` command, also `zoom auto`
@@ -979,6 +1006,7 @@ def MakeRenderParameters(
     - config.pal
     - config.set_pal
     - config.set_points
+    - config.i_pixels
     - config.mark_coords
     - config.mark_color
     - config.mark_width
@@ -998,12 +1026,15 @@ def MakeRenderParameters(
   """
   # add the mark? parse coordinates early to catch errors before expensive computation
   mark_coords: tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]] | None = (
-    params.CoordsTupleToPixel(config.mark_coords) if config.mark_coords else None
+    params.CoordsTupleToPixel(config.mark_coords, i_pixels=config.i_pixels)
+    if config.mark_coords
+    else None
   )
   # build render and output configuration objects
   render: image.RenderParameters = image.RenderParameters(
     escaped_pal=config.pal,
     set_pal=None if config.set_points is None else config.set_pal,
+    i_pixels=config.i_pixels,
     mark_re=_MPQ_ZERO if mark_coords is None else mark_coords[0][0],
     mark_im=_MPQ_ZERO if mark_coords is None else mark_coords[0][1],
     mark_color=None if mark_coords is None else config.mark_color,
@@ -1157,7 +1188,7 @@ def MakePointFromCLIArgs(
 def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
   config: TranZoomConfig,
   out: image.ImageOutputConfig,
-  zoom_params: image.ZoomParameters,
+  zoom_params: zoom.ZoomParameters,
   save_frames: bool,
 ) -> tuple[pathlib.Path, int]:
   """Make the animation file, returning its path and size.
@@ -1165,7 +1196,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
   Args:
     config (TranZoomConfig): the shared config with all options.
     out (image.ImageOutputConfig): the image output config with all options for rendering.
-    zoom_params (image.ZoomParameters): the parameters of the zoom to render.
+    zoom_params (zoom.ZoomParameters): the parameters of the zoom to render.
     save_frames (bool): whether to save the individual frames as images in the output directory.
 
   Returns:
@@ -1184,16 +1215,22 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
   all_frames, all_markers, all_depth = zoom_params.Frames()  # could go boom!
   logging.debug(f'Marker frames: {[idx for idx, _ in all_markers]}')
   # we should be good to go, all options check out; log and warn if needed
+  final_width: int
+  final_height: int
+  final_width, final_height = zoom_params.img.Size(i_pixels=zoom_params.render.i_pixels)
+  real_sz_str: str = (
+    f' (on disk: {final_width} \u00d7 {final_height})' if zoom_params.render.i_pixels else ''
+  )
   config.console.print(
-    f'\n{zoom_params.img.width} x {zoom_params.img.height} '
+    f'\n{zoom_params.img.width} \u00d7 {zoom_params.img.height}{real_sz_str} '
     f'{zoom_params.render.escaped_pal.value!r} {zoom_params.img.frm.fractal.value.capitalize()!r} '
     f'[magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/], '
     f'{human.HumanizedSeconds(float(zoom_params.n_seconds))} long, '
-    f'at {float(zoom_params.fps):.2f} FPS, '
-    f'with {zoom_params.n_frames} frames ({len(all_markers)} markers, '
+    f'at {float(zoom_params.fps):.2f}*{zoom_params.i_frames + 1} FPS, '
+    f'with {zoom_params.n_frames}|{zoom_params.all_frames} frames ({len(all_markers)} markers, '
     f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%, and {len(all_depth)} depth frames, '
     f'{100.0 * len(all_depth) / zoom_params.n_frames:.2f}%), '
-    f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step, '
+    f'{100.0 * (float(zoom_params.scalar_magnification_per_step) - 1.0):.4f}%/step, '
     f'{fractal.OptimizationToUse(config.python_optimization)[1]}...'
   )
   config.console.print(f'[yellow]ZOOM:[/] {zoom_params} ... {all_frames[-1]}\n')
@@ -1248,7 +1285,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     # produce the depth computations for all the depth frames: this will save us a lot of trouble
     max_iter: int
     idx: int
-    j: int
+    jj: int
     stats: image.FractalStats
     depth_computations: dict[int, tuple[frame.Frame, int, int, image.FractalStats]] = {}
     params: frame.ComputationParameters = zoom_params.img  # starting value, to replace frm & depth
@@ -1283,9 +1320,9 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
         smoothed_depths: list[int] = frame.SmoothDepths(jagged_depths)
         del jagged_depths
         logging.debug(f'Smoothed depths for depth frames: {smoothed_depths}')
-        for j, (idx, _) in enumerate(all_depth):
+        for jj, (idx, _) in enumerate(all_depth):
           frm, max_iter, _, stats = depth_computations[idx]
-          depth_computations[idx] = (frm, max_iter, smoothed_depths[j], stats)
+          depth_computations[idx] = (frm, max_iter, smoothed_depths[jj], stats)
         del smoothed_depths
         # this is our first milestone; add to DB; commit
         if streaming:
@@ -1387,7 +1424,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     # produce the frames
     n_frames_actually_computed: int = 0
     total_depth: int = sum(
-      _FrameEstimatedIters(*_DepthAndStatsForFrame(j)) for j in range(zoom_params.n_frames)
+      zoom.FrameEstimatedIters(*_DepthAndStatsForFrame(jj)) for jj in range(zoom_params.n_frames)
     )
     cmp_bar: tqdm.tqdm[NoReturn] = tqdm.tqdm(
       # BEWARE: the tqdm-rich.tqdm bar is visually nicer BUT it cannot live with another bar because
@@ -1420,7 +1457,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           if cp and cp['raw_data_path']:
             all_params[idx] = params
             config.console.print('Computation in DB cache\n')
-            cmp_bar.update(_FrameEstimatedIters(max_iter, stats))  # update progress bar
+            cmp_bar.update(zoom.FrameEstimatedIters(max_iter, stats))  # update progress bar
             continue
         # we really need to compute: feed frame to the producer
         img: image.Image
@@ -1447,7 +1484,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           db.Save()  # commit to disk every N computations
         # write a space and update the bar, and we're done with this frame
         config.console.print()
-        cmp_bar.update(_FrameEstimatedIters(max_iter, stats))  # update progress bar
+        cmp_bar.update(zoom.FrameEstimatedIters(max_iter, stats))  # update progress bar
       del d_all_markers
     # we have all frames; if we're using DB and have done computations, make sure it is all saved
     cmp_bar.close()
@@ -1499,18 +1536,48 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           dynamic_ncols=True,
           smoothing=0.1,
           colour='yellow',
+          disable=False,  # for debugging rendering, set to True to disable the progress bar
         )
       # start try..finally for the progress bar
+      all_hash: dict[int, str] = {}
       try:
 
-        def _StreamingRenderFrame(i: int) -> bytes:
-          """Render a single frame, returning the image data as bytes. Only one in memory at a time.
+        def _TwoFrameRenderStream() -> abc.Iterator[
+          tuple[zoom.RenderedZoomFrame, zoom.RenderedZoomFrame | None]
+        ]:
+          """Render base frames with a rolling [curr, next] window.
+
+          At most two rendered base-frame byte payloads are retained by this stream.
+
+          The stream shape is:
+            (frame0, frame1)
+            (frame1, frame2)
+            ...
+            (frameN-2, frameN-1)
+            (frameN-1, None)
+
+          Yields:
+            tuple[zoom.RenderedZoomFrame, zoom.RenderedZoomFrame | None]: A tuple of
+                the current frame and the next frame (or None if at the end)
+
+          """
+          curr_frame: zoom.RenderedZoomFrame = _StreamingRenderFrame(0)
+          next_frame: zoom.RenderedZoomFrame | None = _StreamingRenderFrame(1)  # (MIN_FRAMES is 3)
+          for i in range(zoom_params.n_frames):
+            yield (curr_frame, next_frame)
+            if next_frame is None:
+              break
+            curr_frame = next_frame
+            next_frame = _StreamingRenderFrame(i + 2) if i + 2 < zoom_params.n_frames else None
+
+        def _StreamingRenderFrame(i: int) -> zoom.RenderedZoomFrame:
+          """Render a single frame, returning the image data. Only one in memory at a time.
 
           Args:
             i (int): The index of the frame in the zoom sequence.
 
           Returns:
-            bytes: The rendered image data for the frame at index i.
+            zoom.RenderedZoomFrame: The rendered image data for the frame at index i.
 
           """
           img_data: bytes
@@ -1545,27 +1612,36 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           # update progress bar, return data
           if p_bar:
             p_bar.update(1)
-          return img_data
+          return zoom.RenderedZoomFrame(
+            idx=i, data=img_data, data_hash=data_hash, img_path=img_path
+          )
 
-        all_hash: dict[int, str] = {}
+        # render the video to a temporary path, using the two-frame stream to interpolate frames
         tmp_path: pathlib.Path = pathlib.Path(tmpdir) / f'temp_video.{zoom_params.tp.value.lower()}'
-        if zoom_params.tp == image.AnimationType.GIF:
-          image.WriteAnimatedGIF(
-            (_StreamingRenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
+        frame_bytes: abc.Iterable[bytes] = zoom.InterpolatedFrameStream(  # generator! memory!
+          # we must keep all of this as generators to save rendering memory
+          _TwoFrameRenderStream(),  # this will yield (curr, next) tuples of rendered frames
+          i_frames=zoom_params.i_frames,
+          zoom_per_step=float(zoom_params.scalar_magnification_per_step),
+          use_quadratic=zoom.DEFAULT_USE_QUADRATIC,
+        )
+        if zoom_params.tp == zoom.AnimationType.GIF:
+          zoom.WriteAnimatedGIF(
+            frame_bytes,  # generator! memory!
             tmp_path,
             zoom_params.img.width,
             zoom_params.img.height,
-            zoom_params.n_frames,
+            zoom_params.all_frames,
             float(zoom_params.n_seconds),
             loop=zoom_params.loop,
           )
-        elif zoom_params.tp == image.AnimationType.MP4:
-          image.WriteVideoMP4(
-            (_StreamingRenderFrame(i) for i in range(zoom_params.n_frames)),  # generator! memory!
+        elif zoom_params.tp == zoom.AnimationType.MP4:
+          zoom.WriteVideoMP4(
+            frame_bytes,  # generator! memory!
             tmp_path,
             zoom_params.img.width,
             zoom_params.img.height,
-            zoom_params.n_frames,
+            zoom_params.all_frames,
             float(zoom_params.n_seconds),
           )
         else:
@@ -1597,6 +1673,9 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           image.META_ZOOM_LOOP_KEY: str(zoom_params.loop),
           image.META_ZOOM_STEPS_KEY: str(zoom_params.n_steps),
           image.META_ZOOM_FPS_KEY: str(zoom_params.fps),
+          image.META_ZOOM_I_FPS_KEY: str(zoom_params.ifps),
+          image.META_ZOOM_I_FRAMES_KEY: str(zoom_params.i_frames),
+          image.META_ZOOM_ALL_FRAMES_KEY: str(zoom_params.all_frames),
           image.META_ZOOM_MAGNITUDE_PER_STEP_KEY: str(zoom_params.mag_per_step),
           image.META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str(
             zoom_params.scalar_magnification_per_step
@@ -1614,10 +1693,10 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
       )
       # move the file!
       video_path = full_path(video_hash)
-      if zoom_params.tp == image.AnimationType.GIF:
-        image.ReWriteAnimatedGIFMeta(tmp_path, video_path, meta)
-      elif zoom_params.tp == image.AnimationType.MP4:
-        image.ReWriteVideoMP4Meta(tmp_path, video_path, meta)
+      if zoom_params.tp == zoom.AnimationType.GIF:
+        zoom.ReWriteAnimatedGIFMeta(tmp_path, video_path, meta)
+      elif zoom_params.tp == zoom.AnimationType.MP4:
+        zoom.ReWriteVideoMP4Meta(tmp_path, video_path, meta)
     # closed temporary directory, video is saved in final destination with final metadata
     config.console.print('[yellow]Render:[/] [green]DONE[/]\n')
     # we just freed the temporary directory; add to DB
@@ -1636,22 +1715,3 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     f'{depth_tmr or "-"} (depth) + {frames_tmr} (frames) + {render_tmr} (render)'
   )
   return (video_path, video_path.stat().st_size)
-
-
-def _FrameEstimatedIters(d: int, s: image.FractalStats) -> int:
-  """Estimate a measure for how hard the iterations will be for this frame.
-
-  We will use the following approximation:
-    - 1/5 of depth, plus
-    - 4/5 of depth allocated as percentage of estimated set points (s.n_interior / s.n_px)
-
-  Args:
-    d (int): estimated depth for frame
-    s (image.FractalStats):  estimated stats for image
-
-  Returns:
-    int: estimated iteration count for frame, used for progress bar estimation;
-        (d // 5) <= estimate <= d
-
-  """
-  return d // 5 + math.floor((4.0 * d * s.n_interior) / (5.0 * s.n_px))

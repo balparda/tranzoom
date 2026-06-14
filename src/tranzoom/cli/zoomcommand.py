@@ -20,7 +20,7 @@ from transcrypto.utils import human
 
 from tranzoom import tranz
 from tranzoom.cli import base
-from tranzoom.core import ai, frame, image
+from tranzoom.core import ai, frame, image, zoom
 
 # TODO: zoom animation can probably get pretty good scale up in both resolution and fps!
 
@@ -60,6 +60,7 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
   img_width: int = base.IMAGE_ZOOM_WIDTH_OPTION,  # type: ignore[assignment]
   img_height: int = base.IMAGE_ZOOM_HEIGHT_OPTION,  # type: ignore[assignment]
   img_size: int | None = base.IMAGE_SIZE_OPTION,  # type: ignore[assignment]
+  i_pixels: int = base.IMAGE_INTERPOLATION_PIXELS_OPTION,  # type: ignore[assignment]
   max_steps: int = base.MAX_STEPS_OPTION,  # type: ignore[assignment]
   julia_re: str = base.JULIA_RE_OPTION,  # type: ignore[assignment]
   julia_im: str = base.JULIA_IM_OPTION,  # type: ignore[assignment]
@@ -82,6 +83,7 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
       img_width=img_width,
       img_height=img_height,
       img_size=img_size,
+      i_pixels=i_pixels,
       max_steps=max_steps,
       julia_re=julia_re,
       julia_im=julia_im,
@@ -231,10 +233,11 @@ def Auto(  # documentation is help/epilog/args  # noqa: D103
   f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]
   f_height: str | None = base.FRAME_HEIGHT_ARGUMENT,  # type: ignore[assignment]
   dest_magnification_10: str = base.ANIM_DEST_MAGNIFICATION_ARGUMENT,  # type: ignore[assignment]
-  anim_type: image.AnimationType = base.ANIM_TYPE_OPTION,  # type: ignore[assignment]
+  anim_type: zoom.AnimationType = base.ANIM_TYPE_OPTION,  # type: ignore[assignment]
   duration: float | None = base.ANIM_DURATION_OPTION,  # type: ignore[assignment]
   frames: int | None = base.ANIM_FRAMES_OPTION,  # type: ignore[assignment]
   fps: float | None = base.ANIM_FPS_OPTION,  # type: ignore[assignment]
+  i_frames: int = base.ANIM_INTERPOLATION_FRAMES_OPTION,  # type: ignore[assignment]
   loop: int = base.ANIM_LOOP_OPTION,  # type: ignore[assignment]
   save_frames: bool = base.ANIM_SAVE_FRAMES_OPTION,  # type: ignore[assignment]
 ) -> None:
@@ -258,13 +261,14 @@ def Auto(  # documentation is help/epilog/args  # noqa: D103
   render: image.RenderParameters
   out: image.ImageOutputConfig
   render, out = base.MakeRenderParameters(params, config)
-  zoom_params: image.ZoomParameters = image.ZoomParameters(
+  zoom_params: zoom.ZoomParameters = zoom.ZoomParameters(
     tp=anim_type,
     img=params,  # zoom is created with the sentinel value (if on AUTO) and does NOT update!
     render=render,  # notice this render does not have prev/next markers!
     mag=gmpy2.mpq(dest_magnification_10),
     n_frames=frames,
-    duration=round(duration * image.VIDEO_DURATION_STORE_SCALE),
+    duration=round(duration * zoom.VIDEO_DURATION_STORE_SCALE),
+    i_frames=i_frames,
     loop=loop,
   )
   # call
@@ -276,6 +280,6 @@ def Auto(  # documentation is help/epilog/args  # noqa: D103
     f'Saved {zoom_params.tp.value.upper()} to {str(img_p)!r}, {human.HumanizedBytes(img_sz)}\n'
   )
   # iterm
-  if config.iterm and zoom_params.tp != image.AnimationType.MP4:  # iTerm2 does not support MP4
+  if config.iterm and zoom_params.tp != zoom.AnimationType.MP4:  # iTerm2 does not support MP4
     image.PrintITerm2(img_p.read_bytes())
     config.console.print()

@@ -3,7 +3,7 @@
 """TranZoom: Mandelbrot/Julia Fractal generation and manipulation with AI/LLMs."""
 
 __all__: list[str] = ['__author__', '__version__']
-__version__ = '1.9.0'  # also update pyproject.toml
+__version__ = '1.10.0'  # also update pyproject.toml
 __author__ = 'Daniel Balparda <balparda@github.com>, Bella Keri <BellaKeri@github.com>'
 
 __app__ = 'tranZoom'

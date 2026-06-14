@@ -17,11 +17,34 @@ _MAX_ENCODING_UINT64: int = 18446744073701163007
 
 
 # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
+RENDER_STR_1: str = (
+  '{"escaped_pal":"sunset","i_pixels":1,"mark_color":null,"mark_im":"0","mark_re":"0",'
+  '"mark_width":1,"next_marker":null,"overlay":null,"prev_marker":null,'
+  '"set_pal":"rgrayscale","tp":"png"}'
+)
+RENDER_STR_2: str = (
+  '{"escaped_pal":"electric","i_pixels":0,"mark_color":"red","mark_im":"9/2",'
+  '"mark_re":"-11/17","mark_width":2,"next_marker":{"bottom_im":"-1","bottom_re":"11/9",'
+  '"fractal":"mandelbrot","point_im":"0","point_re":"0","top_im":"1","top_re":"-1/2"},'
+  '"overlay":"grid","prev_marker":{"bottom_im":"-1","bottom_re":"1",'
+  '"fractal":"mandelbrot","point_im":"0","point_re":"0","top_im":"1","top_re":"-1"},'
+  '"set_pal":null,"tp":"gif"}'
+)
+RENDER_STR_3: str = (
+  '{"escaped_pal":"grayscale","i_pixels":3,"mark_color":"yellow","mark_im":"-7/11",'
+  '"mark_re":"71/4","mark_width":3,"next_marker":null,"overlay":null,'
+  '"prev_marker":null,"set_pal":"sunset","tp":"mp4"}'
+)
+# DO NOT "JUST FIX" THESE! If they are wrong, it means something will break in the DB!
+
+
+# ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
 @pytest.mark.parametrize(
   (
     'tp',
     'e_pal',
     's_pal',
+    'ip',
     'm_re',
     'm_im',
     'm_col',
@@ -31,12 +54,14 @@ _MAX_ENCODING_UINT64: int = 18446744073701163007
     'n_json',
     'json1',
     'sha',
+    'txt',
   ),
   [
     (
       'png',
       'sunset',
       'rgrayscale',
+      1,
       '0',
       '0',
       None,
@@ -45,18 +70,16 @@ _MAX_ENCODING_UINT64: int = 18446744073701163007
       None,
       None,
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
-      (
-        '{"escaped_pal":"sunset","mark_color":null,"mark_im":"0","mark_re":"0",'
-        '"mark_width":1,"next_marker":null,"overlay":null,"prev_marker":null,'
-        '"set_pal":"rgrayscale","tp":"png"}'
-      ),
-      'f5eccc29cd3e934ec74e0ce9e8a24acab5c630c7d5469280699872cfefc06324',  # DO NOT "JUST FIX"
+      RENDER_STR_1,  # re-used below (zoom) to make sure it is all tied together
+      '8d93c85ee64d1f9d2e379cf12e646493445d2855bae6ddcdb945cfa510982731',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
+      '{[PNG*2: SUNSET, GRAYSCALE_REVERSE]}',
     ),
     (
       'gif',
       'electric',
       None,
+      0,
       '-11/17',
       '9/2',
       'red',
@@ -71,21 +94,19 @@ _MAX_ENCODING_UINT64: int = 18446744073701163007
         '"top_im":"1","top_re":"-1/2"}'
       ),
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
-      (
-        '{"escaped_pal":"electric","mark_color":"red","mark_im":"9/2",'
-        '"mark_re":"-11/17","mark_width":2,"next_marker":{"bottom_im":"-1","bottom_re":"11/9",'
-        '"fractal":"mandelbrot","point_im":"0","point_re":"0","top_im":"1","top_re":"-1/2"},'
-        '"overlay":"grid","prev_marker":{"bottom_im":"-1","bottom_re":"1",'
-        '"fractal":"mandelbrot","point_im":"0","point_re":"0","top_im":"1","top_re":"-1"},'
-        '"set_pal":null,"tp":"gif"}'
-      ),
-      '1c788c6ae8d3c839cdb6a8971ef2fe2d7362f30d302f96c0688ee2dea236a18b',  # DO NOT "JUST FIX"
+      RENDER_STR_2,  # re-used below (zoom) to make sure it is all tied together
+      '20876ddd181c33300831b61318d096f71eae28944b148961e97e698e3bd26fd1',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
+      (
+        '{[GIF*1: ELECTRIC, none] + [MARK: red/2 @ (-11/17, 9/2)] + '
+        '[OVERLAY: GRID] + [P:22c8b5cfc5, N:2f0dcd61dc]}'
+      ),
     ),
     (
       'mp4',
       'grayscale',
       'sunset',
+      3,
       '71/4',
       '-7/11',
       'yellow',
@@ -94,13 +115,10 @@ _MAX_ENCODING_UINT64: int = 18446744073701163007
       None,
       None,
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
-      (
-        '{"escaped_pal":"grayscale","mark_color":"yellow","mark_im":"-7/11",'
-        '"mark_re":"71/4","mark_width":3,"next_marker":null,"overlay":null,'
-        '"prev_marker":null,"set_pal":"sunset","tp":"mp4"}'
-      ),
-      '7468fbddfb9919df639b64a4e6805a3def0aebd3986c603d5e99f6593c6329e4',  # DO NOT "JUST FIX"
+      RENDER_STR_3,  # re-used below (zoom) to make sure it is all tied together
+      'f0c9521daa9d566928f591eb5bc074b9bc0c40bd90e09783e8d50ebedca95f28',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
+      '{[MP4*4: GRAYSCALE, SUNSET] + [MARK: yellow/3 @ (71/4, -7/11)]}',
     ),
   ],
 )
@@ -108,6 +126,7 @@ def test_render_hash_stability_and_serialization_consistency(
   tp: str,
   e_pal: str,
   s_pal: str | None,
+  ip: int,
   m_re: str,
   m_im: str,
   m_col: str | None,
@@ -117,12 +136,14 @@ def test_render_hash_stability_and_serialization_consistency(
   n_json: str | None,
   json1: str,
   sha: str,
+  txt: str,
 ) -> None:
   """Important JSON and hash consistency/stability checks."""
   params: image.RenderParameters = image.RenderParameters(
     tp=image.FileType(tp),
     escaped_pal=palette.Palette(e_pal),
     set_pal=palette.Palette(s_pal) if s_pal else None,
+    i_pixels=ip,
     mark_re=gmpy2.mpq(m_re),
     mark_im=gmpy2.mpq(m_im),
     mark_color=image.Color[m_col.upper()] if m_col is not None else None,
@@ -135,141 +156,7 @@ def test_render_hash_stability_and_serialization_consistency(
   assert data == json1, 'BIG PROBLEM: breaking JSON! BUG!'
   assert params.sha == sha, 'BIG PROBLEM: breaking hash! BUG!'
   assert image.RenderParameters.FromJson(params.json, check_hash=sha) == params, 'BIG PROBLEM! BUG!'
-
-
-# ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
-@pytest.mark.parametrize(
-  (
-    'tp',
-    'i_json',
-    'r_json',
-    'mag',
-    'nf',
-    'd',
-    'lo',
-    'json1',
-    'sha',
-  ),
-  [
-    (
-      'gif',
-      (
-        '{"depth":9999,"frm":{"bottom_im":"-1","bottom_re":"1","fractal":"mandelbrot",'
-        '"point_im":"0","point_re":"0","top_im":"1","top_re":"-1"},"height":512,'
-        '"set_points":null,"width":512}'
-      ),
-      (
-        '{"escaped_pal":"sunset","mark_color":null,"mark_im":"0","mark_re":"0",'
-        '"mark_width":1,"next_marker":null,"overlay":null,"prev_marker":null,'
-        '"set_pal":"rgrayscale","tp":"png"}'
-      ),
-      '40/3',
-      17,
-      80000,
-      0,
-      # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
-      (
-        '{"duration":80000,"img":{"depth":9999,"frm":{"bottom_im":"-1","bottom_re":"1",'
-        '"fractal":"mandelbrot","point_im":"0","point_re":"0","top_im":"1","top_re":"-1"},'
-        '"height":512,"set_points":null,"width":512},"loop":0,"mag":"40/3","n_frames":17,'
-        '"render":{"escaped_pal":"sunset","mark_color":null,"mark_im":"0","mark_re":"0",'
-        '"mark_width":1,"next_marker":null,"overlay":null,"prev_marker":null,'
-        '"set_pal":"rgrayscale","tp":"png"},"tp":"gif"}'
-      ),
-      'f5d72bb6675a7ea4ab0cc979f44446f5e25982354d729142f59ab182cb7b7bde',  # DO NOT "JUST FIX"
-      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
-    ),
-    (
-      'mp4',
-      (
-        '{"depth":6666,"frm":{"bottom_im":"-1","bottom_re":"1","fractal":"julia"'
-        ',"point_im":"1","point_re":"1","top_im":"1","top_re":"-1"},"height":1024,'
-        '"set_points":"imaginary","width":1024}'
-      ),
-      (
-        '{"escaped_pal":"electric","mark_color":"red","mark_im":"9/2",'
-        '"mark_re":"-11/17","mark_width":2,"next_marker":{"bottom_im":"-1","bottom_re":"11/9",'
-        '"fractal":"mandelbrot","point_im":"0","point_re":"0","top_im":"1","top_re":"-1/2"},'
-        '"overlay":"grid","prev_marker":{"bottom_im":"-1","bottom_re":"1",'
-        '"fractal":"mandelbrot","point_im":"0","point_re":"0","top_im":"1","top_re":"-1"},'
-        '"set_pal":null,"tp":"gif"}'
-      ),
-      '3/7',
-      1000,
-      3000000,
-      0,
-      # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
-      (
-        '{"duration":3000000,"img":{"depth":6666,"frm":{"bottom_im":"-1","bottom_re":"1",'
-        '"fractal":"julia","point_im":"1","point_re":"1","top_im":"1","top_re":"-1"},'
-        '"height":1024,"set_points":"imaginary","width":1024},"loop":0,"mag":"3/7",'
-        '"n_frames":1000,"render":{"escaped_pal":"electric","mark_color":"red",'
-        '"mark_im":"9/2","mark_re":"-11/17","mark_width":2,"next_marker":{"bottom_im":"-1"'
-        ',"bottom_re":"11/9","fractal":"mandelbrot","point_im":"0","point_re":"0",'
-        '"top_im":"1","top_re":"-1/2"},"overlay":"grid","prev_marker":{"bottom_im":"-1",'
-        '"bottom_re":"1","fractal":"mandelbrot","point_im":"0","point_re":"0","top_im":"1",'
-        '"top_re":"-1"},"set_pal":null,"tp":"gif"},"tp":"mp4"}'
-      ),
-      'e82e364d381942181b69887582911ce898c3527f7381c95feff5bcec22de0deb',  # DO NOT "JUST FIX"
-      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
-    ),
-    (
-      'gif',
-      (
-        '{"depth":8888,"frm":{"bottom_im":"-17/19","bottom_re":"1/31","fractal":"julia",'
-        '"point_im":"-11/19","point_re":"3/2","top_im":"13/7","top_re":"-11/23"},'
-        '"height":2048,"set_points":"max","width":2048}'
-      ),
-      (
-        '{"escaped_pal":"grayscale","mark_color":"yellow","mark_im":"-7/11",'
-        '"mark_re":"71/4","mark_width":3,"next_marker":null,"overlay":null,'
-        '"prev_marker":null,"set_pal":"sunset","tp":"mp4"}'
-      ),
-      '3000/4',
-      100,
-      800000,
-      2,
-      # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
-      (
-        '{"duration":800000,"img":{"depth":8888,"frm":{"bottom_im":"-17/19","bottom_re":"1/31",'
-        '"fractal":"julia","point_im":"-11/19","point_re":"3/2","top_im":"13/7","top_re":"-11/23"},'
-        '"height":2048,"set_points":"max","width":2048},"loop":2,"mag":"750","n_frames":100,'
-        '"render":{"escaped_pal":"grayscale","mark_color":"yellow","mark_im":"-7/11",'
-        '"mark_re":"71/4","mark_width":3,"next_marker":null,"overlay":null,"prev_marker":null,'
-        '"set_pal":"sunset","tp":"mp4"},"tp":"gif"}'
-      ),
-      '3f33045af82f73ffedcacf88f7fb82b1da72e855aff31a25bd61fe4b2c5a3d16',  # DO NOT "JUST FIX"
-      # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
-    ),
-  ],
-)
-def test_zoom_hash_stability_and_serialization_consistency(
-  tp: str,
-  i_json: str,
-  r_json: str,
-  mag: str,
-  nf: int,
-  d: int,
-  lo: int,
-  json1: str,
-  sha: str,
-) -> None:
-  """Important JSON and hash consistency/stability checks."""
-  params: image.ZoomParameters = image.ZoomParameters(
-    tp=image.AnimationType(tp),
-    img=frame.ComputationParameters.FromJson(json.loads(i_json)),
-    render=image.RenderParameters.FromJson(json.loads(r_json)),
-    mag=gmpy2.mpq(mag),
-    n_frames=nf,
-    duration=d,
-    loop=lo,
-  )
-  data: str = params.binary.decode('utf-8')
-  assert data == json1, 'BIG PROBLEM: breaking JSON! BUG!'
-  assert params.sha == sha, 'BIG PROBLEM: breaking hash! BUG!'
-  assert image.ZoomParameters.FromJson(params.json, check_hash=sha) == params, 'BIG PROBLEM! BUG!'
-  assert i_json in data, 'BIG PROBLEM: breaking input JSON! BUG!'
-  assert r_json in data, 'BIG PROBLEM: breaking render JSON! BUG!'
+  assert str(params) == txt
 
 
 @pytest.mark.parametrize(

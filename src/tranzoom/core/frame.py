@@ -7,6 +7,7 @@ from __future__ import annotations
 import abc as abstract_abc
 import dataclasses
 import enum
+import fractions
 import json
 import math
 import os
@@ -43,6 +44,10 @@ HIGH_ITERS: list[int] = [100_000, 1_000_000, 10_000_000]  # these are very high 
 MAX_ITER: int = BIT_31 - 1  # ± 2_147_483_647, max for signed array('i'), sint32
 SET_INTERIOR_INT_MAX: int = MAX_ITER  # could be BIT_31, but lets keep abs() <= MAX_ITER
 SMOOTH_EXTRA_ITERS: int = 5  # iterations AFTER |z| > 2 to compute: eliminates color banding errors
+
+# image interpolation constants
+
+MAX_INTERPOLATION_PIXELS: int = 3  # sanity limit for interpolation pixels
 
 # file/memory size thresholds for warnings about large files or memory usage
 THRESHOLD_LARGE_PNG_BYTES: int = 50 * 1024 * 1024  # warn if single-frame PNG/JPG exceeds 50 MB
@@ -457,8 +462,8 @@ class Frame(SerializingFractalObject):
         top_im=gmpy2.mpq(str(data['top_im'])),
         bottom_re=gmpy2.mpq(str(data['bottom_re'])),
         bottom_im=gmpy2.mpq(str(data['bottom_im'])),
-        point_re=gmpy2.mpq(str(data['point_re'])),
-        point_im=gmpy2.mpq(str(data['point_im'])),
+        point_re=gmpy2.mpq(str(data.get('point_re', '0'))),
+        point_im=gmpy2.mpq(str(data.get('point_im', '0'))),
       )
     except (KeyError, ValueError, TypeError, Error) as err:
       raise Error(f'Invalid Frame JSON data: {err}') from err
@@ -714,6 +719,19 @@ class ComputationParameters(SerializingFractalObject):
     """
     return (self.width, self.height)
 
+  def Size(self, *, i_pixels: int = 0) -> tuple[int, int]:
+    """Get the real final (disk) size of the image as (width, height).
+
+    Args:
+      i_pixels (int): The number of extra pixels to add to each generated pixel, default is 0
+
+    Returns:
+      tuple[int, int]: The size of the image.
+
+    """
+    ValidateIPixels(i_pixels)
+    return (self.width * (i_pixels + 1), self.height * (i_pixels + 1))
+
   @property
   def disk_sz_bytes(self) -> int:
     """Estimate the size in bytes of one image.Image object as serialized to disk.
@@ -731,7 +749,7 @@ class ComputationParameters(SerializingFractalObject):
       int: Estimated bytes occupied by a single serialized Image on disk (no histograms).
 
     """
-    n_px: int = self.width * self.height
+    n_px: int = self.width * self.height  # we do not save i_pixels!
     # (1) escape array: exact -- width*height uint64 values at N_BYTES_UINT = 8 bytes each
     escape_sz: int = n_px * N_BYTES_UINT
     # (2) FractalStats (if present): 2 Python ints + 8 gmpy2.mpfr objects;
@@ -765,7 +783,7 @@ class ComputationParameters(SerializingFractalObject):
       int: Estimated bytes occupied by a single in-memory Image with histograms.
 
     """
-    n_px: int = self.width * self.height
+    n_px: int = self.width * self.height  # image object does not have i_pixels!
     # (1) escape array: exact -- width*height uint64 values at N_BYTES_UINT = 8 bytes each
     escape_sz: int = n_px * N_BYTES_UINT
     # (2) two Image.Histogram objects (ext_hist, int_hist); each histogram stores:
@@ -833,7 +851,7 @@ class ComputationParameters(SerializingFractalObject):
     per_proc_mpfr_sz: int = (self.width + n_working_mpfr) * mpfr_sz
     return MAX_CONCURRENCE * (per_proc_image_sz + per_proc_mpfr_sz)
 
-  def png_sz_bytes(self) -> tuple[int, int]:
+  def png_sz_bytes(self, *, i_pixels: int = 0) -> tuple[int, int]:
     """Estimate the on-disk size of the PNG and JPG output files in bytes.
 
     Both estimates include a metadata block for all frame/computation/render parameters
@@ -850,11 +868,18 @@ class ComputationParameters(SerializingFractalObject):
            smooth exterior very well; the sharp fractal boundary is a small fraction of
            total pixels, so JPEG is typically smaller than PNG for fractal images.
 
+    Args:
+      i_pixels (int): The number of extra pixels to add to each generated pixel, default is 0
+
     Returns:
       tuple[int, int]: Estimated file sizes as (png_bytes, jpg_bytes).
 
     """
-    n_px: int = self.width * self.height
+    # compute final saved image size
+    w: int
+    h: int
+    w, h = self.Size(i_pixels=i_pixels)
+    n_px: int = w * h
     # metadata overhead: all frame/computation/render/image parameters stored in tEXt chunks
     # (PNG) or EXIF comment (JPG); ~50 key-value pairs with ~5 KB fixed overhead (keys ~35
     # chars, hash values 64 chars, int/float values 1-20 chars) plus coordinate mpq strings
@@ -920,7 +945,7 @@ class ComputationParameters(SerializingFractalObject):
         width=int(str(data['width'])),
         height=int(str(data['height'])),
         depth=int(str(data['depth'])),
-        set_points=SetHighlightAlgorithm(data['set_points']) if data['set_points'] else None,
+        set_points=SetHighlightAlgorithm(data['set_points']) if data.get('set_points') else None,
       )
     except (KeyError, ValueError, TypeError, Error) as err:
       raise Error(f'Invalid ComputationParameters JSON data: {err}') from err
@@ -930,7 +955,7 @@ class ComputationParameters(SerializingFractalObject):
     return params
 
   def CoordToPixel(
-    self, re_inp: ExactInputType, im_inp: ExactInputType
+    self, re_inp: ExactInputType, im_inp: ExactInputType, *, i_pixels: int = 0
   ) -> tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]:
     """Convert complex-plane coordinates to pixel coordinates in the image.
 
@@ -946,6 +971,7 @@ class ComputationParameters(SerializingFractalObject):
     Args:
       re_inp (ExactInputType): Real part of the complex coordinate.
       im_inp (ExactInputType): Imaginary part of the complex coordinate.
+      i_pixels (int): The number of extra pixels to add to each generated pixel, default is 0.
 
     Returns:
       tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]: The (re, im) complex coordinates and
@@ -963,25 +989,27 @@ class ComputationParameters(SerializingFractalObject):
     ):
       raise Error(f'coordinates ({re}, {im}) are outside the frame {self.frm}')
     # do computation
+    w: int
+    h: int
+    w, h = self.Size(i_pixels=i_pixels)
     x: int = int(
-      gmpy2.floor(
-        (re - self.frm.top_re) / (self.frm.bottom_re - self.frm.top_re) * gmpy2.mpq(self.width)
-      )
+      gmpy2.floor((re - self.frm.top_re) / (self.frm.bottom_re - self.frm.top_re) * gmpy2.mpq(w))
     )
     y: int = int(
-      gmpy2.floor(
-        (self.frm.top_im - im) / (self.frm.top_im - self.frm.bottom_im) * gmpy2.mpq(self.height)
-      )
+      gmpy2.floor((self.frm.top_im - im) / (self.frm.top_im - self.frm.bottom_im) * gmpy2.mpq(h))
     )
-    return ((re, im), (min(max(x, 0), self.width - 1), min(max(y, 0), self.height - 1)))
+    return ((re, im), (min(max(x, 0), w - 1), min(max(y, 0), h - 1)))
 
-  def CoordsTupleToPixel(self, inp: str) -> tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]:
+  def CoordsTupleToPixel(
+    self, inp: str, *, i_pixels: int = 0
+  ) -> tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]:
     """Parse a complex-plane tuple coordinates to pixel coordinates in the image.
 
     See CoordToPixel() for more details.
 
     Args:
       inp (str): A string representing the complex coordinate in the format "(re, im)".
+      i_pixels (int): The number of extra pixels to add to each generated pixel, default is 0.
 
     Returns:
       tuple[tuple[gmpy2.mpq, gmpy2.mpq], tuple[int, int]]: The (re, im) complex coordinates and
@@ -999,7 +1027,7 @@ class ComputationParameters(SerializingFractalObject):
     if not co_re.startswith('(') or not co_im.endswith(')'):
       raise Error(f'Expected "(re,im)" input got {inp!r}')
     # convert the coordinate to pixel and draw the overlay
-    return self.CoordToPixel(co_re[1:], co_im[:-1])
+    return self.CoordToPixel(co_re[1:], co_im[:-1], i_pixels=i_pixels)
 
   @property
   def precision(self) -> int:
@@ -1302,3 +1330,67 @@ def ConcurrenceToUse(n_processes: int | None = None) -> int:
   if n_processes is not None and n_processes < 1:
     raise Error(f'{n_processes=} must be a positive integer or None')
   return min(n_processes or AVAILABLE_CPU, MAX_CONCURRENCE, AVAILABLE_CPU)  # never exceed CPU!
+
+
+def LimitMPQDenominator(x: gmpy2.mpq, max_denominator: int) -> tuple[gmpy2.mpq, float]:
+  """Limit the denominator of a gmpy2.mpq rational number to a maximum value.
+
+  Works by converting the gmpy2.mpq to a fractions.Fraction, using its limit_denominator() method,
+  and then converting back to gmpy2.mpq. This is needed because, there **IS** a limit_denominator()
+  method in gmpy2.mpq, but I have found bugs where it corrupts the mpq object. This horror story
+  below is a real thing that happened in the real world after calling gmpy2.mpq.limit_denominator():
+
+    -> pdb.set_trace()
+    > /Users/balparda/py/tranzoom/src/tranzoom/core/image.py(1047)Frames()
+    -> error_x: gmpy2.mpq = abs(dx - rdx) / dx
+    (Pdb) dx
+    mpq(1,509709994281253475634230198920704424381256103515625000000000000000000000000000000000000
+          000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+          000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+          0000000000000000000000000000000000000)
+    (Pdb) n
+    ZeroDivisionError: division or modulo by zero
+    > /Users/balparda/py/tranzoom/src/tranzoom/core/image.py(1047)Frames()
+    -> error_x: gmpy2.mpq = abs(dx - rdx) / dx
+    (Pdb) dx
+    mpq(0,1)
+
+  As can be seen, the mpq object got corrupted and turned into 0, which caused a ZeroDivisionError
+  later on. The key fact in the investigation is that `dx - rdx` mutates `dx` in place
+  (or dx points to corrupted internal state)! The ID `id(dx)` remains the same, but it mutates.
+  For an immutable numeric type, that is impossible at the Python level. And this is pure gmpy2,
+  NOT Cython compiled code (in use in fractal.py/fractalc.pyx). This is a plain gmpy2.mpq bug.
+
+  Args:
+    x (gmpy2.mpq): The gmpy2.mpq rational number to limit.
+    max_denominator (int): The maximum allowed denominator.
+
+  Returns:
+    tuple[gmpy2.mpq, float]: The gmpy2.mpq rational number with the limited denominator
+        and the relative error introduced by limiting the denominator.
+
+  """
+  # get trivial case out of the way, and avoid divide by zero later
+  if x == _MPQ_ZERO:
+    return (x, 0.0)
+  # convert to fractions.Fraction
+  f_x: fractions.Fraction = fractions.Fraction(int(x.numerator), int(x.denominator))
+  # limit
+  f_x = f_x.limit_denominator(max_denominator)
+  # convert back to gmpy2.mpq and return
+  r_x: gmpy2.mpq = gmpy2.mpq(f_x.numerator, f_x.denominator)
+  return (r_x, float(abs(x - r_x) / abs(x)))
+
+
+def ValidateIPixels(i_pixels: int) -> None:
+  """Validate the interpolation pixels parameter.
+
+  Args:
+    i_pixels (int): The number of interpolation pixels to validate.
+
+  Raises:
+    Error: If i_pixels is not between 0 and MAX_INTERPOLATION_PIXELS (inclusive).
+
+  """
+  if not (0 <= i_pixels <= MAX_INTERPOLATION_PIXELS):
+    raise Error(f'Interpolation must be between 0 and {MAX_INTERPOLATION_PIXELS}, got {i_pixels=}')

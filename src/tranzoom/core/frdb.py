@@ -18,7 +18,7 @@ from transcrypto.utils import config as app_config
 from transcrypto.utils import human, timer
 
 from tranzoom import __version__
-from tranzoom.core import fractal, frame, image
+from tranzoom.core import fractal, frame, image, zoom
 
 # TODO: commands to look/inspect the DB data, print DB stats, etc
 # DB constants
@@ -37,7 +37,7 @@ _PicklePrettyJSON: abc.Callable[[tbase.JSONDict], bytes] = lambda d: json.dumps(
 ).encode('utf-8')
 
 
-class Error(fractal.Error):
+class Error(zoom.Error):
   """Base fractal database exception."""
 
 
@@ -706,11 +706,11 @@ class FractalDatabase:
       raise Error(f'Inconsistent DB: found {render_hash=!r} in DB but not in renders; Report bug!')
     return (params, ck, frm_data, cp_data, cp_data['renders'][render_hash])
 
-  def FindZoom(self, zoom: image.ZoomParameters) -> ZoomData | None:
+  def FindZoom(self, zoom: zoom.ZoomParameters) -> ZoomData | None:
     """Find a zoom (video/GIF) in the database given its zoom parameters.
 
     Args:
-      zoom (image.ZoomParameters): the zoom parameters to look up
+      zoom (zoom.ZoomParameters): the zoom parameters to look up
 
     Returns:
       ZoomData | None: the ZoomData for the given zoom parameters, or None if not found
@@ -871,7 +871,7 @@ class FractalDatabase:
 
   def AddZoomToDB(
     self,
-    zoom: image.ZoomParameters,
+    zoom: zoom.ZoomParameters,
     tm: int,
     data_hash: str | None,
     path: str | None,
@@ -882,7 +882,7 @@ class FractalDatabase:
     """Add a zoom (video/GIF) to the DB.
 
     Args:
-      zoom (image.ZoomParameters): the zoom parameters to add; zoom is created with the sentinel
+      zoom (zoom.ZoomParameters): the zoom parameters to add; zoom is created with the sentinel
           value (if on AUTO) and does NOT update!
       tm (int): the timestamp of the video/GIF creation
       data_hash (str | None): the hash of the video/GIF data, used for indexing and deduplication
@@ -1081,7 +1081,7 @@ class FractalDatabase:
     # log
     set_param: str = '' if params.set_points is None else f' w/ SET {params.set_points.value!r}'
     print_comm(
-      f'{params.width} x {params.height} '
+      f'{params.width} \u00d7 {params.height} '
       f'{params.frm.fractal.value.capitalize()}{set_param}, '
       f'10^{params.frm.magnification[1]:.3f} magnitude, '
       f'{fractal.OptimizationToUse(optimization)[1]}...'
@@ -1251,13 +1251,20 @@ class FractalDatabase:
       logging.debug('DB miss: no render data')
     # we got to here, so we have to render the PNG data from the image object and add overlay/mark;
     # hash is computed from the raw PNG before any post-processing overlays
+    final_width: int
+    final_height: int
+    final_width, final_height = img.params.Size(i_pixels=render.i_pixels)
     with timer.Timer(emit_log=False) as tmr:
       img_data, img_hash = img.AsPNG(  # <<== this is the actual render!  <<==   <<==   <<==
         render, zoom_norm=zoom_norm, no_meta=no_meta
       )
+      # TODO: here is the place to interpolate the frame!
       # draw crosshair mark if specified in render parameters
       if render.mark_color is not None:
-        _, mark_pixel = params.CoordToPixel(render.mark_re, render.mark_im)
+        mark_pixel: tuple[int, int]
+        _, mark_pixel = params.CoordToPixel(
+          render.mark_re, render.mark_im, i_pixels=render.i_pixels
+        )
         print_comm(
           f'[cyan]Marking[/] coordinate ({render.mark_re}, {render.mark_im}) with '
           f'{render.mark_color.name.lower()!r} crosshair @{mark_pixel}/{render.mark_width}px'
@@ -1276,7 +1283,8 @@ class FractalDatabase:
       render_data = self.AddRenderToDB(params, render, ck, img_hash, str(full_path(img_hash)))
     # log
     print_comm(
-      f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE,[/] {img_hash!r} '
+      f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE '
+      f'({final_width} \u00d7 {final_height}),[/] {img_hash!r} '
       f'in {tmr}, {human.HumanizedBytes(len(img_data))}'
     )
     # print inline in iTerm2 if requested
@@ -1287,17 +1295,17 @@ class FractalDatabase:
 
 
 def WarnUserAnimationParams(
-  zoom_params: image.ZoomParameters, *, print_comm: abc.Callable[[str], None]
+  zoom_params: zoom.ZoomParameters, *, print_comm: abc.Callable[[str], None]
 ) -> None:
   """Print warnings if the zoom parameters may lead to sub-optimal animation quality or size.
 
   Args:
-    zoom_params (image.ZoomParameters): the zoom parameters to check
+    zoom_params (zoom.ZoomParameters): the zoom parameters to check
     print_comm (abc.Callable[[str], None]): A rich console callable for printing messages.
 
   """
   # sanity checks and warnings before we start the expensive rendering loop
-  if zoom_params.scalar_magnification_per_step > image.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
+  if zoom_params.scalar_magnification_per_step > zoom.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
     print_comm(
       f'{100.0 * (float(zoom_params.scalar_magnification_per_step) - 1.0):.4f}%/step. '
       'or reducing the total magnification.[/]\n'

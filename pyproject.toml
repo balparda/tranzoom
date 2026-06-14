@@ -20,7 +20,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 
 name = "tranzoom"
-version = "1.9.0"  # also update src/tranzoom/__init__.py
+version = "1.10.0"  # also update src/tranzoom/__init__.py
 
 description = "Mandelbrot/Julia Fractal generation and manipulation with AI/LLMs"
 license = "Apache-2.0"
@@ -134,11 +134,11 @@ typer = { version = "^0.26.7", extras = ["all"] }   # if this changes, also chan
 mypy = "^2.1"
 pyinstrument = "^5.1"
 pyright = "^1.1"
-pytest = "^9.0"
+pytest = "^9.1"
 pytest-cov = "^7.1"
 pytest-flakefinder = "^1.1"
 pre-commit = "^4.6"
-ruff = "^0.15.16"
+ruff = "^0.15.17"
 typeguard = "^4.5"
 
 # project-specific dev-only
@@ -257,6 +257,7 @@ preview = true  # if you want new features being previewed
   "PT018",    # Assertion should be broken down into multiple parts
   "SLF001",   # Private member accessed
   "PLR2004",  # Magic value used in comparison, consider replacing <V> with a constant variable
+  "RUF076",   # Avoid using `autouse=True` in `pytest.fixture` decorators
 ]
 
 ####################################################################################################

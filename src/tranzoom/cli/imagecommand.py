@@ -58,6 +58,7 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
   img_width: int = base.IMAGE_WIDTH_OPTION,  # type: ignore[assignment]
   img_height: int = base.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
   img_size: int | None = base.IMAGE_SIZE_OPTION,  # type: ignore[assignment]
+  i_pixels: int = base.IMAGE_INTERPOLATION_PIXELS_OPTION,  # type: ignore[assignment]
   max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
   mark_coords: str | None = base.MARK_COORDINATES_OPTION,  # type: ignore[assignment]
   mark_color: str = base.MARK_COLOR_OPTION,  # type: ignore[assignment]
@@ -77,6 +78,7 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
       img_width=img_width,
       img_height=img_height,
       img_size=img_size,
+      i_pixels=i_pixels,
       max_iter=max_iter,
       mark_coords=mark_coords,
       mark_color=image.Color[col],
@@ -201,7 +203,7 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
   # print header
   config.console.print()
   config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')
-  config.console.print(f'[green]{w} x {h}[/green] (wxh) / [cyan]{png_hash}[/cyan]')
+  config.console.print(f'[green]{w} \u00d7 {h}[/green] (w\u00d7h) / [cyan]{png_hash}[/cyan]')
   config.console.print()
   # expand JSON, if needed
   if image.META_LLM_RESULT_JSON_KEY in info:
@@ -256,16 +258,15 @@ def Clean(  # documentation is help/epilog/args  # noqa: D103
   # print header
   config.console.print()
   config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')
-  config.console.print(f'[green]{w} x {h}[/green] (wxh) / [cyan]{png_hash}[/cyan]')
+  config.console.print(f'[green]{w} \u00d7 {h}[/green] (w\u00d7h) / [cyan]{png_hash}[/cyan]')
   config.console.print()
   # convert bytes, keep hash meta if we were asked to do so
   config.console.print('  Format: ' + ('[green]JPG[/]' if jpeg else '[yellow]PNG[/]'))
   config.console.print('  Hashes: ' + ('[yellow]IN META[/]' if leave_hashes else '[green]CLEAN[/]'))
-  new_data: bytes = {False: image.CleanSavePNG, True: image.CleanSaveJPG}[jpeg](
-    image_data,
-    extra_meta={k: str(info[k]) for k in image.META_SAFE_HASHES if k in info}
-    if leave_hashes
-    else None,
+  new_data: bytes = {False: image.PNGFromRGBImage, True: image.JPGFromRGBImage}[jpeg](
+    image.RGBImageFromImage(image_data),
+    meta={k: str(info[k]) for k in image.META_SAFE_HASHES if k in info} if leave_hashes else None,
+    copy_previous=False,
   )
   # make output path, save, and print info about the new image
   random_hash: str = hashes.Hash512(saferandom.RandBytes(100)).hex()[:20]

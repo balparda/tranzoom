@@ -9,6 +9,24 @@ import pytest
 
 from tranzoom.core import frame
 
+# ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
+COMPUTATION_STR_1: str = (
+  '{"depth":9999,"frm":{"bottom_im":"-1","bottom_re":"1","fractal":"mandelbrot",'
+  '"point_im":"0","point_re":"0","top_im":"1","top_re":"-1"},"height":512,'
+  '"set_points":null,"width":512}'
+)
+COMPUTATION_STR_2: str = (
+  '{"depth":6666,"frm":{"bottom_im":"-1","bottom_re":"1","fractal":"julia"'
+  ',"point_im":"1","point_re":"1","top_im":"1","top_re":"-1"},"height":1024,'
+  '"set_points":"imaginary","width":1024}'
+)
+COMPUTATION_STR_3: str = (
+  '{"depth":8888,"frm":{"bottom_im":"-17/19","bottom_re":"1/31","fractal":"julia",'
+  '"point_im":"-11/19","point_re":"3/2","top_im":"13/7","top_re":"-11/23"},'
+  '"height":2048,"set_points":"max","width":2048}'
+)
+# DO NOT "JUST FIX" THESE! If they are wrong, it means something will break in the DB!
+
 
 # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
 @pytest.mark.parametrize(
@@ -28,6 +46,8 @@ from tranzoom.core import frame
     'sha1',
     'json2',
     'sha2',
+    'txt1',
+    'txt2',
   ),
   [
     (
@@ -49,13 +69,11 @@ from tranzoom.core import frame
       ),
       '22c8b5cfc5b0ce22051d1e20d4c27c280d989f0ba65b58243b1b8955a6cd3182',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
-      (
-        '{"depth":9999,"frm":{"bottom_im":"-1","bottom_re":"1","fractal":"mandelbrot",'
-        '"point_im":"0","point_re":"0","top_im":"1","top_re":"-1"},"height":512,'
-        '"set_points":null,"width":512}'
-      ),
+      COMPUTATION_STR_1,  # re-used in image_test.py to make sure it is all tied together
       '86f5d287f590adfeafb2878412a8a4bb7b9b56b8f250e797b0cf680e7a1f180e',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
+      '[MANDELBROT: (0, 0) ± 2]',
+      '{[MANDELBROT: (0, 0) ± 2] : [512, 512, 9999]}',
     ),
     (
       'julia',
@@ -76,13 +94,11 @@ from tranzoom.core import frame
       ),
       '9e78d5b39bd5b12566406c5936d78075229149b38fce058a1cb86207d834ceca',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
-      (
-        '{"depth":6666,"frm":{"bottom_im":"-1","bottom_re":"1","fractal":"julia"'
-        ',"point_im":"1","point_re":"1","top_im":"1","top_re":"-1"},"height":1024,'
-        '"set_points":"imaginary","width":1024}'
-      ),
+      COMPUTATION_STR_2,  # re-used in image_test.py to make sure it is all tied together
       'ea7e24f96db025c8c3a5fe2a7df3bd008fc9ce1e645aa9bdc5751d964779b15b',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
+      '[JULIA: (0, 0) ± 2 @ (1, 1)]',
+      '{[JULIA: (0, 0) ± 2 @ (1, 1)] : [1024, 1024, 6666] : imaginary}',
     ),
     (
       'julia',
@@ -103,13 +119,14 @@ from tranzoom.core import frame
       ),
       'cbff4724b845e1bfbffcca0f4e83822231cc053705f76b987504d601270b67a9',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
-      (
-        '{"depth":8888,"frm":{"bottom_im":"-17/19","bottom_re":"1/31","fractal":"julia",'
-        '"point_im":"-11/19","point_re":"3/2","top_im":"13/7","top_re":"-11/23"},'
-        '"height":2048,"set_points":"max","width":2048}'
-      ),
+      COMPUTATION_STR_3,  # re-used in image_test.py to make sure it is all tied together
       '877b0d190c32be56d7ac6fc7e9daafc5fda739d2ec3550b67790cf261f3ef683',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
+      '[JULIA: (-159/713, 64/133) ± (364/713, 366/133) @ (3/2, -11/19)]',
+      (
+        '{[JULIA: (-159/713, 64/133) ± (364/713, 366/133) @ (3/2, -11/19)] : '
+        '[2048, 2048, 8888] : max}'
+      ),
     ),
   ],
 )
@@ -129,6 +146,8 @@ def test_frame_hash_stability_and_serialization_consistency(
   sha1: str,
   json2: str,
   sha2: str,
+  txt1: str,
+  txt2: str,
 ) -> None:
   """Important JSON and hash consistency/stability checks."""
   # Frame
@@ -145,6 +164,7 @@ def test_frame_hash_stability_and_serialization_consistency(
   assert data == json1, 'BIG PROBLEM: breaking JSON! BUG!'
   assert frm.sha == sha1, 'BIG PROBLEM: breaking JSON! BUG!'
   assert frame.Frame.FromJson(frm.json, check_hash=sha1) == frm, 'BIG PROBLEM: breaking JSON! BUG!'
+  assert str(frm) == txt1
   # ComputationParameters
   cp: frame.ComputationParameters = frame.ComputationParameters(
     frm=frm,
@@ -158,6 +178,7 @@ def test_frame_hash_stability_and_serialization_consistency(
   assert cp.sha == sha2, 'BIG PROBLEM: breaking JSON! BUG!'
   assert frame.ComputationParameters.FromJson(cp.json, check_hash=sha2) == cp, 'BIG PROBLEM! BUG!'
   assert json1 in data, 'BIG PROBLEM: breaking input JSON! BUG!'
+  assert str(cp) == txt2
 
 
 @pytest.mark.parametrize(
