@@ -40,7 +40,7 @@ _BLUR_QUADRATIC: float = 32.0
 # animation constants
 
 MIN_FRAMES: int = 3  # sanity limit for number of frames in an animation
-MAX_FRAMES: int = 100_000  # sanity limit for number of frames in an animation
+MAX_FRAMES: int = 1_000_000  # sanity limit for number of frames in an animation
 MIN_DURATION: float = 0.1  # minimum duration of an animation in seconds, for sanity checking
 MAX_DURATION: float = 45000.0  # maximum duration of an animation in seconds, for sanity checking
 VIDEO_DURATION_STORE_SCALE = 40_000  # MAX_DURATION * VIDEO_DURATION_STORE_SCALE < 2**31; HASH!
@@ -142,6 +142,11 @@ class ZoomParameters(frame.SerializingFractalObject):
     # check ifps is valid: it also has to be between MIN_FPS and MAX_FPS
     if not (MIN_FPS <= self.ifps <= MAX_FPS):
       raise Error(f'Final interpolated FPS must be between {MIN_FPS} and {MAX_FPS} got {self.ifps}')
+    # re-check total frames is valid: it also has to be between MIN_FRAMES and MAX_FRAMES
+    if not (MIN_FRAMES <= self.all_frames <= MAX_FRAMES):
+      raise Error(
+        f'Final total frames must be between {MIN_FRAMES} and {MAX_FRAMES}, got {self.all_frames}'
+      )
     # check loop count is valid for GIFs
     if self.tp == AnimationType.GIF and not (MIN_LOOP <= self.loop <= MAX_LOOP):
       raise Error(f'Loop count for GIFs must be between {MIN_LOOP} and {MAX_LOOP}, got {self.loop}')
@@ -682,12 +687,12 @@ def PNGBytesFromRGBArray(arr: np.ndarray) -> bytes:
     bytes: The PNG-encoded bytes of the image.
 
   Raises:
-    image.Error: If the input array is not of dtype uint8
+    Error: If the input array is not of dtype uint8
 
   """
   # sanity check
   if arr.dtype != np.uint8:
-    raise image.Error(f'Expected uint8 array, got {arr.dtype}')
+    raise Error(f'Expected uint8 array, got {arr.dtype}')
   # save to PNG bytes
   with io.BytesIO() as buf:
     PILImage.fromarray(arr, mode='RGB').save(buf, format='PNG')
@@ -723,16 +728,16 @@ def CenterZoomRGB(
         optionally with its validity mask.
 
   Raises:
-    image.Error: on error
+    Error: on error
 
   """
   # check image and scale are valid
   if img.mode != 'RGB':
-    raise image.Error(f'expected RGB image, got {img.mode!r}')
+    raise Error(f'expected RGB image, got {img.mode!r}')
   if not math.isfinite(scale) or scale <= 0.0:
-    raise image.Error(f'invalid interpolation zoom scale: {scale}')
+    raise Error(f'invalid interpolation zoom scale: {scale}')
   if fill_color and (max(fill_color) > MAX_COLOR or min(fill_color) < 0):
-    raise image.Error(f'invalid fill_color: {fill_color}')
+    raise Error(f'invalid fill_color: {fill_color}')
   # if scale is effectively 1, return a copy
   if abs(scale - 1.0) < 1e-12:  # noqa: PLR2004
     return (img.copy(), PILImage.new('L', img.size, MAX_COLOR) if return_mask else None)
@@ -784,7 +789,7 @@ def BorderFillColor(img: PILImage.Image) -> tuple[int, int, int]:
     tuple[int, int, int]: The estimated fill color as an RGB tuple.
 
   Raises:
-    image.Error: on error
+    Error: on error
 
   """
   # pick up only border pixels (top, bottom, left, right)
@@ -801,7 +806,7 @@ def BorderFillColor(img: PILImage.Image) -> tuple[int, int, int]:
   # compute the median color of the border pixels
   color: np.ndarray = np.median(border, axis=0)
   if color.shape != (3,):
-    raise image.Error(f'Unexpected border color shape: {color.shape}')
+    raise Error(f'Unexpected border color shape: {color.shape}')
   return tuple(int(x) for x in color)  # type: ignore[return-value]
 
 
@@ -825,16 +830,16 @@ def FeatherValidMask(
     PILImage.Image: L-mode soft mask.
 
   Raises:
-    image.Error: on error
+    Error: on error
 
   """
   # sanity check
   if mask.mode != 'L':
-    raise image.Error(f'expected L mask, got {mask.mode!r}')
+    raise Error(f'expected L mask, got {mask.mode!r}')
   if erode_pixels < 0:
-    raise image.Error(f'pixels must be >= 0, got {erode_pixels}')
+    raise Error(f'pixels must be >= 0, got {erode_pixels}')
   if blur_pixels < 0.0:
-    raise image.Error(f'blur_pixels must be >= 0, got {blur_pixels}')
+    raise Error(f'blur_pixels must be >= 0, got {blur_pixels}')
   # erode first
   soft_mask: PILImage.Image = mask
   if erode_pixels:
@@ -857,12 +862,12 @@ def MaskArray(mask: PILImage.Image) -> np.ndarray:
     np.ndarray: A float32 array of shape (height, width, 1) with values in [0, 1].
 
   Raises:
-    image.Error: on error
+    Error: on error
 
   """
   # sanity check
   if mask.mode != 'L':
-    raise image.Error(f'expected L mask, got {mask.mode!r}')
+    raise Error(f'expected L mask, got {mask.mode!r}')
   # convert to float32 array in [0, 1]
   return np.asarray(mask, dtype=np.float32)[:, :, None] / float(MAX_COLOR)
 
@@ -886,14 +891,14 @@ def LinearInterpolatedFrame(
     bytes: The PNG-encoded bytes of the interpolated image.
 
   Raises:
-    image.Error: on error
+    Error: on error
 
   """
   # check params and convert images
   if not math.isfinite(zoom_per_step) or zoom_per_step <= 0.0:
-    raise image.Error(f'Invalid zoom_per_step: {zoom_per_step}')
+    raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
   if not (0.0 <= frac <= 1.0):
-    raise image.Error(f'Invalid interpolation fraction: {frac}')
+    raise Error(f'Invalid interpolation fraction: {frac}')
   c: PILImage.Image = image.RGBImageFromPNG(curr_img.data)
   n: PILImage.Image = image.RGBImageFromPNG(next_img.data)
   # align both images to the virtual zoom depth between the two real frames
@@ -905,7 +910,7 @@ def LinearInterpolatedFrame(
     n, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
   )
   if not next_valid_mask:
-    raise image.Error('next_valid_mask is None, but it should not be; bug! report')
+    raise Error('next_valid_mask is None, but it should not be; bug! report')
   # the future frames will have a black border where the zoomed-out image is outside the
   # original image; we create a soft alpha mask to blend the current frame into the next frame
   # to avoid harsh transitions
@@ -947,14 +952,14 @@ def QuadraticInterpolatedFrame(  # noqa: PLR0914
     bytes: The PNG-encoded bytes of the interpolated image.
 
   Raises:
-    image.Error: on error
+    Error: on error
 
   """
   # check params and convert images
   if not math.isfinite(zoom_per_step) or zoom_per_step <= 0.0:
-    raise image.Error(f'Invalid zoom_per_step: {zoom_per_step}')
+    raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
   if not (0.0 <= frac <= 1.0):
-    raise image.Error(f'Invalid interpolation fraction: {frac}')
+    raise Error(f'Invalid interpolation fraction: {frac}')
   c: PILImage.Image = image.RGBImageFromPNG(curr_img.data)
   n1: PILImage.Image = image.RGBImageFromPNG(next_img_1.data)
   n2: PILImage.Image = image.RGBImageFromPNG(next_img_2.data)
@@ -972,7 +977,7 @@ def QuadraticInterpolatedFrame(  # noqa: PLR0914
     n2, zoom_per_step ** (frac - 2.0), return_mask=True, fill_color=curr_border
   )
   if not next_valid_mask_1 or not next_valid_mask_2:
-    raise image.Error('next_valid_mask_1|2 is None, but it should not be; bug! report')
+    raise Error('next_valid_mask_1|2 is None, but it should not be; bug! report')
   # the future frames will have a black border where the zoomed-out image is outside the
   # original image; we create a soft alpha mask to blend the current frame into the next frame
   # to avoid harsh transitions
@@ -1030,13 +1035,13 @@ def InterpolatedFrameStream(
     bytes: The PNG-encoded bytes of each frame (real and interpolated).
 
   Raises:
-    image.Error: on error
+    Error: on error
 
   """
   # check params
   ValidateIFrames(i_frames)
   if not math.isfinite(zoom_per_step) or zoom_per_step <= 0.0:
-    raise image.Error(f'Invalid zoom_per_step: {zoom_per_step}')
+    raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
   # create an iterator over the pairs, get the first one
   it: abc.Iterator[tuple[RenderedZoomFrame, RenderedZoomFrame | None]] = iter(pairs)
   curr_frame: RenderedZoomFrame
@@ -1261,7 +1266,7 @@ def WriteVideoMP4(
   """
   # check inputs
   if not (MIN_FRAMES <= n_frames <= MAX_FRAMES):
-    raise Error(f'n_frames must be between 2 and {MAX_FRAMES}, got {n_frames}')
+    raise Error(f'n_frames must be between {MIN_FRAMES} and {MAX_FRAMES}, got {n_frames}')
   if not (frame.MIN_IMAGE_SIZE <= width <= frame.MAX_IMAGE_SIZE) or not (
     frame.MIN_IMAGE_SIZE <= height <= frame.MAX_IMAGE_SIZE
   ):

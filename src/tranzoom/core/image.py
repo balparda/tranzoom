@@ -593,17 +593,6 @@ class RenderParameters(frame.SerializingFractalObject):
     Raises:
       Error: on error
 
-    tp: FileType = FileType.PNG
-    escaped_pal: palette.Palette = palette.DEFAULT_PALETTE
-    set_pal: palette.Palette | None = None  # if None, this must be a non-Set-computation
-    mark_re: gmpy2.mpq = _MPQ_ZERO
-    mark_im: gmpy2.mpq = _MPQ_ZERO
-    mark_color: Color | None = None  # if None, no mark will be drawn
-    mark_width: int = DEFAULT_MARK_WIDTH
-    overlay: OverlayType | None = None  # overlay is independent of mark!
-    prev_marker: frame.Frame | None = None  # for zoom
-    next_marker: frame.Frame | None = None  # for zoom
-
     """
     # create the object
     try:
@@ -1712,6 +1701,8 @@ def DrawCrossOverlay(
 def RGBImageFromPNG(img_data: bytes) -> PILImage.Image:
   """Decode PNG bytes and return an RGB Pillow image copy.
 
+  Will not convert to RGB if the PNG is not in RGB mode; instead, it will raise an error.
+
   Args:
     img_data (bytes): The PNG-encoded bytes of the image.
 
@@ -1727,6 +1718,25 @@ def RGBImageFromPNG(img_data: bytes) -> PILImage.Image:
     # check mode
     if img.mode != 'RGB':
       raise Error(f'frame mode {img.mode} != RGB')
+    # make a copy
+    return img.copy()
+
+
+def RGBImageFromImage(img_data: bytes) -> PILImage.Image:
+  """Decode image bytes and return an RGB Pillow image copy. Will convert to RGB if necessary.
+
+  Args:
+    img_data (bytes): The image-encoded bytes of the image.
+
+  Returns:
+    PILImage.Image: A Pillow Image object in RGB mode.
+
+  """
+  # open
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    # check mode
+    if img.mode != 'RGB':
+      return img.convert('RGB')
     # make a copy
     return img.copy()
 

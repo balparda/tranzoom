@@ -264,7 +264,7 @@ def Clean(  # documentation is help/epilog/args  # noqa: D103
   config.console.print('  Format: ' + ('[green]JPG[/]' if jpeg else '[yellow]PNG[/]'))
   config.console.print('  Hashes: ' + ('[yellow]IN META[/]' if leave_hashes else '[green]CLEAN[/]'))
   new_data: bytes = {False: image.PNGFromRGBImage, True: image.JPGFromRGBImage}[jpeg](
-    image.RGBImageFromPNG(image_data),
+    image.RGBImageFromImage(image_data),
     meta={k: str(info[k]) for k in image.META_SAFE_HASHES if k in info} if leave_hashes else None,
     copy_previous=False,
   )
