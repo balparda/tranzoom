@@ -1021,9 +1021,9 @@ Usage: tranz zoom auto [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │                                                                    `--duration`, `--frames` and  │
 │                                                                    `--fps`, and the third will   │
 │                                                                    be computed; default is None  │
-│ --frames                             INTEGER RANGE [3<=x<=100000]  Number of frames in           │
-│                                                                    GIF/video; 3 ≤ fr ≤ 100000 or │
-│                                                                    None; pick 2 out of           │
+│ --frames                             INTEGER RANGE                 Number of frames in           │
+│                                      [3<=x<=1000000]               GIF/video; 3 ≤ fr ≤ 1000000   │
+│                                                                    or None; pick 2 out of        │
 │                                                                    `--duration`, `--frames` and  │
 │                                                                    `--fps`, and the third will   │
 │                                                                    be computed; default is None  │
