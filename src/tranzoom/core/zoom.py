@@ -19,11 +19,23 @@ import gmpy2
 import imageio
 import numpy as np
 from PIL import Image as PILImage
-from PIL import ImageFilter
+from PIL import ImageChops, ImageFilter
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
 from tranzoom.core import fractal, frame, image
+
+# basic computation constants
+MAX_COLOR: int = 255  # max color value for 8-bit RGB channels
+
+# interpolation constants; these could conceivably be made user-configurable, but for that they
+# would need to be added to the ZoomParameters dataclass and serialized in the JSON, which is
+# a bit overkill for now
+DEFAULT_USE_QUADRATIC: bool = True  # use quadratic interpolation for smoother transitions
+_ERODE_LINEAR: int = 5
+_BLUR_LINEAR: float = 16.0
+_ERODE_QUADRATIC: int = 8
+_BLUR_QUADRATIC: float = 32.0
 
 # animation constants
 
@@ -696,7 +708,7 @@ def CenterZoomRGB(
   scale == 1 returns a copy.
 
   If return_mask is True, also return an L-mode validity mask:
-    255 where the transformed output samples from inside the source image.
+    MAX_COLOR where the transformed output samples from inside the source image.
     0 where the transformed output is outside the source image.
 
   Args:
@@ -719,11 +731,11 @@ def CenterZoomRGB(
     raise image.Error(f'expected RGB image, got {img.mode!r}')
   if not math.isfinite(scale) or scale <= 0.0:
     raise image.Error(f'invalid interpolation zoom scale: {scale}')
-  if fill_color and (max(fill_color) > 255 or min(fill_color) < 0):  # noqa: PLR2004
+  if fill_color and (max(fill_color) > MAX_COLOR or min(fill_color) < 0):
     raise image.Error(f'invalid fill_color: {fill_color}')
   # if scale is effectively 1, return a copy
   if abs(scale - 1.0) < 1e-12:  # noqa: PLR2004
-    return (img.copy(), PILImage.new('L', img.size, 255) if return_mask else None)
+    return (img.copy(), PILImage.new('L', img.size, MAX_COLOR) if return_mask else None)
   # get center
   width: int
   height: int
@@ -750,8 +762,8 @@ def CenterZoomRGB(
   # if the caller does not want a mask, return just the zoomed image
   if not return_mask:
     return (out, None)
-  # create a mask of the same size as the input image, filled with 255 (valid)
-  mask_src: PILImage.Image = PILImage.new('L', img.size, 255)
+  # create a mask of the same size as the input image, filled with MAX_COLOR (valid)
+  mask_src: PILImage.Image = PILImage.new('L', img.size, MAX_COLOR)
   mask: PILImage.Image = mask_src.transform(
     img.size,
     PILImage.Transform.AFFINE,
@@ -760,49 +772,6 @@ def CenterZoomRGB(
     fillcolor=0,
   )
   return (out, mask)
-
-
-def ReplaceInvalidWithReference(
-  img: PILImage.Image,
-  valid_mask: PILImage.Image,
-  reference: PILImage.Image,
-  *,
-  erode_pixels: int = 0,
-) -> PILImage.Image:
-  """Replace invalid transformed pixels in img with pixels from reference.
-
-  valid_mask must be L-mode:
-    255 means keep img.
-    0 means use reference.
-
-  Args:
-    img (PILImage.Image): Transformed RGB image.
-    valid_mask (PILImage.Image): Validity mask for img.
-    reference (PILImage.Image): RGB image used to fill invalid pixels.
-    erode_pixels (int): Number of pixels to erode from the valid region of valid_mask;
-        default 0 means no erosion. Erosion is useful to avoid bicubic fillcolor contamination
-        from the affine transform near the invalid border.
-
-  Returns:
-    PILImage.Image: RGB image with invalid areas replaced.
-
-  Raises:
-    image.Error: on error
-
-  """
-  # sanity check
-  if img.mode != 'RGB':
-    raise image.Error(f'expected RGB img, got {img.mode!r}')
-  if reference.mode != 'RGB':
-    raise image.Error(f'expected RGB reference, got {reference.mode!r}')
-  if valid_mask.mode != 'L':
-    raise image.Error(f'expected L mask, got {valid_mask.mode!r}')
-  if img.size != reference.size or img.size != valid_mask.size:
-    raise image.Error(
-      f'image/mask sizes differ: img={img.size}, reference={reference.size}, mask={valid_mask.size}'
-    )
-  # return a composite image where valid_mask selects pixels from img and reference
-  return PILImage.composite(img, reference, ErodeValidMask(valid_mask, pixels=erode_pixels))
 
 
 def BorderFillColor(img: PILImage.Image) -> tuple[int, int, int]:
@@ -836,34 +805,66 @@ def BorderFillColor(img: PILImage.Image) -> tuple[int, int, int]:
   return tuple(int(x) for x in color)  # type: ignore[return-value]
 
 
-def ErodeValidMask(valid_mask: PILImage.Image, *, pixels: int) -> PILImage.Image:
-  """Shrink the valid area of an L-mode validity mask.
+def FeatherValidMask(
+  mask: PILImage.Image,
+  *,
+  erode_pixels: int,
+  blur_pixels: float,
+) -> PILImage.Image:
+  """Return a soft validity mask.
 
-  This removes pixels near the invalid border, which avoids bicubic fillcolor
-  contamination from the RGB affine transform.
+  The valid region is first eroded, then blurred. This creates a smooth
+  alpha ramp from valid transformed pixels to invalid/out-of-bounds pixels.
 
   Args:
-    valid_mask (PILImage.Image): L-mode mask, 255 valid and 0 invalid.
-    pixels (int): Number of pixels to erode from the valid region.
+    mask (PILImage.Image): L-mode mask, MAX_COLOR valid and 0 invalid.
+    erode_pixels (int): Pixels to shrink the hard valid region before blur.
+    blur_pixels (float): Gaussian blur radius for the alpha ramp.
 
   Returns:
-    PILImage.Image: Eroded L-mode validity mask.
+    PILImage.Image: L-mode soft mask.
 
   Raises:
     image.Error: on error
 
   """
   # sanity check
-  if valid_mask.mode != 'L':
-    raise image.Error(f'expected L mask, got {valid_mask.mode!r}')
-  if pixels < 0:
-    raise image.Error(f'pixels must be >= 0, got {pixels}')
-  # trivial case: no erosion requested, return the original mask
-  if pixels == 0:
-    return valid_mask
-  # MinFilter makes dark/invalid pixels expand, which shrinks the white/valid area.
-  size: int = pixels * 2 + 1
-  return valid_mask.filter(ImageFilter.MinFilter(size))
+  if mask.mode != 'L':
+    raise image.Error(f'expected L mask, got {mask.mode!r}')
+  if erode_pixels < 0:
+    raise image.Error(f'pixels must be >= 0, got {erode_pixels}')
+  if blur_pixels < 0.0:
+    raise image.Error(f'blur_pixels must be >= 0, got {blur_pixels}')
+  # erode first
+  soft_mask: PILImage.Image = mask
+  if erode_pixels:
+    soft_mask = soft_mask.filter(ImageFilter.MinFilter(erode_pixels * 2 + 1))
+  # then blur
+  if blur_pixels:
+    soft_mask = soft_mask.filter(ImageFilter.GaussianBlur(blur_pixels))
+  # critical: GaussianBlur leaks white alpha into the invalid region:
+  # clamp it so invalid transformed pixels remain fully transparent
+  return ImageChops.multiply(soft_mask, mask)
+
+
+def MaskArray(mask: PILImage.Image) -> np.ndarray:
+  """Convert an L-mode mask to a float32 alpha array in [0, 1].
+
+  Args:
+    mask (PILImage.Image): L-mode mask, MAX_COLOR valid and 0 invalid
+
+  Returns:
+    np.ndarray: A float32 array of shape (height, width, 1) with values in [0, 1].
+
+  Raises:
+    image.Error: on error
+
+  """
+  # sanity check
+  if mask.mode != 'L':
+    raise image.Error(f'expected L mask, got {mask.mode!r}')
+  # convert to float32 array in [0, 1]
+  return np.asarray(mask, dtype=np.float32)[:, :, None] / float(MAX_COLOR)
 
 
 def LinearInterpolatedFrame(
@@ -903,16 +904,19 @@ def LinearInterpolatedFrame(
   next_aligned_raw, next_valid_mask = CenterZoomRGB(
     n, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
   )
+  if not next_valid_mask:
+    raise image.Error('next_valid_mask is None, but it should not be; bug! report')
   # the future frames will have a black border where the zoomed-out image is outside the
-  # original image; we replace those invalid pixels with the current frame's pixels to avoid
-  # black borders banding
-  next_aligned: PILImage.Image = (
-    ReplaceInvalidWithReference(next_aligned_raw, next_valid_mask, curr_aligned, erode_pixels=2)
-    if next_valid_mask
-    else next_aligned_raw
+  # original image; we create a soft alpha mask to blend the current frame into the next frame
+  # to avoid harsh transitions
+  next_alpha_mask: PILImage.Image = FeatherValidMask(
+    next_valid_mask, erode_pixels=_ERODE_LINEAR, blur_pixels=_BLUR_LINEAR
   )
-  # use PILImage.blend() (linear interpolation) to interpolate between the two aligned images
-  return PNGBytesFromRGBArray(np.asarray(PILImage.blend(curr_aligned, next_aligned, frac)))
+  a0: np.ndarray = np.asarray(curr_aligned, dtype=np.float32)
+  a1: np.ndarray = np.asarray(next_aligned_raw, dtype=np.float32)
+  alpha1: np.ndarray = frac * MaskArray(next_alpha_mask)
+  out: np.ndarray = a0 * (1.0 - alpha1) + a1 * alpha1
+  return PNGBytesFromRGBArray(np.clip(out, 0, MAX_COLOR).astype(np.uint8))
 
 
 def QuadraticInterpolatedFrame(  # noqa: PLR0914
@@ -958,36 +962,43 @@ def QuadraticInterpolatedFrame(  # noqa: PLR0914
   curr_border: tuple[int, int, int] = BorderFillColor(c)
   curr_aligned: PILImage.Image = CenterZoomRGB(c, zoom_per_step**frac, fill_color=curr_border)[0]
   next_aligned_1_raw: PILImage.Image
-  next_valid_mask: PILImage.Image | None
-  next_aligned_1_raw, next_valid_mask = CenterZoomRGB(
+  next_valid_mask_1: PILImage.Image | None
+  next_aligned_1_raw, next_valid_mask_1 = CenterZoomRGB(
     n1, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
   )
-  # the future frames will have a black border where the zoomed-out image is outside the
-  # original image; we replace those invalid pixels with the current frame's pixels to avoid
-  # black borders banding
-  next_aligned_1: PILImage.Image = (
-    ReplaceInvalidWithReference(next_aligned_1_raw, next_valid_mask, curr_aligned, erode_pixels=2)
-    if next_valid_mask
-    else next_aligned_1_raw
-  )
   next_aligned_2_raw: PILImage.Image
-  next_aligned_2_raw, next_valid_mask = CenterZoomRGB(
+  next_valid_mask_2: PILImage.Image | None
+  next_aligned_2_raw, next_valid_mask_2 = CenterZoomRGB(
     n2, zoom_per_step ** (frac - 2.0), return_mask=True, fill_color=curr_border
   )
-  next_aligned_2: PILImage.Image = (
-    ReplaceInvalidWithReference(next_aligned_2_raw, next_valid_mask, curr_aligned, erode_pixels=3)
-    if next_valid_mask
-    else next_aligned_2_raw
+  if not next_valid_mask_1 or not next_valid_mask_2:
+    raise image.Error('next_valid_mask_1|2 is None, but it should not be; bug! report')
+  # the future frames will have a black border where the zoomed-out image is outside the
+  # original image; we create a soft alpha mask to blend the current frame into the next frame
+  # to avoid harsh transitions
+  soft_mask_1: PILImage.Image = FeatherValidMask(
+    next_valid_mask_1, erode_pixels=_ERODE_LINEAR, blur_pixels=_BLUR_LINEAR
+  )
+  soft_mask_2: PILImage.Image = FeatherValidMask(
+    next_valid_mask_2, erode_pixels=_ERODE_QUADRATIC, blur_pixels=_BLUR_QUADRATIC
   )
   # blend using Lagrange interpolation
   a0: np.ndarray = np.asarray(curr_aligned, dtype=np.float32)
-  a1: np.ndarray = np.asarray(next_aligned_1, dtype=np.float32)
-  a2: np.ndarray = np.asarray(next_aligned_2, dtype=np.float32)
+  a1: np.ndarray = np.asarray(next_aligned_1_raw, dtype=np.float32)
+  a2: np.ndarray = np.asarray(next_aligned_2_raw, dtype=np.float32)
   w0: float = ((frac - 1.0) * (frac - 2.0)) / 2.0
   w1: float = -frac * (frac - 2.0)
   w2: float = (frac * (frac - 1.0)) / 2.0
-  out: np.ndarray = w0 * a0 + w1 * a1 + w2 * a2
-  return PNGBytesFromRGBArray(np.clip(out, 0, 255).astype(np.uint8))
+  alpha1: np.ndarray = MaskArray(soft_mask_1)
+  alpha2: np.ndarray = MaskArray(soft_mask_2)
+  # fade future-frame contributions out near their invalid borders;
+  # important: when future weights are masked away, give the missing weight
+  # back to curr_aligned: this keeps brightness stable and avoids dark seams
+  effective_w1: np.ndarray = w1 * alpha1
+  effective_w2: np.ndarray = w2 * alpha2
+  effective_w0: np.ndarray = w0 + (w1 * (1.0 - alpha1)) + (w2 * (1.0 - alpha2))
+  out: np.ndarray = effective_w0 * a0 + effective_w1 * a1 + effective_w2 * a2
+  return PNGBytesFromRGBArray(np.clip(out, 0, MAX_COLOR).astype(np.uint8))
 
 
 def InterpolatedFrameStream(
@@ -995,7 +1006,7 @@ def InterpolatedFrameStream(
   *,
   i_frames: int,
   zoom_per_step: float,
-  use_quadratic: bool = True,
+  use_quadratic: bool = DEFAULT_USE_QUADRATIC,
 ) -> abc.Iterator[bytes]:
   """Yield real + interpolated animation frames.
 
@@ -1013,7 +1024,7 @@ def InterpolatedFrameStream(
     i_frames (int): The number of interpolated frames to generate between each pair of real frames.
     zoom_per_step (float): The zoom factor per step between frames.
     use_quadratic (bool): Whether to use quadratic interpolation (True) or linear
-        interpolation only (False).
+        interpolation only (False); default is DEFAULT_USE_QUADRATIC
 
   Yields:
     bytes: The PNG-encoded bytes of each frame (real and interpolated).

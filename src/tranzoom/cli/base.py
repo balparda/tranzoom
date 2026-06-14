@@ -1623,7 +1623,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           _TwoFrameRenderStream(),  # this will yield (curr, next) tuples of rendered frames
           i_frames=zoom_params.i_frames,
           zoom_per_step=float(zoom_params.scalar_magnification_per_step),
-          use_quadratic=False,
+          use_quadratic=zoom.DEFAULT_USE_QUADRATIC,
         )
         if zoom_params.tp == zoom.AnimationType.GIF:
           zoom.WriteAnimatedGIF(
