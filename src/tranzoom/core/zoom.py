@@ -109,7 +109,7 @@ class ZoomParameters(frame.SerializingFractalObject):
   i_frames: int = 0  # number of interpolated frames to render between every two computed frames
   loop: int = 0  # number of loops for GIFs; 0 means infinite loop; ignored for non-GIFs
 
-  def __post_init__(self) -> None:
+  def __post_init__(self) -> None:  # noqa: C901
     """Check ZoomParameters for validity.
 
     Raises:
