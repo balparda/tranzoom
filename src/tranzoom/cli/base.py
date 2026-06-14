@@ -1227,10 +1227,10 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     f'[magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/], '
     f'{human.HumanizedSeconds(float(zoom_params.n_seconds))} long, '
     f'at {float(zoom_params.fps):.2f}*{zoom_params.i_frames + 1} FPS, '
-    f'with {zoom_params.n_frames}/{zoom_params.all_frames} frames ({len(all_markers)} markers, '
+    f'with {zoom_params.n_frames}|{zoom_params.all_frames} frames ({len(all_markers)} markers, '
     f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%, and {len(all_depth)} depth frames, '
     f'{100.0 * len(all_depth) / zoom_params.n_frames:.2f}%), '
-    f'{100.0 * float(zoom_params.scalar_magnification_per_step):.4f}%/step, '
+    f'{100.0 * (float(zoom_params.scalar_magnification_per_step) - 1.0):.4f}%/step, '
     f'{fractal.OptimizationToUse(config.python_optimization)[1]}...'
   )
   config.console.print(f'[yellow]ZOOM:[/] {zoom_params} ... {all_frames[-1]}\n')
@@ -1536,6 +1536,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           dynamic_ncols=True,
           smoothing=0.1,
           colour='yellow',
+          disable=False,  # for debugging rendering, set to True to disable the progress bar
         )
       # start try..finally for the progress bar
       all_hash: dict[int, str] = {}
@@ -1620,10 +1621,9 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
         frame_bytes: abc.Iterable[bytes] = zoom.InterpolatedFrameStream(  # generator! memory!
           # we must keep all of this as generators to save rendering memory
           _TwoFrameRenderStream(),  # this will yield (curr, next) tuples of rendered frames
-          i_frames=zoom_params.render.i_pixels,
+          i_frames=zoom_params.i_frames,
           zoom_per_step=float(zoom_params.scalar_magnification_per_step),
-          width=zoom_params.img.width,
-          height=zoom_params.img.height,
+          use_quadratic=False,
         )
         if zoom_params.tp == zoom.AnimationType.GIF:
           zoom.WriteAnimatedGIF(

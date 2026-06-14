@@ -263,11 +263,10 @@ def Clean(  # documentation is help/epilog/args  # noqa: D103
   # convert bytes, keep hash meta if we were asked to do so
   config.console.print('  Format: ' + ('[green]JPG[/]' if jpeg else '[yellow]PNG[/]'))
   config.console.print('  Hashes: ' + ('[yellow]IN META[/]' if leave_hashes else '[green]CLEAN[/]'))
-  new_data: bytes = {False: image.CleanSavePNG, True: image.CleanSaveJPG}[jpeg](
-    image_data,
-    extra_meta={k: str(info[k]) for k in image.META_SAFE_HASHES if k in info}
-    if leave_hashes
-    else None,
+  new_data: bytes = {False: image.PNGFromRGBImage, True: image.JPGFromRGBImage}[jpeg](
+    image.RGBImageFromPNG(image_data),
+    meta={k: str(info[k]) for k in image.META_SAFE_HASHES if k in info} if leave_hashes else None,
+    copy_previous=False,
   )
   # make output path, save, and print info about the new image
   random_hash: str = hashes.Hash512(saferandom.RandBytes(100)).hex()[:20]

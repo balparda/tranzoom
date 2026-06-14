@@ -19,6 +19,7 @@ import gmpy2
 import imageio
 import numpy as np
 from PIL import Image as PILImage
+from PIL import ImageFilter
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
@@ -659,7 +660,7 @@ def FrameEstimatedIters(d: int, s: image.FractalStats) -> int:
   return d // 5 + math.floor((4.0 * d * s.n_interior) / (5.0 * s.n_px))
 
 
-def PngBytesFromRGBArray(arr: np.ndarray) -> bytes:
+def PNGBytesFromRGBArray(arr: np.ndarray) -> bytes:
   """Encode an RGB uint8 numpy array as PNG bytes.
 
   Args:
@@ -681,79 +682,188 @@ def PngBytesFromRGBArray(arr: np.ndarray) -> bytes:
     return buf.getvalue()
 
 
-def RGBImageFromBytes(img_data: bytes, width: int, height: int) -> PILImage.Image:
-  """Decode frame bytes and return an RGB Pillow image copy.
-
-  Args:
-    img_data (bytes): The PNG-encoded bytes of the image.
-    width (int): The expected width of the image.
-    height (int): The expected height of the image.
-
-  Returns:
-    PILImage.Image: A Pillow Image object in RGB mode.
-
-  Raises:
-    image.Error: on error
-
-  """
-  # open
-  with PILImage.open(io.BytesIO(img_data)) as img:
-    # check size and mode
-    if img.size != (width, height):
-      raise image.Error(f'frame size {img.size} != {(width, height)}')
-    if img.mode != 'RGB':
-      raise image.Error(f'frame mode {img.mode} != RGB')
-    # make a copy
-    return img.copy()
-
-
-def CenterZoomRGB(img: PILImage.Image, scale: float) -> PILImage.Image:
+def CenterZoomRGB(
+  img: PILImage.Image,
+  scale: float,
+  *,
+  return_mask: bool = False,
+  fill_color: tuple[int, int, int] | None = None,
+) -> tuple[PILImage.Image, PILImage.Image | None]:
   """Return img zoomed around its center.
 
   scale > 1 zooms in.
   scale < 1 zooms out.
   scale == 1 returns a copy.
 
-  Pillow affine transforms use an inverse mapping: for every output pixel,
-  the coefficients map back into the input image.
+  If return_mask is True, also return an L-mode validity mask:
+    255 where the transformed output samples from inside the source image.
+    0 where the transformed output is outside the source image.
 
   Args:
     img (PILImage.Image): The input RGB image to be zoomed.
     scale (float): The zoom scale factor. Must be a finite positive number.
+    return_mask (bool): Whether to return the transform validity mask; default False.
+    fill_color (tuple[int, int, int] | None): Optional RGB fill color for areas outside the
+        source image. If None, the fill color is estimated from the median of the border pixels.
 
   Returns:
-    PILImage.Image: A new Pillow Image object that is the zoomed version of the input
+    tuple[PILImage.Image, PILImage.Image | None]: The zoomed image,
+        optionally with its validity mask.
 
   Raises:
     image.Error: on error
 
   """
-  # check scale is valid
+  # check image and scale are valid
+  if img.mode != 'RGB':
+    raise image.Error(f'expected RGB image, got {img.mode!r}')
   if not math.isfinite(scale) or scale <= 0.0:
     raise image.Error(f'invalid interpolation zoom scale: {scale}')
+  if fill_color and (max(fill_color) > 255 or min(fill_color) < 0):  # noqa: PLR2004
+    raise image.Error(f'invalid fill_color: {fill_color}')
   # if scale is effectively 1, return a copy
   if abs(scale - 1.0) < 1e-12:  # noqa: PLR2004
-    return img.copy()
+    return (img.copy(), PILImage.new('L', img.size, 255) if return_mask else None)
   # get center
+  width: int
+  height: int
   width, height = img.size
   cx: float = (width - 1) / 2.0
   cy: float = (height - 1) / 2.0
   # compute inverse scale for Pillow affine transform
   inv: float = 1.0 / scale
-  return img.transform(
+  affine: tuple[float, float, float, float, float, float] = (
+    inv,
+    0.0,
+    cx - cx * inv,
+    0.0,
+    inv,
+    cy - cy * inv,
+  )
+  out: PILImage.Image = img.transform(
     img.size,
     PILImage.Transform.AFFINE,
-    (
-      inv,
-      0.0,
-      cx - cx * inv,
-      0.0,
-      inv,
-      cy - cy * inv,
-    ),
+    affine,
     resample=PILImage.Resampling.BICUBIC,
-    fillcolor=(0, 0, 0),
+    fillcolor=fill_color or BorderFillColor(img),
   )
+  # if the caller does not want a mask, return just the zoomed image
+  if not return_mask:
+    return (out, None)
+  # create a mask of the same size as the input image, filled with 255 (valid)
+  mask_src: PILImage.Image = PILImage.new('L', img.size, 255)
+  mask: PILImage.Image = mask_src.transform(
+    img.size,
+    PILImage.Transform.AFFINE,
+    affine,
+    resample=PILImage.Resampling.NEAREST,
+    fillcolor=0,
+  )
+  return (out, mask)
+
+
+def ReplaceInvalidWithReference(
+  img: PILImage.Image,
+  valid_mask: PILImage.Image,
+  reference: PILImage.Image,
+  *,
+  erode_pixels: int = 0,
+) -> PILImage.Image:
+  """Replace invalid transformed pixels in img with pixels from reference.
+
+  valid_mask must be L-mode:
+    255 means keep img.
+    0 means use reference.
+
+  Args:
+    img (PILImage.Image): Transformed RGB image.
+    valid_mask (PILImage.Image): Validity mask for img.
+    reference (PILImage.Image): RGB image used to fill invalid pixels.
+    erode_pixels (int): Number of pixels to erode from the valid region of valid_mask;
+        default 0 means no erosion. Erosion is useful to avoid bicubic fillcolor contamination
+        from the affine transform near the invalid border.
+
+  Returns:
+    PILImage.Image: RGB image with invalid areas replaced.
+
+  Raises:
+    image.Error: on error
+
+  """
+  # sanity check
+  if img.mode != 'RGB':
+    raise image.Error(f'expected RGB img, got {img.mode!r}')
+  if reference.mode != 'RGB':
+    raise image.Error(f'expected RGB reference, got {reference.mode!r}')
+  if valid_mask.mode != 'L':
+    raise image.Error(f'expected L mask, got {valid_mask.mode!r}')
+  if img.size != reference.size or img.size != valid_mask.size:
+    raise image.Error(
+      f'image/mask sizes differ: img={img.size}, reference={reference.size}, mask={valid_mask.size}'
+    )
+  # return a composite image where valid_mask selects pixels from img and reference
+  return PILImage.composite(img, reference, ErodeValidMask(valid_mask, pixels=erode_pixels))
+
+
+def BorderFillColor(img: PILImage.Image) -> tuple[int, int, int]:
+  """Estimate a safer affine fill color from the median of the image border pixels.
+
+  Args:
+    img (PILImage.Image): The input RGB image.
+
+  Returns:
+    tuple[int, int, int]: The estimated fill color as an RGB tuple.
+
+  Raises:
+    image.Error: on error
+
+  """
+  # pick up only border pixels (top, bottom, left, right)
+  arr: np.ndarray = np.asarray(img, dtype=np.uint8)
+  border: np.ndarray = np.concatenate(
+    (
+      arr[0, :, :],
+      arr[-1, :, :],
+      arr[:, 0, :],
+      arr[:, -1, :],
+    ),
+    axis=0,
+  )
+  # compute the median color of the border pixels
+  color: np.ndarray = np.median(border, axis=0)
+  if color.shape != (3,):
+    raise image.Error(f'Unexpected border color shape: {color.shape}')
+  return tuple(int(x) for x in color)  # type: ignore[return-value]
+
+
+def ErodeValidMask(valid_mask: PILImage.Image, *, pixels: int) -> PILImage.Image:
+  """Shrink the valid area of an L-mode validity mask.
+
+  This removes pixels near the invalid border, which avoids bicubic fillcolor
+  contamination from the RGB affine transform.
+
+  Args:
+    valid_mask (PILImage.Image): L-mode mask, 255 valid and 0 invalid.
+    pixels (int): Number of pixels to erode from the valid region.
+
+  Returns:
+    PILImage.Image: Eroded L-mode validity mask.
+
+  Raises:
+    image.Error: on error
+
+  """
+  # sanity check
+  if valid_mask.mode != 'L':
+    raise image.Error(f'expected L mask, got {valid_mask.mode!r}')
+  if pixels < 0:
+    raise image.Error(f'pixels must be >= 0, got {pixels}')
+  # trivial case: no erosion requested, return the original mask
+  if pixels == 0:
+    return valid_mask
+  # MinFilter makes dark/invalid pixels expand, which shrinks the white/valid area.
+  size: int = pixels * 2 + 1
+  return valid_mask.filter(ImageFilter.MinFilter(size))
 
 
 def LinearInterpolatedFrame(
@@ -762,8 +872,6 @@ def LinearInterpolatedFrame(
   *,
   zoom_per_step: float,
   frac: float,
-  width: int,
-  height: int,
 ) -> bytes:
   """Interpolate between curr_img and next_img at fraction frac.
 
@@ -772,8 +880,6 @@ def LinearInterpolatedFrame(
     next_img (_RenderedZoomFrame): The next rendered zoom frame.
     zoom_per_step (float): The zoom factor per step between frames.
     frac (float): The interpolation fraction between 0.0 and 1.0.
-    width (int): The width of the images.
-    height (int): The height of the images.
 
   Returns:
     bytes: The PNG-encoded bytes of the interpolated image.
@@ -787,24 +893,35 @@ def LinearInterpolatedFrame(
     raise image.Error(f'Invalid zoom_per_step: {zoom_per_step}')
   if not (0.0 <= frac <= 1.0):
     raise image.Error(f'Invalid interpolation fraction: {frac}')
-  c: PILImage.Image = RGBImageFromBytes(curr_img.data, width, height)
-  n: PILImage.Image = RGBImageFromBytes(next_img.data, width, height)
+  c: PILImage.Image = image.RGBImageFromPNG(curr_img.data)
+  n: PILImage.Image = image.RGBImageFromPNG(next_img.data)
   # align both images to the virtual zoom depth between the two real frames
-  curr_aligned: PILImage.Image = CenterZoomRGB(c, zoom_per_step**frac)
-  next_aligned: PILImage.Image = CenterZoomRGB(n, zoom_per_step ** (frac - 1.0))
-  # blend
-  return PngBytesFromRGBArray(np.asarray(PILImage.blend(curr_aligned, next_aligned, frac)))
+  curr_border: tuple[int, int, int] = BorderFillColor(c)
+  curr_aligned: PILImage.Image = CenterZoomRGB(c, zoom_per_step**frac, fill_color=curr_border)[0]
+  next_aligned_raw: PILImage.Image
+  next_valid_mask: PILImage.Image | None
+  next_aligned_raw, next_valid_mask = CenterZoomRGB(
+    n, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
+  )
+  # the future frames will have a black border where the zoomed-out image is outside the
+  # original image; we replace those invalid pixels with the current frame's pixels to avoid
+  # black borders banding
+  next_aligned: PILImage.Image = (
+    ReplaceInvalidWithReference(next_aligned_raw, next_valid_mask, curr_aligned, erode_pixels=2)
+    if next_valid_mask
+    else next_aligned_raw
+  )
+  # use PILImage.blend() (linear interpolation) to interpolate between the two aligned images
+  return PNGBytesFromRGBArray(np.asarray(PILImage.blend(curr_aligned, next_aligned, frac)))
 
 
-def QuadraticInterpolatedFrame(
+def QuadraticInterpolatedFrame(  # noqa: PLR0914
   curr_img: RenderedZoomFrame,
   next_img_1: RenderedZoomFrame,
   next_img_2: RenderedZoomFrame,
   *,
   zoom_per_step: float,
   frac: float,
-  width: int,
-  height: int,
 ) -> bytes:
   """Quadratic interpolation using curr_img, next_img_1, next_img_2.
 
@@ -821,8 +938,6 @@ def QuadraticInterpolatedFrame(
     next_img_2 (_RenderedZoomFrame): The next rendered zoom frame after next_img_1.
     zoom_per_step (float): The zoom factor per step between frames.
     frac (float): The interpolation fraction between 0.0 and 1.0.
-    width (int): The width of the images.
-    height (int): The height of the images.
 
   Returns:
     bytes: The PNG-encoded bytes of the interpolated image.
@@ -836,13 +951,34 @@ def QuadraticInterpolatedFrame(
     raise image.Error(f'Invalid zoom_per_step: {zoom_per_step}')
   if not (0.0 <= frac <= 1.0):
     raise image.Error(f'Invalid interpolation fraction: {frac}')
-  c: PILImage.Image = RGBImageFromBytes(curr_img.data, width, height)
-  n1: PILImage.Image = RGBImageFromBytes(next_img_1.data, width, height)
-  n2: PILImage.Image = RGBImageFromBytes(next_img_2.data, width, height)
+  c: PILImage.Image = image.RGBImageFromPNG(curr_img.data)
+  n1: PILImage.Image = image.RGBImageFromPNG(next_img_1.data)
+  n2: PILImage.Image = image.RGBImageFromPNG(next_img_2.data)
   # align all three samples to the same virtual zoom depth
-  curr_aligned: PILImage.Image = CenterZoomRGB(c, zoom_per_step**frac)
-  next_aligned_1: PILImage.Image = CenterZoomRGB(n1, zoom_per_step ** (frac - 1.0))
-  next_aligned_2: PILImage.Image = CenterZoomRGB(n2, zoom_per_step ** (frac - 2.0))
+  curr_border: tuple[int, int, int] = BorderFillColor(c)
+  curr_aligned: PILImage.Image = CenterZoomRGB(c, zoom_per_step**frac, fill_color=curr_border)[0]
+  next_aligned_1_raw: PILImage.Image
+  next_valid_mask: PILImage.Image | None
+  next_aligned_1_raw, next_valid_mask = CenterZoomRGB(
+    n1, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
+  )
+  # the future frames will have a black border where the zoomed-out image is outside the
+  # original image; we replace those invalid pixels with the current frame's pixels to avoid
+  # black borders banding
+  next_aligned_1: PILImage.Image = (
+    ReplaceInvalidWithReference(next_aligned_1_raw, next_valid_mask, curr_aligned, erode_pixels=2)
+    if next_valid_mask
+    else next_aligned_1_raw
+  )
+  next_aligned_2_raw: PILImage.Image
+  next_aligned_2_raw, next_valid_mask = CenterZoomRGB(
+    n2, zoom_per_step ** (frac - 2.0), return_mask=True, fill_color=curr_border
+  )
+  next_aligned_2: PILImage.Image = (
+    ReplaceInvalidWithReference(next_aligned_2_raw, next_valid_mask, curr_aligned, erode_pixels=3)
+    if next_valid_mask
+    else next_aligned_2_raw
+  )
   # blend using Lagrange interpolation
   a0: np.ndarray = np.asarray(curr_aligned, dtype=np.float32)
   a1: np.ndarray = np.asarray(next_aligned_1, dtype=np.float32)
@@ -851,7 +987,7 @@ def QuadraticInterpolatedFrame(
   w1: float = -frac * (frac - 2.0)
   w2: float = (frac * (frac - 1.0)) / 2.0
   out: np.ndarray = w0 * a0 + w1 * a1 + w2 * a2
-  return PngBytesFromRGBArray(out)
+  return PNGBytesFromRGBArray(np.clip(out, 0, 255).astype(np.uint8))
 
 
 def InterpolatedFrameStream(
@@ -859,8 +995,7 @@ def InterpolatedFrameStream(
   *,
   i_frames: int,
   zoom_per_step: float,
-  width: int,
-  height: int,
+  use_quadratic: bool = True,
 ) -> abc.Iterator[bytes]:
   """Yield real + interpolated animation frames.
 
@@ -877,8 +1012,8 @@ def InterpolatedFrameStream(
         (curr, next).
     i_frames (int): The number of interpolated frames to generate between each pair of real frames.
     zoom_per_step (float): The zoom factor per step between frames.
-    width (int): The width of the images.
-    height (int): The height of the images.
+    use_quadratic (bool): Whether to use quadratic interpolation (True) or linear
+        interpolation only (False).
 
   Yields:
     bytes: The PNG-encoded bytes of each frame (real and interpolated).
@@ -917,14 +1052,12 @@ def InterpolatedFrameStream(
     next2: RenderedZoomFrame | None = None if next_pending is None else next_pending[1]
     for jj in range(i_frames):
       frac: float = float(jj + 1) / float(i_frames + 1)
-      if next2 is None:
+      if next2 is None or not use_quadratic:
         yield LinearInterpolatedFrame(
           curr_frame,
           next_frame,
           zoom_per_step=zoom_per_step,
           frac=frac,
-          width=width,
-          height=height,
         )
       else:
         yield QuadraticInterpolatedFrame(
@@ -933,8 +1066,6 @@ def InterpolatedFrameStream(
           next2,
           zoom_per_step=zoom_per_step,
           frac=frac,
-          width=width,
-          height=height,
         )
     # if we have a next triple, advance the frames; otherwise, we are done
     if next_pending is None:
@@ -1015,10 +1146,10 @@ def WriteAnimatedGIF(
   def _RemainingFrames() -> abc.Iterator[PILImage.Image]:
     for frm in frames_iter:
       frame_count[0] += 1
-      yield _ImageNormalizeAndValidate(frm, width, height)
+      yield image.RGBImageFromPNG(frm)
 
   # save the whole GIF, normalizing each frame; PIL will iterate _RemainingFrames() lazily to save
-  img0: PILImage.Image = _ImageNormalizeAndValidate(first_frame, width, height)
+  img0: PILImage.Image = image.RGBImageFromPNG(first_frame)
   img0.save(
     # https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif
     path,
@@ -1153,7 +1284,7 @@ def WriteVideoMP4(
     output_params=output_params,
   ) as writer:
     for frm in frames:
-      writer.append_data(np.asarray(_ImageNormalizeAndValidate(frm, width, height)))  # type: ignore[attr-defined]
+      writer.append_data(np.asarray(image.RGBImageFromPNG(frm)))  # type: ignore[attr-defined]
       frame_count += 1
   # done, check that the frame count matches n_frames
   if frame_count != n_frames:
@@ -1197,26 +1328,3 @@ def ReWriteVideoMP4Meta(
     for frm in reader:  # type: ignore[attr-defined]
       writer.append_data(frm)  # type: ignore[attr-defined]
   reader.close()
-
-
-def _ImageNormalizeAndValidate(img_bytes: bytes, width: int, height: int) -> PILImage.Image:
-  """Normalize the image bytes to a PIL Image in RGB mode, and validate its size.
-
-  Args:
-    img_bytes (bytes): The image data as bytes.
-    width (int): The expected width of the image.
-    height (int): The expected height of the image.
-
-  Returns:
-    PILImage.Image: The normalized PIL Image in RGB mode.
-
-  Raises:
-    Error: on error
-
-  """
-  with PILImage.open(io.BytesIO(img_bytes)) as img:
-    if img.size != (width, height):
-      raise Error(f'frame size {img.size} != {(width, height)}')
-    if img.mode != 'RGB':
-      raise Error(f'expected RGB frame, got mode {img.mode!r}')
-    return img.copy()

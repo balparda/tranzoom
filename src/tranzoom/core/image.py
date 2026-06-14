@@ -1172,19 +1172,14 @@ class Image:
       'RGB', (self._params.width, self._params.height), raw_img
     )
     # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranZoom:" (_app) namespace
-    png_meta: PngImagePlugin.PngInfo | None = None
-    if not no_meta:
-      png_meta = PngImagePlugin.PngInfo()
-      for k, v in MakeImageMeta(self, render, img_data_hash).items():
-        png_meta.add_text(k, v)
-    # save to PNG bytes, hash and return
-    buf = io.BytesIO()
-    img.save(buf, format='PNG', pnginfo=png_meta)
     logging.debug(
       f'AsPNG: rendered {self._params.width} x {self._params.height} '
       f'{self._params.frm.fractal.value} PNG, hash {img_data_hash[:16]!r}'
     )
-    return (buf.getvalue(), img_data_hash)
+    return (
+      PNGFromRGBImage(img, meta=None if no_meta else MakeImageMeta(self, render, img_data_hash)),
+      img_data_hash,
+    )
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
@@ -1623,7 +1618,7 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
         (x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=Color.GREEN.value, font=font
       )
     # done, save remembering to add metadata that this image has an overlay
-    return SaveWithMeta(img)
+    return PNGFromRGBImage(img)
 
 
 def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
@@ -1672,7 +1667,7 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
           anchor='mm',  # center it exactly
         )
     # done, save remembering to add metadata that this image has an overlay
-    return SaveWithMeta(img)
+    return PNGFromRGBImage(img)
 
 
 def DrawCrossOverlay(
@@ -1711,89 +1706,124 @@ def DrawCrossOverlay(
     draw.line((0, y, w, y), fill=col.value, width=lw)
     draw.line((x, 0, x, h), fill=col.value, width=lw)
     # done, save remembering to add metadata that this image has an overlay
-    return SaveWithMeta(img)
+    return PNGFromRGBImage(img)
 
 
-def SaveWithMeta(img: PILImage.Image, *, extra_meta: dict[str, str] | None = None) -> bytes:
-  """Save a PIL image to PNG bytes, including its metadata.
+def RGBImageFromPNG(img_data: bytes) -> PILImage.Image:
+  """Decode PNG bytes and return an RGB Pillow image copy.
 
   Args:
-    img (PILImage.Image): The PIL image to save.
-    extra_meta (dict[str, str] | None): Optional additional metadata to include in the PNG;
-        default is None.
+    img_data (bytes): The PNG-encoded bytes of the image.
 
   Returns:
-    bytes: The PNG image data as bytes.
+    PILImage.Image: A Pillow Image object in RGB mode.
 
   Raises:
-    Error: if there are issues saving the image or with the metadata.
+    Error: on error
 
   """
-  # we have to re-copy the metadata from the original image
-  png_meta = PngImagePlugin.PngInfo()
-  for k, v in img.info.items():
-    if not isinstance(k, str):
-      raise Error(f'Unexpected non-string PNG metadata pair: {k!r}: {v!r}')
-    png_meta.add_text(k, str(v))
-  if extra_meta:
-    for k, v in extra_meta.items():
-      png_meta.add_text(k, v)
-  # save to PNG bytes, return
-  output = io.BytesIO()
-  img.save(output, format='PNG', pnginfo=png_meta)
-  return output.getvalue()
+  # open
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    # check mode
+    if img.mode != 'RGB':
+      raise Error(f'frame mode {img.mode} != RGB')
+    # make a copy
+    return img.copy()
 
 
-def CleanSavePNG(img_data: bytes, *, extra_meta: dict[str, str] | None = None) -> bytes:
-  """Save a PNG bytes to a clean copy PNG bytes, including only metadata given in `meta`, if any.
+def PNGFromRGBImage(
+  img_data: PILImage.Image, *, meta: dict[str, str] | None = None, copy_previous: bool = True
+) -> bytes:
+  """Encode an RGB Pillow image as PNG bytes.
 
   Args:
-    img_data (bytes): The original PNG image data as bytes.
-    extra_meta (dict[str, str] | None): Optional metadata to include in the PNG.
+    img_data (PILImage.Image): A Pillow Image object in RGB mode.
+    meta (dict[str, str] | None): Optional additional metadata to include in the PNG;
+        default is None.
+    copy_previous (bool): Whether to copy existing metadata from the original image;
+        default is True.
 
   Returns:
-    bytes: The PNG image data as bytes.
+    bytes: The PNG-encoded bytes of the image.
+
+  Raises:
+    Error: on error
 
   """
-  with PILImage.open(io.BytesIO(img_data)) as img:
-    # keep only meta that was explicitly given
-    png_meta = PngImagePlugin.PngInfo()
-    if extra_meta:
-      for k, v in extra_meta.items():
-        png_meta.add_text(k, v)
-    # save to PNG bytes, return
-    output = io.BytesIO()
-    img.save(output, format='PNG', pnginfo=png_meta)
-    return output.getvalue()
+  # check mode
+  if img_data.mode != 'RGB':
+    raise Error(f'frame mode {img_data.mode} != RGB')
+  # save to PNG bytes
+  with io.BytesIO() as buf:
+    # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranZoom:" (_app) namespace
+    png_meta: PngImagePlugin.PngInfo | None = None
+    if meta or (copy_previous and img_data.info.items()):
+      png_meta = PngImagePlugin.PngInfo()
+      # copy any existing metadata from the original image
+      if copy_previous and img_data.info.items():
+        for k, v in img_data.info.items():
+          if not isinstance(k, str):
+            raise Error(f'Unexpected non-string PNG metadata pair: {k!r}: {v!r}')
+          png_meta.add_text(k, str(v))
+      # add any extra metadata passed in
+      if meta:
+        for k, v in meta.items():
+          png_meta.add_text(k, v)
+    # save to PNG bytes
+    img_data.save(buf, format='PNG', pnginfo=png_meta)
+    return buf.getvalue()
 
 
-def CleanSaveJPG(img_data: bytes, *, extra_meta: dict[str, str] | None = None) -> bytes:
-  """Save a PNG bytes to a clean copy JPG bytes, including only metadata given in `meta`, if any.
+def JPGFromRGBImage(
+  img_data: PILImage.Image, *, meta: dict[str, str] | None = None, copy_previous: bool = True
+) -> bytes:
+  """Encode an RGB Pillow image as JPG bytes.
 
   Args:
-    img_data (bytes): The original PNG image data as bytes.
-    extra_meta (dict[str, str] | None): Optional metadata to include in the JPG.
+    img_data (PILImage.Image): A Pillow Image object in RGB mode.
+    meta (dict[str, str] | None): Optional additional metadata to include in the JPG;
+        default is None.
+    copy_previous (bool): Whether to copy existing metadata from the original image;
+        default is True.
 
   Returns:
-    bytes: The JPG image data as bytes.
+    bytes: The JPG-encoded bytes of the image.
+
+  Raises:
+    Error: on error
 
   """
-  exif: PILImage.Exif | None = None
-  with PILImage.open(io.BytesIO(img_data)) as img:
-    if extra_meta:
+  # check mode
+  if img_data.mode != 'RGB':
+    raise Error(f'frame mode {img_data.mode} != RGB')
+  # save to JPG bytes
+  with io.BytesIO() as buf:
+    # store metadata as compact JSON in EXIF ImageDescription (tag 0x010E)
+    exif: PILImage.Exif | None = None
+    if meta or (copy_previous and img_data.info.items()):
+      all_meta: dict[str, str] = {}
+      # copy any existing metadata from the original image
+      if copy_previous and img_data.info.items():
+        for k, v in img_data.info.items():
+          if not isinstance(k, str):
+            raise Error(f'Unexpected non-string PNG metadata pair: {k!r}: {v!r}')
+          all_meta[k] = str(v)
+      # add any extra metadata passed in
+      if meta:
+        all_meta.update(meta)
       # store metadata as compact JSON in EXIF ImageDescription (tag 0x010E)
-      exif = PILImage.Exif()
       # list of tags in: https://github.com/python-pillow/Pillow/blob/main/src/PIL/ExifTags.py
-      exif[ExifTags.Base.ImageDescription] = json.dumps(extra_meta, separators=(',', ':'))
-    output = io.BytesIO()
-    img.save(
-      output,
+      exif = PILImage.Exif()
+      exif[ExifTags.Base.ImageDescription] = json.dumps(all_meta, separators=(',', ':'))
+    # save to PNG bytes
+    img_data.save(
+      buf,
       format='JPEG',
       quality=JPEG_QUALITY,
       optimize=True,
       exif=exif.tobytes() if exif else None,
     )
-    return output.getvalue()
+    return buf.getvalue()
 
 
 def AddEvaluationMetaToImage(
@@ -1849,8 +1879,7 @@ def AddEvaluationMetaToImage(
         META_LLM_QUERY_REASONING_KEY: str(reason).lower(),  # store as "true"/"false"
       }
     )
-  with PILImage.open(io.BytesIO(img_data)) as img:
-    return SaveWithMeta(img, extra_meta=new_meta)
+  return PNGFromRGBImage(RGBImageFromPNG(img_data), meta=new_meta)
 
 
 def PrintITerm2(img_data: bytes) -> None:
