@@ -1133,7 +1133,7 @@ class FractalDatabase:
     )
     return (params, img, did_computation)
 
-  def DoRender(
+  def DoRender(  # noqa: C901, PLR0915
     self,
     img: image.Image,
     render: image.RenderParameters,
@@ -1258,7 +1258,15 @@ class FractalDatabase:
       img_data, img_hash = img.AsPNG(  # <<== this is the actual render!  <<==   <<==   <<==
         render, zoom_norm=zoom_norm, no_meta=no_meta
       )
-      # TODO: here is the place to interpolate the frame!
+      # upscale/interpolate the rendered frame before overlays
+      if render.i_pixels:
+        print_comm(
+          f'[cyan]Interpolating[/] rendered frame '
+          f'{img.params.width} \u00d7 {img.params.height} -> '
+          f'{final_width} \u00d7 {final_height} '
+          f'(*{render.i_pixels + 1})'
+        )
+        img_data = image.ResizePNG(img_data, final_width, final_height)
       # draw crosshair mark if specified in render parameters
       if render.mark_color is not None:
         mark_pixel: tuple[int, int]
@@ -1307,6 +1315,7 @@ def WarnUserAnimationParams(
   # sanity checks and warnings before we start the expensive rendering loop
   if zoom_params.scalar_magnification_per_step > zoom.THRESHOLD_JUMPY_ZOOM_PER_FRAME:
     print_comm(
+      f'[red]Warning: jumpy zoom detected: '
       f'{100.0 * (float(zoom_params.scalar_magnification_per_step) - 1.0):.4f}%/step. '
       'or reducing the total magnification.[/]\n'
     )

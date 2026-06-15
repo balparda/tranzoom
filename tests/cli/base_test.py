@@ -22,15 +22,15 @@ _IMAGES_DIR: pathlib.Path = _REPO_ROOT / 'tests' / 'data' / 'images'
     # PNG - really only change if core computation changes, so these are more important to be stable
     # don't change anything here: change base.py if the computation changed
     ('demo-mandel-seahorse-tail.png', 1024, 1024, base.SEAHORSE_TAIL_HASH),
-    ('demo-julia-suzana-wave.png', 512, 377, base.SUZANA_WAVE_HASH),
+    ('demo-julia-suzana-wave.png', 1024, 754, base.SUZANA_WAVE_HASH),
     # GIF - these may change for core computation, or if the animation frame machinery changes
     # don't change anything here: change base.py if the computation changed
     ('demo-mandel-seahorse-tail-anim.gif', 220, 220, base.SEAHORSE_ANIMATED_HASH),
-    ('test-mandel-z-auto-seahorse.gif', 53, 39, base.T_GIF_SEAHORSE_HASH),
-    ('test-mandel-z-auto-seeds300.gif', 31, 26, base.T_GIF_SEEDS_300_HASH),
-    ('test-julia-z-auto-suzana.gif', 44, 59, base.T_GIF_JULIA_SUZANA_HASH),
-    ('test-julia-z-auto-dragon.gif', 52, 67, base.T_GIF_JULIA_DRAGON_HASH),
-    ('test-julia-z-auto-blob.gif', 71, 55, base.T_GIF_JULIA_BLOB_HASH),
+    ('test-mandel-z-auto-seahorse.gif', 159, 117, base.T_GIF_SEAHORSE_HASH),
+    ('test-mandel-z-auto-seeds300.gif', 124, 104, base.T_GIF_SEEDS_300_HASH),
+    ('test-julia-z-auto-suzana.gif', 88, 118, base.T_GIF_JULIA_SUZANA_HASH),
+    ('test-julia-z-auto-dragon.gif', 104, 134, base.T_GIF_JULIA_DRAGON_HASH),
+    ('test-julia-z-auto-blob.gif', 142, 110, base.T_GIF_JULIA_BLOB_HASH),
   ],
 )
 def test_computation_integrity_hashes_of_test_images(img: str, w: int, h: int, hsh: str) -> None:

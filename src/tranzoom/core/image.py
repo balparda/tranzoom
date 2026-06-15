@@ -1103,6 +1103,11 @@ class Image:
     # histograms for cross-frame consistency instead of using this frame's own histogram
     escaped_at: int
     f_nu: float
+    # TODO: create a structure of numpy float32 array of shape (height, width, 3) and a metadata
+    # dict[str, str] and then use it to pass around, and do overlays, and everything else to
+    # stop the current madness of converting bytes->PNG->bytes->PIL->bytes->PNG->bytes->PIL->...
+    # Only at the end, and only once, convert the data to PNG and add the whole metadata.
+    # I think today an image has the potential of being converted 5-6x before leaving the pipeline.
     pixels = bytearray(self._params.width * self._params.height * 3)
     for i, enc_escaped_at in enumerate(self.escape):
       escaped_at, f_nu = Decode64ToIntFloat(enc_escaped_at)
@@ -1511,6 +1516,7 @@ def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDi
       )
       raw_hash = hashes.Hash256(img_bytes).hex()
     return (width, height, raw_hash, mp4_meta)
+  # PNG or GIF: use PIL to open and extract metadata
   with PILImage.open(io.BytesIO(img_bytes)) as img:
     # get the internal data we need (size and hash)
     width = img.width
@@ -1519,20 +1525,15 @@ def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDi
       raise Error(f'Invalid image size {width} x {height}')
     raw_hash = hashes.Hash256(img.convert('RGB').tobytes()).hex()  # not 'RGBA'!!
     # extract metadata from PNG
-    pil_info: tbase.JSONDict = img.info  # type: ignore[assignment]
+    img_metadata: tbase.JSONDict = img.info  # type: ignore[assignment]
     # make sure format is known and do any format-specific operations
     if (img_format := (img.format or '').upper()) == FileType.PNG.value.upper():
       pass  # nothing else to do for PNG, the metadata is already extracted in pil_info
     elif img_format == FileType.GIF.value.upper():
       # for GIFs we expect the metadata to be stored in the "comment" field as a JSON string
-      if 'comment' in pil_info:
+      if 'comment' in img_metadata:
         try:
-          pil_info = json.loads(cast('bytes', pil_info['comment']).decode('utf-8'))
-          # if we managed to extract this, then maybe we can also get the correct hash
-          if META_IMAGE_HASH_KEY in pil_info:
-            raw_hash = str(pil_info[META_IMAGE_HASH_KEY])
-          else:
-            logging.error('DO NOT trust this GIF hash')
+          img_metadata = json.loads(cast('bytes', img_metadata['comment']).decode('utf-8'))
         except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError):
           # if comment is not valid JSON, just keep the original pil_info
           logging.error(
@@ -1543,7 +1544,42 @@ def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDi
       raise Error('MP4 format reached PIL unexpectedly; file bytes may not be a valid MP4')
     else:
       raise Error(f'Unsupported image format {img.format!r}, expected PNG')
-  return (width, height, raw_hash, pil_info)
+    # if we managed to extract the metadata, then maybe we can also get the correct hash
+    if META_IMAGE_HASH_KEY in img_metadata:
+      raw_hash = str(img_metadata[META_IMAGE_HASH_KEY])
+    else:
+      logging.error('DO NOT trust this image hash')
+  return (width, height, raw_hash, img_metadata)
+
+
+def ResizePNG(
+  img_data: bytes,
+  width: int,
+  height: int,
+  *,
+  resample: PILImage.Resampling = PILImage.Resampling.BICUBIC,
+) -> bytes:
+  """Resize PNG bytes and return PNG bytes without metadata.
+
+  Args:
+    img_data (bytes): The PNG image data as bytes.
+    width (int): The target width in pixels.
+    height (int): The target height in pixels.
+    resample (PILImage.Resampling): The resampling filter to use for resizing; default is BICUBIC.
+
+  Returns:
+    bytes: The resized PNG image data as bytes.
+
+  """
+  # open the image
+  with PILImage.open(io.BytesIO(img_data)) as img:
+    # trivial case: if the image is already the requested size, just return the original bytes
+    if img.size == (width, height):
+      return img_data
+    # resize the image and save to PNG bytes
+    return PNGFromRGBImage(
+      img.resize((width, height), resample=resample), meta=cast('dict[str, str]', img.info)
+    )
 
 
 def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
@@ -1607,7 +1643,7 @@ def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
         (x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=Color.GREEN.value, font=font
       )
     # done, save remembering to add metadata that this image has an overlay
-    return PNGFromRGBImage(img)
+    return PNGFromRGBImage(img, meta=cast('dict[str, str]', img.info))
 
 
 def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
@@ -1656,7 +1692,7 @@ def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
           anchor='mm',  # center it exactly
         )
     # done, save remembering to add metadata that this image has an overlay
-    return PNGFromRGBImage(img)
+    return PNGFromRGBImage(img, meta=cast('dict[str, str]', img.info))
 
 
 def DrawCrossOverlay(
@@ -1695,7 +1731,7 @@ def DrawCrossOverlay(
     draw.line((0, y, w, y), fill=col.value, width=lw)
     draw.line((x, 0, x, h), fill=col.value, width=lw)
     # done, save remembering to add metadata that this image has an overlay
-    return PNGFromRGBImage(img)
+    return PNGFromRGBImage(img, meta=cast('dict[str, str]', img.info))
 
 
 def RGBImageFromPNG(img_data: bytes) -> PILImage.Image:

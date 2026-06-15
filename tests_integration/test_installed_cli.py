@@ -204,9 +204,11 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
         '0.00073801',
         '1',
         '--fps',
-        '10',
+        '5',
         '--duration',
         '4',
+        '--i-frames',
+        '1',
       ]
     )
     assert r.returncode == 0, f'tranz zoom auto failed:\n{r.stderr}'
@@ -288,21 +290,21 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:zoom:frame:initial:width_re': '73801/100000000',
       'tranZoom:zoom:frame:initial:height_im': '73801/100000000',
       'tranZoom:zoom:frame:magnitude': '1',
-      'tranZoom:zoom:frame:frames': '40',
-      'tranZoom:zoom:frame:i_frames': '0',
-      'tranZoom:zoom:frame:all_frames': '40',
+      'tranZoom:zoom:frame:frames': '20',
+      'tranZoom:zoom:frame:i_frames': '1',
+      'tranZoom:zoom:frame:all_frames': '39',
       'tranZoom:zoom:frame:seconds': '4',
       'tranZoom:zoom:frame:loop': '0',
-      'tranZoom:zoom:frame:fps': '10',
+      'tranZoom:zoom:frame:fps': '5',
       'tranZoom:zoom:frame:ifps': '10',
-      'tranZoom:zoom:frame:steps': '39',
-      'tranZoom:zoom:frame:magnitude_per_step': '1/39',
-      'tranZoom:zoom:frame:magnification_per_step': '4777501148913803/4503599627370496',
-      'tranZoom:zoom:marker:index': '[0, 39]',
+      'tranZoom:zoom:frame:steps': '19',
+      'tranZoom:zoom:frame:magnitude_per_step': '1/19',
+      'tranZoom:zoom:frame:magnification_per_step': '2541916954176431/2251799813685248',
+      'tranZoom:zoom:marker:index': '[0, 19]',
       'tranZoom:zoom:depth:frames': (
-        '[(0, 1000, 1001), (13, 1000, 1019), (26, 1000, 1034), (39, 1159, 1105)]'
+        '[(0, 1000, 1001), (6, 1000, 1019), (13, 1000, 1034), (19, 1159, 1105)]'
       ),
-      'tranZoom:zoom:hash': '48fce30e32850f69ec2fba3e16154878fa66d3660e504c0b31301741f7b445b5',
+      'tranZoom:zoom:hash': 'edef7da54fc24b114c90906ad7ab1fcaadcb234496dd1f6bcc6f2ac11ac4fda1',
     }
 
 
@@ -337,6 +339,8 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
         'image',
         '-s',
         '512',
+        '--i-pixels',
+        '1',
         'julia',
         '13667/50000',
         '371/50000',
@@ -359,8 +363,8 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
     hsh: str
     info: tbase.JSONDict
     w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
-    assert w == 512, f'Expected image dimensions 512 x 377, got {w} x {h}'
-    assert h == 377, f'Expected image dimensions 512 x 377, got {w} x {h}'
+    assert w == 1024, f'Expected image dimensions 1024 x 754, got {w} x {h}'
+    assert h == 754, f'Expected image dimensions 1024 x 754, got {w} x {h}'
     assert hsh == base.SUZANA_WAVE_HASH
     assert info == {
       'tranZoom:frame:fractal': 'julia',
@@ -433,10 +437,10 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
       'tranZoom:render:overlay': 'none',
       'tranZoom:render:palette': 'electric',
       'tranZoom:render:set_palette': 'sunset',
-      'tranZoom:render:i_pixels': '0',
+      'tranZoom:render:i_pixels': '1',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_re': '0',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': '1235957a8370bdc2c68b45dfa46233646b9cf8a30ad49dea7cb08f15a9ed7439',
+      'tranZoom:render:hash': '57e17bd485377f533971053c16d099905457daaa7c73b21b911d1c41a54e673b',
     }

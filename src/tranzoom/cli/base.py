@@ -62,9 +62,9 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 SEAHORSE_TAIL_HASH: str = '1fd6e1f31ba76e8116c64b798f16a994011f00d977d74421cd09e0f63538a7aa'
 SUZANA_WAVE_HASH: str = '92ee073dea23ff91a436a4ee7a1d7a64abfc3b512a440b01746ef78ce1c6c81a'
 # GIF - these may change for core computation, or if the animation frame machinery changes
-SEAHORSE_ANIMATED_HASH: str = 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab'
-T_GIF_SEAHORSE_HASH: str = '073feb420ea0c1441f30a6eaf407a3fe8fd45c35293827f4314427e5d31722b1'
-T_GIF_SEEDS_300_HASH: str = '10dc540880f300d8fbe3a57d35a4c1db5ba78a07ad6c856f11eab13e7160bbf2'
+SEAHORSE_ANIMATED_HASH: str = '5895416ff1f8dad1f64a2280347048d6c179a352ecbf8fd718a38972bf8c5e5e'
+T_GIF_SEAHORSE_HASH: str = 'eb04d237fa9bee8d5a8c5f81442dc9e88a57a58f5b3be1eada11065b121279b4'
+T_GIF_SEEDS_300_HASH: str = '8d866d0114de22631a32bb9dc9e6475c2c68759ade48f0ce38a55a47111de2c8'
 T_GIF_JULIA_SUZANA_HASH: str = '55db8370c11152e65c6afc555c5eee494324a44017ea154fa2e2f64ced53ed30'
 T_GIF_JULIA_DRAGON_HASH: str = 'a44055a0e8cea2c68f068fb755bd5909247b8ac6b7a2b8d077dbbf8015375733'
 T_GIF_JULIA_BLOB_HASH: str = 'cc4b74f72a0d4c1daa015bd377826c21a410c63863a3181e0882403c965b40a7'
@@ -73,8 +73,8 @@ TEST_IMAGE_DATA_HASHES: dict[str, tuple[int, str]] = {
   # name: (number of frames, hash of all the frames)
   # these are the hashes of the raw object data of the frame pickled to disk, not to be confused
   # with the frames' hash we compute; both are data dependent only, but they WILL BE DIFFERENT
-  'seahorse': (45, '1105b681fc059328833f9e79ef5d37059ee29b4995ad05d20e9a6610cfaf5313'),
-  'seeds300': (20, 'b7b771ce478c594e1cd73271ec92127b1b2a40d8e1224e72e5f9cb2d77ea2e75'),
+  'seahorse': (31, 'b9d56f228b0b4d31d116c37109d9af5eeb5ac3d707a440e4970f186137954ce1'),
+  'seeds300': (10, '54c49efbaf685916ad0240d14ec070934a6cd604e4eecb447be637f85a89bfac'),
   'suzana': (21, '57fb14828e1adeebd6c8fa5d3fe7f75ac0a4cf8e5864235ff77dc89aa20dbca5'),
   'dragon': (8, '23fbaca543e2e319ab621d964772b32b04dc5605160a83f031bee38444403f9a'),
   'blob': (8, 'd7e54a7b817cca30ae14b9ad03d8c81bd72e8c8ece62fdf8dc569de7d030c917'),
