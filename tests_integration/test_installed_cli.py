@@ -19,7 +19,7 @@ from transcrypto.utils import base as tbase
 
 import tranzoom
 from tranzoom.cli import base
-from tranzoom.core import image
+from tranzoom.core import pixels
 
 
 @pytest.fixture
@@ -88,7 +88,7 @@ def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
     h: int
     hsh: str
     info: tbase.JSONDict
-    w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
+    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
     assert w == h == 1024, f'Expected image dimensions 1024x1024, got {w} x {h}'
     assert hsh == base.SEAHORSE_TAIL_HASH
     assert info == {
@@ -225,7 +225,7 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
     h: int
     hsh: str
     info: tbase.JSONDict
-    w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
+    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
     assert w == h == 220, f'Expected image dimensions 220 x 220, got {w} x {h}'
     assert hsh == base.SEAHORSE_ANIMATED_HASH
     assert info == {
@@ -362,7 +362,7 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
     h: int
     hsh: str
     info: tbase.JSONDict
-    w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
+    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
     assert w == 1024, f'Expected image dimensions 1024 x 754, got {w} x {h}'
     assert h == 754, f'Expected image dimensions 1024 x 754, got {w} x {h}'
     assert hsh == base.SUZANA_WAVE_HASH

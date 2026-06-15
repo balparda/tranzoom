@@ -18,7 +18,7 @@ from transcrypto.utils import config as app_config
 from transcrypto.utils import human, timer
 
 from tranzoom import __version__
-from tranzoom.core import fractal, frame, image, zoom
+from tranzoom.core import fractal, frame, image, pixels, zoom
 
 # TODO: commands to look/inspect the DB data, print DB stats, etc
 # DB constants
@@ -117,7 +117,7 @@ class ImageCoreKey(TypedDict):
 
 
 CoreKeyFromData: abc.Callable[
-  [frame.ComputationParameters, image.RenderParameters], ImageCoreKey
+  [frame.ComputationParameters, pixels.RenderParameters], ImageCoreKey
 ] = lambda c, r: ImageCoreKey(frm=c.frm.sha, cp=c.sha, render=r.sha)
 
 
@@ -662,7 +662,7 @@ class FractalDatabase:
     return (params, frm_data, frm_data['cps'][cp_hash])
 
   def FindRender(
-    self, params: frame.ComputationParameters, render: image.RenderParameters
+    self, params: frame.ComputationParameters, render: pixels.RenderParameters
   ) -> tuple[
     frame.ComputationParameters,
     ImageCoreKey,
@@ -674,7 +674,7 @@ class FractalDatabase:
 
     Args:
       params (frame.ComputationParameters): the computation parameters associated with the image
-      render (image.RenderParameters): the render parameters associated with the image
+      render (pixels.RenderParameters): the render parameters associated with the image
 
     Returns:
       tuple[
@@ -806,7 +806,7 @@ class FractalDatabase:
   def AddRenderToDB(
     self,
     params: frame.ComputationParameters,
-    render: image.RenderParameters,
+    render: pixels.RenderParameters,
     ck: ImageCoreKey,
     img_hash: str,
     path: str,
@@ -815,7 +815,7 @@ class FractalDatabase:
 
     Args:
       params (frame.ComputationParameters): the computation parameters associated with the render
-      render (image.RenderParameters): the render parameters to add
+      render (pixels.RenderParameters): the render parameters to add
       ck (ImageCoreKey): the core key for the image, containing the frame_hash, cp_hash, render_hash
       img_hash (str): the hash of the image PNG data, used for indexing and deduplication
       path (str): the path to the image PNG file, as stored in the DB; this is absolute disk path
@@ -952,7 +952,7 @@ class FractalDatabase:
   def CoreComputeImage(
     self,
     params: frame.ComputationParameters,
-    render: image.RenderParameters,
+    render: pixels.RenderParameters,
     out: image.ImageOutputConfig,
     *,
     add_serial: int | None,
@@ -978,7 +978,7 @@ class FractalDatabase:
     Args:
       params (frame.ComputationParameters): The computation parameters for the frame, including
           width, height, and other settings.
-      render (image.RenderParameters): The render parameters, including color palettes, optional
+      render (pixels.RenderParameters): The render parameters, including color palettes, optional
           crosshair mark (mark_color not None means draw a crosshair), and optional sector overlay
           (overlay not None means draw the numbered sector grid).
       out (image.ImageOutputConfig): Output path configuration for building the file name.
@@ -1000,7 +1000,7 @@ class FractalDatabase:
       tuple[frame.ComputationParameters, image.Image | None, bytes, str, pathlib.Path]: A 5-tuple:
           - frame.ComputationParameters: The computation parameters used for the frame
               (with actual depth if a sentinel was used)
-          - image.Image: the computed fractal Image object
+          - pixels.RenderParameters: the computed fractal Image object
           - bytes: the final PNG bytes (with crosshair mark and sector overlay applied, if any)
           - str: the SHA-256 hash of the raw PNG before any post-processing overlays
           - pathlib.Path: the intended save path (NOT yet written to disk; caller must save)
@@ -1136,7 +1136,7 @@ class FractalDatabase:
   def DoRender(  # noqa: C901, PLR0915
     self,
     img: image.Image,
-    render: image.RenderParameters,
+    render: pixels.RenderParameters,
     out: image.ImageOutputConfig,
     *,
     add_serial: int | None,
@@ -1158,7 +1158,7 @@ class FractalDatabase:
 
     Args:
       img (image.Image): The computed fractal Image object.
-      render (image.RenderParameters): The render parameters, including color palettes, optional
+      render (pixels.RenderParameters): The render parameters, including color palettes, optional
           crosshair mark (mark_color not None means draw a crosshair), and optional sector overlay
           (overlay not None means draw the numbered sector grid).
       out (image.ImageOutputConfig): Output path configuration for building the file name.
@@ -1199,7 +1199,7 @@ class FractalDatabase:
     # log
     print_comm(f'[yellow]Render:[/] {render}')
     # create path callback missing only the hash
-    full_path: abc.Callable[[str], pathlib.Path] = lambda h: image.MakeImagePath(
+    full_path: abc.Callable[[str], pathlib.Path] = lambda h: pixels.MakeImagePath(
       out.path,
       out.use_date,
       out.use_hash,
@@ -1240,7 +1240,7 @@ class FractalDatabase:
         # print inline in iTerm2 if requested
         if iterm:
           print_comm('')
-          image.PrintITerm2(img_data)
+          pixels.PrintITerm2(img_data)
         return (img_data, img_hash, full_path(img_hash), False)
       # if we got here, we have the render parameters but no existing image on disk
       print_comm(
@@ -1266,7 +1266,7 @@ class FractalDatabase:
           f'{final_width} \u00d7 {final_height} '
           f'(*{render.i_pixels + 1})'
         )
-        img_data = image.ResizePNG(img_data, final_width, final_height)
+        img_data = pixels.ResizePNG(img_data, final_width, final_height)
       # draw crosshair mark if specified in render parameters
       if render.mark_color is not None:
         mark_pixel: tuple[int, int]
@@ -1277,14 +1277,14 @@ class FractalDatabase:
           f'[cyan]Marking[/] coordinate ({render.mark_re}, {render.mark_im}) with '
           f'{render.mark_color.name.lower()!r} crosshair @{mark_pixel}/{render.mark_width}px'
         )
-        img_data = image.DrawCrossOverlay(
+        img_data = pixels.DrawCrossOverlay(
           img_data, *mark_pixel, col=render.mark_color, lw=render.mark_width
         )
       # draw the numbered sector grid overlay if requested (e.g., for AI/manual zoom navigation)
       if render.overlay is not None:
         print_comm(f'[cyan]Adding[/] {render.overlay.value!r} overlay')
-        if render.overlay == image.OverlayType.GRID:
-          img_data = image.DrawThirdsInfoOverlay(img_data)
+        if render.overlay == pixels.OverlayType.GRID:
+          img_data = pixels.DrawThirdsInfoOverlay(img_data)
         else:
           raise Error(f'Unsupported overlay type: {render.overlay!r}')
       # add to DB; remember render_data could be None if use_db==False
@@ -1298,7 +1298,7 @@ class FractalDatabase:
     # print inline in iTerm2 if requested
     if iterm:
       print_comm('')
-      image.PrintITerm2(img_data)
+      pixels.PrintITerm2(img_data)
     return (img_data, img_hash, full_path(img_hash), True)
 
 

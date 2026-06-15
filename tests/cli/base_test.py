@@ -9,7 +9,7 @@ import pathlib
 import pytest
 
 from tranzoom.cli import base
-from tranzoom.core import image
+from tranzoom.core import pixels
 
 _REPO_ROOT: pathlib.Path = pathlib.Path(__file__).resolve().parent.parent.parent
 _IMAGES_DIR: pathlib.Path = _REPO_ROOT / 'tests' / 'data' / 'images'
@@ -38,7 +38,7 @@ def test_computation_integrity_hashes_of_test_images(img: str, w: int, h: int, h
   i_w: int
   i_h: int
   i_hsh: str
-  i_w, i_h, i_hsh, _ = image.GetBasicDataFromImage((_IMAGES_DIR / img).read_bytes())
+  i_w, i_h, i_hsh, _ = pixels.GetBasicDataFromImage((_IMAGES_DIR / img).read_bytes())
   assert i_w == w, f'Width mismatch for {img}: expected {w}, got {i_w}; BUG!'
   assert i_h == h, f'Height mismatch for {img}: expected {h}, got {i_h}; BUG!'
   assert i_hsh == hsh, (

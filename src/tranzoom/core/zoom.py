@@ -23,7 +23,7 @@ from PIL import ImageChops, ImageFilter
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
-from tranzoom.core import fractal, frame, image
+from tranzoom.core import fractal, frame, image, pixels
 
 # basic computation constants
 MAX_COLOR: int = 255  # max color value for 8-bit RGB channels
@@ -89,7 +89,7 @@ class ZoomParameters(frame.SerializingFractalObject):
     tp (AnimationType): The animation output type ('gif' or 'mp4').
     img (frame.ComputationParameters): The initial frame computation parameters; the same
         parameters are used for all frames in the animation.
-    render (RenderParameters): The render parameters applied to all frames in the animation.
+    render (pixels.RenderParameters): The render parameters applied to all frames in the animation.
     mag (gmpy2.mpq): The destination magnification (as a log10 magnitude order).
     n_frames (int): The total number of frames in the animation.
     duration (int): The animation duration stored as
@@ -102,7 +102,7 @@ class ZoomParameters(frame.SerializingFractalObject):
   # ATTENTION: changing anything here changes the HASH!!
   tp: AnimationType  # 'gif' or 'mp4'
   img: frame.ComputationParameters  # INITIAL frame; one computation parameters for all images
-  render: image.RenderParameters  # one render parameters for all images
+  render: pixels.RenderParameters  # one render parameters for all images
   mag: gmpy2.mpq  # destination magnitude
   n_frames: int  # number of frames in the animation
   duration: int  # round(duration in seconds * VIDEO_DURATION_STORE_SCALE): no float precision snafu
@@ -423,7 +423,7 @@ class ZoomParameters(frame.SerializingFractalObject):
       params = ZoomParameters(  # object creation will check the data is valid and consistent
         tp=AnimationType(data['tp']),
         img=frame.ComputationParameters.FromJson(cast('tbase.JSONDict', data['img'])),
-        render=image.RenderParameters.FromJson(cast('tbase.JSONDict', data['render'])),
+        render=pixels.RenderParameters.FromJson(cast('tbase.JSONDict', data['render'])),
         mag=gmpy2.mpq(str(data['mag'])),
         n_frames=int(str(data['n_frames'])),
         duration=int(str(data['duration'])),
@@ -899,8 +899,8 @@ def LinearInterpolatedFrame(
     raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
   if not (0.0 <= frac <= 1.0):
     raise Error(f'Invalid interpolation fraction: {frac}')
-  c: PILImage.Image = image.RGBImageFromPNG(curr_img.data)
-  n: PILImage.Image = image.RGBImageFromPNG(next_img.data)
+  c: PILImage.Image = pixels.RGBImageFromPNG(curr_img.data)
+  n: PILImage.Image = pixels.RGBImageFromPNG(next_img.data)
   # align both images to the virtual zoom depth between the two real frames
   curr_border: tuple[int, int, int] = BorderFillColor(c)
   curr_aligned: PILImage.Image = CenterZoomRGB(c, zoom_per_step**frac, fill_color=curr_border)[0]
@@ -960,9 +960,9 @@ def QuadraticInterpolatedFrame(  # noqa: PLR0914
     raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
   if not (0.0 <= frac <= 1.0):
     raise Error(f'Invalid interpolation fraction: {frac}')
-  c: PILImage.Image = image.RGBImageFromPNG(curr_img.data)
-  n1: PILImage.Image = image.RGBImageFromPNG(next_img_1.data)
-  n2: PILImage.Image = image.RGBImageFromPNG(next_img_2.data)
+  c: PILImage.Image = pixels.RGBImageFromPNG(curr_img.data)
+  n1: PILImage.Image = pixels.RGBImageFromPNG(next_img_1.data)
+  n2: PILImage.Image = pixels.RGBImageFromPNG(next_img_2.data)
   # align all three samples to the same virtual zoom depth
   curr_border: tuple[int, int, int] = BorderFillColor(c)
   curr_aligned: PILImage.Image = CenterZoomRGB(c, zoom_per_step**frac, fill_color=curr_border)[0]
@@ -1162,10 +1162,10 @@ def WriteAnimatedGIF(
   def _RemainingFrames() -> abc.Iterator[PILImage.Image]:
     for frm in frames_iter:
       frame_count[0] += 1
-      yield image.RGBImageFromPNG(frm)
+      yield pixels.RGBImageFromPNG(frm)
 
   # save the whole GIF, normalizing each frame; PIL will iterate _RemainingFrames() lazily to save
-  img0: PILImage.Image = image.RGBImageFromPNG(first_frame)
+  img0: PILImage.Image = pixels.RGBImageFromPNG(first_frame)
   img0.save(
     # https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif
     path,

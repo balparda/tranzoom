@@ -25,7 +25,7 @@ from transcrypto.utils import base as tbase
 from transcrypto.utils import human, timer
 
 from tranzoom import __version__
-from tranzoom.core import ai, fractal, frame, frdb, image, palette, zoom
+from tranzoom.core import ai, fractal, frame, frdb, image, palette, pixels, zoom
 
 
 class Error(ai.Error, typer._click.exceptions.ClickException):  # noqa: SLF001
@@ -431,21 +431,21 @@ MARK_COORDINATES_OPTION: typer.models.OptionInfo = typer.Option(
   ),
 )
 MARK_COLOR_OPTION: typer.models.OptionInfo = typer.Option(
-  image.DEFAULT_MARK_COLOR.name.lower(),
+  pixels.DEFAULT_MARK_COLOR.name.lower(),
   '--mark-color',
   help=(
-    f'Color of the crosshair overlay; default is "{image.DEFAULT_MARK_COLOR.name.lower()}"; '
-    'available colors: ' + ', '.join(sorted(repr(c.name.lower()) for c in image.Color))
+    f'Color of the crosshair overlay; default is "{pixels.DEFAULT_MARK_COLOR.name.lower()}"; '
+    'available colors: ' + ', '.join(sorted(repr(c.name.lower()) for c in pixels.Color))
   ),
 )
 MARK_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
-  image.DEFAULT_MARK_WIDTH,
+  pixels.DEFAULT_MARK_WIDTH,
   '--mark-width',
-  min=image.MIN_MARK_WIDTH,
-  max=image.MAX_MARK_WIDTH,
+  min=pixels.MIN_MARK_WIDTH,
+  max=pixels.MAX_MARK_WIDTH,
   help=(
-    f'Width of the crosshair overlay; {image.MIN_MARK_WIDTH} ≤ w ≤ {image.MAX_MARK_WIDTH}; '
-    f'default is {image.DEFAULT_MARK_WIDTH}'
+    f'Width of the crosshair overlay; {pixels.MIN_MARK_WIDTH} ≤ w ≤ {pixels.MAX_MARK_WIDTH}; '
+    f'default is {pixels.DEFAULT_MARK_WIDTH}'
   ),
 )
 
@@ -786,8 +786,8 @@ class TranZoomConfig(clibase.CLIConfig):
 
   max_iter: int | None = None  # for `image` command, also `zoom auto`
   mark_coords: str | None = None  # for `image` command, also `zoom auto`
-  mark_color: image.Color = image.DEFAULT_MARK_COLOR  # for `image` command, also `zoom auto`
-  mark_width: int = image.DEFAULT_MARK_WIDTH  # for `image` command, also `zoom auto`
+  mark_color: pixels.Color = pixels.DEFAULT_MARK_COLOR  # for `image` command, also `zoom auto`
+  mark_width: int = pixels.DEFAULT_MARK_WIDTH  # for `image` command, also `zoom auto`
 
   max_steps: int = 0  # for `zoom` command
   fractal_type: frame.Fractal = frame.DEFAULT_FRACTAL  # for `zoom` command
@@ -882,7 +882,7 @@ def MakeFrameFromCLIArgs(
       if not img_path.exists() or not img_path.is_file():
         raise Error(f'Image "{img_path}" does not exist or is not a file')  # noqa: TRY301
       # make sure we have the needed metadata
-      info: tbase.JSONDict = image.GetBasicDataFromImage(img_path.read_bytes())[-1]
+      info: tbase.JSONDict = pixels.GetBasicDataFromImage(img_path.read_bytes())[-1]
       if (
         image.META_CENTER_RE_KEY not in info
         or image.META_CENTER_IM_KEY not in info
@@ -999,7 +999,7 @@ def MakeComputationParameters(
 def MakeRenderParameters(
   params: frame.ComputationParameters,
   config: TranZoomConfig,
-) -> tuple[image.RenderParameters, image.ImageOutputConfig]:
+) -> tuple[pixels.RenderParameters, image.ImageOutputConfig]:
   """Make a RenderParameters/ImageOutputConfig object from the ComputationParameters and the config.
 
   Will use the ComputationParameters/Frame and:
@@ -1020,7 +1020,7 @@ def MakeRenderParameters(
     config (TranZoomConfig): the global configuration with all the options needed
 
   Returns:
-    tuple[image.RenderParameters, image.ImageOutputConfig]: a tuple of the RenderParameters
+    tuple[pixels.RenderParameters, image.ImageOutputConfig]: a tuple of the RenderParameters
         and ImageOutputConfig
 
   """
@@ -1031,7 +1031,7 @@ def MakeRenderParameters(
     else None
   )
   # build render and output configuration objects
-  render: image.RenderParameters = image.RenderParameters(
+  render: pixels.RenderParameters = pixels.RenderParameters(
     escaped_pal=config.pal,
     set_pal=None if config.set_points is None else config.set_pal,
     i_pixels=config.i_pixels,
@@ -1059,7 +1059,7 @@ def ProduceFractalImage(
   tm: int | None = None,
   add_serial: int | None = None,
   save_image: bool = True,
-) -> tuple[image.Image | None, bytes, str, image.RenderParameters]:
+) -> tuple[image.Image | None, bytes, str, pixels.RenderParameters]:
   """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
 
   Args:
@@ -1077,7 +1077,7 @@ def ProduceFractalImage(
         not be saved; default is True.
 
   Returns:
-    tuple[image.Image, bytes, str, image.RenderParameters]: A tuple of
+    tuple[image.Image, bytes, str, pixels.RenderParameters]: A tuple of
         (image.Image object, raw PNG bytes, internal hash of the raw PNG, RenderParameters)
 
   This is a high-level function that takes care of all the steps needed to produce the final image,
@@ -1093,7 +1093,7 @@ def ProduceFractalImage(
   """
   # build parameters
   params: frame.ComputationParameters = MakeComputationParameters(frm, config)
-  render: image.RenderParameters
+  render: pixels.RenderParameters
   out: image.ImageOutputConfig
   render, out = MakeRenderParameters(params, config)
   # warn if size estimates are large, before starting expensive computation
@@ -1170,7 +1170,7 @@ def MakePointFromCLIArgs(
       if not img_path.exists() or not img_path.is_file():
         raise Error(f'Image "{img_path}" does not exist or is not a file') from err  # noqa: TRY301
       # make sure we have the needed metadata
-      info: tbase.JSONDict = image.GetBasicDataFromImage(img_path.read_bytes())[-1]
+      info: tbase.JSONDict = pixels.GetBasicDataFromImage(img_path.read_bytes())[-1]
       if image.META_CENTER_RE_KEY not in info or image.META_CENTER_IM_KEY not in info:
         raise Error(f'Image "{img_path}" missing tranZoom frame metadata keys') from err  # noqa: TRY301
       fract: str = str(info.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
@@ -1238,7 +1238,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
   frdb.WarnUserAnimationParams(zoom_params, print_comm=config.console.print)
   # create path callback missing only the hash
   timestamp: int = timer.Now()
-  full_path: abc.Callable[[str], pathlib.Path] = lambda h: image.MakeImagePath(
+  full_path: abc.Callable[[str], pathlib.Path] = lambda h: pixels.MakeImagePath(
     config.img_output_path,
     config.img_use_date,
     config.img_use_hash,

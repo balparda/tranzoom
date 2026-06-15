@@ -9,8 +9,8 @@ import json
 import gmpy2
 import pytest
 
-from tests.core import frame_test, image_test
-from tranzoom.core import frame, image, zoom
+from tests.core import frame_test, pixels_test
+from tranzoom.core import frame, pixels, zoom
 
 
 # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
@@ -32,7 +32,7 @@ from tranzoom.core import frame, image, zoom
     (
       'gif',
       frame_test.COMPUTATION_STR_1,  # re-used from frame_test.py, ties it all together
-      image_test.RENDER_STR_1,  # re-used from above (render), ties it all together
+      pixels_test.RENDER_STR_1,  # re-used from above (render), ties it all together
       '40/3',
       17,
       80000,
@@ -57,7 +57,7 @@ from tranzoom.core import frame, image, zoom
     (
       'mp4',
       frame_test.COMPUTATION_STR_2,  # re-used from frame_test.py, ties it all together
-      image_test.RENDER_STR_2,  # re-used from above (render), ties it all together
+      pixels_test.RENDER_STR_2,  # re-used from above (render), ties it all together
       '3/7',
       1000,
       3000000,
@@ -86,7 +86,7 @@ from tranzoom.core import frame, image, zoom
     (
       'gif',
       frame_test.COMPUTATION_STR_3,  # re-used from frame_test.py, ties it all together
-      image_test.RENDER_STR_3,  # re-used from above (render), ties it all together
+      pixels_test.RENDER_STR_3,  # re-used from above (render), ties it all together
       '3000/4',
       100,
       800000,
@@ -128,7 +128,7 @@ def test_zoom_hash_stability_and_serialization_consistency(
   params: zoom.ZoomParameters = zoom.ZoomParameters(
     tp=zoom.AnimationType(tp),
     img=frame.ComputationParameters.FromJson(json.loads(i_json)),
-    render=image.RenderParameters.FromJson(json.loads(r_json)),
+    render=pixels.RenderParameters.FromJson(json.loads(r_json)),
     mag=gmpy2.mpq(mag),
     n_frames=nf,
     duration=d,

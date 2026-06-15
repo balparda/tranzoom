@@ -17,7 +17,7 @@ from transai.core import lms
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
-from tranzoom.core import frame, frdb, image, queries
+from tranzoom.core import frame, frdb, image, pixels, queries
 
 # TODO: divide image into the sectors and feed them separately to the LLM so they can be scored
 
@@ -43,7 +43,7 @@ class Error(queries.Error):
 def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
   db: frdb.FractalDatabase,
   params: frame.ComputationParameters,
-  render: image.RenderParameters,
+  render: pixels.RenderParameters,
   out: image.ImageOutputConfig,
   *,
   max_threads: int | None,
@@ -79,7 +79,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
   Args:
     db (frdb.FractalDatabase): The fractal database to use.
     params (frame.ComputationParameters): The computation parameters for the fractal zoom search.
-    render (image.RenderParameters): The render parameters for each zoom step, including color
+    render (pixels.RenderParameters): The render parameters for each zoom step, including color
         palettes and the overlay type (should be OverlayType.GRID to enable navigation grid).
     out (image.ImageOutputConfig): Output path configuration for file naming.
     max_threads (int | None): Optional maximum number of threads to use for rendering; if None,
@@ -152,7 +152,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
     setup_query, image_query = queries.BuildImageThirdsPrompts(params.frm, reason, query)
     logging.debug(f'AI setup query:\n{setup_query}\n')
   # add grid to render
-  render = dataclasses.replace(render, overlay=render.overlay or image.OverlayType.GRID)
+  render = dataclasses.replace(render, overlay=render.overlay or pixels.OverlayType.GRID)
   # use LMStudioWorker for AI mode; nullcontext (no-op) for manual mode
   ai_ctx: contextlib.AbstractContextManager[lms.LMStudioWorker | None] = (
     lms.LMStudioWorker(timeout=timeout, free_resources=True)

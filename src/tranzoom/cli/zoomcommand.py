@@ -20,7 +20,7 @@ from transcrypto.utils import human
 
 from tranzoom import tranz
 from tranzoom.cli import base
-from tranzoom.core import ai, frame, image, zoom
+from tranzoom.core import ai, frame, image, pixels, zoom
 
 _AI_QUERY_WEIGHT: float = 0.8  # how much to weight the AI query vs the manual score
 
@@ -70,10 +70,10 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
   if ctx.invoked_subcommand is not None and ctx.obj is not None:
     # check color so it won't raise plain KeyError
     col: str = mark_color.strip().upper()
-    if col not in image.Color.__members__:
+    if col not in pixels.Color.__members__:
       raise base.UsageError(
         f'Invalid mark color {mark_color!r}; available colors: '
-        + ', '.join(sorted(repr(c.name.lower()) for c in image.Color))
+        + ', '.join(sorted(repr(c.name.lower()) for c in pixels.Color))
       )
     ctx.obj = dataclasses.replace(
       ctx.obj,
@@ -86,7 +86,7 @@ def ZoomOptions(  # documentation is in help/epilog  # noqa: D103
       julia_re=julia_re,
       julia_im=julia_im,
       mark_coords=mark_coords,
-      mark_color=image.Color[col],
+      mark_color=pixels.Color[col],
       mark_width=mark_width,
     )
 
@@ -125,7 +125,7 @@ def AI(  # documentation is help/epilog/args  # noqa: D103
   config: base.TranZoomConfig = ctx.obj
   frm: frame.Frame = base.MakeFrameFromConfig(config, center_re, center_im, f_width, f_height)
   params: frame.ComputationParameters = base.MakeComputationParameters(frm, config)
-  render: image.RenderParameters
+  render: pixels.RenderParameters
   out: image.ImageOutputConfig
   render, out = base.MakeRenderParameters(params, config)
   # call the main zoom loop
@@ -188,7 +188,7 @@ def Manual(  # documentation is help/epilog/args  # noqa: D103
   config: base.TranZoomConfig = ctx.obj
   frm: frame.Frame = base.MakeFrameFromConfig(config, center_re, center_im, f_width, f_height)
   params: frame.ComputationParameters = base.MakeComputationParameters(frm, config)
-  render: image.RenderParameters
+  render: pixels.RenderParameters
   out: image.ImageOutputConfig
   render, out = base.MakeRenderParameters(params, config)
   # call the main zoom loop
@@ -256,7 +256,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: D103
   # build parameters
   frm: frame.Frame = base.MakeFrameFromConfig(config, center_re, center_im, f_width, f_height)
   params: frame.ComputationParameters = base.MakeComputationParameters(frm, config)
-  render: image.RenderParameters
+  render: pixels.RenderParameters
   out: image.ImageOutputConfig
   render, out = base.MakeRenderParameters(params, config)
   zoom_params: zoom.ZoomParameters = zoom.ZoomParameters(
@@ -279,5 +279,5 @@ def Auto(  # documentation is help/epilog/args  # noqa: D103
   )
   # iterm
   if config.iterm and zoom_params.tp != zoom.AnimationType.MP4:  # iTerm2 does not support MP4
-    image.PrintITerm2(img_p.read_bytes())
+    pixels.PrintITerm2(img_p.read_bytes())
     config.console.print()

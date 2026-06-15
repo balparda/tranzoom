@@ -19,7 +19,7 @@ from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 
 from tranzoom.cli import base
-from tranzoom.core import image
+from tranzoom.core import pixels
 
 
 @pytest.fixture
@@ -126,7 +126,7 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
     h: int
     hsh: str
     info: tbase.JSONDict
-    w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
+    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
     assert (w, h) == (159, 117), f'Expected image dimensions 159x117, got {w} x {h}'
     assert hsh == base.T_GIF_SEAHORSE_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'seahorse')
@@ -326,7 +326,7 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
     h: int
     hsh: str
     info: tbase.JSONDict
-    w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
+    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
     assert (w, h) == (124, 104), f'Expected image dimensions 124x104, got {w} x {h}'
     assert hsh == base.T_GIF_SEEDS_300_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'seeds300')
@@ -630,7 +630,7 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
     h: int
     hsh: str
     info: tbase.JSONDict
-    w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
+    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
     assert (w, h) == (88, 118), f'Expected image dimensions 88x118, got {w} x {h}'
     assert hsh == base.T_GIF_JULIA_SUZANA_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'suzana')
@@ -808,7 +808,7 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
     h: int
     hsh: str
     info: tbase.JSONDict
-    w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
+    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
     assert (w, h) == (104, 134), f'Expected image dimensions 104x134, got {w} x {h}'
     assert hsh == base.T_GIF_JULIA_DRAGON_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'dragon')
@@ -984,7 +984,7 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
     h: int
     hsh: str
     info: tbase.JSONDict
-    w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
+    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
     assert (w, h) == (142, 110), f'Expected image dimensions 142x110, got {w} x {h}'
     assert hsh == base.T_GIF_JULIA_BLOB_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'blob')
