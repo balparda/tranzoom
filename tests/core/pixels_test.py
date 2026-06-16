@@ -139,7 +139,7 @@ def test_render_hash_stability_and_serialization_consistency(
 ) -> None:
   """Important JSON and hash consistency/stability checks."""
   params: pixels.RenderParameters = pixels.RenderParameters(
-    tp=pixels.FileType(tp),
+    tp=pixels.ImageEncoding(tp),
     escaped_pal=palette.Palette(e_pal),
     set_pal=palette.Palette(s_pal) if s_pal else None,
     i_pixels=ip,

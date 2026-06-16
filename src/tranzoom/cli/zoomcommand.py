@@ -231,7 +231,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: D103
   f_width: str = base.FRAME_WIDTH_ARGUMENT,  # type: ignore[assignment]
   f_height: str | None = base.FRAME_HEIGHT_ARGUMENT,  # type: ignore[assignment]
   dest_magnification_10: str = base.ANIM_DEST_MAGNIFICATION_ARGUMENT,  # type: ignore[assignment]
-  anim_type: zoom.AnimationType = base.ANIM_TYPE_OPTION,  # type: ignore[assignment]
+  anim_type: pixels.AnimationEncoding = base.ANIM_TYPE_OPTION,  # type: ignore[assignment]
   duration: float | None = base.ANIM_DURATION_OPTION,  # type: ignore[assignment]
   frames: int | None = base.ANIM_FRAMES_OPTION,  # type: ignore[assignment]
   fps: float | None = base.ANIM_FPS_OPTION,  # type: ignore[assignment]
@@ -260,13 +260,11 @@ def Auto(  # documentation is help/epilog/args  # noqa: D103
   out: image.ImageOutputConfig
   render, out = base.MakeRenderParameters(params, config)
   zoom_params: zoom.ZoomParameters = zoom.ZoomParameters(
-    tp=anim_type,
     img=params,  # zoom is created with the sentinel value (if on AUTO) and does NOT update!
-    render=render,  # notice this render does not have prev/next markers!
+    render=pixels.RenderAnimationParameters.FromRender(render, anim=anim_type, i_frames=i_frames),
     mag=gmpy2.mpq(dest_magnification_10),
     n_frames=frames,
     duration=round(duration * zoom.VIDEO_DURATION_STORE_SCALE),
-    i_frames=i_frames,
     loop=loop,
   )
   # call
@@ -275,9 +273,10 @@ def Auto(  # documentation is help/epilog/args  # noqa: D103
   img_p, img_sz = base.ProduceFractalAnimation(config, out, zoom_params, save_frames)
   # log
   config.console.print(
-    f'Saved {zoom_params.tp.value.upper()} to {str(img_p)!r}, {human.HumanizedBytes(img_sz)}\n'
+    f'Saved {zoom_params.render.anim.value.upper()} to '
+    f'{str(img_p)!r}, {human.HumanizedBytes(img_sz)}\n'
   )
-  # iterm
-  if config.iterm and zoom_params.tp != zoom.AnimationType.MP4:  # iTerm2 does not support MP4
+  # iterm; note it does not support MP4
+  if config.iterm and zoom_params.render.anim != pixels.AnimationEncoding.MP4:
     pixels.PrintITerm2(img_p.read_bytes())
     config.console.print()

@@ -622,12 +622,12 @@ ANIM_FPS_OPTION: typer.models.OptionInfo = typer.Option(
   ),
 )
 ANIM_TYPE_OPTION: typer.models.OptionInfo = typer.Option(
-  zoom.DEFAULT_ANIMATION_TYPE,
+  pixels.DEFAULT_ANIMATION_TYPE,
   '--anim',
   help=(
     f'Type of animation to produce; possible values: '
-    f'{", ".join(repr(t.value) for t in zoom.AnimationType)}; '
-    f'default is "{zoom.DEFAULT_ANIMATION_TYPE.value}"'
+    f'{", ".join(repr(t.value) for t in pixels.AnimationEncoding)}; '
+    f'default is "{pixels.DEFAULT_ANIMATION_TYPE.value}"'
   ),
 )
 ANIM_LOOP_OPTION: typer.models.OptionInfo = typer.Option(
@@ -652,10 +652,10 @@ ANIM_INTERPOLATION_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
   0,
   '--i-frames',
   min=0,
-  max=zoom.MAX_INTERPOLATION_FRAMES,
+  max=pixels.MAX_INTERPOLATION_FRAMES,
   help=(
     f'Extra interpolated frames for every video frame; effectively, final FPS=fps*(i+1); '
-    f'0 ≤ i ≤ {zoom.MAX_INTERPOLATION_FRAMES}; default is 0; '
+    f'0 ≤ i ≤ {pixels.MAX_INTERPOLATION_FRAMES}; default is 0; '
     'so 0 is no interpolation, 1 means add 1 interpolated frame between every pair of frames, etc'
   ),
 )
@@ -1223,10 +1223,11 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
   )
   config.console.print(
     f'\n{zoom_params.img.width} \u00d7 {zoom_params.img.height}{real_sz_str} '
+    f'{zoom_params.render.anim.value.upper()!r}: '
     f'{zoom_params.render.escaped_pal.value!r} {zoom_params.img.frm.fractal.value.capitalize()!r} '
     f'[magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/], '
     f'{human.HumanizedSeconds(float(zoom_params.n_seconds))} long, '
-    f'at {float(zoom_params.fps):.2f}*{zoom_params.i_frames + 1} FPS, '
+    f'at {float(zoom_params.fps):.2f}*{zoom_params.render.i_frames + 1} FPS, '
     f'with {zoom_params.n_frames}|{zoom_params.all_frames} frames ({len(all_markers)} markers, '
     f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%, and {len(all_depth)} depth frames, '
     f'{100.0 * len(all_depth) / zoom_params.n_frames:.2f}%), '
@@ -1245,7 +1246,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     config.img_path_prefix or DEFAULT_IMAGE_PREFIX[zoom_params.img.frm.fractal],
     h,
     tm=timestamp,
-    suffix=zoom_params.tp.value.lower(),
+    suffix=zoom_params.render.anim.value.lower(),
   )
   # DB
   did_comp: bool
@@ -1280,7 +1281,9 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           video_data: bytes = old_path.read_bytes()
           video_path.write_bytes(video_data)
         # log and shortcircuit
-        config.console.print(f'Success: {zoom_params.tp.value.upper()} {video_hash!r} from disk')
+        config.console.print(
+          f'Success: {zoom_params.render.anim.value.upper()} {video_hash!r} from disk'
+        )
         return (video_path, video_path.stat().st_size)
     # produce the depth computations for all the depth frames: this will save us a lot of trouble
     max_iter: int
@@ -1590,7 +1593,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           p, n, zn = zoom_norm.ForFrame(i)
           img_data, data_hash, img_path, _ = db.DoRender(
             _SmartImage(i),  # get the Image object for this frame
-            dataclasses.replace(
+            pixels.RenderAnimationFrameParameters.FromAnimAndFrames(
               zoom_params.render, prev_marker=all_frames[p], next_marker=all_frames[n]
             ),
             out,
@@ -1617,15 +1620,17 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           )
 
         # render the video to a temporary path, using the two-frame stream to interpolate frames
-        tmp_path: pathlib.Path = pathlib.Path(tmpdir) / f'temp_video.{zoom_params.tp.value.lower()}'
+        tmp_path: pathlib.Path = (
+          pathlib.Path(tmpdir) / f'temp_video.{zoom_params.render.anim.value.lower()}'
+        )
         frame_bytes: abc.Iterable[bytes] = zoom.InterpolatedFrameStream(  # generator! memory!
           # we must keep all of this as generators to save rendering memory
           _TwoFrameRenderStream(),  # this will yield (curr, next) tuples of rendered frames
-          i_frames=zoom_params.i_frames,
+          i_frames=zoom_params.render.i_frames,
           zoom_per_step=float(zoom_params.scalar_magnification_per_step),
           use_quadratic=zoom.DEFAULT_USE_QUADRATIC,
         )
-        if zoom_params.tp == zoom.AnimationType.GIF:
+        if zoom_params.render.anim == pixels.AnimationEncoding.GIF:
           zoom.WriteAnimatedGIF(
             frame_bytes,  # generator! memory!
             tmp_path,
@@ -1635,7 +1640,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             float(zoom_params.n_seconds),
             loop=zoom_params.loop,
           )
-        elif zoom_params.tp == zoom.AnimationType.MP4:
+        elif zoom_params.render.anim == pixels.AnimationEncoding.MP4:
           zoom.WriteVideoMP4(
             frame_bytes,  # generator! memory!
             tmp_path,
@@ -1645,7 +1650,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             float(zoom_params.n_seconds),
           )
         else:
-          raise UsageError(f'Unsupported animation type: {zoom_params.tp}')
+          raise UsageError(f'Unsupported animation type: {zoom_params.render.anim}')
       finally:
         # we are done, close the progress bar, free memory
         p_bar.close()
@@ -1660,11 +1665,11 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
       )
       del all_img_obj  # this should help free all generated images from memory
       # add video-specific metadata
-      meta[image.META_IMAGE_ANIMATION_KEY] = zoom_params.tp.value.lower()
+      meta[image.META_IMAGE_ANIMATION_KEY] = zoom_params.render.anim.value.lower()
       meta.update(
         # the extra animation keys
         {
-          image.META_ZOOM_TYPE_KEY: zoom_params.tp.value,
+          image.META_ZOOM_TYPE_KEY: zoom_params.render.anim.value.lower(),
           image.META_ZOOM_INITIAL_WIDTH_RE_KEY: str(all_frames[0].size[0]),
           image.META_ZOOM_INITIAL_HEIGHT_IM_KEY: str(all_frames[0].size[1]),
           image.META_ZOOM_MAGNITUDE_KEY: str(zoom_params.mag),
@@ -1674,7 +1679,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           image.META_ZOOM_STEPS_KEY: str(zoom_params.n_steps),
           image.META_ZOOM_FPS_KEY: str(zoom_params.fps),
           image.META_ZOOM_I_FPS_KEY: str(zoom_params.ifps),
-          image.META_ZOOM_I_FRAMES_KEY: str(zoom_params.i_frames),
+          image.META_ZOOM_I_FRAMES_KEY: str(zoom_params.render.i_frames),
           image.META_ZOOM_ALL_FRAMES_KEY: str(zoom_params.all_frames),
           image.META_ZOOM_MAGNITUDE_PER_STEP_KEY: str(zoom_params.mag_per_step),
           image.META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str(
@@ -1693,9 +1698,9 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
       )
       # move the file!
       video_path = full_path(video_hash)
-      if zoom_params.tp == zoom.AnimationType.GIF:
+      if zoom_params.render.anim == pixels.AnimationEncoding.GIF:
         zoom.ReWriteAnimatedGIFMeta(tmp_path, video_path, meta)
-      elif zoom_params.tp == zoom.AnimationType.MP4:
+      elif zoom_params.render.anim == pixels.AnimationEncoding.MP4:
         zoom.ReWriteVideoMP4Meta(tmp_path, video_path, meta)
     # closed temporary directory, video is saved in final destination with final metadata
     config.console.print('[yellow]Render:[/] [green]DONE[/]\n')
@@ -1711,7 +1716,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     )
   # done, close DB, final log and iTerm2
   config.console.print(
-    f'Success: {zoom_params.tp.value.upper()} {video_hash!r} in '
+    f'Success: {zoom_params.render.anim.value.upper()} {video_hash!r} in '
     f'{depth_tmr or "-"} (depth) + {frames_tmr} (frames) + {render_tmr} (render)'
   )
   return (video_path, video_path.stat().st_size)

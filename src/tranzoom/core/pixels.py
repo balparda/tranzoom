@@ -20,11 +20,14 @@ import subprocess  # noqa: S404
 import sys
 import tempfile
 import time
-from typing import cast
+from collections import abc
+from typing import Any, cast
 
 import gmpy2
 import imageio
 import imageio_ffmpeg  # type: ignore
+import numpy as np
+from numpy._typing._array_like import NDArray
 from PIL import ExifTags, ImageDraw, ImageFont, PngImagePlugin
 from PIL import Image as PILImage
 from transcrypto.core import hashes
@@ -61,12 +64,24 @@ class Color(enum.Enum):
   MAGENTA = (255, 0, 255)
 
 
-class FileType(enum.Enum):
-  """File type enum."""
+class ImageEncoding(enum.Enum):
+  """Image file encoding type enum."""
 
   PNG = 'png'  # also the file suffix!
   GIF = 'gif'
+  JPG = 'jpg'
+
+
+class AnimationEncoding(enum.Enum):
+  """Animation file encoding type enum."""
+
+  GIF = 'gif'  # also the file suffix!
   MP4 = 'mp4'
+
+
+# MP4: has an 'ftyp' ISO base media box at bytes 4-8; PILImage.open() raises on MP4, so we
+# must detect and handle it before reaching PIL
+DetectMP4: abc.Callable[[bytes], bool] = lambda img_b: len(img_b) >= 8 and img_b[4:8] == b'ftyp'  # noqa: PLR2004
 
 
 class OverlayType(enum.Enum):
@@ -76,7 +91,12 @@ class OverlayType(enum.Enum):
   CARDINAL = 'cardinal'
 
 
+# basic computation constants
+
+MAX_COLOR: int = 255  # max color value for 8-bit RGB channels
 JPEG_QUALITY: int = 95  # quality for JPEG output; ignored for PNG which is lossless
+MAX_INTERPOLATION_FRAMES: int = 7  # sanity limit for number of interpolated frames
+DEFAULT_ANIMATION_TYPE: AnimationEncoding = AnimationEncoding.GIF
 
 # hash key is the only meta key that has to be known here b/c we have to read it from files
 
@@ -95,7 +115,7 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class RenderParameters(frame.SerializingFractalObject):
-  """Defines a transformation from math to image.
+  """Defines a transformation from math to image of a single image.
 
   ATTENTION: changing any attribute changes the object SHA-256 hash.
 
@@ -119,7 +139,7 @@ class RenderParameters(frame.SerializingFractalObject):
   """
 
   # ATTENTION: changing anything here changes the HASH!!
-  tp: FileType = FileType.PNG
+  tp: ImageEncoding = ImageEncoding.PNG
   escaped_pal: palette.Palette = palette.DEFAULT_PALETTE
   set_pal: palette.Palette | None = None  # if None, this must be a non-Set-computation
   i_pixels: int = 0  # for interpolation, number of pixels to interpolate between each pixel
@@ -128,10 +148,8 @@ class RenderParameters(frame.SerializingFractalObject):
   mark_color: Color | None = None  # if None, no mark will be drawn
   mark_width: int = DEFAULT_MARK_WIDTH
   overlay: OverlayType | None = None  # overlay is independent of mark!
-  prev_marker: frame.Frame | None = None  # for zoom
-  next_marker: frame.Frame | None = None  # for zoom
 
-  def __post_init__(self) -> None:  # noqa: C901, PLR0912
+  def __post_init__(self) -> None:
     """Check parameters for validity.
 
     Raises:
@@ -139,8 +157,8 @@ class RenderParameters(frame.SerializingFractalObject):
 
     """
     # check type is valid
-    if self.tp not in {FileType.PNG, FileType.GIF, FileType.MP4}:
-      raise Error(f'Unknown file type: {self.tp}')
+    if self.tp != ImageEncoding.PNG:
+      raise Error(f'Unsupported file type for rendering: {self.tp}')
     # check overlay is valid: for now we only allow GRID overlay
     if self.overlay and self.overlay != OverlayType.GRID:
       raise Error(f'Unknown overlay: {self.overlay}')
@@ -173,17 +191,6 @@ class RenderParameters(frame.SerializingFractalObject):
       r, g, b = self.mark_color.value
       if not (0 <= r <= 255 and 0 <= g <= 255 and 0 <= b <= 255):  # noqa: PLR2004
         raise Error(f'Mark color RGB values must be between 0 and 255, got {self.mark_color}')
-    # check prev/next markers are valid if provided
-    if not self.prev_marker and self.next_marker:
-      raise Error('next_marker provided without prev_marker')
-    if self.prev_marker and not self.next_marker:
-      raise Error('prev_marker provided without next_marker')
-    if (
-      self.prev_marker
-      and self.next_marker
-      and (self.prev_marker.fractal != self.next_marker.fractal)
-    ):
-      raise Error('prev/next_marker fractal types do not match')
 
   def __str__(self) -> str:
     """Get string representation of the RenderParameters.
@@ -214,15 +221,10 @@ class RenderParameters(frame.SerializingFractalObject):
       )
     )
     overlay: str = '' if self.overlay is None else f' + [OVERLAY: {self.overlay.name}]'
-    markers: str = (
-      ''
-      if self.prev_marker is None or self.next_marker is None
-      else f' + [P:{self.prev_marker.sha[:10]}, N:{self.next_marker.sha[:10]}]'
-    )
     return (
       '{'
       f'[{self.tp.name.upper()}*{self.i_pixels + 1}: {self.escaped_pal.name}, '
-      f'{self.set_pal.name if self.set_pal else "none"}]{mark}{overlay}{markers}'
+      f'{self.set_pal.name if self.set_pal else "none"}]{mark}{overlay}'
       '}'
     )
 
@@ -249,8 +251,6 @@ class RenderParameters(frame.SerializingFractalObject):
       'mark_color': self.mark_color.name.lower() if self.mark_color else None,
       'mark_width': self.mark_width,
       'overlay': self.overlay.value if self.overlay else None,
-      'prev_marker': self.prev_marker.json if self.prev_marker else None,
-      'next_marker': self.next_marker.json if self.next_marker else None,
     }
 
   @staticmethod
@@ -272,7 +272,7 @@ class RenderParameters(frame.SerializingFractalObject):
     # create the object
     try:
       params = RenderParameters(  # object creation will check the data is valid and consistent
-        tp=FileType(data.get('tp', FileType.PNG.value)),
+        tp=ImageEncoding(data.get('tp', ImageEncoding.PNG.value)),
         escaped_pal=palette.Palette(data.get('escaped_pal', palette.DEFAULT_PALETTE.value)),
         set_pal=palette.Palette(data['set_pal']) if data.get('set_pal') else None,
         i_pixels=int(str(data.get('i_pixels', '0'))),
@@ -283,18 +283,301 @@ class RenderParameters(frame.SerializingFractalObject):
         ),
         mark_width=int(str(data.get('mark_width', DEFAULT_MARK_WIDTH))),
         overlay=OverlayType(data['overlay']) if data.get('overlay') else None,
-        prev_marker=frame.Frame.FromJson(cast('tbase.JSONDict', data['prev_marker']))
-        if data.get('prev_marker')
-        else None,
-        next_marker=frame.Frame.FromJson(cast('tbase.JSONDict', data['next_marker']))
-        if data.get('next_marker')
-        else None,
       )
     except (KeyError, ValueError, TypeError, Error) as err:
       raise Error(f'Invalid RenderParameters JSON data: {err}') from err
     # check hash if provided
     if check_hash is not None and params.sha != check_hash:
       raise Error(f'RenderParameters {params.sha!r} does not match expected {check_hash!r}')
+    return params
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class RenderAnimationParameters(RenderParameters):
+  """Defines a transformation from math to image of an animation.
+
+  ATTENTION: changing any attribute changes the object SHA-256 hash.
+
+  Attributes:
+    anim (AnimationEncoding): Output file type; default is AnimationEncoding.GIF.
+    tp (FileType): Output type for animation frames; default is FileType.PNG.
+    escaped_pal (palette.Palette): Color palette for escaped (exterior) points;
+        default is palette.DEFAULT_PALETTE.
+    set_pal (palette.Palette | None): Color palette for interior Set points; None means no
+        Set palette (requires a non-Set computation); default is None.
+    i_frames (int): Number of frames to interpolate between each frame; default is 0
+    i_pixels (int): Number of pixels to interpolate between each pixel; default is 0
+    mark_re (gmpy2.mpq): Real part of the optional crosshair mark coordinate;
+        default is 0; unused when mark_color is None.
+    mark_im (gmpy2.mpq): Imaginary part of the optional crosshair mark coordinate;
+        default is 0; unused when mark_color is None.
+    mark_color (Color | None): Color of the crosshair mark overlay; None means no mark is
+        drawn; default is None.
+    mark_width (int): Crosshair mark line width in pixels; default is DEFAULT_MARK_WIDTH.
+    overlay (OverlayType | None): Optional numbered sector grid overlay; None means no
+        overlay; default is None.
+
+  """
+
+  # ATTENTION: changing anything here changes the HASH!!
+  anim: AnimationEncoding = AnimationEncoding.GIF
+  i_frames: int = 0  # for interpolation, number of frames to interpolate between each frame
+
+  def __post_init__(self) -> None:
+    """Check parameters for validity.
+
+    Raises:
+      Error: if any parameter is invalid.
+
+    """
+    super(RenderAnimationParameters, self).__post_init__()
+    # check type is valid
+    if self.anim not in {AnimationEncoding.GIF, AnimationEncoding.MP4}:
+      raise Error(f'Unsupported animation type for rendering: {self.anim}')
+    # check i_frames is valid
+    ValidateIFrames(self.i_frames)
+
+  def __str__(self) -> str:
+    """Get string representation of the RenderAnimationParameters.
+
+    Format is:
+    - "<<ANIM_TYPE>*<FRM+1>: RENDER_PARAMS>"
+    - `<ANIM_TYPE>` is the animation type in uppercase, like "MP4".
+    - `<FRM+1>` is the number of i_frames + 1
+
+    Returns:
+      str: String representation of the RenderAnimationParameters.
+
+    """
+    return (
+      f'<{self.anim.name.upper()}*{self.i_frames + 1}: '
+      f'{super(RenderAnimationParameters, self).__str__()}>'
+    )
+
+  @property
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the RenderAnimationParameters.
+
+    Keys: `anim`, `i_frames`, `render`.
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the RenderAnimationParameters.
+
+    """
+    return {
+      # ATTENTION: changing anything here changes the HASH!!
+      'anim': self.anim.value,
+      'i_frames': self.i_frames,
+      'render': super(RenderAnimationParameters, self).json,
+    }
+
+  @staticmethod
+  def FromRender(
+    render: RenderParameters, *, anim: AnimationEncoding = AnimationEncoding.GIF, i_frames: int = 0
+  ) -> RenderAnimationParameters:
+    """Create a RenderAnimationParameters from its parent plus type and i_frames.
+
+    Args:
+      render (RenderParameters): The parent RenderParameters.
+      anim (AnimationEncoding): The animation type, default is GIF.
+      i_frames (int): The number of i_frames, default is 0.
+
+    Returns:
+      RenderAnimationParameters: A RenderAnimationParameters object
+
+    """
+    return RenderAnimationParameters(
+      anim=anim,
+      tp=render.tp,
+      escaped_pal=render.escaped_pal,
+      set_pal=render.set_pal,
+      i_frames=i_frames,
+      i_pixels=render.i_pixels,
+      mark_re=render.mark_re,
+      mark_im=render.mark_im,
+      mark_color=render.mark_color,
+      mark_width=render.mark_width,
+      overlay=render.overlay,
+    )
+
+  @staticmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> RenderAnimationParameters:
+    """Create a RenderAnimationParameters from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from RenderAnimationParameters.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the
+          RenderAnimationParameters. If the calculated hash does not match, an error is raised.
+
+    Returns:
+      RenderAnimationParameters: A RenderAnimationParameters object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      params: RenderAnimationParameters = RenderAnimationParameters.FromRender(
+        RenderParameters.FromJson(cast('tbase.JSONDict', data['render'])),
+        anim=AnimationEncoding(data.get('anim', AnimationEncoding.GIF.value)),
+        i_frames=int(str(data.get('i_frames', '0'))),
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid RenderAnimationParameters JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and params.sha != check_hash:
+      raise Error(
+        f'RenderAnimationParameters {params.sha!r} does not match expected {check_hash!r}'
+      )
+    return params
+
+
+# TODO: why does prev_marker and next_marker seem unused??? are we not smoothing the zoom?
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class RenderAnimationFrameParameters(RenderAnimationParameters):
+  """Defines a transformation from math to image of an animation single frame.
+
+  ATTENTION: changing any attribute changes the object SHA-256 hash.
+
+  Attributes:
+    anim (AnimationEncoding): Output file type; default is AnimationEncoding.GIF.
+    tp (FileType): Output type for animation frames; default is FileType.PNG.
+    escaped_pal (palette.Palette): Color palette for escaped (exterior) points;
+        default is palette.DEFAULT_PALETTE.
+    set_pal (palette.Palette | None): Color palette for interior Set points; None means no
+        Set palette (requires a non-Set computation); default is None.
+    i_frames (int): Number of frames to interpolate between each frame; default is 0
+    i_pixels (int): Number of pixels to interpolate between each pixel; default is 0
+    mark_re (gmpy2.mpq): Real part of the optional crosshair mark coordinate;
+        default is 0; unused when mark_color is None.
+    mark_im (gmpy2.mpq): Imaginary part of the optional crosshair mark coordinate;
+        default is 0; unused when mark_color is None.
+    mark_color (Color | None): Color of the crosshair mark overlay; None means no mark is
+        drawn; default is None.
+    mark_width (int): Crosshair mark line width in pixels; default is DEFAULT_MARK_WIDTH.
+    overlay (OverlayType | None): Optional numbered sector grid overlay; None means no
+        overlay; default is None.
+    prev_marker (frame.Frame): Previous frame marker for zoom animations
+    next_marker (frame.Frame): Next frame marker for zoom animations
+
+  """
+
+  # ATTENTION: changing anything here changes the HASH!!
+  prev_marker: frame.Frame
+  next_marker: frame.Frame
+
+  def __post_init__(self) -> None:
+    """Check parameters for validity.
+
+    Raises:
+      Error: if any parameter is invalid.
+
+    """
+    super(RenderAnimationFrameParameters, self).__post_init__()
+    # check prev/next markers are valid if provided
+    if (
+      self.prev_marker.fractal != self.next_marker.fractal  # same type
+      or self.prev_marker.center != self.next_marker.center  # same center, for now zooms don't move
+    ):
+      raise Error(f'prev/next_marker do not match: {self.prev_marker=} vs {self.next_marker=}')
+
+  def __str__(self) -> str:
+    """Get string representation of the RenderAnimationFrameParameters.
+
+    Format is:
+    - "(ANIM_PARAMS, P: <PREV_MARKER_SHA[:10]>, N: <NEXT_MARKER_SHA[:10]>)"
+
+    Returns:
+      str: String representation of the RenderAnimationFrameParameters.
+
+    """
+    return (
+      f'({super(RenderAnimationFrameParameters, self).__str__()}, '
+      f'P: {self.prev_marker.sha[:10]}, N: {self.next_marker.sha[:10]})'
+    )
+
+  @property
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the RenderAnimationFrameParameters.
+
+    Keys: `tp`, `escaped_pal`, `set_pal`, `mark_re`, `mark_im`, `mark_color`,
+    `mark_width`, `overlay`.
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the RenderAnimationFrameParameters.
+
+    """
+    return {
+      # ATTENTION: changing anything here changes the HASH!!
+      'anim_render': super(RenderAnimationFrameParameters, self).json,
+      'prev_marker': self.prev_marker.json,
+      'next_marker': self.next_marker.json,
+    }
+
+  @staticmethod
+  def FromAnimAndFrames(
+    render: RenderAnimationParameters, *, prev_marker: frame.Frame, next_marker: frame.Frame
+  ) -> RenderAnimationFrameParameters:
+    """Create a RenderAnimationFrameParameters from its parent and prev/next frames.
+
+    Args:
+      render (RenderAnimationParameters): The parent RenderAnimationParameters.
+      prev_marker (frame.Frame): Previous frame marker for zoom animations.
+      next_marker (frame.Frame): Next frame marker for zoom animations.
+
+    Returns:
+      RenderAnimationFrameParameters: A RenderAnimationFrameParameters object
+
+    """
+    return RenderAnimationFrameParameters(
+      anim=render.anim,
+      tp=render.tp,
+      escaped_pal=render.escaped_pal,
+      set_pal=render.set_pal,
+      i_frames=render.i_frames,
+      i_pixels=render.i_pixels,
+      mark_re=render.mark_re,
+      mark_im=render.mark_im,
+      mark_color=render.mark_color,
+      mark_width=render.mark_width,
+      overlay=render.overlay,
+      prev_marker=prev_marker,
+      next_marker=next_marker,
+    )
+
+  @staticmethod
+  def FromJson(
+    data: tbase.JSONDict, *, check_hash: str | None = None
+  ) -> RenderAnimationFrameParameters:
+    """Create a RenderAnimationFrameParameters from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from RenderAnimationFrameParameters.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the
+          RenderAnimationFrameParameters. If the calculated hash does not match, an error is raised.
+
+    Returns:
+      RenderAnimationFrameParameters: A RenderAnimationFrameParameters object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      params: RenderAnimationFrameParameters = RenderAnimationFrameParameters.FromAnimAndFrames(
+        RenderAnimationParameters.FromJson(cast('tbase.JSONDict', data['anim_render'])),
+        prev_marker=frame.Frame.FromJson(cast('tbase.JSONDict', data['prev_marker'])),
+        next_marker=frame.Frame.FromJson(cast('tbase.JSONDict', data['next_marker'])),
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid RenderAnimationFrameParameters JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and params.sha != check_hash:
+      raise Error(
+        f'RenderAnimationFrameParameters {params.sha!r} does not match expected {check_hash!r}'
+      )
     return params
 
 
@@ -356,59 +639,679 @@ def MakeImagePath(
   )
 
 
-def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDict]:  # noqa: C901, PLR0912, PLR0915
-  """Get basic data from an image (PNG, GIF, or MP4), including format, size, hash, and metadata.
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class ObjInfo(frame.SerializingFractalObject):
+  """Represents information on an image or animation, but not the data.
+
+  Attributes:
+    img (ImageEncoding | None): Only present if this is an image; None if this is an animation.
+    anim (AnimationEncoding | None): Only present if this is an animation; None if this is an image.
+    width (int): Width of the image/animation in pixels.
+    height (int): Height of the image/animation in pixels.
+    bin_hash (str): SHA-256 hash of the binary data of the image or animation.
+    data_hash (str): SHA-256 hash of the pixel data of the image or animation.
+    meta (dict[str, str]): Metadata associated with the image or animation.
+
+  """
+
+  img: ImageEncoding | None = None
+  anim: AnimationEncoding | None = None
+  width: int
+  height: int
+  bin_hash: str
+  data_hash: str
+  meta: dict[str, str]
+
+  def __post_init__(self) -> None:
+    """Check ObjInfo for validity.
+
+    Raises:
+      Error: if any parameter is invalid.
+
+    """
+    # check that either img or anim is set, but not both
+    if (self.img is None and self.anim is None) or (self.img is not None and self.anim is not None):
+      raise Error(f'Exactly one of img or anim must be set, got {self.img=} and {self.anim=}')
+    # check width and height are valid
+    if not (frame.MIN_IMAGE_SIZE <= self.width <= frame.MAX_IMAGE_SIZE) or not (
+      frame.MIN_IMAGE_SIZE <= self.height <= frame.MAX_IMAGE_SIZE
+    ):
+      raise Error(
+        f'{self.width=} and {self.height=} must be '
+        f'between {frame.MIN_IMAGE_SIZE} and {frame.MAX_IMAGE_SIZE}'
+      )
+    # check bin_hash and data_hash are valid hex strings of length 64 (SHA-256)
+    for hash_name, hash_value in [('bin_hash', self.bin_hash), ('data_hash', self.data_hash)]:
+      if len(hash_value) != 64 or not all(c in '0123456789abcdef' for c in hash_value.lower()):  # noqa: PLR2004
+        raise Error(f'{hash_name} must be a 64-character hex string, got {hash_value=}')
+
+  def __str__(self) -> str:
+    """Get string representation of the ObjInfo.
+
+    Format is:
+    - ""
+
+    Returns:
+      str: String representation of the ObjInfo.
+
+    """
+    tp: str = ''
+    if self.img is not None:
+      tp = f'{self.img.name.upper()}.img'
+    elif self.anim is not None:
+      tp = f'{self.anim.name.upper()}.anim'
+    return (
+      f'[{tp}: {self.width} \u00d7 {self.height}, BIN:{self.bin_hash!r}, '
+      f'DATA:{self.data_hash!r}, {self.meta}]'
+    )
+
+  @property
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the ObjInfo.
+
+    Keys: `tp`, `escaped_pal`, `set_pal`, `mark_re`, `mark_im`, `mark_color`,
+    `mark_width`, `overlay`.
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the ObjInfo.
+
+    """
+    return {
+      # ATTENTION: changing anything here changes the HASH!!
+      'img': self.img.value if self.img else None,
+      'anim': self.anim.value if self.anim else None,
+      'width': self.width,
+      'height': self.height,
+      'bin_hash': self.bin_hash,
+      'data_hash': self.data_hash,
+      'meta': cast('tbase.JSONDict', self.meta),
+    }
+
+  @staticmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> ObjInfo:
+    """Create a ObjInfo from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from ObjInfo.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the ObjInfo.
+          If the calculated hash does not match, an error is raised.
+
+    Returns:
+      ObjInfo: An ObjInfo object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      params: ObjInfo = ObjInfo(
+        img=ImageEncoding(data['img']) if data.get('img') else None,
+        anim=AnimationEncoding(data['anim']) if data.get('anim') else None,
+        width=int(str(data['width'])),
+        height=int(str(data['height'])),
+        bin_hash=str(data['bin_hash']),
+        data_hash=str(data['data_hash']),
+        meta=cast('dict[str, str]', data['meta']),
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid ObjInfo JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and params.sha != check_hash:
+      raise Error(f'ObjInfo {params.sha!r} does not match expected {check_hash!r}')
+    return params
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class Pixels(frame.SerializingFractalObject):
+  """Represents pixel data for an image."""
+
+  data: NDArray[np.float32]
+  meta: dict[str, str]
+
+  def __post_init__(self) -> None:
+    """Check Pixels for validity.
+
+    Raises:
+      Error: if any parameter is invalid.
+
+    """
+    # check data shape is valid
+    width: int
+    height: int
+    channels: int
+    height, width, channels = self.data.shape
+    if channels != 3:  # noqa: PLR2004
+      raise Error(f'Expected data shape (height, width, 3), got {self.data.shape}')
+    # check width and height are valid
+    if not (frame.MIN_IMAGE_SIZE <= width <= frame.MAX_IMAGE_SIZE) or not (
+      frame.MIN_IMAGE_SIZE <= height <= frame.MAX_IMAGE_SIZE
+    ):
+      raise Error(
+        f'{width=} and {height=} must be between {frame.MIN_IMAGE_SIZE} and {frame.MAX_IMAGE_SIZE}'
+      )
+
+  def __str__(self) -> str:
+    """Get string representation of the Pixels.
+
+    Format is:
+    - "[<WIDTH>, <HEIGHT>, <DATA_HASH>, <META>]"
+
+    Returns:
+      str: String representation of the Pixels.
+
+    """
+    return f'[{self.width}, {self.height}, {self.data_hash}, {self.meta}]'
+
+  def PrintITerm2(self) -> None:
+    """Print the image to `sys.stdout` in iTerm2, using the iTerm2 inline image protocol.
+
+    <https://iterm2.com/documentation-images.html>
+
+    """
+    PrintITerm2(self.PNG(copy_previous=False)[0])
+
+  @property
+  def width(self) -> int:
+    """Get the width of the pixel data.
+
+    Returns:
+      int: The width of the pixel data.
+
+    """
+    return cast('int', self.data.shape[1])
+
+  @property
+  def height(self) -> int:
+    """Get the height of the pixel data.
+
+    Returns:
+      int: The height of the pixel data.
+
+    """
+    return cast('int', self.data.shape[0])
+
+  @property
+  def clip(self) -> NDArray[np.uint8]:
+    """Clip the pixel data to the valid range [0, MAX_COLOR] and convert to uint8.
+
+    Returns:
+      NDArray[np.uint8]: The clipped pixel data as a uint8 array.
+
+    """
+    return np.clip(self.data, 0, MAX_COLOR).astype(np.uint8)
+
+  @property
+  def obj(self) -> PILImage.Image:
+    """Get a PIL Image object from the pixel data.
+
+    Returns:
+      PILImage.Image: A PIL Image object representing the pixel data.
+
+    """
+    return PILImage.fromarray(self.clip, mode='RGB')
+
+  @property
+  def data_hash(self) -> str:
+    """Get a hash of the pixel data.
+
+    Returns:
+      str: A hexadecimal string representing the hash of the 'RGB' mode pixel data.
+
+    """
+    return hashes.Hash256(self.obj.tobytes()).hex()
+
+  @property
+  def json(self) -> tbase.JSONDict:
+    """Get a JSON-serializable dictionary representation of the Pixels.
+
+    Keys: `width`, `height`, `data_hash`, `meta`.
+
+    Returns:
+      tbase.JSONDict: A dictionary representation of the Pixels.
+
+    """
+    return {
+      # ATTENTION: changing anything here changes the HASH!!
+      'data': self.data.tobytes().hex(),
+      'meta': cast('tbase.JSONDict', self.meta),
+    }
+
+  @staticmethod
+  def FromJson(data: tbase.JSONDict, *, check_hash: str | None = None) -> Pixels:
+    """Create a Pixels from a JSON dictionary.
+
+    Args:
+      data (tbase.JSONDict): A dictionary like from Pixels.json.
+      check_hash (str | None): If provided, the expected SHA-256 hash of the Pixels.
+          If the calculated hash does not match, an error is raised.
+
+    Returns:
+      Pixels: A Pixels object
+
+    Raises:
+      Error: on error
+
+    """
+    # create the object
+    try:
+      width: int = int(str(data['width']))
+      height: int = int(str(data['height']))
+      params: Pixels = Pixels(
+        data=np.frombuffer(bytes.fromhex(str(data['data'])), dtype=np.float32).reshape(
+          height, width, 3
+        ),
+        meta=cast('dict[str, str]', data['meta']),
+      )
+    except (KeyError, ValueError, TypeError, Error) as err:
+      raise Error(f'Invalid Pixels JSON data: {err}') from err
+    # check hash if provided
+    if check_hash is not None and params.sha != check_hash:
+      raise Error(f'Pixels {params.sha!r} does not match expected {check_hash!r}')
+    return params
+
+  @staticmethod
+  def FromPIL(  # noqa: C901, PLR0912
+    img: PILImage.Image, *, allow_conversion: bool = False
+  ) -> tuple[Pixels, ImageEncoding, str]:
+    """Create a Pixels object from a PIL Image object.
+
+    Args:
+      img (PILImage.Image): The image data as a PIL Image object
+      allow_conversion (bool): If False (default) will only accept PNG RGB images; if True
+          will try to open any non-animation image and convert data from other modes to RGB
+
+    Returns:
+      tuple[Pixels, ImageEncoding, str]: A Pixels object containing the image data and metadata,
+          the image format, and the SHA-256 hash of the internal bytes image data.
+
+
+    Raises:
+      Error: on error
+
+    """
+    # check for animated images, which are not supported
+    if img.is_animated:
+      raise Error('Animated images are not supported for Pixels')
+    # check source type
+    try:
+      img_format: ImageEncoding = ImageEncoding((img.format or '').upper())
+    except Exception as err:
+      raise Error(f'Unsupported image format: {img.format!r}') from err
+    if img_format != ImageEncoding.PNG and not allow_conversion:
+      raise Error(f'Expected PNG format, got {img_format!r}')
+    # get metadata, but different formats may encode metadata differently!
+    meta: dict[str, str] = {}
+    if img_format == ImageEncoding.PNG:
+      # PNG metadata is stored in img.info as a dict of str -> str
+      meta = _LoadMetadataKeys(img.info.items())
+    elif img_format == ImageEncoding.JPG:
+      # JPG metadata is stored in EXIF tags, which are numeric keys; we convert to str
+      exif: PILImage.Exif | None = img.getexif()
+      if exif:
+        try:
+          meta = _LoadMetadataKeys(json.loads(str(exif[ExifTags.Base.ImageDescription])).items())
+        except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError, KeyError) as err:
+          logging.error(f'JPG exif {ExifTags.Base.ImageDescription} is not valid, ignoring: {err}')
+    elif img_format == ImageEncoding.GIF:
+      # for GIFs we expect the metadata to be stored in the "comment" field as a JSON string
+      try:
+        meta = _LoadMetadataKeys(
+          json.loads(cast('bytes', img.info['comment']).decode('utf-8')).items()
+        )
+      except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError, KeyError) as err:
+        logging.error(f'GIF "comment" metadata is not valid, ignoring: {err}')
+    else:
+      raise Error(f'Unsupported image format: {img_format!r}')
+    # check mode, convert if needed/allowed
+    rgb_img: PILImage.Image
+    if img.mode == 'RGB':
+      rgb_img = img
+    else:
+      if not allow_conversion:
+        raise Error(f'Unsupported image mode {img.mode!r}, expected RGB')
+      rgb_img = img.convert('RGB')
+    # create object
+    return (
+      Pixels(
+        data=np.asarray(rgb_img, dtype=np.float32),  # __post_init__ will check width/height/shape
+        meta=meta,
+      ),
+      img_format,
+      hashes.Hash256(rgb_img.tobytes()).hex(),
+    )
+
+  @staticmethod
+  def FromBytes(img_data: bytes, *, allow_conversion: bool = False) -> tuple[Pixels, ObjInfo]:
+    """Create a Pixels object from image bytes (PNG, GIF, or MP4).
+
+    Args:
+      img_data (bytes): The image data as bytes; cannot be empty; must represent a non-animated
+          PNG, GIF, BMP or JPG as bytes on disk
+      allow_conversion (bool): If False (default) will only accept PNG RGB images; if True
+          will try to open any non-animation image and convert data from other modes to RGB
+
+    Returns:
+      tuple[Pixels, ObjInfo]: A Pixels object containing the image data and metadata and
+          the ObjInfo object containing the image type, dimensions, and hashes.
+
+    Raises:
+      Error: on error
+
+    """
+    # check for no data, hash the whole thing
+    if not img_data:
+      raise Error('No image data provided')
+    if DetectMP4(img_data):
+      raise Error('MP4 animation data is not supported for Pixels')
+    bin_hash: str = hashes.Hash256(img_data).hex()
+    # open as image, with PIL
+    with PILImage.open(io.BytesIO(img_data)) as img:
+      px: Pixels
+      tp: ImageEncoding
+      hsh: str
+      px, tp, hsh = Pixels.FromPIL(img, allow_conversion=allow_conversion)
+      return (
+        px,
+        ObjInfo(
+          img=tp,
+          width=px.width,
+          height=px.height,
+          bin_hash=bin_hash,
+          data_hash=hsh,
+          meta=px.meta.copy(),
+        ),
+      )
+
+  def PNG(
+    self, *, meta: dict[str, str] | None = None, copy_previous: bool = True
+  ) -> tuple[bytes, str, str]:
+    """Encode as PNG bytes.
+
+    Args:
+      meta (dict[str, str] | None): Optional additional metadata to include in the image;
+          default is None.
+      copy_previous (bool): Whether to copy existing metadata from `self.meta` into the image;
+          default is True.
+
+    Returns:
+      tuple[bytes, str, str]: The PNG-encoded bytes of the image, its file hash, and its pixel hash.
+
+    """
+    # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranZoom:" (_app) namespace
+    png_meta: PngImagePlugin.PngInfo | None = None
+    if meta or (copy_previous and self.meta):
+      png_meta = PngImagePlugin.PngInfo()
+      # copy any existing metadata from the original image
+      if copy_previous and self.meta:
+        for k, v in self.meta.items():
+          png_meta.add_text(k, v)
+      # add any extra metadata passed in
+      if meta:
+        for k, v in meta.items():
+          png_meta.add_text(k, v)
+    # save to PNG bytes
+    with io.BytesIO() as buf, self.obj as img:
+      img.save(buf, format='PNG', pnginfo=png_meta)
+      img_data: bytes = buf.getvalue()
+      return (img_data, hashes.Hash256(img_data).hex(), hashes.Hash256(img.tobytes()).hex())
+
+  def JPG(
+    self, *, meta: dict[str, str] | None = None, copy_previous: bool = True
+  ) -> tuple[bytes, str, str]:
+    """Encode as JPG bytes.
+
+    Args:
+      meta (dict[str, str] | None): Optional additional metadata to include in the image;
+          default is None.
+      copy_previous (bool): Whether to copy existing metadata from `self.meta` into the image;
+          default is True.
+
+    Returns:
+      tuple[bytes, str, str]: The JPG-encoded bytes of the image, its file hash, and its pixel hash.
+
+    """
+    # store metadata as compact JSON in EXIF ImageDescription (tag 0x010E)
+    exif: PILImage.Exif | None = None
+    if meta or (copy_previous and self.meta):
+      # copy any existing metadata from the original image
+      all_meta: dict[str, str] = self.meta.copy() if (copy_previous and self.meta) else {}
+      # add any extra metadata passed in
+      if meta:
+        all_meta.update(meta)
+      # store metadata as compact JSON in EXIF ImageDescription (tag 0x010E)
+      exif = PILImage.Exif()
+      exif[ExifTags.Base.ImageDescription] = json.dumps(all_meta, separators=(',', ':'))
+    # save to PNG bytes
+    with io.BytesIO() as buf, self.obj as img:
+      img.save(
+        buf,
+        format='JPEG',
+        quality=JPEG_QUALITY,
+        optimize=True,
+        exif=exif.tobytes() if exif else None,
+      )
+      img_data: bytes = buf.getvalue()
+      return (img_data, hashes.Hash256(img_data).hex(), hashes.Hash256(img.tobytes()).hex())
+
+  def Resize(
+    self,
+    width: int,
+    height: int,
+    *,
+    resample: PILImage.Resampling = PILImage.Resampling.BICUBIC,
+  ) -> Pixels:
+    """Resize Pixels to the specified dimensions by resampling. Keep metadata intact.
+
+    Args:
+      width (int): The target width in pixels.
+      height (int): The target height in pixels.
+      resample (PILImage.Resampling): The resampling filter to use for resizing; default is BICUBIC.
+
+    Returns:
+      Pixels: The resized image data as a Pixels object.
+
+    """
+    return dataclasses.replace(
+      Pixels.FromPIL(self.obj.resize((width, height), resample=resample))[0], meta=self.meta.copy()
+    )
+
+  def DrawCardinalInfoOverlay(self) -> Pixels:
+    """Draw an overlay on the (512x512) image with target info for moving the zoom frame.
+
+    Overlays is:
+    - white lines delimiting the quadrants of the image, intersecting at the center
+    - 8 green circles around the center, indicating the 8 cardinal and ordinal directions
+      to move the frame
+    - each circle has a green label with its direction: "N", "NE", "E", "SE", "S", "SW", "W", "NW"
+
+    Works on any size image, but is designed for 512x512, especially because of:
+    - circle radius is fixed
+    - text labels are fixed size and positioned with a fixed offset from the circle's center
+    Fix these and it can work well on other sizes too...
+
+    Returns:
+      Pixels: The modified Pixels image data with the overlay drawn.
+
+    """
+    w: int
+    h: int
+    cx: int
+    cy: int
+    x: int
+    y: int
+    lw: int
+    # open the image
+    with self.obj as img:
+      # draw the quadrant lines
+      draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
+      w, h = img.size
+      cx, cy = w // 2, h // 2
+      step_sz: int = w // frame.DEFAULT_STEP_DIRECT
+      lw = max(1, max(w, h) // _LINE_WIDTH_RATIO)
+      draw.line((0, cy, w, cy), fill=Color.WHITE.value, width=lw)
+      draw.line((cx, 0, cx, h), fill=Color.WHITE.value, width=lw)
+      # draw 8 circles around the center to indicate the 8 cardinal/ordinal directions
+      font: ImageFont.ImageFont = cast('ImageFont.ImageFont', ImageFont.load_default())
+      for dx, dy, direction in [
+        (0, -step_sz, 'N'),
+        (step_sz / _SQRT_TWO, -step_sz / _SQRT_TWO, 'NE'),
+        (step_sz, 0, 'E'),
+        (step_sz / _SQRT_TWO, step_sz / _SQRT_TWO, 'SE'),
+        (0, step_sz, 'S'),
+        (-step_sz / _SQRT_TWO, step_sz / _SQRT_TWO, 'SW'),
+        (-step_sz, 0, 'W'),
+        (-step_sz / _SQRT_TWO, -step_sz / _SQRT_TWO, 'NW'),
+      ]:
+        x, y = int(cx + dx), int(cy + dy)
+        draw.ellipse(
+          (x - _CIRCLE_RADIUS, y - _CIRCLE_RADIUS, x + _CIRCLE_RADIUS, y + _CIRCLE_RADIUS),
+          outline=Color.GREEN.value,
+          width=lw,
+        )
+        # for each circle, also draw the label text
+        draw.text(
+          (x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=Color.GREEN.value, font=font
+        )
+      # done, save remembering to add metadata that this image has an overlay
+      return dataclasses.replace(Pixels.FromPIL(img)[0], meta=self.meta.copy())
+
+  def DrawThirdsInfoOverlay(self) -> Pixels:
+    """Draw an overlay on an image of any size, with target info for moving the zoom frame.
+
+    Overlays:
+    - white lines delimiting the 9 sections of the image
+    - large green number labels (1-9) centered in each section, left-to-right, top-to-bottom
+
+    Returns:
+      Pixels: The modified Pixels image data with the overlay drawn.
+
+    """
+    w: int
+    h: int
+    cx: int
+    cy: int
+    col: int
+    row: int
+    lw: int
+    # open the image
+    with self.obj as img:
+      # draw the thirds lines
+      draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
+      w, h = img.size
+      cx, cy = w // 3, h // 3
+      lw = max(1, max(w, h) // _LINE_WIDTH_RATIO)
+      draw.line((0, cy, w, cy), fill=Color.WHITE.value, width=lw)
+      draw.line((0, 2 * cy, w, 2 * cy), fill=Color.WHITE.value, width=lw)
+      draw.line((cx, 0, cx, h), fill=Color.WHITE.value, width=lw)
+      draw.line((2 * cx, 0, 2 * cx, h), fill=Color.WHITE.value, width=lw)
+      # draw large number labels centered in each of the 9 sections, left-to-right, top-to-bottom
+      label_font: ImageFont.FreeTypeFont = cast(
+        'ImageFont.FreeTypeFont', ImageFont.load_default(size=int(max(cx, cy) / 3))
+      )
+      for row in range(3):
+        for col in range(3):
+          draw.text(
+            (col * cx + cx // 2, row * cy + cy // 2),  # center of this section
+            str(row * 3 + col + 1),  # label
+            fill=Color.GREEN.value,
+            font=label_font,
+            anchor='mm',  # center it exactly
+          )
+      # done, save remembering to add metadata that this image has an overlay
+      return dataclasses.replace(Pixels.FromPIL(img)[0], meta=self.meta.copy())
+
+  def DrawCrossOverlay(
+    self,
+    x: int,
+    y: int,
+    *,
+    col: Color = DEFAULT_MARK_COLOR,
+    lw: int = DEFAULT_MARK_WIDTH,
+  ) -> Pixels:
+    """Draw a cross overlay on an image at the specified coordinates.
+
+    Overlays:
+    - a horizontal line spanning the image at the given y-coordinate
+    - a vertical line spanning the image at the given x-coordinate
+
+    Args:
+      x (int): The x-coordinate of the center of the cross.
+      y (int): The y-coordinate of the center of the cross.
+      col (Color): The color of the cross; default is DEFAULT_MARK_COLOR.
+      lw (int): The line width of the cross in pixels; default is DEFAULT_MARK_WIDTH.
+
+    Returns:
+      Pixels: The modified Pixels image data with the overlay drawn.
+
+    Raises:
+      Error: If the coordinates are out of bounds or if there are issues processing the image.
+
+    """
+    w: int
+    h: int
+    # open the image
+    with self.obj as img:
+      # check the coords
+      draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
+      w, h = img.size
+      if not (0 <= x < w) or not (0 <= y < h):
+        raise Error(f'Invalid coordinates for cross overlay: {x=}, {y=}, image size {w=} x {h=}')
+      # draw the cross lines
+      draw.line((0, y, w, y), fill=col.value, width=lw)
+      draw.line((x, 0, x, h), fill=col.value, width=lw)
+      # done, save remembering to add metadata that this image has an overlay
+      return dataclasses.replace(Pixels.FromPIL(img)[0], meta=self.meta.copy())
+
+
+def GetBasicDataFromMP4(img_bytes: bytes) -> ObjInfo:
+  """Get basic data from an MP4.
 
   Args:
     img_bytes (bytes): The image data as bytes (PNG, GIF, or MP4).
 
   Returns:
-    tuple[int, int, str, tbase.JSONDict]: (width, height, hash, metadata) where:
-      - width: The width of the image in pixels.
-      - height: The height of the image in pixels.
-      - hash: A hash of the image data (SHA256 of RGB bytes).
-      - metadata: The extracted metadata from the image.
+    ObjInfo: Basic information about the MP4
 
   Raises:
-    Error: If the image format is unsupported or if there are issues processing the image.
+    Error: on error
 
   """
-  # MP4: has an 'ftyp' ISO base media box at bytes 4-8; PILImage.open() raises on MP4, so we
-  # must detect and handle it before reaching PIL
-  raw_hash: str
+  # MP4: has an 'ftyp' ISO base media box at bytes 4-8; PILImage.open() raises on MP4: check
+  if not DetectMP4(img_bytes):
+    raise Error('Not a valid MP4 file (missing ftyp box)')
+  bin_hash: str = hashes.Hash256(img_bytes).hex()
+  # we have to write the bytes to a temporary file because imageio_ffmpeg requires a file path
   width: int
   height: int
-  if len(img_bytes) >= 8 and img_bytes[4:8] == b'ftyp':  # noqa: PLR2004
-    with tempfile.NamedTemporaryFile(suffix='.mp4') as tmp:
-      tmp.write(img_bytes)
-      tmp.flush()
-      tmp_path = pathlib.Path(tmp.name)
-      # get width/height via imageio (reliable); get_meta_data() does NOT expose container tags
-      reader = imageio.get_reader(  # pyright: ignore[reportUnknownMemberType]
-        tmp_path,
-        format='ffmpeg',  # type: ignore[arg-type]
-      )
-      width, height = cast('tuple[int, int]', reader.get_meta_data().get('size', (0, 0)))  # type: ignore[union-attr]
-      reader.close()
-      # read container tags (including our JSON comment) via ffmpeg -f ffmetadata;
-      # this is the only way to access format.tags since imageio doesn't expose them
-      proc = subprocess.run(  # noqa: S603
-        [
-          imageio_ffmpeg.get_ffmpeg_exe(),
-          '-v',
-          'quiet',
-          '-i',
-          str(tmp_path),
-          '-f',
-          'ffmetadata',
-          'pipe:1',
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-      )
-    if width < 1 or height < 1:
-      raise Error(f'Invalid MP4 frame size {width} x {height}')
+  with tempfile.NamedTemporaryFile(suffix='.mp4') as tmp:
+    tmp.write(img_bytes)
+    tmp.flush()
+    tmp_path = pathlib.Path(tmp.name)
+    # get width/height via imageio (reliable); get_meta_data() does NOT expose container tags
+    reader = imageio.get_reader(  # pyright: ignore[reportUnknownMemberType]
+      tmp_path,
+      format='ffmpeg',  # type: ignore[arg-type]
+    )
+    width, height = cast('tuple[int, int]', reader.get_meta_data().get('size', (0, 0)))  # type: ignore[union-attr]
+    reader.close()
+    # read container tags (including our JSON comment) via ffmpeg -f ffmetadata;
+    # this is the only way to access format.tags since imageio doesn't expose them
+    proc = subprocess.run(  # noqa: S603
+      [
+        imageio_ffmpeg.get_ffmpeg_exe(),
+        '-v',
+        'quiet',
+        '-i',
+        str(tmp_path),
+        '-f',
+        'ffmetadata',
+        'pipe:1',
+      ],
+      capture_output=True,
+      text=True,
+      check=False,
+    )
     if proc.returncode != 0:
       raise Error(f'ffmpeg failed reading MP4 metadata: {proc.stderr.strip()!r}')
     # parse ffmetadata format: key=value lines; comments start with ';', sections with '['
@@ -423,376 +1326,81 @@ def GetBasicDataFromImage(img_bytes: bytes) -> tuple[int, int, str, tbase.JSONDi
     # metadata was stored by WriteVideoMP4 as a single JSON string in the 'comment' field
     # (mirrors how GIF stores metadata in its comment field)
     mp4_meta: tbase.JSONDict = {}
-    raw_hash = ''
-    if 'comment' in mp4_tags:
-      try:
-        mp4_meta = json.loads(mp4_tags['comment'])
-        if META_IMAGE_HASH_KEY in mp4_meta:
-          raw_hash = str(mp4_meta[META_IMAGE_HASH_KEY])
-        else:
-          logging.error('DO NOT trust this MP4 hash')
-      except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError):
-        logging.error('MP4 comment metadata not valid JSON, ignoring; DO NOT trust this MP4 hash')
-    if not raw_hash:
-      logging.error(
-        'MP4 missing %r in metadata; falling back to file hash (DO NOT trust)', META_IMAGE_HASH_KEY
-      )
-      raw_hash = hashes.Hash256(img_bytes).hex()
-    return (width, height, raw_hash, mp4_meta)
-  # PNG or GIF: use PIL to open and extract metadata
+    data_hash: str = bin_hash
+    # try to get the data hash from the JSON metadata; if not valid JSON, log an error and ignore it
+    try:
+      mp4_meta = json.loads(mp4_tags['comment'])
+      data_hash = str(mp4_meta[META_IMAGE_HASH_KEY])
+    except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError, KeyError):
+      logging.error('MP4 comment metadata not valid JSON, ignoring; DO NOT trust this MP4 hash')
+    # build the ObjInfo object
+    return ObjInfo(
+      anim=AnimationEncoding.MP4,
+      width=width,
+      height=height,
+      bin_hash=bin_hash,
+      data_hash=data_hash,
+      meta=cast('dict[str, str]', mp4_meta),
+    )
+
+
+def GetBasicData(img_bytes: bytes) -> tuple[ObjInfo, Pixels | None]:
+  """Get basic data from an image or animation (PNG, GIF, or MP4) or load, if possible.
+
+  Args:
+    img_bytes (bytes): The image data as bytes (PNG, GIF, or MP4).
+
+  Returns:
+    tuple[ObjInfo, Pixels | None]: A tuple containing:
+      - ObjInfo: Basic information about the image or animation.
+      - Pixels | None: The loaded image as a Pixels object, or None if not applicable.
+
+  Raises:
+    Error: on error
+
+  """
+  if not img_bytes:
+    raise Error('No image data provided')
+  # we must detect and handle MP4 it before reaching PIL!
+  if DetectMP4(img_bytes):
+    return (GetBasicDataFromMP4(img_bytes), None)
+  # non-MP4: try to load as an image and extract metadata
+  try:
+    px: Pixels
+    info: ObjInfo
+    px, info = Pixels.FromBytes(img_bytes, allow_conversion=True)
+    return (info, px)
+  except Error as err:
+    logging.info(err)
+  # Pixels failed: the only reason we'll accept for now, is that the image is an animated GIF
+  # open as image, with PIL
   with PILImage.open(io.BytesIO(img_bytes)) as img:
-    # get the internal data we need (size and hash)
-    width = img.width
-    height = img.height
-    if width < 1 or height < 1:
-      raise Error(f'Invalid image size {width} x {height}')
-    raw_hash = hashes.Hash256(img.convert('RGB').tobytes()).hex()  # not 'RGBA'!!
-    # extract metadata from PNG
-    img_metadata: tbase.JSONDict = img.info  # type: ignore[assignment]
-    # make sure format is known and do any format-specific operations
-    if (img_format := (img.format or '').upper()) == FileType.PNG.value.upper():
-      pass  # nothing else to do for PNG, the metadata is already extracted in pil_info
-    elif img_format == FileType.GIF.value.upper():
-      # for GIFs we expect the metadata to be stored in the "comment" field as a JSON string
-      if 'comment' in img_metadata:
-        try:
-          img_metadata = json.loads(cast('bytes', img_metadata['comment']).decode('utf-8'))
-        except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError):
-          # if comment is not valid JSON, just keep the original pil_info
-          logging.error(
-            'GIF image has comment metadata but it is not valid JSON, ignoring it; '
-            'DO NOT trust this GIF hash'
-          )
-    elif img_format == FileType.MP4.value.upper():
-      raise Error('MP4 format reached PIL unexpectedly; file bytes may not be a valid MP4')
-    else:
-      raise Error(f'Unsupported image format {img.format!r}, expected PNG')
-    # if we managed to extract the metadata, then maybe we can also get the correct hash
-    if META_IMAGE_HASH_KEY in img_metadata:
-      raw_hash = str(img_metadata[META_IMAGE_HASH_KEY])
-    else:
-      logging.error('DO NOT trust this image hash')
-  return (width, height, raw_hash, img_metadata)
-
-
-def ResizePNG(
-  img_data: bytes,
-  width: int,
-  height: int,
-  *,
-  resample: PILImage.Resampling = PILImage.Resampling.BICUBIC,
-) -> bytes:
-  """Resize PNG bytes and return PNG bytes without metadata.
-
-  Args:
-    img_data (bytes): The PNG image data as bytes.
-    width (int): The target width in pixels.
-    height (int): The target height in pixels.
-    resample (PILImage.Resampling): The resampling filter to use for resizing; default is BICUBIC.
-
-  Returns:
-    bytes: The resized PNG image data as bytes.
-
-  """
-  # open the image
-  with PILImage.open(io.BytesIO(img_data)) as img:
-    # trivial case: if the image is already the requested size, just return the original bytes
-    if img.size == (width, height):
-      return img_data
-    # resize the image and save to PNG bytes
-    return PNGFromRGBImage(
-      img.resize((width, height), resample=resample), meta=cast('dict[str, str]', img.info)
-    )
-
-
-def DrawCardinalInfoOverlay(img_data: bytes) -> bytes:
-  """Draw an overlay on the (512x512) image with target info for moving the zoom frame.
-
-  Overlays is:
-  - white lines delimiting the quadrants of the image, intersecting at the center
-  - 8 green circles around the center, indicating the 8 cardinal and ordinal directions
-    to move the frame
-  - each circle has a green label with its direction: "N", "NE", "E", "SE", "S", "SW", "W", "NW"
-
-  Works on any size image, but is designed for 512x512, especially because of:
-  - circle radius is fixed
-  - text labels are fixed size and positioned with a fixed offset from the circle's center
-  Fix these and it can work well on other sizes too...
-
-  Args:
-    img_data (bytes): The PNG image data as bytes.
-
-  Returns:
-    bytes: The modified PNG image data with the overlay drawn.
-
-  """
-  w: int
-  h: int
-  cx: int
-  cy: int
-  x: int
-  y: int
-  lw: int
-  # open the image
-  with PILImage.open(io.BytesIO(img_data)) as img:
-    # draw the quadrant lines
-    draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
-    w, h = img.size
-    cx, cy = w // 2, h // 2
-    step_sz: int = w // frame.DEFAULT_STEP_DIRECT
-    lw = max(1, max(w, h) // _LINE_WIDTH_RATIO)
-    draw.line((0, cy, w, cy), fill=Color.WHITE.value, width=lw)
-    draw.line((cx, 0, cx, h), fill=Color.WHITE.value, width=lw)
-    # draw 8 circles around the center to indicate the 8 cardinal/ordinal directions
-    font: ImageFont.ImageFont = cast('ImageFont.ImageFont', ImageFont.load_default())
-    for dx, dy, direction in [
-      (0, -step_sz, 'N'),
-      (step_sz / _SQRT_TWO, -step_sz / _SQRT_TWO, 'NE'),
-      (step_sz, 0, 'E'),
-      (step_sz / _SQRT_TWO, step_sz / _SQRT_TWO, 'SE'),
-      (0, step_sz, 'S'),
-      (-step_sz / _SQRT_TWO, step_sz / _SQRT_TWO, 'SW'),
-      (-step_sz, 0, 'W'),
-      (-step_sz / _SQRT_TWO, -step_sz / _SQRT_TWO, 'NW'),
-    ]:
-      x, y = int(cx + dx), int(cy + dy)
-      draw.ellipse(
-        (x - _CIRCLE_RADIUS, y - _CIRCLE_RADIUS, x + _CIRCLE_RADIUS, y + _CIRCLE_RADIUS),
-        outline=Color.GREEN.value,
-        width=lw,
+    # check source type; make absolutely sure it is an animated GIF
+    try:
+      img_format: AnimationEncoding = AnimationEncoding((img.format or '').upper())
+    except Exception as err:
+      raise Error(f'Unsupported image format: {img.format!r}') from err
+    if img_format != AnimationEncoding.GIF or not (anim := img.is_animated):
+      raise Error(f'Expected animated GIF format, got {img_format!r} / {anim=}')
+    # for GIFs we expect the metadata to be stored in the "comment" field as a JSON string
+    meta: dict[str, str] = {}
+    try:
+      meta = _LoadMetadataKeys(
+        json.loads(cast('bytes', img.info['comment']).decode('utf-8')).items()
       )
-      # for each circle, also draw the label text
-      draw.text(
-        (x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=Color.GREEN.value, font=font
-      )
-    # done, save remembering to add metadata that this image has an overlay
-    return PNGFromRGBImage(img, meta=cast('dict[str, str]', img.info))
-
-
-def DrawThirdsInfoOverlay(img_data: bytes) -> bytes:
-  """Draw an overlay on an image of any size, with target info for moving the zoom frame.
-
-  Overlays:
-  - white lines delimiting the 9 sections of the image
-  - large green number labels (1-9) centered in each section, left-to-right, top-to-bottom
-
-  Args:
-    img_data (bytes): The PNG image data as bytes.
-
-  Returns:
-    bytes: The modified PNG image data with the overlay drawn.
-
-  """
-  w: int
-  h: int
-  cx: int
-  cy: int
-  col: int
-  row: int
-  lw: int
-  # open the image
-  with PILImage.open(io.BytesIO(img_data)) as img:
-    # draw the thirds lines
-    draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
-    w, h = img.size
-    cx, cy = w // 3, h // 3
-    lw = max(1, max(w, h) // _LINE_WIDTH_RATIO)
-    draw.line((0, cy, w, cy), fill=Color.WHITE.value, width=lw)
-    draw.line((0, 2 * cy, w, 2 * cy), fill=Color.WHITE.value, width=lw)
-    draw.line((cx, 0, cx, h), fill=Color.WHITE.value, width=lw)
-    draw.line((2 * cx, 0, 2 * cx, h), fill=Color.WHITE.value, width=lw)
-    # draw large number labels centered in each of the 9 sections, left-to-right, top-to-bottom
-    label_font: ImageFont.FreeTypeFont = cast(
-      'ImageFont.FreeTypeFont', ImageFont.load_default(size=int(max(cx, cy) / 3))
+    except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError, KeyError) as err:
+      logging.error(f'GIF "comment" metadata is not valid, ignoring: {err}')
+    return (
+      ObjInfo(
+        anim=img_format,
+        width=img.width,
+        height=img.height,
+        bin_hash=hashes.Hash256(img_bytes).hex(),
+        data_hash=hashes.Hash256(img.convert('RGB').tobytes()).hex(),
+        meta=meta,
+      ),
+      None,
     )
-    for row in range(3):
-      for col in range(3):
-        draw.text(
-          (col * cx + cx // 2, row * cy + cy // 2),  # center of this section
-          str(row * 3 + col + 1),  # label
-          fill=Color.GREEN.value,
-          font=label_font,
-          anchor='mm',  # center it exactly
-        )
-    # done, save remembering to add metadata that this image has an overlay
-    return PNGFromRGBImage(img, meta=cast('dict[str, str]', img.info))
-
-
-def DrawCrossOverlay(
-  img_data: bytes, x: int, y: int, *, col: Color = DEFAULT_MARK_COLOR, lw: int = DEFAULT_MARK_WIDTH
-) -> bytes:
-  """Draw a cross overlay on an image at the specified coordinates.
-
-  Overlays:
-  - a horizontal line spanning the image at the given y-coordinate
-  - a vertical line spanning the image at the given x-coordinate
-
-  Args:
-    img_data (bytes): The PNG image data as bytes.
-    x (int): The x-coordinate of the center of the cross.
-    y (int): The y-coordinate of the center of the cross.
-    col (Color): The color of the cross; default is DEFAULT_MARK_COLOR.
-    lw (int): The line width of the cross in pixels; default is DEFAULT_MARK_WIDTH.
-
-  Returns:
-    bytes: The modified PNG image data with the overlay drawn.
-
-  Raises:
-    Error: If the coordinates are out of bounds or if there are issues processing the image.
-
-  """
-  w: int
-  h: int
-  # open the image
-  with PILImage.open(io.BytesIO(img_data)) as img:
-    # check the coords
-    draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
-    w, h = img.size
-    if not (0 <= x < w) or not (0 <= y < h):
-      raise Error(f'Invalid coordinates for cross overlay: {x=}, {y=}, image size {w=} x {h=}')
-    # draw the cross lines
-    draw.line((0, y, w, y), fill=col.value, width=lw)
-    draw.line((x, 0, x, h), fill=col.value, width=lw)
-    # done, save remembering to add metadata that this image has an overlay
-    return PNGFromRGBImage(img, meta=cast('dict[str, str]', img.info))
-
-
-def RGBImageFromPNG(img_data: bytes) -> PILImage.Image:
-  """Decode PNG bytes and return an RGB Pillow image copy.
-
-  Will not convert to RGB if the PNG is not in RGB mode; instead, it will raise an error.
-
-  Args:
-    img_data (bytes): The PNG-encoded bytes of the image.
-
-  Returns:
-    PILImage.Image: A Pillow Image object in RGB mode.
-
-  Raises:
-    Error: on error
-
-  """
-  # open
-  with PILImage.open(io.BytesIO(img_data)) as img:
-    # check mode
-    if img.mode != 'RGB':
-      raise Error(f'frame mode {img.mode} != RGB')
-    # make a copy
-    return img.copy()
-
-
-def RGBImageFromImage(img_data: bytes) -> PILImage.Image:
-  """Decode image bytes and return an RGB Pillow image copy. Will convert to RGB if necessary.
-
-  Args:
-    img_data (bytes): The image-encoded bytes of the image.
-
-  Returns:
-    PILImage.Image: A Pillow Image object in RGB mode.
-
-  """
-  # open
-  with PILImage.open(io.BytesIO(img_data)) as img:
-    # check mode
-    if img.mode != 'RGB':
-      return img.convert('RGB')
-    # make a copy
-    return img.copy()
-
-
-def PNGFromRGBImage(
-  img_data: PILImage.Image, *, meta: dict[str, str] | None = None, copy_previous: bool = True
-) -> bytes:
-  """Encode an RGB Pillow image as PNG bytes.
-
-  Args:
-    img_data (PILImage.Image): A Pillow Image object in RGB mode.
-    meta (dict[str, str] | None): Optional additional metadata to include in the PNG;
-        default is None.
-    copy_previous (bool): Whether to copy existing metadata from the original image;
-        default is True.
-
-  Returns:
-    bytes: The PNG-encoded bytes of the image.
-
-  Raises:
-    Error: on error
-
-  """
-  # check mode
-  if img_data.mode != 'RGB':
-    raise Error(f'frame mode {img_data.mode} != RGB')
-  # save to PNG bytes
-  with io.BytesIO() as buf:
-    # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranZoom:" (_app) namespace
-    png_meta: PngImagePlugin.PngInfo | None = None
-    if meta or (copy_previous and img_data.info.items()):
-      png_meta = PngImagePlugin.PngInfo()
-      # copy any existing metadata from the original image
-      if copy_previous and img_data.info.items():
-        for k, v in img_data.info.items():
-          if not isinstance(k, str):
-            raise Error(f'Unexpected non-string PNG metadata pair: {k!r}: {v!r}')
-          png_meta.add_text(k, str(v))
-      # add any extra metadata passed in
-      if meta:
-        for k, v in meta.items():
-          png_meta.add_text(k, v)
-    # save to PNG bytes
-    img_data.save(buf, format='PNG', pnginfo=png_meta)
-    return buf.getvalue()
-
-
-def JPGFromRGBImage(
-  img_data: PILImage.Image, *, meta: dict[str, str] | None = None, copy_previous: bool = True
-) -> bytes:
-  """Encode an RGB Pillow image as JPG bytes.
-
-  Args:
-    img_data (PILImage.Image): A Pillow Image object in RGB mode.
-    meta (dict[str, str] | None): Optional additional metadata to include in the JPG;
-        default is None.
-    copy_previous (bool): Whether to copy existing metadata from the original image;
-        default is True.
-
-  Returns:
-    bytes: The JPG-encoded bytes of the image.
-
-  Raises:
-    Error: on error
-
-  """
-  # check mode
-  if img_data.mode != 'RGB':
-    raise Error(f'frame mode {img_data.mode} != RGB')
-  # save to JPG bytes
-  with io.BytesIO() as buf:
-    # store metadata as compact JSON in EXIF ImageDescription (tag 0x010E)
-    exif: PILImage.Exif | None = None
-    if meta or (copy_previous and img_data.info.items()):
-      all_meta: dict[str, str] = {}
-      # copy any existing metadata from the original image
-      if copy_previous and img_data.info.items():
-        for k, v in img_data.info.items():
-          if not isinstance(k, str):
-            raise Error(f'Unexpected non-string PNG metadata pair: {k!r}: {v!r}')
-          all_meta[k] = str(v)
-      # add any extra metadata passed in
-      if meta:
-        all_meta.update(meta)
-      # store metadata as compact JSON in EXIF ImageDescription (tag 0x010E)
-      # list of tags in: https://github.com/python-pillow/Pillow/blob/main/src/PIL/ExifTags.py
-      exif = PILImage.Exif()
-      exif[ExifTags.Base.ImageDescription] = json.dumps(all_meta, separators=(',', ':'))
-    # save to PNG bytes
-    img_data.save(
-      buf,
-      format='JPEG',
-      quality=JPEG_QUALITY,
-      optimize=True,
-      exif=exif.tobytes() if exif else None,
-    )
-    return buf.getvalue()
 
 
 def PrintITerm2(img_data: bytes) -> None:
@@ -808,3 +1416,26 @@ def PrintITerm2(img_data: bytes) -> None:
     f'\x1b]1337;File=inline=1;size={len(img_data)}:{base64.b64encode(img_data).decode("ascii")}\a\n'
   )
   sys.stdout.flush()
+
+
+def ValidateIFrames(i_frames: int) -> None:
+  """Validate the interpolation frames parameter.
+
+  Args:
+    i_frames (int): The number of interpolation frames to validate.
+
+  Raises:
+    Error: If i_frames is not between 0 and MAX_INTERPOLATION_FRAMES (inclusive).
+
+  """
+  if not (0 <= i_frames <= MAX_INTERPOLATION_FRAMES):
+    raise Error(f'Interpolation must be between 0 and {MAX_INTERPOLATION_FRAMES}, got {i_frames=}')
+
+
+def _LoadMetadataKeys(img_m: abc.Iterable[tuple[Any, Any]]) -> dict[str, str]:
+  m: dict[str, str] = {}
+  for k, v in img_m:
+    if not isinstance(k, str):
+      raise Error(f'Invalid metadata key type {type(k)} for key {k!r}')
+    m[k] = str(v)
+  return m

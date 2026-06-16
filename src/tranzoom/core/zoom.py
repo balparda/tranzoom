@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import bisect
 import dataclasses
-import enum
 import io
 import json
 import logging
@@ -24,9 +23,6 @@ from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
 from tranzoom.core import fractal, frame, image, pixels
-
-# basic computation constants
-MAX_COLOR: int = 255  # max color value for 8-bit RGB channels
 
 # interpolation constants; these could conceivably be made user-configurable, but for that they
 # would need to be added to the ZoomParameters dataclass and serialized in the JSON, which is
@@ -56,7 +52,6 @@ THRESHOLD_JUMPY_ZOOM_PER_FRAME: float = 1.25  # if zoom per frame is above this 
 MAX_TOLERATED_FRAME_MAG_ERROR: float = 0.0002  # 0.02% - max error Frame vs. reduced mpq Frame
 MAX_TOLERATED_TOTAL_MAG_ERROR: float = 0.001  # 0.1% - max total cumulative error of total zoom
 MAX_TOLERATED_MARKER_MAG_ERROR: float = 0.15  # 15% max error for marker frames
-MAX_INTERPOLATION_FRAMES: int = 7  # sanity limit for number of interpolated frames
 
 # gmpy2.mpq constants
 _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
@@ -67,16 +62,6 @@ MAGNITUDE_PER_DEPTH_MARKER: gmpy2.mpq = gmpy2.mpq('3/10')  # ~2x zoom/frame (10*
 
 class Error(fractal.Error):
   """Base zoom exception."""
-
-
-class AnimationType(enum.Enum):
-  """Animation type enum."""
-
-  GIF = 'gif'  # also the file suffix!
-  MP4 = 'mp4'
-
-
-DEFAULT_ANIMATION_TYPE: AnimationType = AnimationType.GIF
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
@@ -100,25 +85,20 @@ class ZoomParameters(frame.SerializingFractalObject):
   """
 
   # ATTENTION: changing anything here changes the HASH!!
-  tp: AnimationType  # 'gif' or 'mp4'
   img: frame.ComputationParameters  # INITIAL frame; one computation parameters for all images
-  render: pixels.RenderParameters  # one render parameters for all images
+  render: pixels.RenderAnimationParameters  # one render animation parameters for all images
   mag: gmpy2.mpq  # destination magnitude
   n_frames: int  # number of frames in the animation
   duration: int  # round(duration in seconds * VIDEO_DURATION_STORE_SCALE): no float precision snafu
-  i_frames: int = 0  # number of interpolated frames to render between every two computed frames
   loop: int = 0  # number of loops for GIFs; 0 means infinite loop; ignored for non-GIFs
 
-  def __post_init__(self) -> None:  # noqa: C901
+  def __post_init__(self) -> None:
     """Check ZoomParameters for validity.
 
     Raises:
       Error: if any parameter is invalid.
 
     """
-    # check type is valid
-    if self.tp not in {AnimationType.GIF, AnimationType.MP4}:
-      raise Error(f'Unknown animation type: {self.tp}')
     # check magnitude is valid
     if not (-MAX_ZOOM_MAGNITUDE_10 <= self.mag <= MAX_ZOOM_MAGNITUDE_10):
       raise Error(f'Magnitude abs() must be <= {MAX_ZOOM_MAGNITUDE_10}, got {self.mag}')
@@ -137,8 +117,6 @@ class ZoomParameters(frame.SerializingFractalObject):
     # check fps is valid: we already validated n_frames and duration that are used to compute fps
     if not (MIN_FPS <= self.fps <= MAX_FPS):
       raise Error(f'Frames per second must be between {MIN_FPS} and {MAX_FPS}, got {self.fps}')
-    # check i_frames is valid
-    ValidateIFrames(self.i_frames)
     # check ifps is valid: it also has to be between MIN_FPS and MAX_FPS
     if not (MIN_FPS <= self.ifps <= MAX_FPS):
       raise Error(f'Final interpolated FPS must be between {MIN_FPS} and {MAX_FPS} got {self.ifps}')
@@ -148,16 +126,16 @@ class ZoomParameters(frame.SerializingFractalObject):
         f'Final total frames must be between {MIN_FRAMES} and {MAX_FRAMES}, got {self.all_frames}'
       )
     # check loop count is valid for GIFs
-    if self.tp == AnimationType.GIF and not (MIN_LOOP <= self.loop <= MAX_LOOP):
+    if self.render.anim == pixels.AnimationEncoding.GIF and not (MIN_LOOP <= self.loop <= MAX_LOOP):
       raise Error(f'Loop count for GIFs must be between {MIN_LOOP} and {MAX_LOOP}, got {self.loop}')
-    if self.tp != AnimationType.GIF and self.loop != 0:
-      raise Error(f'Loop count is only applicable for GIFs, got {self.loop} for {self.tp}')
+    if self.render.anim != pixels.AnimationEncoding.GIF and self.loop != 0:
+      raise Error(f'Loop count is only applicable for GIFs, got {self.loop} for {self.render.anim}')
 
   def __str__(self) -> str:
     """Get string representation of the ZoomParameters.
 
     Format is:
-      "<[ANIMATION_TYPE]: [RENDER_PARAMETERS] -> [COMPUTATION_PARAMETERS] / "
+      "<[COMPUTATION_PARAMETERS] -> [RENDER_PARAMETERS] / "
       "(mag:[MAGNIFICATION], n:[N_FRAMES]|[ALL_FRAMES], "
       "d:[DURATION(sec)], fps:([FPS])*[I_FRAMES+1], l:[LOOP])>"
 
@@ -166,9 +144,9 @@ class ZoomParameters(frame.SerializingFractalObject):
 
     """
     return (
-      f'<{self.tp.name.upper()}: {self.img} -> {self.render} / '
+      f'<{self.img} -> {self.render} / '
       f'(mag:{self.mag}, n:{self.n_frames}|{self.all_frames}, d:{self.n_seconds}, '
-      f'fps:({self.fps})*{self.i_frames + 1}, l:{self.loop})>'
+      f'fps:({self.fps})*{self.render.i_frames + 1}, l:{self.loop})>'
     )
 
   @property
@@ -209,7 +187,7 @@ class ZoomParameters(frame.SerializingFractalObject):
       gmpy2.mpq: The interpolated frames per second for this animation.
 
     """
-    return self.fps * gmpy2.mpq(self.i_frames + 1)
+    return self.fps * gmpy2.mpq(self.render.i_frames + 1)
 
   @property
   def all_frames(self) -> int:
@@ -222,7 +200,7 @@ class ZoomParameters(frame.SerializingFractalObject):
       int: The total number of frames for this animation.
 
     """
-    return ((self.n_frames - 1) * (self.i_frames + 1)) + 1
+    return ((self.n_frames - 1) * (self.render.i_frames + 1)) + 1
 
   @property
   def mag_per_step(self) -> gmpy2.mpq:
@@ -392,13 +370,11 @@ class ZoomParameters(frame.SerializingFractalObject):
     """
     return {
       # ATTENTION: changing anything here changes the HASH!!
-      'tp': self.tp.value,
       'img': self.img.json,
       'render': self.render.json,
       'mag': str(self.mag),
       'n_frames': self.n_frames,
       'duration': self.duration,
-      'i_frames': self.i_frames,
       'loop': self.loop,
     }
 
@@ -421,13 +397,11 @@ class ZoomParameters(frame.SerializingFractalObject):
     # create the object
     try:
       params = ZoomParameters(  # object creation will check the data is valid and consistent
-        tp=AnimationType(data['tp']),
         img=frame.ComputationParameters.FromJson(cast('tbase.JSONDict', data['img'])),
-        render=pixels.RenderParameters.FromJson(cast('tbase.JSONDict', data['render'])),
+        render=pixels.RenderAnimationParameters.FromJson(cast('tbase.JSONDict', data['render'])),
         mag=gmpy2.mpq(str(data['mag'])),
         n_frames=int(str(data['n_frames'])),
         duration=int(str(data['duration'])),
-        i_frames=int(str(data.get('i_frames', '0'))),
         loop=int(str(data.get('loop', '0'))),
       )
     except (KeyError, ValueError, TypeError, Error) as err:
@@ -736,11 +710,11 @@ def CenterZoomRGB(
     raise Error(f'expected RGB image, got {img.mode!r}')
   if not math.isfinite(scale) or scale <= 0.0:
     raise Error(f'invalid interpolation zoom scale: {scale}')
-  if fill_color and (max(fill_color) > MAX_COLOR or min(fill_color) < 0):
+  if fill_color and (max(fill_color) > pixels.MAX_COLOR or min(fill_color) < 0):
     raise Error(f'invalid fill_color: {fill_color}')
   # if scale is effectively 1, return a copy
   if abs(scale - 1.0) < 1e-12:  # noqa: PLR2004
-    return (img.copy(), PILImage.new('L', img.size, MAX_COLOR) if return_mask else None)
+    return (img.copy(), PILImage.new('L', img.size, pixels.MAX_COLOR) if return_mask else None)
   # get center
   width: int
   height: int
@@ -768,7 +742,7 @@ def CenterZoomRGB(
   if not return_mask:
     return (out, None)
   # create a mask of the same size as the input image, filled with MAX_COLOR (valid)
-  mask_src: PILImage.Image = PILImage.new('L', img.size, MAX_COLOR)
+  mask_src: PILImage.Image = PILImage.new('L', img.size, pixels.MAX_COLOR)
   mask: PILImage.Image = mask_src.transform(
     img.size,
     PILImage.Transform.AFFINE,
@@ -869,7 +843,7 @@ def MaskArray(mask: PILImage.Image) -> np.ndarray:
   if mask.mode != 'L':
     raise Error(f'expected L mask, got {mask.mode!r}')
   # convert to float32 array in [0, 1]
-  return np.asarray(mask, dtype=np.float32)[:, :, None] / float(MAX_COLOR)
+  return np.asarray(mask, dtype=np.float32)[:, :, None] / float(pixels.MAX_COLOR)
 
 
 def LinearInterpolatedFrame(
@@ -921,7 +895,7 @@ def LinearInterpolatedFrame(
   a1: np.ndarray = np.asarray(next_aligned_raw, dtype=np.float32)
   alpha1: np.ndarray = frac * MaskArray(next_alpha_mask)
   out: np.ndarray = a0 * (1.0 - alpha1) + a1 * alpha1
-  return PNGBytesFromRGBArray(np.clip(out, 0, MAX_COLOR).astype(np.uint8))
+  return PNGBytesFromRGBArray(np.clip(out, 0, pixels.MAX_COLOR).astype(np.uint8))
 
 
 def QuadraticInterpolatedFrame(  # noqa: PLR0914
@@ -1003,7 +977,7 @@ def QuadraticInterpolatedFrame(  # noqa: PLR0914
   effective_w2: np.ndarray = w2 * alpha2
   effective_w0: np.ndarray = w0 + (w1 * (1.0 - alpha1)) + (w2 * (1.0 - alpha2))
   out: np.ndarray = effective_w0 * a0 + effective_w1 * a1 + effective_w2 * a2
-  return PNGBytesFromRGBArray(np.clip(out, 0, MAX_COLOR).astype(np.uint8))
+  return PNGBytesFromRGBArray(np.clip(out, 0, pixels.MAX_COLOR).astype(np.uint8))
 
 
 def InterpolatedFrameStream(
@@ -1039,7 +1013,7 @@ def InterpolatedFrameStream(
 
   """
   # check params
-  ValidateIFrames(i_frames)
+  pixels.ValidateIFrames(i_frames)
   if not math.isfinite(zoom_per_step) or zoom_per_step <= 0.0:
     raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
   # create an iterator over the pairs, get the first one
@@ -1087,20 +1061,6 @@ def InterpolatedFrameStream(
     if next_pending is None:
       return  # done
     curr_frame, next_frame = next_pending
-
-
-def ValidateIFrames(i_frames: int) -> None:
-  """Validate the interpolation frames parameter.
-
-  Args:
-    i_frames (int): The number of interpolation frames to validate.
-
-  Raises:
-    Error: If i_frames is not between 0 and MAX_INTERPOLATION_FRAMES (inclusive).
-
-  """
-  if not (0 <= i_frames <= MAX_INTERPOLATION_FRAMES):
-    raise Error(f'Interpolation must be between 0 and {MAX_INTERPOLATION_FRAMES}, got {i_frames=}')
 
 
 def WriteAnimatedGIF(

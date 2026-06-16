@@ -704,7 +704,7 @@ class ComputationParameters(SerializingFractalObject):
     return (
       '{'
       f'{self.frm} : '
-      f'[{self.width}, {self.height}, {self.depth if self.depth > MIN_ITER else "AUTO"}]'
+      f'[{self.width} \u00d7 {self.height}, {self.depth if self.depth > MIN_ITER else "AUTO"}]'
       + ('' if self.set_points is None else f' : {self.set_points.value.lower()}')
       + '}'
     )
