@@ -79,6 +79,10 @@ class AnimationEncoding(enum.Enum):
   MP4 = 'mp4'
 
 
+# GIF has is_animated, but we have to check for it
+DetectAnimGIF: abc.Callable[[PILImage.Image], bool] = lambda img: (  # pyright: ignore[reportUnknownLambdaType]
+  hasattr(img, 'is_animated') and img.is_animated  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+)
 # MP4: has an 'ftyp' ISO base media box at bytes 4-8; PILImage.open() raises on MP4, so we
 # must detect and handle it before reaching PIL
 DetectMP4: abc.Callable[[bytes], bool] = lambda img_b: len(img_b) >= 8 and img_b[4:8] == b'ftyp'  # noqa: PLR2004
@@ -931,18 +935,18 @@ class Pixels(frame.SerializingFractalObject):
 
     """
     # check for animated images, which are not supported
-    if img.is_animated:
-      raise Error('Animated images are not supported for Pixels')
+    if DetectAnimGIF(img):
+      raise Error('Animated GIF images are not supported for Pixels')
     # check source type
     try:
-      img_format: ImageEncoding = ImageEncoding((img.format or '').upper())
-    except Exception as err:
+      img_format: ImageEncoding | None = ImageEncoding((img.format).upper()) if img.format else None
+    except (ValueError, KeyError) as err:
       raise Error(f'Unsupported image format: {img.format!r}') from err
-    if img_format != ImageEncoding.PNG and not allow_conversion:
+    if img_format and img_format != ImageEncoding.PNG and not allow_conversion:
       raise Error(f'Expected PNG format, got {img_format!r}')
     # get metadata, but different formats may encode metadata differently!
     meta: dict[str, str] = {}
-    if img_format == ImageEncoding.PNG:
+    if img_format is None or img_format == ImageEncoding.PNG:
       # PNG metadata is stored in img.info as a dict of str -> str
       meta = _LoadAndCheckMetadataKeys(img.info.items())
     elif img_format == ImageEncoding.JPG:
@@ -979,7 +983,7 @@ class Pixels(frame.SerializingFractalObject):
         data=np.asarray(rgb_img, dtype=np.float32),  # __post_init__ will check width/height/shape
         meta=meta,
       ),
-      img_format,
+      img_format or ImageEncoding.PNG,  # default to PNG if unknown
       hashes.Hash256(rgb_img.tobytes()).hex(),
     )
 
@@ -1114,13 +1118,16 @@ class Pixels(frame.SerializingFractalObject):
       Pixels: The resized image data as a Pixels object.
 
     """
-    # TODO: we still convert to array->PIL->array a lot; can we do this more efficiently?
-    return dataclasses.replace(
-      Pixels.FromPIL(self.obj.resize((width, height), resample=resample))[0], meta=self.meta.copy()
-    )
+    with self.obj as img:
+      return Pixels(
+        data=np.asarray(img.resize((width, height), resample=resample), dtype=np.float32),
+        meta=self.meta.copy(),
+      )
 
   def DrawCardinalInfoOverlay(self) -> Pixels:
     """Draw an overlay on the (512x512) image with target info for moving the zoom frame.
+
+    Because of the text-on-image this is more efficient converting np.array -> PIL -> np.array.
 
     Overlays is:
     - white lines delimiting the quadrants of the image, intersecting at the center
@@ -1137,7 +1144,6 @@ class Pixels(frame.SerializingFractalObject):
       Pixels: The modified Pixels image data with the overlay drawn.
 
     """
-    # TODO: we still convert to array->PIL->array a lot; can we do this more efficiently?
     w: int
     h: int
     cx: int
@@ -1183,6 +1189,8 @@ class Pixels(frame.SerializingFractalObject):
   def DrawThirdsInfoOverlay(self) -> Pixels:
     """Draw an overlay on an image of any size, with target info for moving the zoom frame.
 
+    Because of the text-on-image this is more efficient converting np.array -> PIL -> np.array.
+
     Overlays:
     - white lines delimiting the 9 sections of the image
     - large green number labels (1-9) centered in each section, left-to-right, top-to-bottom
@@ -1191,7 +1199,6 @@ class Pixels(frame.SerializingFractalObject):
       Pixels: The modified Pixels image data with the overlay drawn.
 
     """
-    # TODO: we still convert to array->PIL->array a lot; can we do this more efficiently?
     w: int
     h: int
     cx: int
@@ -1253,21 +1260,25 @@ class Pixels(frame.SerializingFractalObject):
       Error: If the coordinates are out of bounds or if there are issues processing the image.
 
     """
-    # TODO: we still convert to array->PIL->array a lot; can we do this more efficiently?
+    # check inputs
     w: int
     h: int
-    # open the image
-    with self.obj as img:
-      # check the coords
-      draw: ImageDraw.ImageDraw = ImageDraw.ImageDraw(img)
-      w, h = img.size
-      if not (0 <= x < w) or not (0 <= y < h):
-        raise Error(f'Invalid coordinates for cross overlay: {x=}, {y=}, image size {w=} x {h=}')
-      # draw the cross lines
-      draw.line((0, y, w, y), fill=col.value, width=lw)
-      draw.line((x, 0, x, h), fill=col.value, width=lw)
-      # done, save remembering to add metadata that this image has an overlay
-      return dataclasses.replace(Pixels.FromPIL(img)[0], meta=self.meta.copy())
+    h, w, _ = self.data.shape
+    if not (0 <= x < w) or not (0 <= y < h):
+      raise Error(f'Invalid coordinates for cross overlay: {x=}, {y=}, image size {w=} x {h=}')
+    if lw <= 0:
+      raise Error(f'Invalid line width: {lw}')
+    # draw the cross on a copy of the data array
+    out: NDArray[np.float32] = self.data.copy()
+    color: NDArray[np.float32] = np.asarray(col.value, dtype=np.float32)
+    half_lw: int = lw // 2
+    y0: int = max(0, y - half_lw)
+    y1: int = min(h, y + half_lw + 1)
+    x0: int = max(0, x - half_lw)
+    x1: int = min(w, x + half_lw + 1)
+    out[y0:y1, :, :] = color
+    out[:, x0:x1, :] = color
+    return Pixels(data=out, meta=self.meta.copy())
 
 
 def GetBasicDataFromMP4(img_bytes: bytes) -> ObjInfo:
@@ -1386,8 +1397,8 @@ def GetBasicData(img_bytes: bytes) -> tuple[ObjInfo, Pixels | None]:
       img_format: AnimationEncoding = AnimationEncoding((img.format or '').upper())
     except Exception as err:
       raise Error(f'Unsupported image format: {img.format!r}') from err
-    if img_format != AnimationEncoding.GIF or not (anim := img.is_animated):
-      raise Error(f'Expected animated GIF format, got {img_format!r} / {anim=}')
+    if img_format != AnimationEncoding.GIF or not DetectAnimGIF(img):
+      raise Error(f'Expected animated GIF format, got {img_format!r} / anim. {DetectAnimGIF(img)}')
     # for GIFs we expect the metadata to be stored in the "comment" field as a JSON string
     meta: dict[str, str] = {}
     try:

@@ -882,7 +882,8 @@ def LinearInterpolatedFrame(
   )
   alpha1: NDArray[np.float32] = frac * MaskArray(next_alpha_mask)
   return pixels.Pixels(
-    data=(curr_aligned.data * (1.0 - alpha1)) + (next_aligned_raw.data * alpha1), meta={}
+    data=(curr_aligned.data * (1.0 - alpha1)) + (next_aligned_raw.data * alpha1),  # pyright: ignore[reportArgumentType]
+    meta={},
   )
 
 
@@ -957,7 +958,7 @@ def QuadraticInterpolatedFrame(  # noqa: PLR0914
   # fade future-frame contributions out near their invalid borders;
   # important: when future weights are masked away, give the missing weight
   # back to curr_aligned: this keeps brightness stable and avoids dark seams
-  effective_w0: NDArray[np.float32] = w0 + (w1 * (1.0 - alpha1)) + (w2 * (1.0 - alpha2))
+  effective_w0: NDArray[np.float32] = w0 + (w1 * (1.0 - alpha1)) + (w2 * (1.0 - alpha2))  # pyright: ignore[reportAssignmentType]
   effective_w1: NDArray[np.float32] = w1 * alpha1
   effective_w2: NDArray[np.float32] = w2 * alpha2
   return pixels.Pixels(
@@ -965,7 +966,7 @@ def QuadraticInterpolatedFrame(  # noqa: PLR0914
       (effective_w0 * curr_aligned.data)
       + (effective_w1 * next_aligned_1_raw.data)
       + (effective_w2 * next_aligned_2_raw.data)
-    ),
+    ),  # pyright: ignore[reportArgumentType]
     meta={},
   )
 
@@ -1111,7 +1112,7 @@ def WriteAnimatedGIF(  # noqa: C901
 
   def _OpenPNG(frm: bytes) -> PILImage.Image:
     with io.BytesIO(frm) as buf:
-      return PILImage.open(buf)
+      return PILImage.open(buf).copy()  # copy to avoid lazy file handle issues
 
   def _RemainingFrames() -> abc.Iterator[PILImage.Image]:
     for frm in frames_iter:
