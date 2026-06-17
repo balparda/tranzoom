@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import json
 import logging
 import pathlib
 from collections import abc
@@ -262,7 +263,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
           )
         # save the image, adding the response evaluation as metadata on top of the image
         full_path.write_bytes(
-          image.AddEvaluationMetaToImage(
+          AddEvaluationMetaToImage(
             img_data,
             response.JSON(),
             model if not manual else image.META_LLM_MODEL_VALUE_HUMAN,
@@ -398,3 +399,56 @@ def _MoveCenter(  # noqa: C901
     point_re=frm.point_re,
     point_im=frm.point_im,
   )
+
+
+def AddEvaluationMetaToImage(
+  img_data: pixels.Pixels,
+  response: tbase.JSONDict,
+  model: str,
+  temperature: float,
+  seed: int,
+  reason: bool,
+  query_memory: int,
+  query_setup: str,
+  query_image: str,
+  query_manual: str | None,
+  count: int,
+) -> None:
+  """Add LLM evaluation info to the image metadata. Updates the image metadata in-place.
+
+  Args:
+    img_data (pixels.Pixels): The original PNG image data as a Pixels object.
+    response (tbase.JSONDict): The LLM evaluation response to add to the metadata.
+    model (str): The LLM model used for evaluation; if this is "HUMAN"/META_LLM_MODEL_VALUE_HUMAN,
+        then it will not add temperature, seed, reason, query_memory, query_setup, query_image, nor
+        query_manual to the metadata.
+    temperature (float): The temperature setting used for the LLM evaluation.
+    seed (int): The random seed used for the LLM evaluation.
+    reason (bool): Whether the LLM response includes reasoning steps
+    query_memory (int): The memory parameter used for the LLM evaluation.
+    query_setup (str): The setup query given to the LLM.
+    query_image (str): The image query given to the LLM.
+    query_manual (str | None): The manual query passed as extra into the query.
+    count (int): The zoom step count at which this evaluation was made.
+
+  """
+  # start with the metadata that all zoom images have, for now
+  new_meta: dict[str, str] = {
+    image.META_LLM_MODEL_KEY: model,  # could be "HUMAN"/META_LLM_MODEL_VALUE_HUMAN
+    image.META_LLM_RESULT_JSON_KEY: json.dumps(response),
+    image.META_LLM_ZOOM_COUNT_KEY: str(count),
+  }
+  if model != image.META_LLM_MODEL_VALUE_HUMAN:
+    new_meta.update(
+      # add the non-human metadata
+      {
+        image.META_LLM_TEMPERATURE_KEY: str(temperature),
+        image.META_LLM_SEED_KEY: str(seed),
+        image.META_LLM_QUERY_MEMORY_KEY: str(query_memory),
+        image.META_LLM_QUERY_SETUP_KEY: query_setup,
+        image.META_LLM_QUERY_IMAGE_KEY: query_image,
+        image.META_LLM_QUERY_EXTRA_KEY: query_manual or '',
+        image.META_LLM_QUERY_REASONING_KEY: str(reason).lower(),  # store as "true"/"false"
+      }
+    )
+  img_data.meta.update(new_meta)

@@ -21,7 +21,6 @@ import typer._click.exceptions
 from tqdm.std import TqdmExperimentalWarning
 from transcrypto.cli import clibase
 from transcrypto.core import aes, hashes
-from transcrypto.utils import base as tbase
 from transcrypto.utils import human, timer
 
 from tranzoom import __version__
@@ -842,6 +841,57 @@ class TranZoomConfig(clibase.CLIConfig):
     logging.info(f'Saved config to "{self.appconfig.path}": {cnf}')
 
 
+def MakePointFromCLIArgs(
+  point_re: frame.ExactInputType,
+  point_im: frame.ExactInputType,
+  print_call: abc.Callable[[str], None],
+) -> tuple[gmpy2.mpq, gmpy2.mpq]:
+  """Make a point or die. Tries float/mpq first, then tries reading from a file metadata.
+
+  Args:
+    point_re (frame.ExactInputType): the real part of the point
+    point_im (frame.ExactInputType): the imaginary part of the point
+    print_call (abc.Callable[[str], None]): a callable to print messages, used for logging during
+        frame creation
+
+  Returns:
+    tuple[gmpy2.mpq, gmpy2.mpq]: A valid point
+
+  Raises:
+    UsageError: if arguments can't be turned into a valid point
+    Error: (not really)
+
+  """
+  try:
+    # the happy path is simple... if these conversions work, we return the point and we're done
+    cx: gmpy2.mpq = point_re if isinstance(point_re, gmpy2.mpq) else gmpy2.mpq(point_re)
+    cy: gmpy2.mpq = point_im if isinstance(point_im, gmpy2.mpq) else gmpy2.mpq(point_im)
+    return (cx, cy)
+  except ValueError as err:
+    if 'invalid' not in str(err).lower():
+      raise UsageError(f'Error: {point_re=}, {point_im=}') from err
+    # maybe the user gave us an image path instead of coordinates? let's try to read it as image
+    try:
+      # convert and validate path
+      img_path: pathlib.Path = pathlib.Path(str(point_re)).expanduser().resolve()
+      if not img_path.exists() or not img_path.is_file():
+        raise Error(f'Image "{img_path}" does not exist or is not a file') from err  # noqa: TRY301
+      # make sure we have the needed metadata
+      info: pixels.ObjInfo = pixels.GetBasicData(img_path.read_bytes())[0]
+      if image.META_CENTER_RE_KEY not in info.meta or image.META_CENTER_IM_KEY not in info.meta:
+        raise Error(f'Image "{img_path}" missing tranZoom frame metadata keys') from err  # noqa: TRY301
+      fract: str = str(info.meta.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
+      print_call(f'Reading frame from "{img_path}", [red]tranZoom[/], {fract} fractal...')
+      return (
+        gmpy2.mpq(str(info.meta[image.META_CENTER_RE_KEY])),
+        gmpy2.mpq(str(info.meta[image.META_CENTER_IM_KEY])),
+      )
+    except Exception as err2:  # this error we cannot forgive
+      raise UsageError(f'Error/not path: {point_re=}, {point_im=}') from err2
+  except Exception as err:  # this error we cannot forgive
+    raise UsageError(f'Error: {point_re=}, {point_im=}') from err
+
+
 def MakeFrameFromCLIArgs(
   fractal: frame.Fractal,
   center_re: str,
@@ -882,22 +932,22 @@ def MakeFrameFromCLIArgs(
       if not img_path.exists() or not img_path.is_file():
         raise Error(f'Image "{img_path}" does not exist or is not a file')  # noqa: TRY301
       # make sure we have the needed metadata
-      info: tbase.JSONDict = pixels.GetBasicDataFromImage(img_path.read_bytes())[-1]
+      info: pixels.ObjInfo = pixels.GetBasicData(img_path.read_bytes())[0]
       if (
-        image.META_CENTER_RE_KEY not in info
-        or image.META_CENTER_IM_KEY not in info
-        or image.META_WIDTH_RE_KEY not in info
-        or image.META_HEIGHT_IM_KEY not in info
+        image.META_CENTER_RE_KEY not in info.meta
+        or image.META_CENTER_IM_KEY not in info.meta
+        or image.META_WIDTH_RE_KEY not in info.meta
+        or image.META_HEIGHT_IM_KEY not in info.meta
       ):
         raise Error(f'Image "{img_path}" missing tranZoom frame metadata keys')  # noqa: TRY301
-      fract: str = str(info.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
+      fract: str = str(info.meta.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
       print_call(f'Reading frame from "{img_path}", [red]tranZoom[/], {fract} fractal...')
       return frame.Frame.FromCenter(
         fractal,
-        str(info[image.META_CENTER_RE_KEY]),
-        str(info[image.META_CENTER_IM_KEY]),
-        str(info[image.META_WIDTH_RE_KEY]),
-        height=str(info[image.META_HEIGHT_IM_KEY]),
+        str(info.meta[image.META_CENTER_RE_KEY]),
+        str(info.meta[image.META_CENTER_IM_KEY]),
+        str(info.meta[image.META_WIDTH_RE_KEY]),
+        height=str(info.meta[image.META_HEIGHT_IM_KEY]),
       )
     except Exception as err2:  # this error we cannot forgive
       raise UsageError(
@@ -1059,7 +1109,7 @@ def ProduceFractalImage(
   tm: int | None = None,
   add_serial: int | None = None,
   save_image: bool = True,
-) -> tuple[image.Image | None, bytes, str, pixels.RenderParameters]:
+) -> tuple[image.Image | None, pixels.Pixels, bytes, str, pixels.RenderParameters]:
   """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
 
   Args:
@@ -1077,8 +1127,8 @@ def ProduceFractalImage(
         not be saved; default is True.
 
   Returns:
-    tuple[image.Image, bytes, str, pixels.RenderParameters]: A tuple of
-        (image.Image object, raw PNG bytes, internal hash of the raw PNG, RenderParameters)
+    tuple[image.Image | None, pixels.Pixels, bytes, str, pixels.RenderParameters]: A tuple of
+        (image.Image object, pixels.Pixels object, raw PNG bytes, data hash, RenderParameters)
 
   This is a high-level function that takes care of all the steps needed to produce the final image,
   including:
@@ -1112,10 +1162,10 @@ def ProduceFractalImage(
     )
   # compute the image via the unified core primitive
   img: image.Image | None
-  raw_png: bytes
-  raw_hash: str
+  pix: pixels.Pixels
+  data_hash: str
   full_path: pathlib.Path
-  _, img, raw_png, raw_hash, full_path = db.CoreComputeImage(
+  _, img, pix, data_hash, full_path = db.CoreComputeImage(
     params,
     render,
     out,
@@ -1128,61 +1178,15 @@ def ProduceFractalImage(
     force=config.img_force_redo,
   )
   # save the image to disk if requested
+  raw_png: bytes
+  file_hash: str
+  raw_png, file_hash, _ = pix.PNG()  # <=< <<<<< <=< THIS is where the PNG is actually generated!
   if save_image:
     full_path.write_bytes(raw_png)
-    config.console.print(f'Saved to {str(full_path)!r}, {human.HumanizedBytes(len(raw_png))}')
-  return (img, raw_png, raw_hash, render)
-
-
-def MakePointFromCLIArgs(
-  point_re: frame.ExactInputType,
-  point_im: frame.ExactInputType,
-  print_call: abc.Callable[[str], None],
-) -> tuple[gmpy2.mpq, gmpy2.mpq]:
-  """Make a point or die. Tries float/mpq first, then tries reading from a file metadata.
-
-  Args:
-    point_re (frame.ExactInputType): the real part of the point
-    point_im (frame.ExactInputType): the imaginary part of the point
-    print_call (abc.Callable[[str], None]): a callable to print messages, used for logging during
-        frame creation
-
-  Returns:
-    tuple[gmpy2.mpq, gmpy2.mpq]: A valid point
-
-  Raises:
-    UsageError: if arguments can't be turned into a valid point
-    Error: (not really)
-
-  """
-  try:
-    # the happy path is simple... if these conversions work, we return the point and we're done
-    cx: gmpy2.mpq = point_re if isinstance(point_re, gmpy2.mpq) else gmpy2.mpq(point_re)
-    cy: gmpy2.mpq = point_im if isinstance(point_im, gmpy2.mpq) else gmpy2.mpq(point_im)
-    return (cx, cy)
-  except ValueError as err:
-    if 'invalid' not in str(err).lower():
-      raise UsageError(f'Error: {point_re=}, {point_im=}') from err
-    # maybe the user gave us an image path instead of coordinates? let's try to read it as image
-    try:
-      # convert and validate path
-      img_path: pathlib.Path = pathlib.Path(str(point_re)).expanduser().resolve()
-      if not img_path.exists() or not img_path.is_file():
-        raise Error(f'Image "{img_path}" does not exist or is not a file') from err  # noqa: TRY301
-      # make sure we have the needed metadata
-      info: tbase.JSONDict = pixels.GetBasicDataFromImage(img_path.read_bytes())[-1]
-      if image.META_CENTER_RE_KEY not in info or image.META_CENTER_IM_KEY not in info:
-        raise Error(f'Image "{img_path}" missing tranZoom frame metadata keys') from err  # noqa: TRY301
-      fract: str = str(info.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
-      print_call(f'Reading frame from "{img_path}", [red]tranZoom[/], {fract} fractal...')
-      return (
-        gmpy2.mpq(str(info[image.META_CENTER_RE_KEY])),
-        gmpy2.mpq(str(info[image.META_CENTER_IM_KEY])),
-      )
-    except Exception as err2:  # this error we cannot forgive
-      raise UsageError(f'Error/not path: {point_re=}, {point_im=}') from err2
-  except Exception as err:  # this error we cannot forgive
-    raise UsageError(f'Error: {point_re=}, {point_im=}') from err
+    config.console.print(
+      f'Saved to {str(full_path)!r} ({file_hash[:16]!r}), {human.HumanizedBytes(len(raw_png))}'
+    )
+  return (img, pix, raw_png, data_hash, render)
 
 
 def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
@@ -1583,7 +1587,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             zoom.RenderedZoomFrame: The rendered image data for the frame at index i.
 
           """
-          img_data: bytes
+          img_data: pixels.Pixels
           data_hash: str
           img_path: pathlib.Path
           p: int
@@ -1604,14 +1608,20 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             force=config.img_force_redo,
             zoom_norm=zn,
             silent=True,  # we will have a progress bar
-            no_meta=True,  # do not include metadata for individual frames
           )
           # save hash
           all_hash[i] = data_hash
           # save per-frame-normalized image to disk if requested (for individual frame inspection)
           if save_frames:
-            img_path.write_bytes(img_data)
-            config.console.print(f'Saved frame {i + 1} to {str(img_path)!r}')
+            # saving frames is costly (but not too much), we do it here b/c the user asked for it
+            raw_png: bytes
+            file_hash: str
+            raw_png, file_hash, _ = img_data.PNG()  # WASTEFUL!: this will be done again later
+            img_path.write_bytes(raw_png)
+            config.console.print(
+              f'Saved frame {i + 1} to {str(full_path)!r} '
+              f'({file_hash[:16]!r}), {human.HumanizedBytes(len(raw_png))}'
+            )
           # update progress bar, return data
           if p_bar:
             p_bar.update(1)

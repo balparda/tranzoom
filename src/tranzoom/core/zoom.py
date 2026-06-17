@@ -627,7 +627,7 @@ class RenderedZoomFrame:
   """One fully-rendered base animation frame."""
 
   idx: int
-  data: bytes
+  data: pixels.Pixels
   data_hash: str
   img_path: pathlib.Path
 
@@ -649,28 +649,6 @@ def FrameEstimatedIters(d: int, s: image.FractalStats) -> int:
 
   """
   return d // 5 + math.floor((4.0 * d * s.n_interior) / (5.0 * s.n_px))
-
-
-def PNGBytesFromRGBArray(arr: np.ndarray) -> bytes:
-  """Encode an RGB uint8 numpy array as PNG bytes.
-
-  Args:
-    arr (np.ndarray): A 3D numpy array of shape (height, width, 3) and dtype uint8: an RGB image
-
-  Returns:
-    bytes: The PNG-encoded bytes of the image.
-
-  Raises:
-    Error: If the input array is not of dtype uint8
-
-  """
-  # sanity check
-  if arr.dtype != np.uint8:
-    raise Error(f'Expected uint8 array, got {arr.dtype}')
-  # save to PNG bytes
-  with io.BytesIO() as buf:
-    PILImage.fromarray(arr, mode='RGB').save(buf, format='PNG')
-    return buf.getvalue()
 
 
 def CenterZoomRGB(
@@ -852,7 +830,7 @@ def LinearInterpolatedFrame(
   *,
   zoom_per_step: float,
   frac: float,
-) -> bytes:
+) -> pixels.Pixels:
   """Interpolate between curr_img and next_img at fraction frac.
 
   Args:
@@ -862,7 +840,7 @@ def LinearInterpolatedFrame(
     frac (float): The interpolation fraction between 0.0 and 1.0.
 
   Returns:
-    bytes: The PNG-encoded bytes of the interpolated image.
+    pixels.Pixels: Data object representing the interpolated image; NO META is included
 
   Raises:
     Error: on error
@@ -895,7 +873,7 @@ def LinearInterpolatedFrame(
   a1: np.ndarray = np.asarray(next_aligned_raw, dtype=np.float32)
   alpha1: np.ndarray = frac * MaskArray(next_alpha_mask)
   out: np.ndarray = a0 * (1.0 - alpha1) + a1 * alpha1
-  return PNGBytesFromRGBArray(np.clip(out, 0, pixels.MAX_COLOR).astype(np.uint8))
+  return pixels.Pixels(data=out, meta={})
 
 
 def QuadraticInterpolatedFrame(  # noqa: PLR0914
@@ -905,7 +883,7 @@ def QuadraticInterpolatedFrame(  # noqa: PLR0914
   *,
   zoom_per_step: float,
   frac: float,
-) -> bytes:
+) -> pixels.Pixels:
   """Quadratic interpolation using curr_img, next_img_1, next_img_2.
 
   Points are interpreted as:
@@ -923,7 +901,7 @@ def QuadraticInterpolatedFrame(  # noqa: PLR0914
     frac (float): The interpolation fraction between 0.0 and 1.0.
 
   Returns:
-    bytes: The PNG-encoded bytes of the interpolated image.
+    pixels.Pixels: Data object representing the interpolated image; NO META is included
 
   Raises:
     Error: on error
@@ -977,7 +955,7 @@ def QuadraticInterpolatedFrame(  # noqa: PLR0914
   effective_w2: np.ndarray = w2 * alpha2
   effective_w0: np.ndarray = w0 + (w1 * (1.0 - alpha1)) + (w2 * (1.0 - alpha2))
   out: np.ndarray = effective_w0 * a0 + effective_w1 * a1 + effective_w2 * a2
-  return PNGBytesFromRGBArray(np.clip(out, 0, pixels.MAX_COLOR).astype(np.uint8))
+  return pixels.Pixels(data=out, meta={})
 
 
 def InterpolatedFrameStream(
@@ -1034,7 +1012,7 @@ def InterpolatedFrameStream(
     except StopIteration:
       next_pending = None
     # always yield the real current frame
-    yield curr_frame.data
+    yield curr_frame.data.PNG(copy_previous=False)[0]
     # no next real frame means curr is the final real frame
     if next_frame is None:
       return  # done
@@ -1048,7 +1026,7 @@ def InterpolatedFrameStream(
           next_frame,
           zoom_per_step=zoom_per_step,
           frac=frac,
-        )
+        ).PNG(copy_previous=False)[0]
       else:
         yield QuadraticInterpolatedFrame(
           curr_frame,
@@ -1056,14 +1034,14 @@ def InterpolatedFrameStream(
           next2,
           zoom_per_step=zoom_per_step,
           frac=frac,
-        )
+        ).PNG(copy_previous=False)[0]
     # if we have a next triple, advance the frames; otherwise, we are done
     if next_pending is None:
       return  # done
     curr_frame, next_frame = next_pending
 
 
-def WriteAnimatedGIF(
+def WriteAnimatedGIF(  # noqa: C901
   frames: abc.Iterable[bytes],
   path: pathlib.Path,
   width: int,
@@ -1119,13 +1097,17 @@ def WriteAnimatedGIF(
     raise Error('frames iterable is empty')  # noqa: B904
   frame_count: list[int] = [1]  # mutable container so the nested generator can mutate it
 
+  def _OpenPNG(frm: bytes) -> PILImage.Image:
+    with io.BytesIO(frm) as buf:
+      return PILImage.open(buf)
+
   def _RemainingFrames() -> abc.Iterator[PILImage.Image]:
     for frm in frames_iter:
       frame_count[0] += 1
-      yield pixels.RGBImageFromPNG(frm)
+      yield _OpenPNG(frm)
 
   # save the whole GIF, normalizing each frame; PIL will iterate _RemainingFrames() lazily to save
-  img0: PILImage.Image = pixels.RGBImageFromPNG(first_frame)
+  img0: PILImage.Image = _OpenPNG(first_frame)
   img0.save(
     # https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif
     path,

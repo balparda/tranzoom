@@ -962,7 +962,7 @@ class FractalDatabase:
     print_comm: abc.Callable[[str], None],
     optimization: frame.Optimization | None = None,
     force: bool = False,
-  ) -> tuple[frame.ComputationParameters, image.Image | None, bytes, str, pathlib.Path]:
+  ) -> tuple[frame.ComputationParameters, image.Image | None, pixels.Pixels, str, pathlib.Path]:
     """Compute a fractal image and return the result unsaved; the shared rendering primitive.
 
     This operates even if use_db is False and read_only is True, it just won't use/save cache...
@@ -997,12 +997,12 @@ class FractalDatabase:
       force (bool): If True, will force re-computation of the image even if it is found in the DB
 
     Returns:
-      tuple[frame.ComputationParameters, image.Image | None, bytes, str, pathlib.Path]: A 5-tuple:
+      tuple[frame.ComputationParameters, image.Image | None, pixels.Pixels, str, pathlib.Path]:
           - frame.ComputationParameters: The computation parameters used for the frame
               (with actual depth if a sentinel was used)
           - pixels.RenderParameters: the computed fractal Image object
-          - bytes: the final PNG bytes (with crosshair mark and sector overlay applied, if any)
-          - str: the SHA-256 hash of the raw PNG before any post-processing overlays
+          - pixels.Pixels: the final rendered pixels
+          - str: the image data hash
           - pathlib.Path: the intended save path (NOT yet written to disk; caller must save)
 
     Raises:
@@ -1146,8 +1146,7 @@ class FractalDatabase:
     force: bool = False,
     zoom_norm: image.Image.FrameColorNorm | None = None,
     silent: bool = False,
-    no_meta: bool = False,
-  ) -> tuple[bytes, str, pathlib.Path, bool]:
+  ) -> tuple[pixels.Pixels, str, pathlib.Path, bool]:
     """Take an image.Image and do the fractal rendering.
 
     This operates even if use_db is False and read_only is True, it just won't use/save cache...
@@ -1174,13 +1173,11 @@ class FractalDatabase:
           zoom rendering, and is ignored for static image rendering
       silent (bool): If True, will suppress all printing output from this function; if False, will
           redirect output to logging.info logs; default is False
-      no_meta (bool): If True, do not include metadata in the PNG; mainly for video frames where
-          metadata is not needed and adds overhead. Default is False (include metadata).
 
     Returns:
-      tuple[bytes, str, pathlib.Path, bool]: A tuple:
-          - bytes: the final PNG bytes (with crosshair mark and sector overlay applied, if any)
-          - str: the SHA-256 hash of the raw PNG before any post-processing overlays
+      tuple[pixels.Pixels, str, pathlib.Path, bool]: A tuple:
+          - pixels.Pixels: the final render
+          - str: the hash of the final render
           - pathlib.Path: the intended save path (NOT yet written to disk; caller must save)
           - bool: whether the image was rendered from scratch (True) or loaded from cache (False)
 
@@ -1210,8 +1207,8 @@ class FractalDatabase:
     )
     # do we know about this render?
     ck: ImageCoreKey
+    img_data: pixels.Pixels
     img_hash: str
-    img_data: bytes
     render_data: ImageData | None
     params: frame.ComputationParameters
     params, ck, _, _, render_data = self.FindRender(img.params, render)
@@ -1230,8 +1227,10 @@ class FractalDatabase:
           f'[red]DB render[/], {render_data["data_hash"]!r}@{timer.TimeStr(render_data["tm"])} '
           f'-> "{path}"'
         )
-        img_hash = render_data['data_hash']
-        img_data = path.read_bytes()  # this is why we guard against self._use_db/force
+        # this is why we guard against self._use_db/force
+        obj_info: pixels.ObjInfo
+        img_data, obj_info = pixels.Pixels.FromBytes(path.read_bytes())
+        img_hash = obj_info.data_hash
         # we can end this: we have the image PNG on disk and img is as good as necessary
         print_comm(
           f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE,[/] {img_hash!r} '
@@ -1240,7 +1239,7 @@ class FractalDatabase:
         # print inline in iTerm2 if requested
         if iterm:
           print_comm('')
-          pixels.PrintITerm2(img_data)
+          img_data.PrintITerm2()
         return (img_data, img_hash, full_path(img_hash), False)
       # if we got here, we have the render parameters but no existing image on disk
       print_comm(
@@ -1255,8 +1254,8 @@ class FractalDatabase:
     final_height: int
     final_width, final_height = img.params.Size(i_pixels=render.i_pixels)
     with timer.Timer(emit_log=False) as tmr:
-      img_data, img_hash = img.AsPNG(  # <<== this is the actual render!  <<==   <<==   <<==
-        render, zoom_norm=zoom_norm, no_meta=no_meta
+      img_data = img.AsPixels(  # <<== this is the actual render!  <<==   <<==   <<==
+        render, zoom_norm=zoom_norm
       )
       # upscale/interpolate the rendered frame before overlays
       if render.i_pixels:
@@ -1266,7 +1265,7 @@ class FractalDatabase:
           f'{final_width} \u00d7 {final_height} '
           f'(*{render.i_pixels + 1})'
         )
-        img_data = pixels.ResizePNG(img_data, final_width, final_height)
+        img_data = img_data.Resize(final_width, final_height)
       # draw crosshair mark if specified in render parameters
       if render.mark_color is not None:
         mark_pixel: tuple[int, int]
@@ -1277,29 +1276,30 @@ class FractalDatabase:
           f'[cyan]Marking[/] coordinate ({render.mark_re}, {render.mark_im}) with '
           f'{render.mark_color.name.lower()!r} crosshair @{mark_pixel}/{render.mark_width}px'
         )
-        img_data = pixels.DrawCrossOverlay(
-          img_data, *mark_pixel, col=render.mark_color, lw=render.mark_width
+        img_data = img_data.DrawCrossOverlay(
+          *mark_pixel, col=render.mark_color, lw=render.mark_width
         )
       # draw the numbered sector grid overlay if requested (e.g., for AI/manual zoom navigation)
       if render.overlay is not None:
         print_comm(f'[cyan]Adding[/] {render.overlay.value!r} overlay')
         if render.overlay == pixels.OverlayType.GRID:
-          img_data = pixels.DrawThirdsInfoOverlay(img_data)
+          img_data = img_data.DrawThirdsInfoOverlay()
         else:
           raise Error(f'Unsupported overlay type: {render.overlay!r}')
       # add to DB; remember render_data could be None if use_db==False
-      render_data = self.AddRenderToDB(params, render, ck, img_hash, str(full_path(img_hash)))
+      img_hash = img_data.data_hash
+      final_path: pathlib.Path = full_path(img_hash)
+      render_data = self.AddRenderToDB(params, render, ck, img_hash, str(final_path))
     # log
     print_comm(
       f'[yellow]Render:[/] [green]{render.tp.value.upper()}: DONE '
-      f'({final_width} \u00d7 {final_height}),[/] {img_hash!r} '
-      f'in {tmr}, {human.HumanizedBytes(len(img_data))}'
+      f'({final_width} \u00d7 {final_height}),[/] {img_hash!r} in {tmr}'
     )
     # print inline in iTerm2 if requested
     if iterm:
       print_comm('')
-      pixels.PrintITerm2(img_data)
-    return (img_data, img_hash, full_path(img_hash), True)
+      img_data.PrintITerm2()
+    return (img_data, img_hash, final_path, True)
 
 
 def WarnUserAnimationParams(

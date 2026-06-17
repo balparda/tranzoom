@@ -11,7 +11,6 @@ from __future__ import annotations
 import array
 import bisect
 import dataclasses
-import json
 import logging
 import math
 import pathlib
@@ -19,8 +18,8 @@ import struct
 from collections import abc
 
 import gmpy2
-from PIL import Image as PILImage
-from transcrypto.core import hashes
+import numpy as np
+from numpy._typing._array_like import NDArray
 from transcrypto.utils import base as tbase
 
 from tranzoom import __app__ as _app
@@ -792,7 +791,7 @@ class Image:
 
   def AsPixels(
     self, render: pixels.RenderParameters, *, zoom_norm: FrameColorNorm | None = None
-  ) -> bytes:
+  ) -> pixels.Pixels:
     """Convert the image to raw pixel bytes using histogram-equalized smooth color palette.
 
     Exterior points (escaped) are colored by mapping their escape iteration through a cumulative
@@ -815,7 +814,7 @@ class Image:
           rendering. If None (default), each frame's own histogram is used (per-frame equalized).
 
     Returns:
-      bytes: Raw pixel data in RGB format (3 bytes per pixel).
+      pixels.Pixels: Raw pixel data
 
     Raises:
       Error: on error
@@ -839,12 +838,10 @@ class Image:
     # histograms for cross-frame consistency instead of using this frame's own histogram
     escaped_at: int
     f_nu: float
-    # TODO: create a structure of numpy float32 array of shape (height, width, 3) and a metadata
-    # dict[str, str] and then use it to pass around, and do overlays, and everything else to
-    # stop the current madness of converting bytes->PNG->bytes->PIL->bytes->PNG->bytes->PIL->...
-    # Only at the end, and only once, convert the data to PNG and add the whole metadata.
-    # I think today an image has the potential of being converted 5-6x before leaving the pipeline.
-    pixels = bytearray(self._params.width * self._params.height * 3)
+    np_pixels: NDArray[np.float32] = np.zeros(
+      (self._params.height, self._params.width, 3), dtype=np.float32
+    )
+    rgb: tuple[float, float, float]
     for i, enc_escaped_at in enumerate(self.escape):
       escaped_at, f_nu = Decode64ToIntFloat(enc_escaped_at)
       if escaped_at >= 0 and self.ext_hist.count > 0:
@@ -854,7 +851,7 @@ class Image:
           if zoom_norm is not None
           else self.ext_hist.InterpolateBucket(escaped_at, f_nu)
         )
-        rgb: tuple[int, int, int] = _PixelPalette(t_ext, render.escaped_pal)
+        rgb = _PixelPalette(t_ext, render.escaped_pal)
       elif self._params.set_points and self.int_hist.count > 0 and escaped_at < 0:
         # interior (Set) point: histogram-equalized position in set_pal over |z| magnitudes
         if render.set_pal is None:
@@ -867,51 +864,23 @@ class Image:
         rgb = _PixelPalette(t_set, render.set_pal)
       elif escaped_at < 0 and (not self._params.set_points or not self.int_hist.count):
         # interior point but no histogram data (e.g., all-interior image); render as black
-        rgb = (0, 0, 0)
+        rgb = pixels.Color.BLACK.value
       else:
         # we should really not be getting here, but I am not bold enough to raise...
-        rgb = (0, 0, 0)  # black: interior point (default) or all-interior image
+        rgb = pixels.Color.BLACK.value  # black: interior point (default) or all-interior image
         logging.error(f'Invalid {escaped_at=} at pixel {i=}; bug! report!')
-      pixels[i * 3], pixels[i * 3 + 1], pixels[i * 3 + 2] = rgb
-    return bytes(pixels)
-
-  def AsPNG(
-    self,
-    render: pixels.RenderParameters,
-    *,
-    zoom_norm: FrameColorNorm | None = None,
-    no_meta: bool = False,
-  ) -> tuple[bytes, str]:
-    """Convert the image to PNG bytes and return it with its internal data hash.
-
-    Args:
-      render (pixels.RenderParameters): The render parameters to use for generating the PNG metadata
-      zoom_norm (FrameColorNorm | None): Optional cross-frame color normalization; passed
-          through to AsPixels(). Use for animation frames to keep colors stable across zoom.
-      no_meta (bool): If True, do not include metadata in the PNG; mainly for video frames where
-          metadata is not needed and adds overhead. Default is False (include metadata).
-
-    Returns:
-      tuple[bytes, str]: PNG image data and its internal data hash.
-
-    """
-    # convert the raw pixel data to a PNG using PIL
-    raw_img: bytes = self.AsPixels(render, zoom_norm=zoom_norm)
-    img_data_hash: str = hashes.Hash256(raw_img).hex()
-    img: PILImage.Image = PILImage.frombytes(
-      'RGB', (self._params.width, self._params.height), raw_img
-    )
-    # embed frame parameters as PNG tEXt metadata chunks; keys use a "tranZoom:" (_app) namespace
+      # map flat pixel index `i` to 2D coordinates (y, x) since `np_pixels` has shape
+      # (height, width, 3); assign the RGB tuple to the last axis
+      np_pixels[*divmod(i, self._params.width)] = rgb
+    # done; create Pixels object and compute hash
+    px: pixels.Pixels = pixels.Pixels(data=np_pixels, meta={})
+    hsh: str = px.data_hash
+    px.meta.update(MakeImageMeta(self, render, hsh))
     logging.debug(
-      f'AsPNG: rendered {self._params.width} x {self._params.height} '
-      f'{self._params.frm.fractal.value} PNG, hash {img_data_hash[:16]!r}'
+      f'Image rendered {self._params.width} x {self._params.height} '
+      f'{self._params.frm.fractal.value}, hash {hsh!r}'
     )
-    return (
-      pixels.PNGFromRGBImage(
-        img, meta=None if no_meta else MakeImageMeta(self, render, img_data_hash)
-      ),
-      img_data_hash,
-    )
+    return px
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
@@ -1113,68 +1082,12 @@ def SummaryHistogram(sorted_histogram: list[tuple[int, int]]) -> str:
   return '{' + (', '.join(f'{n}: {f}' for n, f in _SmallHistogram())) + '}'
 
 
-def AddEvaluationMetaToImage(
-  img_data: bytes,
-  response: tbase.JSONDict,
-  model: str,
-  temperature: float,
-  seed: int,
-  reason: bool,
-  query_memory: int,
-  query_setup: str,
-  query_image: str,
-  query_manual: str | None,
-  count: int,
-) -> bytes:
-  """Add LLM evaluation info to the image metadata and return the modified PNG bytes.
-
-  Args:
-    img_data (bytes): The original PNG image data as bytes.
-    response (tbase.JSONDict): The LLM evaluation response to add to the metadata.
-    model (str): The LLM model used for evaluation; if this is "HUMAN"/META_LLM_MODEL_VALUE_HUMAN,
-        then it will not add temperature, seed, reason, query_memory, query_setup, query_image, nor
-        query_manual to the metadata.
-    temperature (float): The temperature setting used for the LLM evaluation.
-    seed (int): The random seed used for the LLM evaluation.
-    reason (bool): Whether the LLM response includes reasoning steps
-    query_memory (int): The memory parameter used for the LLM evaluation.
-    query_setup (str): The setup query given to the LLM.
-    query_image (str): The image query given to the LLM.
-    query_manual (str | None): The manual query passed as extra into the query.
-    count (int): The zoom step count at which this evaluation was made.
-
-  Returns:
-    bytes: The modified PNG image data as bytes, with the evaluation info added to the metadata.
-
-  """
-  # start with the metadata that all zoom images have, for now
-  new_meta: dict[str, str] = {
-    META_LLM_MODEL_KEY: model,  # could be "HUMAN"/META_LLM_MODEL_VALUE_HUMAN
-    META_LLM_RESULT_JSON_KEY: json.dumps(response),
-    META_LLM_ZOOM_COUNT_KEY: str(count),
-  }
-  if model != META_LLM_MODEL_VALUE_HUMAN:
-    new_meta.update(
-      # add the non-human metadata
-      {
-        META_LLM_TEMPERATURE_KEY: str(temperature),
-        META_LLM_SEED_KEY: str(seed),
-        META_LLM_QUERY_MEMORY_KEY: str(query_memory),
-        META_LLM_QUERY_SETUP_KEY: query_setup,
-        META_LLM_QUERY_IMAGE_KEY: query_image,
-        META_LLM_QUERY_EXTRA_KEY: query_manual or '',
-        META_LLM_QUERY_REASONING_KEY: str(reason).lower(),  # store as "true"/"false"
-      }
-    )
-  return pixels.PNGFromRGBImage(pixels.RGBImageFromPNG(img_data), meta=new_meta)
-
-
 def _PixelPalette(
   t: float,
   pal: palette.Palette,
   *,
   cycles: int = 1,
-) -> tuple[int, int, int]:
+) -> tuple[float, float, float]:
   """Get the RGB color for a histogram-equalized normalized palette position.
 
   Smoothly interpolates between adjacent stops in the specified palette, cycling
@@ -1188,7 +1101,7 @@ def _PixelPalette(
     cycles (int): How many times to cycle through the palette across [0, 1); default is 1.
 
   Returns:
-    tuple[int, int, int]: The interpolated RGB color.
+    tuple[float, float, float]: The interpolated RGB color.
 
   Raises:
     Error: if the palette name is unknown or if there are issues computing the color.
@@ -1208,11 +1121,7 @@ def _PixelPalette(
   frac: float = idx - int(idx)
   r0, g0, b0 = palette_stops[lo]
   r1, g1, b1 = palette_stops[hi]
-  return (
-    int(r0 + frac * (r1 - r0)),
-    int(g0 + frac * (g1 - g0)),
-    int(b0 + frac * (b1 - b0)),
-  )
+  return (r0 + frac * (r1 - r0), g0 + frac * (g1 - g0), b0 + frac * (b1 - b0))
 
 
 def _BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram:

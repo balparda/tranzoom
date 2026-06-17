@@ -944,19 +944,21 @@ class Pixels(frame.SerializingFractalObject):
     meta: dict[str, str] = {}
     if img_format == ImageEncoding.PNG:
       # PNG metadata is stored in img.info as a dict of str -> str
-      meta = _LoadMetadataKeys(img.info.items())
+      meta = _LoadAndCheckMetadataKeys(img.info.items())
     elif img_format == ImageEncoding.JPG:
       # JPG metadata is stored in EXIF tags, which are numeric keys; we convert to str
       exif: PILImage.Exif | None = img.getexif()
       if exif:
         try:
-          meta = _LoadMetadataKeys(json.loads(str(exif[ExifTags.Base.ImageDescription])).items())
+          meta = _LoadAndCheckMetadataKeys(
+            json.loads(str(exif[ExifTags.Base.ImageDescription])).items()
+          )
         except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError, KeyError) as err:
           logging.error(f'JPG exif {ExifTags.Base.ImageDescription} is not valid, ignoring: {err}')
     elif img_format == ImageEncoding.GIF:
       # for GIFs we expect the metadata to be stored in the "comment" field as a JSON string
       try:
-        meta = _LoadMetadataKeys(
+        meta = _LoadAndCheckMetadataKeys(
           json.loads(cast('bytes', img.info['comment']).decode('utf-8')).items()
         )
       except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError, KeyError) as err:
@@ -1112,6 +1114,7 @@ class Pixels(frame.SerializingFractalObject):
       Pixels: The resized image data as a Pixels object.
 
     """
+    # TODO: we still convert to array->PIL->array a lot; can we do this more efficiently?
     return dataclasses.replace(
       Pixels.FromPIL(self.obj.resize((width, height), resample=resample))[0], meta=self.meta.copy()
     )
@@ -1134,6 +1137,7 @@ class Pixels(frame.SerializingFractalObject):
       Pixels: The modified Pixels image data with the overlay drawn.
 
     """
+    # TODO: we still convert to array->PIL->array a lot; can we do this more efficiently?
     w: int
     h: int
     cx: int
@@ -1187,6 +1191,7 @@ class Pixels(frame.SerializingFractalObject):
       Pixels: The modified Pixels image data with the overlay drawn.
 
     """
+    # TODO: we still convert to array->PIL->array a lot; can we do this more efficiently?
     w: int
     h: int
     cx: int
@@ -1248,6 +1253,7 @@ class Pixels(frame.SerializingFractalObject):
       Error: If the coordinates are out of bounds or if there are issues processing the image.
 
     """
+    # TODO: we still convert to array->PIL->array a lot; can we do this more efficiently?
     w: int
     h: int
     # open the image
@@ -1385,7 +1391,7 @@ def GetBasicData(img_bytes: bytes) -> tuple[ObjInfo, Pixels | None]:
     # for GIFs we expect the metadata to be stored in the "comment" field as a JSON string
     meta: dict[str, str] = {}
     try:
-      meta = _LoadMetadataKeys(
+      meta = _LoadAndCheckMetadataKeys(
         json.loads(cast('bytes', img.info['comment']).decode('utf-8')).items()
       )
     except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError, KeyError) as err:
@@ -1432,7 +1438,19 @@ def ValidateIFrames(i_frames: int) -> None:
     raise Error(f'Interpolation must be between 0 and {MAX_INTERPOLATION_FRAMES}, got {i_frames=}')
 
 
-def _LoadMetadataKeys(img_m: abc.Iterable[tuple[Any, Any]]) -> dict[str, str]:
+def _LoadAndCheckMetadataKeys(img_m: abc.Iterable[tuple[Any, Any]]) -> dict[str, str]:
+  """Load metadata keys from an iterable of key-value pairs. Checks that all keys are strings.
+
+  Args:
+    img_m (abc.Iterable[tuple[Any, Any]]): An iterable of key-value pairs representing metadata.
+
+  Returns:
+    dict[str, str]: A dictionary with string keys and string values representing the metadata.
+
+  Raises:
+    Error: If any key in the metadata is not a string.
+
+  """
   m: dict[str, str] = {}
   for k, v in img_m:
     if not isinstance(k, str):
