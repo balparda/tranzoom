@@ -186,7 +186,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
         logging.info(f'AI model loaded: {model_config}')
       # main loop: runs until max_steps is reached, or Ctrl+C is pressed
       json_chat: tbase.JSONDict | None = None
-      img_data: bytes
+      img_data: pixels.Pixels
       response: queries.ZoomSectorScoring | queries.ZoomSectorCompleteScoring
       full_path: pathlib.Path
       tmr: timer.Timer
@@ -233,7 +233,7 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
               setup_query,
               image_query,
               queries.ZoomSectorCompleteScoring if reason else queries.ZoomSectorScoring,
-              images=[img_data],
+              images=[img_data.PNG()[0]],
               chat_history=json_chat,
             )
         else:
@@ -262,21 +262,20 @@ def ZoomLoop(  # noqa: C901, PLR0912, PLR0914, PLR0915
             ],
           )
         # save the image, adding the response evaluation as metadata on top of the image
-        full_path.write_bytes(
-          AddEvaluationMetaToImage(
-            img_data,
-            response.JSON(),
-            model if not manual else image.META_LLM_MODEL_VALUE_HUMAN,
-            temperature if not manual else 0.0,
-            (model_config['seed'] or 0) if model_config is not None else 0,
-            reason if not manual else False,
-            memory if not manual else 0,
-            setup_query if not manual else '',
-            image_query if not manual else '',
-            query if not manual else None,
-            count,
-          )
+        AddEvaluationMetaToImage(
+          img_data,
+          response.JSON(),
+          model if not manual else image.META_LLM_MODEL_VALUE_HUMAN,
+          temperature if not manual else 0.0,
+          (model_config['seed'] or 0) if model_config is not None else 0,
+          reason if not manual else False,
+          memory if not manual else 0,
+          setup_query if not manual else '',
+          image_query if not manual else '',
+          query if not manual else None,
+          count,
         )
+        full_path.write_bytes(img_data.PNG()[0])
         # implement the move command
         print_comm('')
         params = dataclasses.replace(

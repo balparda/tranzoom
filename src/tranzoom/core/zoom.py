@@ -17,8 +17,9 @@ from typing import cast
 import gmpy2
 import imageio
 import numpy as np
+from numpy._typing._array_like import NDArray
 from PIL import Image as PILImage
-from PIL import ImageChops, ImageFilter
+from PIL import ImageFilter
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
@@ -652,12 +653,12 @@ def FrameEstimatedIters(d: int, s: image.FractalStats) -> int:
 
 
 def CenterZoomRGB(
-  img: PILImage.Image,
+  img: pixels.Pixels,
   scale: float,
   *,
   return_mask: bool = False,
   fill_color: tuple[int, int, int] | None = None,
-) -> tuple[PILImage.Image, PILImage.Image | None]:
+) -> tuple[pixels.Pixels, NDArray[np.uint8] | None]:
   """Return img zoomed around its center.
 
   scale > 1 zooms in.
@@ -669,14 +670,14 @@ def CenterZoomRGB(
     0 where the transformed output is outside the source image.
 
   Args:
-    img (PILImage.Image): The input RGB image to be zoomed.
+    img (pixels.Pixels): The input RGB image to be zoomed.
     scale (float): The zoom scale factor. Must be a finite positive number.
     return_mask (bool): Whether to return the transform validity mask; default False.
     fill_color (tuple[int, int, int] | None): Optional RGB fill color for areas outside the
         source image. If None, the fill color is estimated from the median of the border pixels.
 
   Returns:
-    tuple[PILImage.Image, PILImage.Image | None]: The zoomed image,
+    tuple[pixels.Pixels, NDArray[np.uint8] | None]: The zoomed image (NO META is included),
         optionally with its validity mask.
 
   Raises:
@@ -684,19 +685,20 @@ def CenterZoomRGB(
 
   """
   # check image and scale are valid
-  if img.mode != 'RGB':
-    raise Error(f'expected RGB image, got {img.mode!r}')
   if not math.isfinite(scale) or scale <= 0.0:
     raise Error(f'invalid interpolation zoom scale: {scale}')
   if fill_color and (max(fill_color) > pixels.MAX_COLOR or min(fill_color) < 0):
     raise Error(f'invalid fill_color: {fill_color}')
   # if scale is effectively 1, return a copy
-  if abs(scale - 1.0) < 1e-12:  # noqa: PLR2004
-    return (img.copy(), PILImage.new('L', img.size, pixels.MAX_COLOR) if return_mask else None)
-  # get center
-  width: int
   height: int
-  width, height = img.size
+  width: int
+  height, width, _ = img.data.shape
+  if abs(scale - 1.0) < 1e-12:  # noqa: PLR2004
+    return (
+      dataclasses.replace(img, meta={}),
+      np.full((height, width), pixels.MAX_COLOR, dtype=np.uint8) if return_mask else None,
+    )
+  # get center
   cx: float = (width - 1) / 2.0
   cy: float = (height - 1) / 2.0
   # compute inverse scale for Pillow affine transform
@@ -709,33 +711,35 @@ def CenterZoomRGB(
     inv,
     cy - cy * inv,
   )
-  out: PILImage.Image = img.transform(
-    img.size,
-    PILImage.Transform.AFFINE,
-    affine,
-    resample=PILImage.Resampling.BICUBIC,
-    fillcolor=fill_color or BorderFillColor(img),
-  )
+  with img.obj as pil_img:
+    out_pil: PILImage.Image = pil_img.transform(
+      pil_img.size,
+      PILImage.Transform.AFFINE,
+      affine,
+      resample=PILImage.Resampling.BICUBIC,
+      fillcolor=fill_color or BorderFillColor(img),
+    )
+    out: pixels.Pixels = pixels.Pixels(data=np.asarray(out_pil, dtype=np.float32), meta={})
   # if the caller does not want a mask, return just the zoomed image
   if not return_mask:
     return (out, None)
   # create a mask of the same size as the input image, filled with MAX_COLOR (valid)
-  mask_src: PILImage.Image = PILImage.new('L', img.size, pixels.MAX_COLOR)
-  mask: PILImage.Image = mask_src.transform(
-    img.size,
+  mask_src: PILImage.Image = PILImage.new('L', (width, height), pixels.MAX_COLOR)
+  mask_pil: PILImage.Image = mask_src.transform(
+    (width, height),
     PILImage.Transform.AFFINE,
     affine,
     resample=PILImage.Resampling.NEAREST,
     fillcolor=0,
   )
-  return (out, mask)
+  return (out, np.asarray(mask_pil, dtype=np.uint8))
 
 
-def BorderFillColor(img: PILImage.Image) -> tuple[int, int, int]:
+def BorderFillColor(img: pixels.Pixels) -> tuple[int, int, int]:
   """Estimate a safer affine fill color from the median of the image border pixels.
 
   Args:
-    img (PILImage.Image): The input RGB image.
+    img (pixels.Pixels): The input image.
 
   Returns:
     tuple[int, int, int]: The estimated fill color as an RGB tuple.
@@ -745,8 +749,8 @@ def BorderFillColor(img: PILImage.Image) -> tuple[int, int, int]:
 
   """
   # pick up only border pixels (top, bottom, left, right)
-  arr: np.ndarray = np.asarray(img, dtype=np.uint8)
-  border: np.ndarray = np.concatenate(
+  arr: NDArray[np.uint8] = img.clip
+  border: NDArray[np.uint8] = np.concatenate(
     (
       arr[0, :, :],
       arr[-1, :, :],
@@ -756,72 +760,78 @@ def BorderFillColor(img: PILImage.Image) -> tuple[int, int, int]:
     axis=0,
   )
   # compute the median color of the border pixels
-  color: np.ndarray = np.median(border, axis=0)
+  color: NDArray[np.float64] = np.median(border, axis=0)
   if color.shape != (3,):
     raise Error(f'Unexpected border color shape: {color.shape}')
   return tuple(int(x) for x in color)  # type: ignore[return-value]
 
 
 def FeatherValidMask(
-  mask: PILImage.Image,
+  mask: NDArray[np.uint8],
   *,
   erode_pixels: int,
   blur_pixels: float,
-) -> PILImage.Image:
+) -> NDArray[np.uint8]:
   """Return a soft validity mask.
 
   The valid region is first eroded, then blurred. This creates a smooth
   alpha ramp from valid transformed pixels to invalid/out-of-bounds pixels.
 
   Args:
-    mask (PILImage.Image): L-mode mask, MAX_COLOR valid and 0 invalid.
+    mask (NDArray[np.uint8]): validity mask, MAX_COLOR valid and 0 invalid.
     erode_pixels (int): Pixels to shrink the hard valid region before blur.
     blur_pixels (float): Gaussian blur radius for the alpha ramp.
 
   Returns:
-    PILImage.Image: L-mode soft mask.
+    NDArray[np.uint8]: validity soft mask.
 
   Raises:
     Error: on error
 
   """
   # sanity check
-  if mask.mode != 'L':
-    raise Error(f'expected L mask, got {mask.mode!r}')
+  if mask.ndim != 2:  # noqa: PLR2004
+    raise Error(f'expected 2-D mask, got shape {mask.shape}')
+  if mask.dtype != np.uint8:
+    raise Error(f'expected uint8 mask, got {mask.dtype}')
   if erode_pixels < 0:
     raise Error(f'pixels must be >= 0, got {erode_pixels}')
   if blur_pixels < 0.0:
     raise Error(f'blur_pixels must be >= 0, got {blur_pixels}')
-  # erode first
-  soft_mask: PILImage.Image = mask
-  if erode_pixels:
-    soft_mask = soft_mask.filter(ImageFilter.MinFilter(erode_pixels * 2 + 1))
-  # then blur
-  if blur_pixels:
-    soft_mask = soft_mask.filter(ImageFilter.GaussianBlur(blur_pixels))
+  # erode & blur
+  with PILImage.fromarray(mask, mode='L') as mask_img:
+    soft_mask: PILImage.Image = mask_img
+    if erode_pixels:
+      soft_mask = soft_mask.filter(ImageFilter.MinFilter(erode_pixels * 2 + 1))
+    if blur_pixels:
+      soft_mask = soft_mask.filter(ImageFilter.GaussianBlur(blur_pixels))
+    soft: NDArray[np.float32] = np.asarray(soft_mask, dtype=np.float32)
   # critical: GaussianBlur leaks white alpha into the invalid region:
   # clamp it so invalid transformed pixels remain fully transparent
-  return ImageChops.multiply(soft_mask, mask)
+  hard_alpha: NDArray[np.float32] = mask.astype(np.float32) / float(pixels.MAX_COLOR)
+  return cast('NDArray[np.uint8]', np.clip(soft * hard_alpha, 0, pixels.MAX_COLOR).astype(np.uint8))  # pyright: ignore[reportUnnecessaryCast]
 
 
-def MaskArray(mask: PILImage.Image) -> np.ndarray:
-  """Convert an L-mode mask to a float32 alpha array in [0, 1].
+def MaskArray(mask: NDArray[np.uint8]) -> NDArray[np.float32]:
+  """Convert a uint8 validity mask to a float32 alpha array in [0, 1].
 
   Args:
-    mask (PILImage.Image): L-mode mask, MAX_COLOR valid and 0 invalid
+    mask (NDArray[np.uint8]): validity mask, MAX_COLOR valid and 0 invalid
 
   Returns:
-    np.ndarray: A float32 array of shape (height, width, 1) with values in [0, 1].
+    NDArray[np.float32]: A float32 array of shape (height, width, 1) with values in [0, 1].
 
   Raises:
     Error: on error
 
   """
   # sanity check
-  if mask.mode != 'L':
-    raise Error(f'expected L mask, got {mask.mode!r}')
+  if mask.ndim != 2:  # noqa: PLR2004
+    raise Error(f'expected 2-D mask, got shape {mask.shape}')
+  if mask.dtype != np.uint8:
+    raise Error(f'expected uint8 mask, got {mask.dtype}')
   # convert to float32 array in [0, 1]
-  return np.asarray(mask, dtype=np.float32)[:, :, None] / float(pixels.MAX_COLOR)
+  return mask.astype(np.float32)[:, :, None] / float(pixels.MAX_COLOR)
 
 
 def LinearInterpolatedFrame(
@@ -851,29 +861,29 @@ def LinearInterpolatedFrame(
     raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
   if not (0.0 <= frac <= 1.0):
     raise Error(f'Invalid interpolation fraction: {frac}')
-  c: PILImage.Image = pixels.RGBImageFromPNG(curr_img.data)
-  n: PILImage.Image = pixels.RGBImageFromPNG(next_img.data)
+  # get border from "current"
+  curr_border: tuple[int, int, int] = BorderFillColor(curr_img.data)
   # align both images to the virtual zoom depth between the two real frames
-  curr_border: tuple[int, int, int] = BorderFillColor(c)
-  curr_aligned: PILImage.Image = CenterZoomRGB(c, zoom_per_step**frac, fill_color=curr_border)[0]
-  next_aligned_raw: PILImage.Image
-  next_valid_mask: PILImage.Image | None
+  curr_aligned: pixels.Pixels = CenterZoomRGB(
+    curr_img.data, zoom_per_step**frac, fill_color=curr_border
+  )[0]
+  next_aligned_raw: pixels.Pixels
+  next_valid_mask: NDArray[np.uint8] | None
   next_aligned_raw, next_valid_mask = CenterZoomRGB(
-    n, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
+    next_img.data, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
   )
-  if not next_valid_mask:
+  if next_valid_mask is None:
     raise Error('next_valid_mask is None, but it should not be; bug! report')
   # the future frames will have a black border where the zoomed-out image is outside the
   # original image; we create a soft alpha mask to blend the current frame into the next frame
   # to avoid harsh transitions
-  next_alpha_mask: PILImage.Image = FeatherValidMask(
+  next_alpha_mask: NDArray[np.uint8] = FeatherValidMask(
     next_valid_mask, erode_pixels=_ERODE_LINEAR, blur_pixels=_BLUR_LINEAR
   )
-  a0: np.ndarray = np.asarray(curr_aligned, dtype=np.float32)
-  a1: np.ndarray = np.asarray(next_aligned_raw, dtype=np.float32)
-  alpha1: np.ndarray = frac * MaskArray(next_alpha_mask)
-  out: np.ndarray = a0 * (1.0 - alpha1) + a1 * alpha1
-  return pixels.Pixels(data=out, meta={})
+  alpha1: NDArray[np.float32] = frac * MaskArray(next_alpha_mask)
+  return pixels.Pixels(
+    data=(curr_aligned.data * (1.0 - alpha1)) + (next_aligned_raw.data * alpha1), meta={}
+  )
 
 
 def QuadraticInterpolatedFrame(  # noqa: PLR0914
@@ -912,50 +922,52 @@ def QuadraticInterpolatedFrame(  # noqa: PLR0914
     raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
   if not (0.0 <= frac <= 1.0):
     raise Error(f'Invalid interpolation fraction: {frac}')
-  c: PILImage.Image = pixels.RGBImageFromPNG(curr_img.data)
-  n1: PILImage.Image = pixels.RGBImageFromPNG(next_img_1.data)
-  n2: PILImage.Image = pixels.RGBImageFromPNG(next_img_2.data)
   # align all three samples to the same virtual zoom depth
-  curr_border: tuple[int, int, int] = BorderFillColor(c)
-  curr_aligned: PILImage.Image = CenterZoomRGB(c, zoom_per_step**frac, fill_color=curr_border)[0]
-  next_aligned_1_raw: PILImage.Image
-  next_valid_mask_1: PILImage.Image | None
+  curr_border: tuple[int, int, int] = BorderFillColor(curr_img.data)
+  curr_aligned: pixels.Pixels = CenterZoomRGB(
+    curr_img.data, zoom_per_step**frac, fill_color=curr_border
+  )[0]
+  next_aligned_1_raw: pixels.Pixels
+  next_valid_mask_1: NDArray[np.uint8] | None
   next_aligned_1_raw, next_valid_mask_1 = CenterZoomRGB(
-    n1, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
+    next_img_1.data, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
   )
-  next_aligned_2_raw: PILImage.Image
-  next_valid_mask_2: PILImage.Image | None
+  next_aligned_2_raw: pixels.Pixels
+  next_valid_mask_2: NDArray[np.uint8] | None
   next_aligned_2_raw, next_valid_mask_2 = CenterZoomRGB(
-    n2, zoom_per_step ** (frac - 2.0), return_mask=True, fill_color=curr_border
+    next_img_2.data, zoom_per_step ** (frac - 2.0), return_mask=True, fill_color=curr_border
   )
-  if not next_valid_mask_1 or not next_valid_mask_2:
+  if next_valid_mask_1 is None or next_valid_mask_2 is None:
     raise Error('next_valid_mask_1|2 is None, but it should not be; bug! report')
   # the future frames will have a black border where the zoomed-out image is outside the
   # original image; we create a soft alpha mask to blend the current frame into the next frame
   # to avoid harsh transitions
-  soft_mask_1: PILImage.Image = FeatherValidMask(
+  soft_mask_1: NDArray[np.uint8] = FeatherValidMask(
     next_valid_mask_1, erode_pixels=_ERODE_LINEAR, blur_pixels=_BLUR_LINEAR
   )
-  soft_mask_2: PILImage.Image = FeatherValidMask(
+  soft_mask_2: NDArray[np.uint8] = FeatherValidMask(
     next_valid_mask_2, erode_pixels=_ERODE_QUADRATIC, blur_pixels=_BLUR_QUADRATIC
   )
   # blend using Lagrange interpolation
-  a0: np.ndarray = np.asarray(curr_aligned, dtype=np.float32)
-  a1: np.ndarray = np.asarray(next_aligned_1_raw, dtype=np.float32)
-  a2: np.ndarray = np.asarray(next_aligned_2_raw, dtype=np.float32)
   w0: float = ((frac - 1.0) * (frac - 2.0)) / 2.0
   w1: float = -frac * (frac - 2.0)
   w2: float = (frac * (frac - 1.0)) / 2.0
-  alpha1: np.ndarray = MaskArray(soft_mask_1)
-  alpha2: np.ndarray = MaskArray(soft_mask_2)
+  alpha1: NDArray[np.float32] = MaskArray(soft_mask_1)
+  alpha2: NDArray[np.float32] = MaskArray(soft_mask_2)
   # fade future-frame contributions out near their invalid borders;
   # important: when future weights are masked away, give the missing weight
   # back to curr_aligned: this keeps brightness stable and avoids dark seams
-  effective_w1: np.ndarray = w1 * alpha1
-  effective_w2: np.ndarray = w2 * alpha2
-  effective_w0: np.ndarray = w0 + (w1 * (1.0 - alpha1)) + (w2 * (1.0 - alpha2))
-  out: np.ndarray = effective_w0 * a0 + effective_w1 * a1 + effective_w2 * a2
-  return pixels.Pixels(data=out, meta={})
+  effective_w0: NDArray[np.float32] = w0 + (w1 * (1.0 - alpha1)) + (w2 * (1.0 - alpha2))
+  effective_w1: NDArray[np.float32] = w1 * alpha1
+  effective_w2: NDArray[np.float32] = w2 * alpha2
+  return pixels.Pixels(
+    data=(
+      (effective_w0 * curr_aligned.data)
+      + (effective_w1 * next_aligned_1_raw.data)
+      + (effective_w2 * next_aligned_2_raw.data)
+    ),
+    meta={},
+  )
 
 
 def InterpolatedFrameStream(
