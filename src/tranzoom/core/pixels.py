@@ -712,10 +712,10 @@ class Pixels(frame.SerializingFractalObject):
     """Get a hash of the pixel data.
 
     Returns:
-      str: A hexadecimal string representing the hash of the 'RGB' mode pixel data.
+      str: A hexadecimal string representing the hash of the pixel data.
 
     """
-    return hashes.Hash256(self.obj.tobytes()).hex()
+    return hashes.Hash256(self.clip.tobytes()).hex()
 
   @property
   def json(self) -> tbase.JSONDict:
