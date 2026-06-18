@@ -246,7 +246,7 @@ def test_render_anim_hash_stability_and_serialization_consistency(
       ),
       '1efdcf2c7cb8386e30ef30cfe1de26e1a37daddebd3ceb4074b25cf11b9e0c3d',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
-      '[PNG.img: 512 × 512, '
+      '[PNG.img: 512 × 512, '  # noqa: RUF001
       "BIN:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', "
       "DATA:'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', "
       "{'key1': 'value1'}]",
@@ -268,7 +268,7 @@ def test_render_anim_hash_stability_and_serialization_consistency(
       ),
       '7f04ba3e080d0b2fcf1f958d9051579e2d5329c48228ec83a8817e152ef91b47',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
-      '[GIF.anim: 1024 × 768, '
+      '[GIF.anim: 1024 × 768, '  # noqa: RUF001
       "BIN:'1111111111111111111111111111111111111111111111111111111111111111', "
       "DATA:'2222222222222222222222222222222222222222222222222222222222222222', "
       "{'key2': 'value2', 'key3': 'value3'}]",
@@ -290,7 +290,7 @@ def test_render_anim_hash_stability_and_serialization_consistency(
       ),
       '47f1a2bf3386e2c526a3486f8b2d96fc03c3d24f6d8e06bc7ebd52872ac47d27',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
-      '[JPG.img: 256 × 256, '
+      '[JPG.img: 256 × 256, '  # noqa: RUF001
       "BIN:'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', "
       "DATA:'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd', {}]",
       id='ObjInfo-3',
