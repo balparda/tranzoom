@@ -657,7 +657,7 @@ class Pixels(frame.SerializingFractalObject):
       str: String representation of the Pixels.
 
     """
-    return f'[{self.width}, {self.height}, {self.data_hash}, {self.meta}]'
+    return f'[{self.width}, {self.height}, {self.data_hash!r}, {self.meta}]'
 
   def PrintITerm2(self) -> None:
     """Print the image to `sys.stdout` in iTerm2, using the iTerm2 inline image protocol.
@@ -731,6 +731,7 @@ class Pixels(frame.SerializingFractalObject):
       # ATTENTION: changing anything here changes the HASH!!
       'data': self.data.tobytes().hex(),
       'meta': cast('tbase.JSONDict', self.meta),
+      'width': self.width,  # store width so we can recover the shape
     }
 
   @staticmethod
@@ -751,12 +752,12 @@ class Pixels(frame.SerializingFractalObject):
     """
     # create the object
     try:
+      dt: NDArray[np.float32] = np.frombuffer(bytes.fromhex(str(data['data'])), dtype=np.float32)
       width: int = int(str(data['width']))
-      height: int = int(str(data['height']))
+      if len(dt.shape) != 1 or dt.shape[0] % (width * 3):
+        raise Error(f'Pixels length {dt.shape[0]} is not a multiple of {width=} * 3 channels')  # noqa: TRY301
       params: Pixels = Pixels(
-        data=np.frombuffer(bytes.fromhex(str(data['data'])), dtype=np.float32).reshape(
-          height, width, 3
-        ),
+        data=dt.reshape(dt.shape[0] // (width * 3), width, 3),
         meta=cast('dict[str, str]', data['meta']),
       )
     except (KeyError, ValueError, TypeError, Error) as err:
