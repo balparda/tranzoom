@@ -58,15 +58,15 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 # if any of these hashes change: the mathematical computation or the setting of colors has changed!
 # this should NOT change over metadata changes, as it is computed from raw pixel data
 # PNG - really only change if core computation changes, so these are more important to be stable
-SEAHORSE_TAIL_HASH: str = '7ab1cfe82183e62e6824d1de3a259977519246c465db0d9f82e393224cda4b9d'
-SUZANA_WAVE_HASH: str = 'dbc2b28d9a289a00f518b4165ac2e21d315d60bc23b23ae62b1d4150f4b07bd8'
+SEAHORSE_TAIL_HASH: str = '525aaf4c4a58391f1386889a54d54dfb91f099050af5783f97322e1f33e8b275'
+SUZANA_WAVE_HASH: str = '95a6acd116fb1ca043f089f093fb0a8c139ffb490a6a24be068fa474c8636871'
 # GIF - these may change for core computation, or if the animation frame machinery changes
-SEAHORSE_ANIMATED_HASH: str = 'c4b43d8eecbcaede3cae88004d1857010a63f11a143fe2a6538987b0f9711868'
-T_GIF_SEAHORSE_HASH: str = '1a7a5669accdaecf8f0e3fb59deda64d744d8dbe1966f318e4ac3dd21b8ba4dc'
-T_GIF_SEEDS_300_HASH: str = '8f043074ca82edecf651cb2abaec26555576c2cd93d254befcff531edf5cf577'
-T_GIF_JULIA_SUZANA_HASH: str = '9a52a1e4e1c0f2973ec09f67573c6f443c845ead59dcc045a2944ad31f0f6896'
-T_GIF_JULIA_DRAGON_HASH: str = '26ac469bb5a34c03333b7e2ef511a19111466498b6b0446add83e2f5b074c3de'
-T_GIF_JULIA_BLOB_HASH: str = 'c8a2ed1c9acb83c7107eaa7b334b0fcbb5d98f644eddb7632d336611c89e4441'
+SEAHORSE_ANIMATED_HASH: str = '6dba92cbdeab5286313e1b7aaa908030a8bf0317daa1fe556537fbd21822bde0'
+T_GIF_SEAHORSE_HASH: str = '400c5fa733c53be45876cc0a438f4c6bd0ea1a08352c179db2814f95c63f4e65'
+T_GIF_SEEDS_300_HASH: str = '6582790cba40597dd11dfd21aac2f0f3b910ae407e1b710da543a9a182221d84'
+T_GIF_JULIA_SUZANA_HASH: str = '383b28e4152981c8d5e3055b82178a23ac6270a042f857f1618c36c713354414'
+T_GIF_JULIA_DRAGON_HASH: str = 'f79360651f0a9bd251cab6bec524ae7f41042d64543e571a306506a7c607fcf0'
+T_GIF_JULIA_BLOB_HASH: str = 'be6afe3e3be136ad07c1839d1045167c6eb616379e73fbb81608d1d81890260b'
 # SHA of all the frame's data - like above: computation or animation frame machinery changes
 TEST_IMAGE_DATA_HASHES: dict[str, tuple[int, str]] = {
   # name: (number of frames, hash of all the frames)

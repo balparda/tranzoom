@@ -691,11 +691,14 @@ class Pixels(frame.SerializingFractalObject):
   def clip(self) -> NDArray[np.uint8]:
     """Clip the pixel data to the valid range [0, MAX_COLOR] and convert to uint8.
 
+    Uses explicit rounding to ensure deterministic conversion from float32 to uint8,
+    avoiding platform-dependent implicit rounding behavior.
+
     Returns:
       NDArray[np.uint8]: The clipped pixel data as a uint8 array.
 
     """
-    return np.clip(self.data, 0, MAX_COLOR).astype(np.uint8)
+    return np.round(np.clip(self.data, 0, MAX_COLOR)).astype(np.uint8)
 
   @property
   def obj(self) -> PILImage.Image:
