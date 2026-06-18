@@ -792,7 +792,7 @@ class Pixels(frame.SerializingFractalObject):
       raise Error('Animated GIF images are not supported for Pixels')
     # check source type
     try:
-      img_format: ImageEncoding | None = ImageEncoding((img.format).upper()) if img.format else None
+      img_format: ImageEncoding | None = ImageEncoding((img.format).lower()) if img.format else None
     except (ValueError, KeyError) as err:
       raise Error(f'Unsupported image format: {img.format!r}') from err
     if img_format and img_format != ImageEncoding.PNG and not allow_conversion:
@@ -1247,7 +1247,7 @@ def GetBasicData(img_bytes: bytes) -> tuple[ObjInfo, Pixels | None]:
   with PILImage.open(io.BytesIO(img_bytes)) as img:
     # check source type; make absolutely sure it is an animated GIF
     try:
-      img_format: AnimationEncoding = AnimationEncoding((img.format or '').upper())
+      img_format: AnimationEncoding = AnimationEncoding((img.format or '').lower())
     except Exception as err:
       raise Error(f'Unsupported image format: {img.format!r}') from err
     if img_format != AnimationEncoding.GIF or not DetectAnimGIF(img):

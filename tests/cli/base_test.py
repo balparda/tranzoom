@@ -35,12 +35,11 @@ _IMAGES_DIR: pathlib.Path = _REPO_ROOT / 'tests' / 'data' / 'images'
 )
 def test_computation_integrity_hashes_of_test_images(img: str, w: int, h: int, hsh: str) -> None:
   """Test computation integrity. SUPER CRITICAL test to make sure computation is stable."""
-  i_w: int
-  i_h: int
-  i_hsh: str
-  i_w, i_h, i_hsh, _ = pixels.GetBasicDataFromImage((_IMAGES_DIR / img).read_bytes())
-  assert i_w == w, f'Width mismatch for {img}: expected {w}, got {i_w}; BUG!'
-  assert i_h == h, f'Height mismatch for {img}: expected {h}, got {i_h}; BUG!'
-  assert i_hsh == hsh, (
-    f'Hash mismatch for {img}: expected {hsh}, got {i_hsh}; did the computation machinery change?'
+  info: pixels.ObjInfo
+  info, _ = pixels.GetBasicData((_IMAGES_DIR / img).read_bytes())
+  assert info.width == w, f'Width mismatch for {img}: expected {w}, got {info.width}; BUG!'
+  assert info.height == h, f'Height mismatch for {img}: expected {h}, got {info.height}; BUG!'
+  assert info.data_hash == hsh, (
+    f'Hash mismatch for {img}: expected {hsh}, got {info.data_hash}; '
+    'did the computation machinery change?'
   )

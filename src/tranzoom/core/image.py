@@ -57,7 +57,6 @@ META_RENDER_MARK_COLOR_KEY: str = f'{_app}:render:mark_color'  # Color.name.lowe
 META_RENDER_MARK_WIDTH_KEY: str = f'{_app}:render:mark_width'  # int
 META_RENDER_HASH_KEY: str = f'{_app}:render:hash'  # str, like "abcdef1234567890", a SHA256
 META_IMAGE_ANIMATION_KEY: str = f'{_app}:image:animation'  # AnimationType or "none" if static image
-META_IMAGE_HASH_KEY: str = pixels.META_IMAGE_HASH_KEY  # str, like "abcdef1234567890", a SHA256
 META_IMAGE_EXT_COUNT_KEY: str = f'{_app}:image:exterior:count'  # int; count escaped
 META_IMAGE_EXT_N_MIN_KEY: str = f'{_app}:image:exterior:n:min'  # int; min iter
 META_IMAGE_EXT_N_MAX_KEY: str = f'{_app}:image:exterior:n:max'  # int; max iter
@@ -133,7 +132,7 @@ META_SAFE_HASHES: set[str] = {
   META_COMPUTATION_HASH_KEY,  # this depends on coordinates, hard for any non-trivial Frame
   META_ZOOM_HASH_KEY,  # this depends on coordinates, hard for any non-trivial Frame
   META_RENDER_HASH_KEY,  # this is easy to brute-force, but it's only the render parameters, useless
-  META_IMAGE_HASH_KEY,  # this is a data-driven hash (depends on rendered bytes) and is 100% safe
+  pixels.META_IMAGE_HASH_KEY,  # this is a data-driven hash (depends on rendered bytes) and is safe
 }
 
 # pre-compiled constants for encoding/decoding
@@ -965,7 +964,7 @@ def MakeImageMeta(img: Image, render: pixels.RenderParameters, data_hash: str) -
     META_IMAGE_ANIMATION_KEY: 'none',  # this is a static image for now, not an animation
     META_COMPUTATION_WIDTH_KEY: str(img.params.size[0]),
     META_COMPUTATION_HEIGHT_KEY: str(img.params.size[1]),
-    META_IMAGE_HASH_KEY: data_hash,
+    pixels.META_IMAGE_HASH_KEY: data_hash,
     META_COMPUTATION_COLOR_SET_KEY: str(img.params.set_points.value)
     if img.params.set_points
     else 'none',

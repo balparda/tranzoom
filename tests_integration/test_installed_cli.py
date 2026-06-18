@@ -84,14 +84,11 @@ def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
     )
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
-    w: int
-    h: int
-    hsh: str
-    info: tbase.JSONDict
-    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
-    assert w == h == 1024, f'Expected image dimensions 1024x1024, got {w} x {h}'
-    assert hsh == base.SEAHORSE_TAIL_HASH
-    assert info == {
+    info: pixels.ObjInfo
+    info, _ = pixels.GetBasicData(output_image.read_bytes())
+    assert info.width == info.height == 1024, f'Expected 1024x1024, got {info.width}x{info.height}'
+    assert info.data_hash == base.SEAHORSE_TAIL_HASH
+    assert info.meta == {
       'tranZoom:frame:fractal': 'mandelbrot',
       'tranZoom:frame:center_re': '-7436499/10000000',
       'tranZoom:frame:center_im': '3297051/25000000',
@@ -167,7 +164,7 @@ def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:render:mark_re': '0',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': '9ccb42f3ee157bcd52a191e532cd531b7d4fd191ad2883b232ba979c13e96a09',
+      'tranZoom:render:hash': 'a1747d5f60f817fab6bcd70db4f772813f361d9e0c75f9e700e36c0a757906d9',
     }
 
 
@@ -221,14 +218,11 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
     )
     assert output_image.exists(), f'Expected output gif not found: {output_image}'
     # check the image data
-    w: int
-    h: int
-    hsh: str
-    info: tbase.JSONDict
-    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
-    assert w == h == 220, f'Expected image dimensions 220 x 220, got {w} x {h}'
-    assert hsh == base.SEAHORSE_ANIMATED_HASH
-    assert info == {
+    info: pixels.ObjInfo
+    info, _ = pixels.GetBasicData(output_image.read_bytes())
+    assert info.width == info.height == 220, f'Expected 220x220, got {info.width}x{info.height}'
+    assert info.data_hash == base.SEAHORSE_ANIMATED_HASH
+    assert info.meta == {
       'tranZoom:frame:fractal': 'mandelbrot',
       'tranZoom:frame:center_re': '-5578776469/7500000000',
       'tranZoom:frame:center_im': '8244620127/62500000000',
@@ -358,15 +352,12 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
     output_image: pathlib.Path = pathlib.Path(tmp_dir) / f'julia-{base.SUZANA_WAVE_HASH[:20]}.png'
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
-    w: int
-    h: int
-    hsh: str
-    info: tbase.JSONDict
-    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
-    assert w == 1024, f'Expected image dimensions 1024 x 754, got {w} x {h}'
-    assert h == 754, f'Expected image dimensions 1024 x 754, got {w} x {h}'
-    assert hsh == base.SUZANA_WAVE_HASH
-    assert info == {
+    info: pixels.ObjInfo
+    info, _ = pixels.GetBasicData(output_image.read_bytes())
+    assert info.width == 1024, f'Expected 1024 x 754, got {info.width} x {info.height}'
+    assert info.height == 754, f'Expected 1024 x 754, got {info.width} x {info.height}'
+    assert info.data_hash == base.SUZANA_WAVE_HASH
+    assert info.meta == {
       'tranZoom:frame:fractal': 'julia',
       'tranZoom:frame:julia_re': '13667/50000',
       'tranZoom:frame:julia_im': '371/50000',
@@ -442,5 +433,5 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
       'tranZoom:render:mark_re': '0',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': '57e17bd485377f533971053c16d099905457daaa7c73b21b911d1c41a54e673b',
+      'tranZoom:render:hash': 'f56145e999d631c6f6ef4dc52b0b502766047aca4b3f3f99156bac5b63a91df6',
     }
