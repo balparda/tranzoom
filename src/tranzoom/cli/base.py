@@ -1587,26 +1587,20 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             zoom.RenderedZoomFrame: The rendered image data for the frame at index i.
 
           """
+          # render the frame, get the image data and hash
           img_data: pixels.Pixels
           data_hash: str
           img_path: pathlib.Path
-          p: int
-          n: int
-          zn: image.Image.FrameColorNorm
-          # render
-          p, n, zn = zoom_norm.ForFrame(i)
           img_data, data_hash, img_path, _ = db.DoRender(
             _SmartImage(i),  # get the Image object for this frame
-            pixels.RenderAnimationFrameParameters.FromAnimAndFrames(
-              zoom_params.render, prev_marker=all_frames[p], next_marker=all_frames[n]
-            ),
+            zoom_params.render,
             out,
             add_serial=i + 1,
             tm=timestamp,
             iterm=False,  # disable, we want silence
             print_comm=config.console.print,
             force=config.img_force_redo,
-            zoom_norm=zn,
+            zoom_norm=zoom_norm.ForFrame(i)[-1],
             silent=True,  # we will have a progress bar
           )
           # save hash

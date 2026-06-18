@@ -50,7 +50,7 @@ COMPUTATION_STR_3: str = (
     'txt2',
   ),
   [
-    (
+    pytest.param(
       'mandelbrot',
       '-1',
       '1',
@@ -73,9 +73,10 @@ COMPUTATION_STR_3: str = (
       '86f5d287f590adfeafb2878412a8a4bb7b9b56b8f250e797b0cf680e7a1f180e',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
       '[MANDELBROT: (0, 0) ± 2]',
-      '{[MANDELBROT: (0, 0) ± 2] : [512, 512, 9999]}',
+      '{[MANDELBROT: (0, 0) ± 2] : [512 × 512, 9999]}',  # noqa: RUF001
+      id='Frame-ComputationParameters-1',
     ),
-    (
+    pytest.param(
       'julia',
       '-1',
       '1',
@@ -98,9 +99,10 @@ COMPUTATION_STR_3: str = (
       'ea7e24f96db025c8c3a5fe2a7df3bd008fc9ce1e645aa9bdc5751d964779b15b',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
       '[JULIA: (0, 0) ± 2 @ (1, 1)]',
-      '{[JULIA: (0, 0) ± 2 @ (1, 1)] : [1024, 1024, 6666] : imaginary}',
+      '{[JULIA: (0, 0) ± 2 @ (1, 1)] : [1024 × 1024, 6666] : imaginary}',  # noqa: RUF001
+      id='Frame-ComputationParameters-2',
     ),
-    (
+    pytest.param(
       'julia',
       '-11/23',
       '13/7',
@@ -125,8 +127,9 @@ COMPUTATION_STR_3: str = (
       '[JULIA: (-159/713, 64/133) ± (364/713, 366/133) @ (3/2, -11/19)]',
       (
         '{[JULIA: (-159/713, 64/133) ± (364/713, 366/133) @ (3/2, -11/19)] : '
-        '[2048, 2048, 8888] : max}'
+        '[2048 × 2048, 8888] : max}'  # noqa: RUF001
       ),
+      id='Frame-ComputationParameters-3',
     ),
   ],
 )
@@ -188,77 +191,94 @@ def test_frame_hash_stability_and_serialization_consistency(
   ),
   [
     # empty
-    (
+    pytest.param(
       [],
       [],
+      id='SmoothDepths-empty',
     ),
     # singular
-    (
+    pytest.param(
       [1000],
       [1001],
+      id='SmoothDepths-singular',
     ),
-    (
+    pytest.param(
       [1001],
       [1001],
+      id='SmoothDepths-singular-2',
     ),
-    (
+    pytest.param(
       [1500],
       [1500],
+      id='SmoothDepths-singular-3',
     ),
     # repeated values
-    (
+    pytest.param(
       [1000, 1000],
       [1001, 1001],
+      id='SmoothDepths-repeated-2',
     ),
-    (
+    pytest.param(
       [1000, 1000, 1000, 1000],
       [1001, 1001, 1001, 1001],
+      id='SmoothDepths-repeated-4',
     ),
-    (
+    pytest.param(
       [1500, 1500, 1500, 1500, 1500, 1500],
       [1500, 1500, 1500, 1500, 1500, 1500],
+      id='SmoothDepths-repeated-6',
     ),
     # steps
-    (
+    pytest.param(
       [1000, 1000, 5000],
       [1210, 1312, 2706],
+      id='SmoothDepths-steps-3',
     ),
-    (
+    pytest.param(
       [5000, 1000, 1000],
       [2706, 1312, 1210],
+      id='SmoothDepths-steps-3-reversed',
     ),
-    (
+    pytest.param(
       [1000, 1000, 1000, 1000, 1000, 1000, 5000, 5000, 5000, 5000, 5000, 5000],
       [1001, 1001, 1001, 1001, 1117, 1422, 3733, 4752, 5001, 5001, 5001, 5001],
+      id='SmoothDepths-steps-12',
     ),
-    (
+    pytest.param(
       [5000, 5000, 5000, 5000, 5000, 5000, 1000, 1000, 1000, 1000, 1000, 1000],
       [5001, 5001, 5001, 5001, 4752, 3733, 1422, 1117, 1001, 1001, 1001, 1001],
+      id='SmoothDepths-steps-12-reversed',
     ),
     # spikes
-    (
+    pytest.param(
       [1000, 1000, 1000, 1000, 10000, 1000, 1000, 1000, 1000],
       [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001],
+      id='SmoothDepths-spikes-9',
     ),
-    (
+    pytest.param(
       [10000, 10000, 10000, 10000, 1000, 10000, 10000, 10000, 10000],
       [10001, 10001, 10001, 10000, 10000, 10000, 10001, 10001, 10001],
+      id='SmoothDepths-spikes-9-reversed',
     ),
-    (
+    pytest.param(
       [1000, 1000, 1000, 10000, 10000, 10000, 1000, 1000, 1000],
       [1001, 1156, 1633, 6499, 8182, 6499, 1633, 1156, 1001],
+      id='SmoothDepths-spikes-9-mixed',
     ),
-    (
+    pytest.param(
       [10000, 10000, 10000, 1000, 1000, 1000, 10000, 10000, 10000],
       [10001, 9180, 6499, 1633, 1297, 1633, 6499, 9180, 10001],
+      id='SmoothDepths-spikes-9-mixed-reversed',
     ),
-    (
+    pytest.param(
       [1000, 1000, 1000, 1500, 2500, 5000, 9000, 2000, 13000, 20000],
       [1001, 1052, 1146, 1634, 2696, 4560, 6472, 4015, 10591, 14380],
+      id='SmoothDepths-spikes-10-mixed',
     ),
-    (
+    pytest.param(
       [1000, 17000, 1000, 17000, 3000, 20000, 5000, 5000, 8000, 8000, 9000, 3000, 1000, 1000, 1000],
       [2410, 7485, 2546, 8898, 5174, 11651, 6328, 6064, 7546, 7801, 6880, 3072, 1356, 1089, 1001],
+      id='SmoothDepths-spikes-15-mixed',
     ),
   ],
 )
