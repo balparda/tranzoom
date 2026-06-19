@@ -49,7 +49,7 @@ H300="127/6100000000000000000000000000000000000000000000000000000000000000000000
 
 # these are meant to stress the mandelbrot/julia math python/cython implementations
 # 1: superficial Mandelbrot zoom, with set[IMAGINARY]
-poetry run tranz --no-db --force --palette "lava" --set imaginary --set-palette "toxic" --no-date --no-hash --prefix "test-mandel-z-auto-seahorse" -o tests/data/images zoom -s 53 --i-pixels 2 auto " -0.7436499" "0.13188204" "227/193" "167/193" "131/43" --fps 1 --duration "31.7" --i-frames 1
+poetry run tranz --no-db --force --palette "lava" --set imaginary --set-palette "toxic" --no-date --no-hash --prefix "test-mandel-z-auto-seahorse" -o tests/data/images zoom -s 53 --i-pixels 2 --resample bilinear auto " -0.7436499" "0.13188204" "227/193" "167/193" "131/43" --fps 1 --duration "31.7" --i-frames 1
 # 2: ultra-deep Mandelbrot zoom, no set
 poetry run tranz --no-db --force --palette "electric" --no-date --no-hash --prefix "test-mandel-z-auto-seeds300" -o tests/data/images zoom -s 31 --i-pixels 3 auto "$CX300" "$CY300" "$W300" "$H300" "43/41" --fps 1 --duration "10.1" --i-frames 1
 # 3: ultra-deep Mandelbrot with mini-brot and set coloring

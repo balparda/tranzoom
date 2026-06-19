@@ -222,7 +222,7 @@ The tool can save all computations to a local DB. If allowed, it will use these 
 - **Manual zoom session**: The `tranz zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM. Supports both Mandelbrot and Julia Set fractals.
 - **Sector scoring**: Each sector is scored on a 0–100 scale for `fractal_score` (visual complexity / zoom promise). When targeted search is active, an additional `target_match_score` (also 0–100) is blended in with a configurable weight.
 - **Image metadata**: All tranZoom PNG images embed rich metadata (`tranZoom:*` PNG text chunks) including frame coordinates, magnification, palette (`tranZoom:render:palette`), precision, per-pixel statistics (`n:min`, `n:max`, `nu:min`, `nu:max`, histogram summaries), and (for AI/manual sessions) the full LLM evaluation, model parameters, prompts, and zoom step count.
-- **Pixel interpolation** (`--i-pixels`): Bicubic upscaling applied to the final rendered image to produce higher-resolution output without additional fractal computation. The `--i-pixels N` flag (valid range 0–3) inserts `N` interpolated pixels between each computed pixel in both dimensions, multiplying the final image size by `(N+1)`. For example, `--i-pixels 2` transforms a 1024×1024 computation into a 3072×3072 final image using deterministic bicubic interpolation. The fractal is computed once at the base resolution, then upscaled using weighted RGBA blending over 2×2 pixel neighborhoods. This produces smoother gradients and reduces visible pixelation at the cost of larger file sizes; no additional computation time beyond the interpolation pass itself (≪1 second for typical sizes). Metadata key `tranZoom:render:i_pixels` stores the interpolation level. Use this when you want poster-quality output from moderate computation cost.
+- **Pixel interpolation** (`--i-pixels`): Lanczos/Bicubic/Bilinear upscaling applied to the final rendered image to produce higher-resolution output without additional fractal computation. The `--i-pixels N` flag (valid range 0–3) inserts `N` interpolated pixels between each computed pixel in both dimensions, multiplying the final image size by `(N+1)`. For example, `--i-pixels 2` transforms a 1024×1024 computation into a 3072×3072 final image using Lanczos interpolation. The fractal is computed once at the base resolution, then upscaled using weighted RGBA blending over 2×2 pixel neighborhoods. This produces smoother gradients and reduces visible pixelation at the cost of larger file sizes; no additional computation time beyond the interpolation pass itself (≪1 second for typical sizes). Metadata key `tranZoom:render:i_pixels` stores the interpolation level. Use this when you want poster-quality output from moderate computation cost.
 - **Frame interpolation** (`--i-frames`): Temporal interpolation applied to zoom animations to produce higher frame rates without computing additional fractal frames. The `--i-frames M` flag (valid range 0–7) inserts `M` interpolated frames between each real fractal-computed frame, multiplying the effective FPS by `(M+1)`. For example, `--fps 10 --i-frames 2` computes 10 real frames per second but outputs 30 total frames per second (10 real + 20 interpolated). Supports **linear interpolation** (weighted RGB blend between consecutive frames) and **quadratic interpolation** (three-point Lagrange curve using curr, next, next+1 frames for smoother acceleration). Quadratic mode is the default and produces more natural motion; it automatically falls back to linear for the final frame pair. This produces fluid animations from fewer expensive fractal computations; particularly effective for long zooms where computational cost dominates. The iteration depth (`max_iter`) is still computed per real frame using depth key frames, so quality remains consistent. Metadata key `tranZoom:zoom:frame:i_frames` stores the interpolation level. Use this when you want cinematic-smooth animations without the render time of computing every frame at full fractal precision.
 
 #### Frame Representation
@@ -316,20 +316,23 @@ TransZoom 2.0 introduces two powerful interpolation modes that dramatically redu
 
 **Purpose:** Upscale a single rendered fractal image to higher resolution without computing additional fractal pixels.
 
-**How it works:** After the fractal escape-time computation finishes, tranZoom applies deterministic bicubic interpolation to the output image. For each interpolated pixel, a weighted RGBA blend is computed from the surrounding 2×2 neighborhood using sub-pixel fractional coordinates. This produces smooth gradients and reduces visible pixelation, particularly effective for poster-quality prints or detailed zoom views.
+**How it works:** After the fractal escape-time computation finishes, tranZoom applies deterministic interpolation to the output image using a selectable resampling method (default: Lanczos). The interpolation algorithm blends RGBA pixel values from the neighborhood around each sub-pixel coordinate. This produces smooth gradients and reduces visible pixelation, particularly effective for poster-quality prints or detailed zoom views. The resampling method can be customized via `--resample` for different quality/speed trade-offs.
 
 **Usage:**
 
 ```sh
 poetry run tranz --palette electric image -s 1024 --i-pixels 2 mandel
+poetry run tranz --palette electric image -s 1024 --i-pixels 2 --resample bilinear mandel  # more stable output
 ```
 
-This computes a 1024×1024 fractal (≈1.05M pixels), then upscales it to 3072×3072 (≈9.44M pixels) via bicubic interpolation. The fractal computation takes the same time as a normal 1024×1024 render; the interpolation pass adds only ≪1 second.
+The first example computes a 1024×1024 fractal (≈1.05M pixels), then upscales it to 3072×3072 (≈9.44M pixels) via Lanczos interpolation. The second uses bilinear resampling, which is natively implemented and more guaranteed to be stable.
 
 **Parameters:**
 
 - **Flag:** `--i-pixels N` (valid range: 0–3)
 - **Effect:** For `N > 0`, the final image dimensions are `(width * (N+1), height * (N+1))`
+- **Flag:** `--resample METHOD` (resampling algorithm: bilinear, bicubic, lanczos, etc.; default: lanczos)
+- **Effect:** Selects the interpolation algorithm used for pixel upscaling; bilinear is fastest and most stable, bicubic/lanczos offer smoother output
 - **Examples:**
   - `--i-pixels 0` → no interpolation (default)
   - `--i-pixels 1` → 2× upscale (1024×1024 → 2048×2048)
@@ -415,7 +418,7 @@ The computation cost is that of 10×512×512 fractal renders; pixel interpolatio
 
 ##### Implementation notes
 
-- **Pixel interpolation:** Uses `PIL.Image.resize()` with `Resampling.BICUBIC`; deterministic and reproducible across platforms
+- **Pixel interpolation:** Uses `PIL.Image.resize()`
 - **Frame interpolation:** Custom implementation in `zoom.py`; `InterpolatedFrameStream()` yields `bytes` (PNG-encoded frames) from an iterable of `(curr, next)` frame pairs; quadratic mode uses `QuadraticInterpolatedFrame()` with Lagrange polynomial blending
 - **Color consistency:** Both modes respect the `ZoomColorNorm` applied to the base computation, so interpolated pixels/frames inherit the same color mapping as surrounding real data
 - **Metadata roundtrip:** All interpolation settings are persisted in PNG text chunks and can be read back with `tranz image read`; re-rendering from a saved interpolated image will use the same settings
@@ -567,7 +570,8 @@ tranz [global flags] image [-w W] [-h H] [-s S] [--iter N] [--mark COORD] <mande
 | `-w`/`--width` | Output image width in pixels (24–16384); NOTE: if `--i-pixels` is given, effective width = `w × (i+1)` | 1024 |
 | `-h`/`--height` | Output image height in pixels (24–16384); NOTE: if `--i-pixels` is given, effective height = `h × (i+1)` | 1024 |
 | `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales the other dimension proportionally to match the frame aspect ratio; NOTE: if `--i-pixels` is given, effective size = `s × (i+1)` | None (use `-w`/`-h`) |
-| `--i-pixels` | Number of interpolated pixels to add between each computed pixel (0–3); upscales final image via bicubic interpolation; `0` = no interpolation (default), `1` = 2× size, `2` = 3× size, `3` = 4× size; see [Pixel interpolation](#pixel-interpolation---i-pixels) | `0` |
+| `--i-pixels` | Number of interpolated pixels to add between each computed pixel (0–3); upscales final image via interpolation; `0` = no interpolation (default), `1` = 2× size, `2` = 3× size, `3` = 4× size; see [Pixel interpolation](#pixel-interpolation---i-pixels) | `0` |
+| `--resample` | Interpolation resampling method for pixel upscaling; available values: `bilinear`, `bicubic`, `lanczos`, and other PIL `Resampling` methods; bilinear is fastest and most stable | `lanczos` |
 | `-i`/`--iter` | Override max iterations (depth); `1000`–4294967295 | automatic adaptive search |
 | `--mark` | Draw a crosshair at this complex coordinate, formatted as `"(re, im)"` | None |
 | `--mark-color` | Color of the crosshair; one of `black`, `white`, `red`, `green`, `blue`, `yellow`, `cyan`, `magenta` | `red` |
@@ -586,7 +590,8 @@ tranz [global flags] zoom [-w W] [-h H] [-s S] [-f FRACTAL] [-n STEPS] [--julia-
 | `-w`/`--width` | Output image width in pixels (24–16384); NOTE: if `--i-pixels` is given, effective width = `w × (i+1)` | 512 |
 | `-h`/`--height` | Output image height in pixels (24–16384); NOTE: if `--i-pixels` is given, effective height = `h × (i+1)` | 512 |
 | `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales proportionally; NOTE: if `--i-pixels` is given, effective size = `s × (i+1)` | None (use `-w`/`-h`) |
-| `--i-pixels` | Number of interpolated pixels to add between each computed pixel (0–3); upscales final images via bicubic interpolation; see [Pixel interpolation](#pixel-interpolation---i-pixels) | `0` |
+| `--i-pixels` | Number of interpolated pixels to add between each computed pixel (0–3); upscales final images via interpolation; see [Pixel interpolation](#pixel-interpolation---i-pixels) | `0` |
+| `--resample` | Interpolation resampling method for pixel upscaling; available values: `bilinear`, `bicubic`, `lanczos`, and other PIL `Resampling` methods; bilinear is fastest and most stable | `lanczos` |
 | `-f`/`--fractal` | Fractal type: `mandelbrot` or `julia` | `mandelbrot` |
 | `--julia-re` | Real part of the Julia Set constant `c` | `'0.27334'` |
 | `--julia-im` | Imaginary part of the Julia Set constant `c` | `'0.00742'` |

@@ -161,11 +161,12 @@ def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:render:palette': 'sahara',
       'tranZoom:render:set_palette': 'rgrayscale',
       'tranZoom:render:i_pixels': '0',
+      'tranZoom:render:resample': 'lanczos',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_re': '0',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': 'a1747d5f60f817fab6bcd70db4f772813f361d9e0c75f9e700e36c0a757906d9',
+      'tranZoom:render:hash': '01226cc2b028d8f397f3c19e49d07476141c4ad740520136ddd5e88329fc82a8',
     }
 
 
@@ -277,11 +278,12 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:render:palette': 'sahara',
       'tranZoom:render:set_palette': 'none',
       'tranZoom:render:i_pixels': '0',
+      'tranZoom:render:resample': 'lanczos',
       'tranZoom:render:mark_color': 'red',
       'tranZoom:render:mark_re': '-5578776469/7500000000',
       'tranZoom:render:mark_im': '8244620127/62500000000',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': '7d39836df7b681893fb77a59a3837d86e3897dbd5a70a233100d35d53aaff49e',
+      'tranZoom:render:hash': 'f93b0c787429c192ac8914775512c02f47cfff5a1f5491657acded78e92f5d79',
       'tranZoom:zoom:type': 'gif',
       'tranZoom:zoom:frame:initial:width_re': '73801/100000000',
       'tranZoom:zoom:frame:initial:height_im': '73801/100000000',
@@ -300,7 +302,7 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:zoom:depth:frames': (
         '[(0, 1000, 1001), (6, 1000, 1019), (13, 1000, 1034), (19, 1159, 1105)]'
       ),
-      'tranZoom:zoom:hash': '8ae54d2302317afa4cb4c6cb971272ee8dea2e3f53040104397517bfc5444b93',
+      'tranZoom:zoom:hash': '550c3d1295e02795ef212b5e7429a15c62b41840b1af809a719e92f47e2d9d27',
     }
 
 
@@ -432,9 +434,10 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
       'tranZoom:render:palette': 'electric',
       'tranZoom:render:set_palette': 'sunset',
       'tranZoom:render:i_pixels': '1',
+      'tranZoom:render:resample': 'lanczos',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_re': '0',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': 'f56145e999d631c6f6ef4dc52b0b502766047aca4b3f3f99156bac5b63a91df6',
+      'tranZoom:render:hash': '478b636f99b98fabde204dec8bc701b92ac9977028c749946bb23d9a2deb0f11',
     }

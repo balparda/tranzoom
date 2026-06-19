@@ -98,6 +98,8 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
         '53',
         '--i-pixels',
         '2',
+        '--resample',
+        'bilinear',
         'auto',
         ' -0.7436499',
         '0.13188204',
@@ -120,6 +122,9 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
     output_image: pathlib.Path = (
       pathlib.Path(tmp_dir) / f'mandel-{base.T_GIF_SEAHORSE_HASH[:20]}.gif'
     )
+    for f in sorted(pathlib.Path(tmp_dir).glob('**/*')):
+      if f.is_file():
+        print(f'Found file: {str(f)!r}')  # noqa: T201
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     info: pixels.ObjInfo
@@ -182,8 +187,9 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
       'tranZoom:image:set:nu:min': '0.49376627802848816',
       'tranZoom:image:stats:imag_hi': '0.05734383622578064069611499703175854039165102',
       'tranZoom:image:stats:imag_lo': '0.05734383622578064069611499703175854039165102',
-      'tranZoom:render:hash': 'e5ed9b7875faed4f26e63f27117eb8ba8f88d58f0f6189d3b0dc55e5c895f584',
+      'tranZoom:render:hash': '47ed64f6232f9203d367251c599190ad7d668d144c11bb4f9420ec777a222ed9',
       'tranZoom:render:i_pixels': '2',
+      'tranZoom:render:resample': 'bilinear',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_re': '0',
@@ -209,7 +215,7 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
       'tranZoom:zoom:frame:magnitude': '131/43',
       'tranZoom:zoom:frame:seconds': '317/10',
       'tranZoom:zoom:frame:steps': '30',
-      'tranZoom:zoom:hash': 'f9eb196b73a9aa2706f48eb5b5d1c08283ddecd06483c34200aefb745d76af6e',
+      'tranZoom:zoom:hash': '3d079241ec8521eb9795ca0969b4bba269d61cdea876c59179fce1b33a528e19',
       'tranZoom:zoom:marker:index': '[0, 10, 20, 30]',
       'tranZoom:zoom:type': 'gif',
     }
@@ -318,6 +324,9 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
     output_image: pathlib.Path = (
       pathlib.Path(tmp_dir) / f'mandel-{base.T_GIF_SEEDS_300_HASH[:20]}.gif'
     )
+    for f in sorted(pathlib.Path(tmp_dir).glob('**/*')):
+      if f.is_file():
+        print(f'Found file: {str(f)!r}')  # noqa: T201
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     info: pixels.ObjInfo
@@ -509,8 +518,9 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
       'tranZoom:image:set:n:min': '0',
       'tranZoom:image:set:nu:max': '0.0',
       'tranZoom:image:set:nu:min': '0.0',
-      'tranZoom:render:hash': '25389b1c9ca4c515a1a40711aff3bfeb638a43f0ff3152cef955c4875701324f',
+      'tranZoom:render:hash': 'efb080883e173221d94b40a4d77115192c72cd69a05853973a66c772a7300ad1',
       'tranZoom:render:i_pixels': '3',
+      'tranZoom:render:resample': 'lanczos',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_re': '0',
@@ -544,7 +554,7 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
       'tranZoom:zoom:frame:magnitude': '43/41',
       'tranZoom:zoom:frame:seconds': '101/10',
       'tranZoom:zoom:frame:steps': '9',
-      'tranZoom:zoom:hash': 'b14e515756b728bf45b4f6c721da0324c5cd2b58b5632c2c5afd878628043910',
+      'tranZoom:zoom:hash': '2301347a0342bff7cb7624b759613f5431627618b231c200ed842336483fe85f',
       'tranZoom:zoom:marker:index': '[0, 9]',
       'tranZoom:zoom:type': 'gif',
     }
@@ -620,6 +630,9 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
     output_image: pathlib.Path = (
       pathlib.Path(tmp_dir) / f'julia-{base.T_GIF_JULIA_SUZANA_HASH[:20]}.gif'
     )
+    for f in sorted(pathlib.Path(tmp_dir).glob('**/*')):
+      if f.is_file():
+        print(f'Found file: {str(f)!r}')  # noqa: T201
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     info: pixels.ObjInfo
@@ -694,8 +707,9 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:image:set:nu:min': '0.0',
       'tranZoom:image:stats:ang_hi': '0.73519948957591444695345637018854658157873099',
       'tranZoom:image:stats:ang_lo': '0.50658202515724162651223774275343995527044469',
-      'tranZoom:render:hash': '5b5881924bb9d30d8aaec378d3053b0484bdf141e4ccfbe6143df82d67321c0b',
+      'tranZoom:render:hash': 'f60ec96d8ba455a5936edc5d5401aabbbd932aa3900160c8d7d0572af5e76b6c',
       'tranZoom:render:i_pixels': '1',
+      'tranZoom:render:resample': 'lanczos',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_re': '0',
@@ -720,7 +734,7 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:zoom:frame:magnitude': '241/139',
       'tranZoom:zoom:frame:seconds': '107/10',
       'tranZoom:zoom:frame:steps': '20',
-      'tranZoom:zoom:hash': '621d6d2b88c7842bdc701b7e8d18533080f784d8c000f89742cdd0ee05f0f961',
+      'tranZoom:zoom:hash': '05be3db6449b73af69bd22b38ad957afa5783219bced59f086e09f0697c85bd3',
       'tranZoom:zoom:marker:index': '[0, 20]',
       'tranZoom:zoom:type': 'gif',
     }
@@ -796,6 +810,9 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
     output_image: pathlib.Path = (
       pathlib.Path(tmp_dir) / f'julia-{base.T_GIF_JULIA_DRAGON_HASH[:20]}.gif'
     )
+    for f in sorted(pathlib.Path(tmp_dir).glob('**/*')):
+      if f.is_file():
+        print(f'Found file: {str(f)!r}')  # noqa: T201
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     info: pixels.ObjInfo
@@ -871,8 +888,9 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:image:set:nu:min': '0.0',
       'tranZoom:image:stats:min_hi': '0.082874941584400487748646457435133671445430575',
       'tranZoom:image:stats:min_lo': '3.6863012726222845779975027843355758506749315e-05',
-      'tranZoom:render:hash': 'd692016a50498841ea7b5c2982f4cef2c3be3b2deec5b9f82cfc3a112f3c94f5',
+      'tranZoom:render:hash': 'ef4ebc337eafe4e9120de9648ac4e4fa787611e4f4425d47fb4d592020488f9c',
       'tranZoom:render:i_pixels': '1',
+      'tranZoom:render:resample': 'lanczos',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_re': '0',
@@ -894,7 +912,7 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:zoom:frame:magnitude': '37/97',
       'tranZoom:zoom:frame:seconds': '41/10',
       'tranZoom:zoom:frame:steps': '7',
-      'tranZoom:zoom:hash': '8b1eac4479ba0f194e4ab174b614cd794e2c686054c015953ed63ba3b45e67a0',
+      'tranZoom:zoom:hash': '3b1b2d08b8cd20d639100fa170cc644b79c8841ee0db9a3736f535eb7fa1c019',
       'tranZoom:zoom:marker:index': '[0, 7]',
       'tranZoom:zoom:type': 'gif',
     }
@@ -970,6 +988,9 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
     output_image: pathlib.Path = (
       pathlib.Path(tmp_dir) / f'julia-{base.T_GIF_JULIA_BLOB_HASH[:20]}.gif'
     )
+    for f in sorted(pathlib.Path(tmp_dir).glob('**/*')):
+      if f.is_file():
+        print(f'Found file: {str(f)!r}')  # noqa: T201
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     info: pixels.ObjInfo
@@ -1046,8 +1067,9 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:image:set:nu:min': '0.0',
       'tranZoom:image:stats:max_hi': '1.9748028908146782087476064434619381192680041',
       'tranZoom:image:stats:max_lo': '0.26279710060872639895079446071425291716398127',
-      'tranZoom:render:hash': 'bdfaebb0bd66c67a5a8b3fb19316040421d9fb2b86db4037abc67ddea6eaf20b',
+      'tranZoom:render:hash': '030e514d8c42aad58277657d981ce5950d145b61b14d5ea10e8513daa93852ec',
       'tranZoom:render:i_pixels': '1',
+      'tranZoom:render:resample': 'lanczos',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_re': '0',
@@ -1069,7 +1091,7 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:zoom:frame:magnitude': '37/97',
       'tranZoom:zoom:frame:seconds': '43/10',
       'tranZoom:zoom:frame:steps': '7',
-      'tranZoom:zoom:hash': '558e31a6c4f3ef7200e9b22b9eadb41a33a22fa15b4cf4fa8040184a619b58e5',
+      'tranZoom:zoom:hash': '7bf8909303f774dd210c388ff13021a6b4b9635f398b307995bc43e9fa17f500',
       'tranZoom:zoom:marker:index': '[0, 7]',
       'tranZoom:zoom:type': 'gif',
     }

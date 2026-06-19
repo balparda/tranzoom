@@ -52,6 +52,7 @@ META_COMPUTATION_HASH_KEY: str = f'{_app}:computation:hash'  # str, like "abcdef
 META_RENDER_PALETTE_KEY: str = f'{_app}:render:palette'  # str, ex "sunset", one of palette.Palette
 META_RENDER_SET_PALETTE_KEY: str = f'{_app}:render:set_palette'  # str, interior Set palette name
 META_RENDER_I_PIXELS_KEY: str = f'{_app}:render:i_pixels'  # int, number of interpolated pixels
+META_RENDER_RESAMPLE_KEY: str = f'{_app}:render:resample'  # str, one of pixels.Resampling.name.low
 META_RENDER_OVERLAY_KEY: str = f'{_app}:render:overlay'  # image.OverlayType or "none"
 META_RENDER_MARK_RE_KEY: str = f'{_app}:render:mark_re'  # gmpy2.mpq
 META_RENDER_MARK_IM_KEY: str = f'{_app}:render:mark_im'  # gmpy2.mpq
@@ -976,6 +977,7 @@ def MakeImageMeta(img: Image, render: pixels.RenderParameters, data_hash: str) -
     META_RENDER_SET_PALETTE_KEY: render.set_pal.value if render.set_pal else 'none',
     META_RENDER_OVERLAY_KEY: render.overlay.value if render.overlay else 'none',
     META_RENDER_I_PIXELS_KEY: str(render.i_pixels),
+    META_RENDER_RESAMPLE_KEY: str(render.resample.name.lower()),
     META_RENDER_MARK_RE_KEY: str(render.mark_re),
     META_RENDER_MARK_IM_KEY: str(render.mark_im),
     META_RENDER_MARK_COLOR_KEY: render.mark_color.name.lower() if render.mark_color else 'none',
