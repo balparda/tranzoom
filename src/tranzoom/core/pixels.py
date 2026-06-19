@@ -89,7 +89,7 @@ class Resampling(enum.IntEnum):
   LANCZOS = PILImage.Resampling.LANCZOS
 
 
-DEFAULT_RESAMPLING: Resampling = Resampling.BICUBIC
+DEFAULT_RESAMPLING: Resampling = Resampling.BILINEAR
 
 
 # GIF has is_animated, but we have to check for it

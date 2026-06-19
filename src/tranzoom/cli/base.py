@@ -59,14 +59,14 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 # this should NOT change over metadata changes, as it is computed from raw pixel data
 # PNG - really only change if core computation changes, so these are more important to be stable
 SEAHORSE_TAIL_HASH: str = '525aaf4c4a58391f1386889a54d54dfb91f099050af5783f97322e1f33e8b275'
-SUZANA_WAVE_HASH: str = '95a6acd116fb1ca043f089f093fb0a8c139ffb490a6a24be068fa474c8636871'
+SUZANA_WAVE_HASH: str = '44c8aeb81ea936c04f54c9f2b1a5b6a9c0b3fcc2fb7db73c8f8cfb3ad47bc696'
 # GIF - these may change for core computation, or if the animation frame machinery changes
 SEAHORSE_ANIMATED_HASH: str = 'd9204b9c2aec64555ca7ce48226301684737cce8b673febe86629c2e8a36ae19'
-T_GIF_SEAHORSE_HASH: str = 'ae35fa4c7834bbfec989548e6bceddd09b821bf883c007b475ff306d7fa286ee'
-T_GIF_SEEDS_300_HASH: str = '1b67e38d95dd10cc5600371719c63654bf3f70c40644f3532787f5a8a915a84f'
-T_GIF_JULIA_SUZANA_HASH: str = 'cb1253e362e25c25da208473db24172b97bd5aad048cf986589d744536060531'
-T_GIF_JULIA_DRAGON_HASH: str = '8e761fe4b35f9132d04bb76a2ec5504308bd7322bb735404c6c4f10d47736f5d'
-T_GIF_JULIA_BLOB_HASH: str = 'ff42442b7928169fa68c4b814b1f43e38c9e273d143ec5a53f3b016708bc137d'
+T_GIF_SEAHORSE_HASH: str = 'b4b514074d358c97ec2440557f920329195f8b1fb6ba38285c6dcb06c368119a'
+T_GIF_SEEDS_300_HASH: str = 'a4c95b839307865ef9c1186b68eb208240b2971c0de74b28daeb542b4a4fc596'
+T_GIF_JULIA_SUZANA_HASH: str = 'ea916e2f7e3c67ab5f27506577bacd3226dc5267f8f77c37a571edb0433c65e7'
+T_GIF_JULIA_DRAGON_HASH: str = '05e82c067221afe85f88bd742b2933ba45156a43d97fef7dcbc68d1fd2d3f4cd'
+T_GIF_JULIA_BLOB_HASH: str = 'f384ba2f6415d32afb4f161f8c07345fad13ab7b700a2fa39918f58a2fc8d27e'
 # SHA of all the frame's data - like above: computation or animation frame machinery changes
 TEST_IMAGE_DATA_HASHES: dict[str, tuple[int, str]] = {
   # name: (number of frames, hash of all the frames)

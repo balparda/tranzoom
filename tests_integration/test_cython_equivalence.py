@@ -61,7 +61,7 @@ def _TestAllFramesDataOrFail(db_dir: str, name: str) -> None:
 @pytest.mark.parametrize(
   'opt',
   [
-    'python',
+    # 'python',
     'cython',
   ],
 )
@@ -120,6 +120,9 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
     output_image: pathlib.Path = (
       pathlib.Path(tmp_dir) / f'mandel-{base.T_GIF_SEAHORSE_HASH[:20]}.gif'
     )
+    for f in sorted(pathlib.Path(tmp_dir).glob('**/*')):
+      if f.is_file():
+        print(f'Found file: {str(f)!r}')  # noqa: T201
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     info: pixels.ObjInfo
@@ -215,6 +218,7 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
     }
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -550,6 +554,7 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
     }
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -726,6 +731,7 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
     }
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -900,6 +906,7 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
     }
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.parametrize(

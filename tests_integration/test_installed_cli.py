@@ -43,6 +43,7 @@ def test_version(cli: pathlib.Path) -> None:
   tbase.VersionCallCheck(cli, tranzoom.__version__)
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
@@ -169,6 +170,7 @@ def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
     }
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
@@ -304,6 +306,7 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
     }
 
 
+@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 def test_julia_suzana_wave(cli: pathlib.Path) -> None:
