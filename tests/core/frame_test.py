@@ -361,6 +361,7 @@ def test_frame_asserts() -> None:
   assert frm.center == (gmpy2.mpq(1, 15), gmpy2.mpq(3, 8))
   assert frm.size == (gmpy2.mpq(22, 15), gmpy2.mpq(1, 4))
   assert not frm.is_square
+  assert frm.scale == gmpy2.mpq(1, 4)
   # mandelbrot frame, square
   frm = frame.Frame(
     fractal=frame.Fractal('mandelbrot'),
@@ -375,6 +376,7 @@ def test_frame_asserts() -> None:
   assert str(frm) == '[MANDELBROT: (0, 0) ± 8]'
   assert frm.center == (gmpy2.mpq(0), gmpy2.mpq(0))
   assert frm.size == (gmpy2.mpq(8), gmpy2.mpq(8))
+  assert frm.scale == gmpy2.mpq(8)
   # julia frame
   frm = frame.Frame(
     fractal=frame.Fractal('julia'),
@@ -389,3 +391,4 @@ def test_frame_asserts() -> None:
   assert frm.center == (gmpy2.mpq(0), gmpy2.mpq(3, 2))
   assert frm.size == (gmpy2.mpq(4), gmpy2.mpq(1))
   assert not frm.is_square
+  assert frm.scale == gmpy2.mpq(1)
