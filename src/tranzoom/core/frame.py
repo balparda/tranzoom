@@ -187,7 +187,7 @@ class SerializingFractalObject(abstract_abc.ABC):
   @property
   @abstract_abc.abstractmethod
   def json(self) -> tbase.JSONDict:
-    """Get a JSON-serializable dictionary representation of the object.
+    """JSON-serializable dictionary representation of the object.
 
     Returns:
       tbase.JSONDict: A dictionary representation of the object.
@@ -197,7 +197,7 @@ class SerializingFractalObject(abstract_abc.ABC):
   @final  # this affects the HASH, let's avoid trouble...
   @property
   def binary(self) -> bytes:
-    """Get a stable binary representation of the object, for hashing and storage.
+    """Stable binary representation of the object, for hashing and storage.
 
     Returns:
       bytes: The stable binary (UTF-8 encoded canonical JSON) representation of the object.
@@ -221,7 +221,7 @@ class SerializingFractalObject(abstract_abc.ABC):
   @final
   @property
   def self_sz(self) -> int:
-    """Get the size of the object in bytes, including nested objects.
+    """Size of the object in bytes, including nested objects.
 
     Not guaranteed to be exact, but should be a good estimate for our purposes.
     Not a super cheap call, don't overuse it.
@@ -321,7 +321,7 @@ class Frame(SerializingFractalObject):
 
   @property
   def center(self) -> tuple[gmpy2.mpq, gmpy2.mpq]:
-    """Get the center of the frame (re, im). Exact.
+    """Center of the frame (re, im). Exact.
 
     Returns:
       tuple[gmpy2.mpq, gmpy2.mpq]: The center of the frame.
@@ -331,7 +331,7 @@ class Frame(SerializingFractalObject):
 
   @property
   def size(self) -> tuple[gmpy2.mpq, gmpy2.mpq]:
-    """Get the size of the frame (re, im). Exact.
+    """Size of the frame (re, im). Exact.
 
     Returns:
       tuple[gmpy2.mpq, gmpy2.mpq]: The size of the frame.
@@ -354,7 +354,7 @@ class Frame(SerializingFractalObject):
 
   @property
   def scale(self) -> gmpy2.mpq:
-    """Get the scale of the frame, i.e., the smaller dimension. Exact.
+    """Scale of the frame, i.e., the smaller dimension. Exact.
 
     Returns:
       gmpy2.mpq: The scale of the frame.
@@ -364,7 +364,7 @@ class Frame(SerializingFractalObject):
 
   @property
   def area(self) -> gmpy2.mpq:
-    """Get the area of the frame. Exact.
+    """Area of the frame. Exact.
 
     Returns:
       gmpy2.mpq: The area of the frame.
@@ -389,7 +389,7 @@ class Frame(SerializingFractalObject):
 
   @property
   def magnification(self) -> tuple[gmpy2.mpfr, float]:
-    """Get frame magnification: How much "zoom" this frame has in relation to the whole set.
+    """Frame magnification: How much "zoom" this frame has in relation to the whole set.
 
     sqrt( DEFAULT_FRAMES[self.fractal].area / self.area ) i.e., sqrt( WHOLE / this )
 
@@ -403,7 +403,7 @@ class Frame(SerializingFractalObject):
 
   @property
   def coordinates_magnitude(self) -> gmpy2.mpq:
-    """Get the magnitude of the frame's coordinates, i.e., the max distance from the origin.
+    """Magnitude of the frame's coordinates, i.e., the max distance from the origin.
 
     Returns:
       gmpy2.mpq: The magnitude of the frame's coordinates.
@@ -419,7 +419,7 @@ class Frame(SerializingFractalObject):
 
   @property
   def json(self) -> tbase.JSONDict:
-    """Get a JSON-serializable dictionary representation of the frame.
+    """JSON-serializable dictionary representation of the frame.
 
     Keys: `fractal`, `top_re`, `top_im`, `bottom_re`, `bottom_im`, `point_re`, `point_im`, all str.
 
@@ -704,14 +704,14 @@ class ComputationParameters(SerializingFractalObject):
     return (
       '{'
       f'{self.frm} : '
-      f'[{self.width}, {self.height}, {self.depth if self.depth > MIN_ITER else "AUTO"}]'
+      f'[{self.width} \u00d7 {self.height}, {self.depth if self.depth > MIN_ITER else "AUTO"}]'
       + ('' if self.set_points is None else f' : {self.set_points.value.lower()}')
       + '}'
     )
 
   @property
   def size(self) -> tuple[int, int]:
-    """Get the size of the image as (width, height).
+    """Size of the image as (width, height).
 
     Returns:
       tuple[int, int]: The size of the image.
@@ -720,7 +720,7 @@ class ComputationParameters(SerializingFractalObject):
     return (self.width, self.height)
 
   def Size(self, *, i_pixels: int = 0) -> tuple[int, int]:
-    """Get the real final (disk) size of the image as (width, height).
+    """Real final (disk) size of the image as (width, height).
 
     Args:
       i_pixels (int): The number of extra pixels to add to each generated pixel, default is 0
@@ -904,7 +904,7 @@ class ComputationParameters(SerializingFractalObject):
 
   @property
   def json(self) -> tbase.JSONDict:
-    """Get a JSON-serializable dictionary representation of the computation parameters.
+    """JSON-serializable dictionary representation of the computation parameters.
 
     Keys: `frm`, `width`, `height`, `depth`, `set_points`, where `frm` is the frame as a JSON dict,
         `width` and `height` and `depth` are int, and `set_points` is str | None.
@@ -1115,7 +1115,7 @@ class ComputationParameters(SerializingFractalObject):
 
   @property
   def context(self) -> gmpy2.context:
-    """Get gmpy2 context with precision to distinguish adjacent pixels in smaller complex-plane dim.
+    """gmpy2 context with precision to distinguish adjacent pixels in smaller complex-plane dim.
 
     Returns:
       gmpy2.context: A context with the estimated number of bits of precision needed.

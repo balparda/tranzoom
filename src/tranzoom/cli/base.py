@@ -21,11 +21,10 @@ import typer._click.exceptions
 from tqdm.std import TqdmExperimentalWarning
 from transcrypto.cli import clibase
 from transcrypto.core import aes, hashes
-from transcrypto.utils import base as tbase
 from transcrypto.utils import human, timer
 
 from tranzoom import __version__
-from tranzoom.core import ai, fractal, frame, frdb, image, palette, zoom
+from tranzoom.core import ai, fractal, frame, frdb, image, palette, pixels, zoom
 
 
 class Error(ai.Error, typer._click.exceptions.ClickException):  # noqa: SLF001
@@ -59,22 +58,22 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 # if any of these hashes change: the mathematical computation or the setting of colors has changed!
 # this should NOT change over metadata changes, as it is computed from raw pixel data
 # PNG - really only change if core computation changes, so these are more important to be stable
-SEAHORSE_TAIL_HASH: str = '1fd6e1f31ba76e8116c64b798f16a994011f00d977d74421cd09e0f63538a7aa'
-SUZANA_WAVE_HASH: str = '92ee073dea23ff91a436a4ee7a1d7a64abfc3b512a440b01746ef78ce1c6c81a'
+SEAHORSE_TAIL_HASH: str = '525aaf4c4a58391f1386889a54d54dfb91f099050af5783f97322e1f33e8b275'
+SUZANA_WAVE_HASH: str = '95a6acd116fb1ca043f089f093fb0a8c139ffb490a6a24be068fa474c8636871'
 # GIF - these may change for core computation, or if the animation frame machinery changes
-SEAHORSE_ANIMATED_HASH: str = 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab'
-T_GIF_SEAHORSE_HASH: str = '073feb420ea0c1441f30a6eaf407a3fe8fd45c35293827f4314427e5d31722b1'
-T_GIF_SEEDS_300_HASH: str = '10dc540880f300d8fbe3a57d35a4c1db5ba78a07ad6c856f11eab13e7160bbf2'
-T_GIF_JULIA_SUZANA_HASH: str = '55db8370c11152e65c6afc555c5eee494324a44017ea154fa2e2f64ced53ed30'
-T_GIF_JULIA_DRAGON_HASH: str = 'a44055a0e8cea2c68f068fb755bd5909247b8ac6b7a2b8d077dbbf8015375733'
-T_GIF_JULIA_BLOB_HASH: str = 'cc4b74f72a0d4c1daa015bd377826c21a410c63863a3181e0882403c965b40a7'
+SEAHORSE_ANIMATED_HASH: str = 'd9204b9c2aec64555ca7ce48226301684737cce8b673febe86629c2e8a36ae19'
+T_GIF_SEAHORSE_HASH: str = 'ae35fa4c7834bbfec989548e6bceddd09b821bf883c007b475ff306d7fa286ee'
+T_GIF_SEEDS_300_HASH: str = '1b67e38d95dd10cc5600371719c63654bf3f70c40644f3532787f5a8a915a84f'
+T_GIF_JULIA_SUZANA_HASH: str = 'cb1253e362e25c25da208473db24172b97bd5aad048cf986589d744536060531'
+T_GIF_JULIA_DRAGON_HASH: str = '8e761fe4b35f9132d04bb76a2ec5504308bd7322bb735404c6c4f10d47736f5d'
+T_GIF_JULIA_BLOB_HASH: str = 'ff42442b7928169fa68c4b814b1f43e38c9e273d143ec5a53f3b016708bc137d'
 # SHA of all the frame's data - like above: computation or animation frame machinery changes
 TEST_IMAGE_DATA_HASHES: dict[str, tuple[int, str]] = {
   # name: (number of frames, hash of all the frames)
   # these are the hashes of the raw object data of the frame pickled to disk, not to be confused
   # with the frames' hash we compute; both are data dependent only, but they WILL BE DIFFERENT
-  'seahorse': (45, '1105b681fc059328833f9e79ef5d37059ee29b4995ad05d20e9a6610cfaf5313'),
-  'seeds300': (20, 'b7b771ce478c594e1cd73271ec92127b1b2a40d8e1224e72e5f9cb2d77ea2e75'),
+  'seahorse': (31, 'b9d56f228b0b4d31d116c37109d9af5eeb5ac3d707a440e4970f186137954ce1'),
+  'seeds300': (10, '54c49efbaf685916ad0240d14ec070934a6cd604e4eecb447be637f85a89bfac'),
   'suzana': (21, '57fb14828e1adeebd6c8fa5d3fe7f75ac0a4cf8e5864235ff77dc89aa20dbca5'),
   'dragon': (8, '23fbaca543e2e319ab621d964772b32b04dc5605160a83f031bee38444403f9a'),
   'blob': (8, 'd7e54a7b817cca30ae14b9ad03d8c81bd72e8c8ece62fdf8dc569de7d030c917'),
@@ -431,21 +430,21 @@ MARK_COORDINATES_OPTION: typer.models.OptionInfo = typer.Option(
   ),
 )
 MARK_COLOR_OPTION: typer.models.OptionInfo = typer.Option(
-  image.DEFAULT_MARK_COLOR.name.lower(),
+  pixels.DEFAULT_MARK_COLOR.name.lower(),
   '--mark-color',
   help=(
-    f'Color of the crosshair overlay; default is "{image.DEFAULT_MARK_COLOR.name.lower()}"; '
-    'available colors: ' + ', '.join(sorted(repr(c.name.lower()) for c in image.Color))
+    f'Color of the crosshair overlay; default is "{pixels.DEFAULT_MARK_COLOR.name.lower()}"; '
+    'available colors: ' + ', '.join(sorted(repr(c.name.lower()) for c in pixels.Color))
   ),
 )
 MARK_WIDTH_OPTION: typer.models.OptionInfo = typer.Option(
-  image.DEFAULT_MARK_WIDTH,
+  pixels.DEFAULT_MARK_WIDTH,
   '--mark-width',
-  min=image.MIN_MARK_WIDTH,
-  max=image.MAX_MARK_WIDTH,
+  min=pixels.MIN_MARK_WIDTH,
+  max=pixels.MAX_MARK_WIDTH,
   help=(
-    f'Width of the crosshair overlay; {image.MIN_MARK_WIDTH} ≤ w ≤ {image.MAX_MARK_WIDTH}; '
-    f'default is {image.DEFAULT_MARK_WIDTH}'
+    f'Width of the crosshair overlay; {pixels.MIN_MARK_WIDTH} ≤ w ≤ {pixels.MAX_MARK_WIDTH}; '
+    f'default is {pixels.DEFAULT_MARK_WIDTH}'
   ),
 )
 
@@ -622,12 +621,12 @@ ANIM_FPS_OPTION: typer.models.OptionInfo = typer.Option(
   ),
 )
 ANIM_TYPE_OPTION: typer.models.OptionInfo = typer.Option(
-  zoom.DEFAULT_ANIMATION_TYPE,
+  pixels.DEFAULT_ANIMATION_TYPE,
   '--anim',
   help=(
     f'Type of animation to produce; possible values: '
-    f'{", ".join(repr(t.value) for t in zoom.AnimationType)}; '
-    f'default is "{zoom.DEFAULT_ANIMATION_TYPE.value}"'
+    f'{", ".join(repr(t.value) for t in pixels.AnimationEncoding)}; '
+    f'default is "{pixels.DEFAULT_ANIMATION_TYPE.value}"'
   ),
 )
 ANIM_LOOP_OPTION: typer.models.OptionInfo = typer.Option(
@@ -652,10 +651,10 @@ ANIM_INTERPOLATION_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
   0,
   '--i-frames',
   min=0,
-  max=zoom.MAX_INTERPOLATION_FRAMES,
+  max=pixels.MAX_INTERPOLATION_FRAMES,
   help=(
     f'Extra interpolated frames for every video frame; effectively, final FPS=fps*(i+1); '
-    f'0 ≤ i ≤ {zoom.MAX_INTERPOLATION_FRAMES}; default is 0; '
+    f'0 ≤ i ≤ {pixels.MAX_INTERPOLATION_FRAMES}; default is 0; '
     'so 0 is no interpolation, 1 means add 1 interpolated frame between every pair of frames, etc'
   ),
 )
@@ -786,8 +785,8 @@ class TranZoomConfig(clibase.CLIConfig):
 
   max_iter: int | None = None  # for `image` command, also `zoom auto`
   mark_coords: str | None = None  # for `image` command, also `zoom auto`
-  mark_color: image.Color = image.DEFAULT_MARK_COLOR  # for `image` command, also `zoom auto`
-  mark_width: int = image.DEFAULT_MARK_WIDTH  # for `image` command, also `zoom auto`
+  mark_color: pixels.Color = pixels.DEFAULT_MARK_COLOR  # for `image` command, also `zoom auto`
+  mark_width: int = pixels.DEFAULT_MARK_WIDTH  # for `image` command, also `zoom auto`
 
   max_steps: int = 0  # for `zoom` command
   fractal_type: frame.Fractal = frame.DEFAULT_FRACTAL  # for `zoom` command
@@ -812,7 +811,7 @@ class TranZoomConfig(clibase.CLIConfig):
     )
 
   def GetConfig(self) -> ConfigType:
-    """Get a dict of the config values from the disk config.
+    """Config values from the disk config.
 
     Returns:
       ConfigType: a dict of the config values, creates the default config if none on disk yet
@@ -840,6 +839,57 @@ class TranZoomConfig(clibase.CLIConfig):
     )
     self.appconfig.Serialize(cnf, silent=True)
     logging.info(f'Saved config to "{self.appconfig.path}": {cnf}')
+
+
+def MakePointFromCLIArgs(
+  point_re: frame.ExactInputType,
+  point_im: frame.ExactInputType,
+  print_call: abc.Callable[[str], None],
+) -> tuple[gmpy2.mpq, gmpy2.mpq]:
+  """Make a point or die. Tries float/mpq first, then tries reading from a file metadata.
+
+  Args:
+    point_re (frame.ExactInputType): the real part of the point
+    point_im (frame.ExactInputType): the imaginary part of the point
+    print_call (abc.Callable[[str], None]): a callable to print messages, used for logging during
+        frame creation
+
+  Returns:
+    tuple[gmpy2.mpq, gmpy2.mpq]: A valid point
+
+  Raises:
+    UsageError: if arguments can't be turned into a valid point
+    Error: (not really)
+
+  """
+  try:
+    # the happy path is simple... if these conversions work, we return the point and we're done
+    cx: gmpy2.mpq = point_re if isinstance(point_re, gmpy2.mpq) else gmpy2.mpq(point_re)
+    cy: gmpy2.mpq = point_im if isinstance(point_im, gmpy2.mpq) else gmpy2.mpq(point_im)
+    return (cx, cy)
+  except ValueError as err:
+    if 'invalid' not in str(err).lower():
+      raise UsageError(f'Error: {point_re=}, {point_im=}') from err
+    # maybe the user gave us an image path instead of coordinates? let's try to read it as image
+    try:
+      # convert and validate path
+      img_path: pathlib.Path = pathlib.Path(str(point_re)).expanduser().resolve()
+      if not img_path.exists() or not img_path.is_file():
+        raise Error(f'Image "{img_path}" does not exist or is not a file') from err  # noqa: TRY301
+      # make sure we have the needed metadata
+      info: pixels.ObjInfo = pixels.GetBasicData(img_path.read_bytes())[0]
+      if image.META_CENTER_RE_KEY not in info.meta or image.META_CENTER_IM_KEY not in info.meta:
+        raise Error(f'Image "{img_path}" missing tranZoom frame metadata keys') from err  # noqa: TRY301
+      fract: str = str(info.meta.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
+      print_call(f'Reading frame from "{img_path}", [red]tranZoom[/], {fract} fractal...')
+      return (
+        gmpy2.mpq(str(info.meta[image.META_CENTER_RE_KEY])),
+        gmpy2.mpq(str(info.meta[image.META_CENTER_IM_KEY])),
+      )
+    except Exception as err2:  # this error we cannot forgive
+      raise UsageError(f'Error/not path: {point_re=}, {point_im=}') from err2
+  except Exception as err:  # this error we cannot forgive
+    raise UsageError(f'Error: {point_re=}, {point_im=}') from err
 
 
 def MakeFrameFromCLIArgs(
@@ -882,22 +932,22 @@ def MakeFrameFromCLIArgs(
       if not img_path.exists() or not img_path.is_file():
         raise Error(f'Image "{img_path}" does not exist or is not a file')  # noqa: TRY301
       # make sure we have the needed metadata
-      info: tbase.JSONDict = image.GetBasicDataFromImage(img_path.read_bytes())[-1]
+      info: pixels.ObjInfo = pixels.GetBasicData(img_path.read_bytes())[0]
       if (
-        image.META_CENTER_RE_KEY not in info
-        or image.META_CENTER_IM_KEY not in info
-        or image.META_WIDTH_RE_KEY not in info
-        or image.META_HEIGHT_IM_KEY not in info
+        image.META_CENTER_RE_KEY not in info.meta
+        or image.META_CENTER_IM_KEY not in info.meta
+        or image.META_WIDTH_RE_KEY not in info.meta
+        or image.META_HEIGHT_IM_KEY not in info.meta
       ):
         raise Error(f'Image "{img_path}" missing tranZoom frame metadata keys')  # noqa: TRY301
-      fract: str = str(info.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
+      fract: str = str(info.meta.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
       print_call(f'Reading frame from "{img_path}", [red]tranZoom[/], {fract} fractal...')
       return frame.Frame.FromCenter(
         fractal,
-        str(info[image.META_CENTER_RE_KEY]),
-        str(info[image.META_CENTER_IM_KEY]),
-        str(info[image.META_WIDTH_RE_KEY]),
-        height=str(info[image.META_HEIGHT_IM_KEY]),
+        str(info.meta[image.META_CENTER_RE_KEY]),
+        str(info.meta[image.META_CENTER_IM_KEY]),
+        str(info.meta[image.META_WIDTH_RE_KEY]),
+        height=str(info.meta[image.META_HEIGHT_IM_KEY]),
       )
     except Exception as err2:  # this error we cannot forgive
       raise UsageError(
@@ -999,7 +1049,7 @@ def MakeComputationParameters(
 def MakeRenderParameters(
   params: frame.ComputationParameters,
   config: TranZoomConfig,
-) -> tuple[image.RenderParameters, image.ImageOutputConfig]:
+) -> tuple[pixels.RenderParameters, image.ImageOutputConfig]:
   """Make a RenderParameters/ImageOutputConfig object from the ComputationParameters and the config.
 
   Will use the ComputationParameters/Frame and:
@@ -1020,7 +1070,7 @@ def MakeRenderParameters(
     config (TranZoomConfig): the global configuration with all the options needed
 
   Returns:
-    tuple[image.RenderParameters, image.ImageOutputConfig]: a tuple of the RenderParameters
+    tuple[pixels.RenderParameters, image.ImageOutputConfig]: a tuple of the RenderParameters
         and ImageOutputConfig
 
   """
@@ -1031,7 +1081,7 @@ def MakeRenderParameters(
     else None
   )
   # build render and output configuration objects
-  render: image.RenderParameters = image.RenderParameters(
+  render: pixels.RenderParameters = pixels.RenderParameters(
     escaped_pal=config.pal,
     set_pal=None if config.set_points is None else config.set_pal,
     i_pixels=config.i_pixels,
@@ -1059,7 +1109,7 @@ def ProduceFractalImage(
   tm: int | None = None,
   add_serial: int | None = None,
   save_image: bool = True,
-) -> tuple[image.Image | None, bytes, str, image.RenderParameters]:
+) -> tuple[image.Image | None, pixels.Pixels, bytes, str, pixels.RenderParameters]:
   """Produce fractal image from a frame and a config, and save it to disk, print it to iTerm2, etc.
 
   Args:
@@ -1077,8 +1127,8 @@ def ProduceFractalImage(
         not be saved; default is True.
 
   Returns:
-    tuple[image.Image, bytes, str, image.RenderParameters]: A tuple of
-        (image.Image object, raw PNG bytes, internal hash of the raw PNG, RenderParameters)
+    tuple[image.Image | None, pixels.Pixels, bytes, str, pixels.RenderParameters]: A tuple of
+        (image.Image object, pixels.Pixels object, raw PNG bytes, data hash, RenderParameters)
 
   This is a high-level function that takes care of all the steps needed to produce the final image,
   including:
@@ -1093,7 +1143,7 @@ def ProduceFractalImage(
   """
   # build parameters
   params: frame.ComputationParameters = MakeComputationParameters(frm, config)
-  render: image.RenderParameters
+  render: pixels.RenderParameters
   out: image.ImageOutputConfig
   render, out = MakeRenderParameters(params, config)
   # warn if size estimates are large, before starting expensive computation
@@ -1112,10 +1162,10 @@ def ProduceFractalImage(
     )
   # compute the image via the unified core primitive
   img: image.Image | None
-  raw_png: bytes
-  raw_hash: str
+  pix: pixels.Pixels
+  data_hash: str
   full_path: pathlib.Path
-  _, img, raw_png, raw_hash, full_path = db.CoreComputeImage(
+  _, img, pix, data_hash, full_path = db.CoreComputeImage(
     params,
     render,
     out,
@@ -1128,61 +1178,15 @@ def ProduceFractalImage(
     force=config.img_force_redo,
   )
   # save the image to disk if requested
+  raw_png: bytes
+  file_hash: str
+  raw_png, file_hash, _ = pix.PNG()  # <=< <<<<< <=< THIS is where the PNG is actually generated!
   if save_image:
     full_path.write_bytes(raw_png)
-    config.console.print(f'Saved to {str(full_path)!r}, {human.HumanizedBytes(len(raw_png))}')
-  return (img, raw_png, raw_hash, render)
-
-
-def MakePointFromCLIArgs(
-  point_re: frame.ExactInputType,
-  point_im: frame.ExactInputType,
-  print_call: abc.Callable[[str], None],
-) -> tuple[gmpy2.mpq, gmpy2.mpq]:
-  """Make a point or die. Tries float/mpq first, then tries reading from a file metadata.
-
-  Args:
-    point_re (frame.ExactInputType): the real part of the point
-    point_im (frame.ExactInputType): the imaginary part of the point
-    print_call (abc.Callable[[str], None]): a callable to print messages, used for logging during
-        frame creation
-
-  Returns:
-    tuple[gmpy2.mpq, gmpy2.mpq]: A valid point
-
-  Raises:
-    UsageError: if arguments can't be turned into a valid point
-    Error: (not really)
-
-  """
-  try:
-    # the happy path is simple... if these conversions work, we return the point and we're done
-    cx: gmpy2.mpq = point_re if isinstance(point_re, gmpy2.mpq) else gmpy2.mpq(point_re)
-    cy: gmpy2.mpq = point_im if isinstance(point_im, gmpy2.mpq) else gmpy2.mpq(point_im)
-    return (cx, cy)
-  except ValueError as err:
-    if 'invalid' not in str(err).lower():
-      raise UsageError(f'Error: {point_re=}, {point_im=}') from err
-    # maybe the user gave us an image path instead of coordinates? let's try to read it as image
-    try:
-      # convert and validate path
-      img_path: pathlib.Path = pathlib.Path(str(point_re)).expanduser().resolve()
-      if not img_path.exists() or not img_path.is_file():
-        raise Error(f'Image "{img_path}" does not exist or is not a file') from err  # noqa: TRY301
-      # make sure we have the needed metadata
-      info: tbase.JSONDict = image.GetBasicDataFromImage(img_path.read_bytes())[-1]
-      if image.META_CENTER_RE_KEY not in info or image.META_CENTER_IM_KEY not in info:
-        raise Error(f'Image "{img_path}" missing tranZoom frame metadata keys') from err  # noqa: TRY301
-      fract: str = str(info.get(image.META_FRACTAL_KEY, '')) or 'UNKNOWN'
-      print_call(f'Reading frame from "{img_path}", [red]tranZoom[/], {fract} fractal...')
-      return (
-        gmpy2.mpq(str(info[image.META_CENTER_RE_KEY])),
-        gmpy2.mpq(str(info[image.META_CENTER_IM_KEY])),
-      )
-    except Exception as err2:  # this error we cannot forgive
-      raise UsageError(f'Error/not path: {point_re=}, {point_im=}') from err2
-  except Exception as err:  # this error we cannot forgive
-    raise UsageError(f'Error: {point_re=}, {point_im=}') from err
+    config.console.print(
+      f'Saved to {str(full_path)!r} ({file_hash[:16]!r}), {human.HumanizedBytes(len(raw_png))}'
+    )
+  return (img, pix, raw_png, data_hash, render)
 
 
 def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
@@ -1223,10 +1227,11 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
   )
   config.console.print(
     f'\n{zoom_params.img.width} \u00d7 {zoom_params.img.height}{real_sz_str} '
+    f'{zoom_params.render.anim.value.upper()!r}: '
     f'{zoom_params.render.escaped_pal.value!r} {zoom_params.img.frm.fractal.value.capitalize()!r} '
     f'[magenta]10^{float(zoom_params.mag):.4f} magnitude ZOOM[/], '
     f'{human.HumanizedSeconds(float(zoom_params.n_seconds))} long, '
-    f'at {float(zoom_params.fps):.2f}*{zoom_params.i_frames + 1} FPS, '
+    f'at {float(zoom_params.fps):.2f}*{zoom_params.render.i_frames + 1} FPS, '
     f'with {zoom_params.n_frames}|{zoom_params.all_frames} frames ({len(all_markers)} markers, '
     f'{100.0 * len(all_markers) / zoom_params.n_frames:.2f}%, and {len(all_depth)} depth frames, '
     f'{100.0 * len(all_depth) / zoom_params.n_frames:.2f}%), '
@@ -1238,14 +1243,14 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
   frdb.WarnUserAnimationParams(zoom_params, print_comm=config.console.print)
   # create path callback missing only the hash
   timestamp: int = timer.Now()
-  full_path: abc.Callable[[str], pathlib.Path] = lambda h: image.MakeImagePath(
+  full_path: abc.Callable[[str], pathlib.Path] = lambda h: pixels.MakeImagePath(
     config.img_output_path,
     config.img_use_date,
     config.img_use_hash,
     config.img_path_prefix or DEFAULT_IMAGE_PREFIX[zoom_params.img.frm.fractal],
     h,
     tm=timestamp,
-    suffix=zoom_params.tp.value.lower(),
+    suffix=zoom_params.render.anim.value.lower(),
   )
   # DB
   did_comp: bool
@@ -1280,7 +1285,9 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           video_data: bytes = old_path.read_bytes()
           video_path.write_bytes(video_data)
         # log and shortcircuit
-        config.console.print(f'Success: {zoom_params.tp.value.upper()} {video_hash!r} from disk')
+        config.console.print(
+          f'Success: {zoom_params.render.anim.value.upper()} {video_hash!r} from disk'
+        )
         return (video_path, video_path.stat().st_size)
     # produce the depth computations for all the depth frames: this will save us a lot of trouble
     max_iter: int
@@ -1361,7 +1368,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     sorted_depth_keys: list[int] = sorted(depth_computations)
 
     def _DepthAndStatsForFrame(i: int) -> tuple[int, image.FractalStats]:
-      """Get the depth/stats for a Frame index, interpolating from depth_computations.
+      """Depth/stats for a Frame index, interpolating from depth_computations.
 
       Args:
         i (int): The index of the frame in the zoom sequence.
@@ -1494,7 +1501,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     # we should have all images either in memory or in DB; so now we we rely on _SmartImage()
 
     def _SmartImage(i: int) -> image.Image:
-      """Get the Image object for frame i, either from memory (not streaming) or DB (streaming).
+      """Image object for frame i, either from memory (not streaming) or DB (streaming).
 
       Args:
         i (int): The index of the frame in the zoom sequence.
@@ -1539,7 +1546,6 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           disable=False,  # for debugging rendering, set to True to disable the progress bar
         )
       # start try..finally for the progress bar
-      all_hash: dict[int, str] = {}
       try:
 
         def _TwoFrameRenderStream() -> abc.Iterator[
@@ -1580,35 +1586,33 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             zoom.RenderedZoomFrame: The rendered image data for the frame at index i.
 
           """
-          img_data: bytes
+          # render the frame, get the image data and hash
+          img_data: pixels.Pixels
           data_hash: str
           img_path: pathlib.Path
-          p: int
-          n: int
-          zn: image.Image.FrameColorNorm
-          # render
-          p, n, zn = zoom_norm.ForFrame(i)
           img_data, data_hash, img_path, _ = db.DoRender(
             _SmartImage(i),  # get the Image object for this frame
-            dataclasses.replace(
-              zoom_params.render, prev_marker=all_frames[p], next_marker=all_frames[n]
-            ),
+            zoom_params.render,
             out,
             add_serial=i + 1,
             tm=timestamp,
             iterm=False,  # disable, we want silence
             print_comm=config.console.print,
             force=config.img_force_redo,
-            zoom_norm=zn,
+            zoom_norm=zoom_norm.ForFrame(i)[-1],
             silent=True,  # we will have a progress bar
-            no_meta=True,  # do not include metadata for individual frames
           )
-          # save hash
-          all_hash[i] = data_hash
           # save per-frame-normalized image to disk if requested (for individual frame inspection)
           if save_frames:
-            img_path.write_bytes(img_data)
-            config.console.print(f'Saved frame {i + 1} to {str(img_path)!r}')
+            # saving frames is costly (but not too much), we do it here b/c the user asked for it
+            raw_png: bytes
+            file_hash: str
+            raw_png, file_hash, _ = img_data.PNG()  # WASTEFUL!: this will be done again later
+            img_path.write_bytes(raw_png)
+            config.console.print(
+              f'Saved frame {i + 1} to {str(img_path)!r} '
+              f'({file_hash[:16]!r}), {human.HumanizedBytes(len(raw_png))}'
+            )
           # update progress bar, return data
           if p_bar:
             p_bar.update(1)
@@ -1617,15 +1621,19 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           )
 
         # render the video to a temporary path, using the two-frame stream to interpolate frames
-        tmp_path: pathlib.Path = pathlib.Path(tmpdir) / f'temp_video.{zoom_params.tp.value.lower()}'
+        tmp_path: pathlib.Path = (
+          pathlib.Path(tmpdir) / f'temp_video.{zoom_params.render.anim.value.lower()}'
+        )
+        all_hash: list[str] = []
         frame_bytes: abc.Iterable[bytes] = zoom.InterpolatedFrameStream(  # generator! memory!
           # we must keep all of this as generators to save rendering memory
           _TwoFrameRenderStream(),  # this will yield (curr, next) tuples of rendered frames
-          i_frames=zoom_params.i_frames,
+          all_hash,  # this will be filled with the hashes of the rendered frames
+          i_frames=zoom_params.render.i_frames,
           zoom_per_step=float(zoom_params.scalar_magnification_per_step),
           use_quadratic=zoom.DEFAULT_USE_QUADRATIC,
         )
-        if zoom_params.tp == zoom.AnimationType.GIF:
+        if zoom_params.render.anim == pixels.AnimationEncoding.GIF:
           zoom.WriteAnimatedGIF(
             frame_bytes,  # generator! memory!
             tmp_path,
@@ -1635,7 +1643,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             float(zoom_params.n_seconds),
             loop=zoom_params.loop,
           )
-        elif zoom_params.tp == zoom.AnimationType.MP4:
+        elif zoom_params.render.anim == pixels.AnimationEncoding.MP4:
           zoom.WriteVideoMP4(
             frame_bytes,  # generator! memory!
             tmp_path,
@@ -1645,26 +1653,23 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             float(zoom_params.n_seconds),
           )
         else:
-          raise UsageError(f'Unsupported animation type: {zoom_params.tp}')
+          raise UsageError(f'Unsupported animation type: {zoom_params.render.anim}')
       finally:
         # we are done, close the progress bar, free memory
         p_bar.close()
-      # we can finally compute the hash
-      video_hash = hashes.Hash256(
-        # stable if the image data and order does not change
-        ('|'.join(all_hash[i] for i in range(zoom_params.n_frames))).encode('ascii')
-      ).hex()
+      # we can finally compute the hash, which is stable if the image data and order does not change
+      video_hash = hashes.Hash256(('|'.join(all_hash)).encode('ascii')).hex()
       # create metadata
       meta: dict[str, str] = image.MakeImageMeta(  # use destination frame (final) as reference
         _SmartImage(zoom_params.n_frames - 1), zoom_params.render, video_hash
       )
       del all_img_obj  # this should help free all generated images from memory
       # add video-specific metadata
-      meta[image.META_IMAGE_ANIMATION_KEY] = zoom_params.tp.value.lower()
+      meta[image.META_IMAGE_ANIMATION_KEY] = zoom_params.render.anim.value.lower()
       meta.update(
         # the extra animation keys
         {
-          image.META_ZOOM_TYPE_KEY: zoom_params.tp.value,
+          image.META_ZOOM_TYPE_KEY: zoom_params.render.anim.value.lower(),
           image.META_ZOOM_INITIAL_WIDTH_RE_KEY: str(all_frames[0].size[0]),
           image.META_ZOOM_INITIAL_HEIGHT_IM_KEY: str(all_frames[0].size[1]),
           image.META_ZOOM_MAGNITUDE_KEY: str(zoom_params.mag),
@@ -1674,7 +1679,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           image.META_ZOOM_STEPS_KEY: str(zoom_params.n_steps),
           image.META_ZOOM_FPS_KEY: str(zoom_params.fps),
           image.META_ZOOM_I_FPS_KEY: str(zoom_params.ifps),
-          image.META_ZOOM_I_FRAMES_KEY: str(zoom_params.i_frames),
+          image.META_ZOOM_I_FRAMES_KEY: str(zoom_params.render.i_frames),
           image.META_ZOOM_ALL_FRAMES_KEY: str(zoom_params.all_frames),
           image.META_ZOOM_MAGNITUDE_PER_STEP_KEY: str(zoom_params.mag_per_step),
           image.META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str(
@@ -1693,9 +1698,9 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
       )
       # move the file!
       video_path = full_path(video_hash)
-      if zoom_params.tp == zoom.AnimationType.GIF:
+      if zoom_params.render.anim == pixels.AnimationEncoding.GIF:
         zoom.ReWriteAnimatedGIFMeta(tmp_path, video_path, meta)
-      elif zoom_params.tp == zoom.AnimationType.MP4:
+      elif zoom_params.render.anim == pixels.AnimationEncoding.MP4:
         zoom.ReWriteVideoMP4Meta(tmp_path, video_path, meta)
     # closed temporary directory, video is saved in final destination with final metadata
     config.console.print('[yellow]Render:[/] [green]DONE[/]\n')
@@ -1711,7 +1716,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     )
   # done, close DB, final log and iTerm2
   config.console.print(
-    f'Success: {zoom_params.tp.value.upper()} {video_hash!r} in '
+    f'Success: {zoom_params.render.anim.value.upper()} {video_hash!r} in '
     f'{depth_tmr or "-"} (depth) + {frames_tmr} (frames) + {render_tmr} (render)'
   )
   return (video_path, video_path.stat().st_size)

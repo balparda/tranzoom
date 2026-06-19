@@ -281,7 +281,7 @@ class ImageScores[ScoreT: ImageScore](pydantic.BaseModel, abstract.ABC):
 
   @final
   def BestEvaluation(self, *, target_weight: float = 0.8) -> ScoreT:
-    """Get the sector evaluation with the highest final score.
+    """Sector evaluation with the highest final score.
 
     If targeted search is inactive, this uses `fractal_score`.
     If targeted search is active, this blends `fractal_score` and
@@ -304,7 +304,7 @@ class ImageScores[ScoreT: ImageScore](pydantic.BaseModel, abstract.ABC):
 
   @final
   def JSON(self) -> tbase.JSONDict:
-    """Get a JSON-serializable dict representation of this scoring object.
+    """JSON-serializable dict representation of this scoring object.
 
     Returns:
       tbase.JSONDict: A dict with a "sectors" key containing a list of dicts for each sector

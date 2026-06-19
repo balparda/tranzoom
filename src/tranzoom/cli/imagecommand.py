@@ -23,7 +23,7 @@ from transcrypto.utils import saferandom
 
 from tranzoom import tranz
 from tranzoom.cli import base
-from tranzoom.core import frame, image
+from tranzoom.core import frame, image, pixels
 
 image_app = typer.Typer(
   no_args_is_help=True,
@@ -68,10 +68,10 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
   if ctx.invoked_subcommand is not None and ctx.obj is not None:
     # check color so it won't raise plain KeyError
     col: str = mark_color.strip().upper()
-    if col not in image.Color.__members__:
+    if col not in pixels.Color.__members__:
       raise base.UsageError(
         f'Invalid mark color {mark_color!r}; available colors: '
-        + ', '.join(sorted(repr(c.name.lower()) for c in image.Color))
+        + ', '.join(sorted(repr(c.name.lower()) for c in pixels.Color))
       )
     ctx.obj = dataclasses.replace(
       ctx.obj,
@@ -81,7 +81,7 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
       i_pixels=i_pixels,
       max_iter=max_iter,
       mark_coords=mark_coords,
-      mark_color=image.Color[col],
+      mark_color=pixels.Color[col],
       mark_width=mark_width,
     )
 
@@ -199,21 +199,26 @@ def Read(  # documentation is help/epilog/args  # noqa: D103
   if not image_path.exists() or not image_path.is_file():
     raise base.Error(f'Image not found: {image_path}')
   image_data: bytes = image_path.read_bytes()
-  w, h, png_hash, info = image.GetBasicDataFromImage(image_data)
+  info: pixels.ObjInfo
+  info, _ = pixels.GetBasicData(image_data)
   # print header
   config.console.print()
   config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')
-  config.console.print(f'[green]{w} \u00d7 {h}[/green] (w\u00d7h) / [cyan]{png_hash}[/cyan]')
+  config.console.print(
+    f'[green]{info.width} \u00d7 {info.height}[/green] (w\u00d7h) / [cyan]{info.data_hash}[/cyan]'
+  )
   config.console.print()
   # expand JSON, if needed
-  if image.META_LLM_RESULT_JSON_KEY in info:
-    info[image.META_LLM_RESULT_JSON_KEY] = json.loads(str(info[image.META_LLM_RESULT_JSON_KEY]))
+  if image.META_LLM_RESULT_JSON_KEY in info.meta:
+    info.meta[image.META_LLM_RESULT_JSON_KEY] = json.loads(
+      str(info.meta[image.META_LLM_RESULT_JSON_KEY])
+    )
   # print the metadata in a nice format
-  config.console.print_json(data=info, indent=2)
+  config.console.print_json(data=info.meta, indent=2)
   config.console.print()
   # iterm
   if config.iterm:
-    image.PrintITerm2(image_data)
+    pixels.PrintITerm2(image_data)
     config.console.print()
 
 
@@ -254,20 +259,27 @@ def Clean(  # documentation is help/epilog/args  # noqa: D103
     # TODO: support animated GIFs/MP4s by cleaning each frame and reassembling
     raise base.Error('Animated GIFs and MP4 videos are not supported for cleaning for now...')
   image_data: bytes = image_path.read_bytes()
-  w, h, png_hash, info = image.GetBasicDataFromImage(image_data)
+  info: pixels.ObjInfo
+  pix: pixels.Pixels | None
+  info, pix = pixels.GetBasicData(image_data)
   # print header
   config.console.print()
   config.console.print(f'[yellow]{str(image_path)!r}[/yellow]')
-  config.console.print(f'[green]{w} \u00d7 {h}[/green] (w\u00d7h) / [cyan]{png_hash}[/cyan]')
+  config.console.print(
+    f'[green]{info.width} \u00d7 {info.height}[/green] (w\u00d7h) / [cyan]{info.data_hash}[/cyan]'
+  )
   config.console.print()
   # convert bytes, keep hash meta if we were asked to do so
   config.console.print('  Format: ' + ('[green]JPG[/]' if jpeg else '[yellow]PNG[/]'))
   config.console.print('  Hashes: ' + ('[yellow]IN META[/]' if leave_hashes else '[green]CLEAN[/]'))
-  new_data: bytes = {False: image.PNGFromRGBImage, True: image.JPGFromRGBImage}[jpeg](
-    image.RGBImageFromImage(image_data),
-    meta={k: str(info[k]) for k in image.META_SAFE_HASHES if k in info} if leave_hashes else None,
+  if not pix:
+    raise base.Error('Image data could not be read; cannot clean it.')
+  new_data: bytes = {False: pix.PNG, True: pix.JPG}[jpeg](
+    meta=(
+      {k: pix.meta[k] for k in image.META_SAFE_HASHES if k in pix.meta} if leave_hashes else None
+    ),
     copy_previous=False,
-  )
+  )[0]
   # make output path, save, and print info about the new image
   random_hash: str = hashes.Hash512(saferandom.RandBytes(100)).hex()[:20]
   config.console.print('    Name: ' + ('[green]CLEAN[/]' if clean_path else '[yellow]UNTOUCHED[/]'))
@@ -282,7 +294,7 @@ def Clean(  # documentation is help/epilog/args  # noqa: D103
   config.console.print()
   # iterm
   if config.iterm:
-    image.PrintITerm2(new_data)
+    pixels.PrintITerm2(new_data)
     config.console.print()
   config.console.print('[bold][green]Done cleaning image[/][/]')
   config.console.print()

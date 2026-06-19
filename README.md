@@ -48,6 +48,11 @@ Built with:
       - [Frame Representation](#frame-representation)
       - [Computation Parameters](#computation-parameters)
       - [Precision](#precision)
+      - [Interpolation features](#interpolation-features)
+        - [Pixel interpolation (`--i-pixels`)](#pixel-interpolation---i-pixels)
+        - [Frame interpolation (`--i-frames`)](#frame-interpolation---i-frames)
+        - [Combining both interpolation modes](#combining-both-interpolation-modes)
+        - [Implementation notes](#implementation-notes)
     - [Inputs and outputs](#inputs-and-outputs)
       - [Inputs](#inputs)
       - [Outputs](#outputs)
@@ -217,6 +222,8 @@ The tool can save all computations to a local DB. If allowed, it will use these 
 - **Manual zoom session**: The `tranz zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM. Supports both Mandelbrot and Julia Set fractals.
 - **Sector scoring**: Each sector is scored on a 0–100 scale for `fractal_score` (visual complexity / zoom promise). When targeted search is active, an additional `target_match_score` (also 0–100) is blended in with a configurable weight.
 - **Image metadata**: All tranZoom PNG images embed rich metadata (`tranZoom:*` PNG text chunks) including frame coordinates, magnification, palette (`tranZoom:render:palette`), precision, per-pixel statistics (`n:min`, `n:max`, `nu:min`, `nu:max`, histogram summaries), and (for AI/manual sessions) the full LLM evaluation, model parameters, prompts, and zoom step count.
+- **Pixel interpolation** (`--i-pixels`): Bicubic upscaling applied to the final rendered image to produce higher-resolution output without additional fractal computation. The `--i-pixels N` flag (valid range 0–3) inserts `N` interpolated pixels between each computed pixel in both dimensions, multiplying the final image size by `(N+1)`. For example, `--i-pixels 2` transforms a 1024×1024 computation into a 3072×3072 final image using deterministic bicubic interpolation. The fractal is computed once at the base resolution, then upscaled using weighted RGBA blending over 2×2 pixel neighborhoods. This produces smoother gradients and reduces visible pixelation at the cost of larger file sizes; no additional computation time beyond the interpolation pass itself (≪1 second for typical sizes). Metadata key `tranZoom:render:i_pixels` stores the interpolation level. Use this when you want poster-quality output from moderate computation cost.
+- **Frame interpolation** (`--i-frames`): Temporal interpolation applied to zoom animations to produce higher frame rates without computing additional fractal frames. The `--i-frames M` flag (valid range 0–7) inserts `M` interpolated frames between each real fractal-computed frame, multiplying the effective FPS by `(M+1)`. For example, `--fps 10 --i-frames 2` computes 10 real frames per second but outputs 30 total frames per second (10 real + 20 interpolated). Supports **linear interpolation** (weighted RGB blend between consecutive frames) and **quadratic interpolation** (three-point Lagrange curve using curr, next, next+1 frames for smoother acceleration). Quadratic mode is the default and produces more natural motion; it automatically falls back to linear for the final frame pair. This produces fluid animations from fewer expensive fractal computations; particularly effective for long zooms where computational cost dominates. The iteration depth (`max_iter`) is still computed per real frame using depth key frames, so quality remains consistent. Metadata key `tranZoom:zoom:frame:i_frames` stores the interpolation level. Use this when you want cinematic-smooth animations without the render time of computing every frame at full fractal precision.
 
 #### Frame Representation
 
@@ -301,6 +308,118 @@ The computed precision is exposed as:
 - `ComputationParameters.precision` → `int` bits (property; uses `params.depth`, `params.width`, `params.height`, and `params.frm`)
 - `ComputationParameters.context` → ready-to-use `gmpy2.context` (property; same inputs as `.precision`)
 
+#### Interpolation features
+
+TransZoom 2.0 introduces two powerful interpolation modes that dramatically reduce computation time while preserving visual quality: **pixel interpolation** (spatial upscaling of single images) and **frame interpolation** (temporal smoothing of animations).
+
+##### Pixel interpolation (`--i-pixels`)
+
+**Purpose:** Upscale a single rendered fractal image to higher resolution without computing additional fractal pixels.
+
+**How it works:** After the fractal escape-time computation finishes, tranZoom applies deterministic bicubic interpolation to the output image. For each interpolated pixel, a weighted RGBA blend is computed from the surrounding 2×2 neighborhood using sub-pixel fractional coordinates. This produces smooth gradients and reduces visible pixelation, particularly effective for poster-quality prints or detailed zoom views.
+
+**Usage:**
+
+```sh
+poetry run tranz --palette electric image -s 1024 --i-pixels 2 mandel
+```
+
+This computes a 1024×1024 fractal (≈1.05M pixels), then upscales it to 3072×3072 (≈9.44M pixels) via bicubic interpolation. The fractal computation takes the same time as a normal 1024×1024 render; the interpolation pass adds only ≪1 second.
+
+**Parameters:**
+
+- **Flag:** `--i-pixels N` (valid range: 0–3)
+- **Effect:** For `N > 0`, the final image dimensions are `(width * (N+1), height * (N+1))`
+- **Examples:**
+  - `--i-pixels 0` → no interpolation (default)
+  - `--i-pixels 1` → 2× upscale (1024×1024 → 2048×2048)
+  - `--i-pixels 2` → 3× upscale (1024×1024 → 3072×3072)
+  - `--i-pixels 3` → 4× upscale (1024×1024 → 4096×4096)
+
+**Trade-offs:**
+
+- ✅ Much faster than computing a larger image from scratch (e.g., computing 4096×4096 directly would take ~16× longer than 1024×1024)
+- ✅ Produces genuinely smoother output than nearest-neighbor scaling; no stair-stepping on diagonal boundaries
+- ✅ File sizes scale proportionally to pixel count (3× dimensions = 9× file size)
+- ❌ Does not add new fractal detail — interpolation cannot invent structure not present in the computed image
+- ❌ Very deep zooms may still show interpolation artifacts if the base resolution was too coarse; prefer computing at higher base resolution for maximum quality
+
+**When to use:**
+
+- You want wall-sized prints (poster/canvas quality) from moderate computation time
+- The fractal detail is well-captured at the base resolution (no severe aliasing or under-sampling)
+- You prefer faster renders over absolute sharpness of fine details
+- You want very high resolution videos to upload, even if they will be down-scaled later
+
+**Metadata:** The interpolation level is stored in the PNG text chunk `tranZoom:render:i_pixels` (integer 0–3). You can inspect it with `tranz image read <file>`.
+
+##### Frame interpolation (`--i-frames`)
+
+**Purpose:** Increase the frame rate of zoom animations without computing additional fractal frames.
+
+**How it works:** tranZoom computes `N` real fractal frames (each a full escape-time iteration at the required precision), then inserts `M` interpolated frames between each consecutive pair. Interpolated frames are generated by blending RGB pixel values from surrounding real frames using either **linear interpolation** (two-point weighted average) or **quadratic interpolation** (three-point Lagrange curve for smoother motion). The final animation has `(N-1) * (M+1) + 1` total frames. The interpolation is much better than a naïve computation because it knows the zoom factor and pre-scales each source before doing the interpolation.
+
+**Usage:**
+
+```sh
+poetry run tranz zoom -s 512 auto " -0.74364" "0.131826" "0.0007380" "1.0" --fps 10 --i-frames 2 --anim gif
+```
+
+This computes 10 real fractal frames (at geometrically increasing zoom depths), then generates 2 interpolated frames between each pair, producing a 28-frame GIF at an effective 30 FPS (10 × (2+1)). The fractal computation cost is that of 10 frames; the interpolation adds negligible time (~0.1s per interpolated frame for typical sizes).
+
+**Parameters:**
+
+- **Flag:** `--i-frames M` (valid range: 0–7)
+- **Effect:** For `M > 0`, the effective FPS becomes `fps * (M+1)` and the total frame count becomes `(n_frames - 1) * (M+1) + 1`
+- **Examples:**
+  - `--i-frames 0` → no interpolation (default)
+  - `--i-frames 1` → 2× FPS (10 real frames → 19 total frames at 20 FPS)
+  - `--i-frames 2` → 3× FPS (10 real frames → 28 total frames at 30 FPS)
+  - `--i-frames 7` → 8× FPS (10 real frames → 73 total frames at 80 FPS)
+
+**Animation depth handling:** The iteration depth (`max_iter`) is computed per real frame using depth key frames (one per ≈2× zoom step) and log-space smoothing with a 5-tap FIR filter. Interpolated frames inherit metadata from their surrounding real frames but are not used for depth estimation. Color normalization (`ZoomColorNorm`) is built from marker frames (one per ≈8.5× zoom step) and applied to all frames (real + interpolated), eliminating per-frame color flickering.
+
+**Trade-offs:**
+
+- ✅ Dramatically reduces render time for high-FPS animations (e.g., 60 FPS quadratic-interpolated from 10 real frames = 6× speedup)
+- ✅ Produces genuinely smoother motion than simply playing fewer frames; quadratic mode adds natural acceleration
+- ✅ File sizes grow proportionally to total frame count; effective for sharing cinematic zoom videos
+- ❌ Does not add new fractal detail between frames — the zoom path is still determined by the real frame spacing
+- ❌ Very fast zoom rates (large magnification jumps per real frame) may show interpolation artifacts as blended pixels cross set boundaries; prefer more real frames or slower zoom rates for maximum smoothness
+
+**When to use:**
+
+- You want fluid, cinematic zoom animations (30–60 FPS) without the computation cost of rendering every frame from scratch
+- The zoom path is well-sampled by the real frames (no abrupt jumps or discontinuities)
+- You prefer faster renders over absolute temporal sharpness of rapid transitions
+- You need high FPS for internet uploads
+
+**Metadata:** The interpolation level is stored in animation metadata under `tranZoom:zoom:frame:i_frames` (integer 0–7). You can inspect it with `tranz image read <file.gif>`.
+
+##### Combining both interpolation modes
+
+Pixel and frame interpolation are independent and can be used together:
+
+```sh
+poetry run tranz zoom -s 512 --i-pixels 1 auto " -0.74364" "0.131826" "0.0007380" "1.0" --fps 10 --i-frames 2 --anim gif
+```
+
+This produces:
+
+- 10 real fractal frames computed at 512×512 resolution
+- Each real frame upscaled to 1024×1024 via pixel interpolation (`--i-pixels 1`)
+- 2 interpolated frames inserted between each pair via quadratic frame interpolation (`--i-frames 2`)
+- Final output: 28-frame GIF at 1024×1024 resolution, effective 30 FPS
+
+The computation cost is that of 10×512×512 fractal renders; pixel interpolation adds ~0.1s per real frame; frame interpolation adds ~0.1s per interpolated frame. Total time is dominated by the 10 fractal computations, not the interpolation passes.
+
+##### Implementation notes
+
+- **Pixel interpolation:** Uses `PIL.Image.resize()` with `Resampling.BICUBIC`; deterministic and reproducible across platforms
+- **Frame interpolation:** Custom implementation in `zoom.py`; `InterpolatedFrameStream()` yields `bytes` (PNG-encoded frames) from an iterable of `(curr, next)` frame pairs; quadratic mode uses `QuadraticInterpolatedFrame()` with Lagrange polynomial blending
+- **Color consistency:** Both modes respect the `ZoomColorNorm` applied to the base computation, so interpolated pixels/frames inherit the same color mapping as surrounding real data
+- **Metadata roundtrip:** All interpolation settings are persisted in PNG text chunks and can be read back with `tranz image read`; re-rendering from a saved interpolated image will use the same settings
+
 ### Inputs and outputs
 
 #### Inputs
@@ -334,16 +453,16 @@ Render the [full Mandelbrot set](#full--default-1) (default, 1024×1024):
 ```sh
 $ poetry run tranz --no-db --no-date image mandel
 
-1024 x 1024 Mandelbrot, 10^0.000 magnitude...
-Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
-Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , 867,929 px/s ]
+1024 × 1024 Mandelbrot, 10^0.000 magnitude, CYTHON OPTIMIZED...
+Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024 × 1024, AUTO]}
+Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , ? px/s ]
 Picked depth 1000, histogram {2: 38, 3: 136, 4: 94, ...: 174, 72: 2, 125: 2, 803: 2}, 128/576 set points
-Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:00:02 < 0:00:00 , 387,141 px/s ]
-Compute: Mandelbrot: DONE, with precision 140 bits, 30.150 MiB, in 3.875 s
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:00:01 < 0:00:00 , 655,226 px/s ]
+Compute: Mandelbrot: DONE, with precision 140 bits, 41.249 MiB, in 2.735 s
 
-Render: {[PNG, SAHARA, none]}
-Render: PNG: DONE, '0d4139e11c83f741bfc38ad7192d1c2a77decd85bb0fa512bd7ed6d291af0e02' in 1.212 s, 447.901 KiB
-Saved to 'mandel-0d4139e11c83f741bfc3.png', 447.901 KiB
+Render: {[PNG*1: SAHARA, none]}
+Render: PNG: DONE (1024 × 1024), '87b93489f56d4f8e90a75819a3671b726df4aa7c0a0849a6110fb03296a945fb' in 1.438 s
+Saved to 'mandel-87b93489f56d4f8e90a7.png' ('11b81512c0ba0e80'), 453.094 KiB
 ```
 
 As can be seen, the `Frame` is stored as rational numbers with arbitrary precision, `[(-3/4, 0) ± 5/2]`, so it is guaranteed to be exact (centered in $-0.75+0j$ and with width of $2.5$). It will pick a precision, in bits, which is the internal `float` representation (mantissa), and will pick the (max) number of iterations for the generation. The magnitude shown is `10^0.00` because it is the full Mandelbrot set (magnification 1). There will be a progress bar, counting the horizontal lines being produced. The generated image data will be hashed and then saved to a PNG on disk.
@@ -445,9 +564,10 @@ tranz [global flags] image [-w W] [-h H] [-s S] [--iter N] [--mark COORD] <mande
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `-w`/`--width` | Output image width in pixels (24–16384) | 1024 |
-| `-h`/`--height` | Output image height in pixels (24–16384) | 1024 |
-| `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales the other dimension proportionally to match the frame aspect ratio | None (use `-w`/`-h`) |
+| `-w`/`--width` | Output image width in pixels (24–16384); NOTE: if `--i-pixels` is given, effective width = `w × (i+1)` | 1024 |
+| `-h`/`--height` | Output image height in pixels (24–16384); NOTE: if `--i-pixels` is given, effective height = `h × (i+1)` | 1024 |
+| `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales the other dimension proportionally to match the frame aspect ratio; NOTE: if `--i-pixels` is given, effective size = `s × (i+1)` | None (use `-w`/`-h`) |
+| `--i-pixels` | Number of interpolated pixels to add between each computed pixel (0–3); upscales final image via bicubic interpolation; `0` = no interpolation (default), `1` = 2× size, `2` = 3× size, `3` = 4× size; see [Pixel interpolation](#pixel-interpolation---i-pixels) | `0` |
 | `-i`/`--iter` | Override max iterations (depth); `1000`–4294967295 | automatic adaptive search |
 | `--mark` | Draw a crosshair at this complex coordinate, formatted as `"(re, im)"` | None |
 | `--mark-color` | Color of the crosshair; one of `black`, `white`, `red`, `green`, `blue`, `yellow`, `cyan`, `magenta` | `red` |
@@ -463,9 +583,10 @@ tranz [global flags] zoom [-w W] [-h H] [-s S] [-f FRACTAL] [-n STEPS] [--julia-
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `-w`/`--width` | Output image width in pixels (24–16384) | 512 |
-| `-h`/`--height` | Output image height in pixels (24–16384) | 512 |
-| `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales proportionally | None (use `-w`/`-h`) |
+| `-w`/`--width` | Output image width in pixels (24–16384); NOTE: if `--i-pixels` is given, effective width = `w × (i+1)` | 512 |
+| `-h`/`--height` | Output image height in pixels (24–16384); NOTE: if `--i-pixels` is given, effective height = `h × (i+1)` | 512 |
+| `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales proportionally; NOTE: if `--i-pixels` is given, effective size = `s × (i+1)` | None (use `-w`/`-h`) |
+| `--i-pixels` | Number of interpolated pixels to add between each computed pixel (0–3); upscales final images via bicubic interpolation; see [Pixel interpolation](#pixel-interpolation---i-pixels) | `0` |
 | `-f`/`--fractal` | Fractal type: `mandelbrot` or `julia` | `mandelbrot` |
 | `--julia-re` | Real part of the Julia Set constant `c` | `'0.27334'` |
 | `--julia-im` | Imaginary part of the Julia Set constant `c` | `'0.00742'` |
@@ -708,8 +829,9 @@ Command-level options:
 | --- | --- | --- |
 | `--anim` | Output format: `gif` or `mp4` | `gif` |
 | `--duration` | Total animation duration in seconds (0.1–45000) | None (computed) |
-| `--frames` | Number of frames (3–100000) | None (computed) |
-| `--fps` | Frames per second (0.1–30) | None (computed) |
+| `--frames` | Number of (real, fractal-computed) frames (3–100000); NOTE: if `--i-frames` is given, total frames = `(frames - 1) × (i+1) + 1` | None (computed) |
+| `--fps` | Frames per second for real frames (0.1–30); NOTE: if `--i-frames` is given, effective FPS = `fps × (i+1)` | None (computed) |
+| `--i-frames` | Number of interpolated frames to add between each pair of real frames (0–7); increases effective FPS via temporal interpolation; see [Frame interpolation](#frame-interpolation---i-frames) | `0` |
 | `--loop` | Number of GIF loops; `0` = infinite (ignored for MP4) | `0` |
 | `--save-frames/--no-save-frames` | Save each intermediate PNG frame to disk | off |
 
@@ -774,16 +896,16 @@ Render the full [Mandelbrot set](https://en.wikipedia.org/wiki/Mandelbrot_set) w
 ```sh
 $ poetry run tranz --no-db --no-date image mandel
 
-1024 x 1024 Mandelbrot, 10^0.000 magnitude...
-Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO]}
-Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , 867,929 px/s ]
+1024 × 1024 Mandelbrot, 10^0.000 magnitude, CYTHON OPTIMIZED...
+Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024 × 1024, AUTO]}
+Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , ? px/s ]
 Picked depth 1000, histogram {2: 38, 3: 136, 4: 94, ...: 174, 72: 2, 125: 2, 803: 2}, 128/576 set points
-Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:00:02 < 0:00:00 , 387,141 px/s ]
-Compute: Mandelbrot: DONE, with precision 140 bits, 30.150 MiB, in 3.875 s
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:00:01 < 0:00:00 , 655,226 px/s ]
+Compute: Mandelbrot: DONE, with precision 140 bits, 41.249 MiB, in 2.735 s
 
-Render: {[PNG, SAHARA, none]}
-Render: PNG: DONE, '0d4139e11c83f741bfc38ad7192d1c2a77decd85bb0fa512bd7ed6d291af0e02' in 1.212 s, 447.901 KiB
-Saved to 'mandel-0d4139e11c83f741bfc3.png', 447.901 KiB
+Render: {[PNG*1: SAHARA, none]}
+Render: PNG: DONE (1024 × 1024), '87b93489f56d4f8e90a75819a3671b726df4aa7c0a0849a6110fb03296a945fb' in 1.438 s
+Saved to 'mandel-87b93489f56d4f8e90a7.png' ('11b81512c0ba0e80'), 453.094 KiB
 ```
 
 This is what tranZoom considers ***`10^0.00 magnitude`*** (magnification 1), and will measure other magnifications against this size.
@@ -797,16 +919,16 @@ You can also extract details from the set points (the traditionally black part o
 ```sh
 $ poetry run tranz --no-db --set imaginary --set-palette "lava" --palette "rgrayscale" --no-date image mandel
 
-1024 x 1024 Mandelbrot w/ SET 'imaginary', 10^0.000 magnitude...
-Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024, 1024, AUTO] : imaginary}
-Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , 542 px/s ]
+1024 × 1024 Mandelbrot w/ SET 'imaginary', 10^0.000 magnitude, CYTHON OPTIMIZED...
+Compute: {[MANDELBROT: (-3/4, 0) ± 5/2] : [1024 × 1024, AUTO] : imaginary}
+Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , 2,771 px/s ]
 Picked depth 1000, histogram {2: 38, 3: 136, 4: 94, ...: 174, 72: 2, 125: 2, 803: 2}, 128/576 set points
-Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:00:23 < 0:00:00 , 47,318 px/s ]
-Compute: Mandelbrot: DONE, with precision 140 bits, 61.112 MiB, in 24.277 s
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:00:09 < 0:00:00 , 98,941 px/s ]
+Compute: Mandelbrot: DONE, with precision 140 bits, 73.391 MiB, in 11.220 s
 
-Render: {[PNG, GRAYSCALE_REVERSE, LAVA]}
-Render: PNG: DONE, '618b366fa07d297957d24ab2d6412ee03d72f7dab8dfef6f94110f6c6c3c5828' in 1.460 s, 446.449 KiB
-Saved to 'mandel-618b366fa07d297957d2.png', 446.449 KiB
+Render: {[PNG*1: GRAYSCALE_REVERSE, LAVA]}
+Render: PNG: DONE (1024 × 1024), '198460dc5b9a27b31757ab216dcc426e483bfc7dc9717b3c5ae0c333745ff6bc' in 1.827 s
+Saved to 'mandel-198460dc5b9a27b31757.png' ('2627fc592cdceaaf'), 449.550 KiB
 ```
 
 Notice how it takes much more time. The interior coloring requires much computation and the whole set (like this image is an example of) has a lot of interior to do, so the whole thing takes almost ten times as long to finish.
@@ -820,16 +942,16 @@ Render a [well-known zoom ("Seahorse")](https://en.wikipedia.org/wiki/File:Mande
 ```sh
 $ poetry run tranz --no-db --no-date image mandel " -0.74303" "0.126433" "0.01611"
 
-1024 x 1024 Mandelbrot, 10^2.191 magnitude...
-Compute: {[MANDELBROT: (-74303/100000, 126433/1000000) ± 1611/100000] : [1024, 1024, AUTO]}
+1024 × 1024 Mandelbrot, 10^2.191 magnitude, CYTHON OPTIMIZED...
+Compute: {[MANDELBROT: (-74303/100000, 126433/1000000) ± 1611/100000] : [1024 × 1024, AUTO]}
 Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , ? px/s ]
 Picked depth 24049, histogram {24: 3, 25: 25, 26: 29, ...: 375, 27749: 1, 31174: 1, 31451: 1}, 141/576 set points
-Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:01:36 < 0:00:00 , 13,736 px/s ]
-Compute: Mandelbrot: DONE, with precision 140 bits, 83.736 MiB, in 1.658 min
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:00:43 < 0:00:00 , 17,604 px/s ]
+Compute: Mandelbrot: DONE, with precision 140 bits, 98.659 MiB, in 45.314 s
 
-Render: {[PNG, SAHARA, none]}
-Render: PNG: DONE, 'f81d8670d12d7ed3468c40d85eb321cc85737345addf4d1df444a895650297bf' in 1.624 s, 1.023 MiB
-Saved to 'mandel-f81d8670d12d7ed3468c.png', 1.023 MiB
+Render: {[PNG*1: SAHARA, none]}
+Render: PNG: DONE (1024 × 1024), 'd075738cb65de0c55165f4fc3a87f8d0a963e99d502b1effed7b885ffd5d3d37' in 1.949 s
+Saved to 'mandel-d075738cb65de0c55165.png' ('301392ea86d36736'), 1.028 MiB
 ```
 
 This one also is time consuming, and definitely demands more time than even much deeper zooms. It has the features that make an image demand computation: a lot of set points (half the image is black, i.e., set points) and a much larger iteration depth (than the previous examples).
@@ -843,16 +965,16 @@ Render a ["Seahorse Tail"](https://en.wikipedia.org/wiki/File:Mandel_zoom_05_tai
 ```sh
 $ poetry run tranz --no-db --set imaginary --no-date image mandel " -0.7436499" "0.13188204" "0.00073801"
 
-1024 x 1024 Mandelbrot w/ SET 'imaginary', 10^3.530 magnitude...
-Compute: {[MANDELBROT: (-7436499/10000000, 3297051/25000000) ± 73801/100000000] : [1024, 1024, AUTO] : imaginary}
+1024 × 1024 Mandelbrot w/ SET 'imaginary', 10^3.530 magnitude, CYTHON OPTIMIZED...
+Compute: {[MANDELBROT: (-7436499/10000000, 3297051/25000000) ± 73801/100000000] : [1024 × 1024, AUTO] : imaginary}
 Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , ? px/s ]
 Picked depth 1000, histogram {37: 15, 38: 28, 39: 30, ...: 500, 438: 1, 509: 1, 765: 1}, 0/576 set points
-Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:00:09 < 0:00:00 , 105,565 px/s ]
-Compute: Mandelbrot: DONE, with precision 140 bits, 75.760 MiB, in 10.341 s
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1,048,576/1,048,576  [ 0:00:04 < 0:00:00 , 217,314 px/s ]
+Compute: Mandelbrot: DONE, with precision 140 bits, 90.780 MiB, in 5.996 s
 
-Render: {[PNG, SAHARA, GRAYSCALE_REVERSE]}
-Render: PNG: DONE, 'e4fad99036a41cc87ad0997ee49677f54259d37178899086e62f16d5879de1d9' in 1.814 s, 1.019 MiB
-Saved to 'mandel-e4fad99036a41cc87ad0.png', 1.019 MiB
+Render: {[PNG*1: SAHARA, GRAYSCALE_REVERSE]}
+Render: PNG: DONE (1024 × 1024), '525aaf4c4a58391f1386889a54d54dfb91f099050af5783f97322e1f33e8b275' in 2.025 s
+Saved to 'mandel-525aaf4c4a58391f1386.png' ('011ee4eb0d024f7c'), 1.024 MiB
 ```
 
 This image is relatively fast to generate (despite the zoom level, it has very little interior regions), so we use it in the unit and integration tests to make sure we are operating consistently. If the hash of this image changes, remember to change it in `src/tranzoom/cli/base.py`.
@@ -866,41 +988,43 @@ This image is relatively fast to generate (despite the zoom level, it has very l
 You can easily make animations!
 
 ```sh
-$ poetry run tranz --no-db --no-date zoom -s 220 --mark "(-5578776469/7500000000,8244620127/62500000000)" auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 10 --duration 4
+$ poetry run tranz --no-db --no-date zoom -s 220 --mark "(-5578776469/7500000000,8244620127/62500000000)" auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 5 --duration 4 --i-frames 1
 
-220 x 220 'sahara' 'Mandelbrot' 10^1.0000 magnitude ZOOM, 4.000 s long, at 10.00 FPS, with 40 frames (2 markers, 5.00%, and 4 depth frames, 10.00%),
-106.0818%/step...
-ZOOM: <GIF: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, AUTO]} -> {[PNG, SAHARA, none] + [MARK: red/1 @
-(-5578776469/7500000000, 8244620127/62500000000)]} / (mag:1, n:40, d:4, fps:10, l:0)> ... [MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ±
-73801/1000000000]
+220 × 220 'GIF': 'sahara' 'Mandelbrot' 10^1.0000 magnitude ZOOM, 4.000 s long, at 5.00*2 FPS,
+ with 20|39 frames (2 markers, 10.00%, and 4 depth frames, 20.00%), 12.8838%/step, CYTHON OPTIMIZED...
+ZOOM: <{[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] :
+ [220 × 220, AUTO]} -> <GIF*2: {[PNG*1: SAHARA, none] +
+ [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}> /
+ (mag:1, n:20|39, d:4, fps:(5)*2, l:0)> ... [MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/1000000000]
 
 Making 4 depth computations...
-Depth 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4/4  [ 0:00:01 < 0:00:00 , 4 fr/s ]
-4 depth computations done in 1.126 s
+Depth 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4/4  [ 0:00:01 < 0:00:00 , 3 fr/s ]
+4 depth computations done in 1.498 s
 
-Iter:   0%|                                              | 0/41431 [00:00<?, ?it/s]
-Marker Frame 1 / 40 - depth 1001
-220 x 220 Mandelbrot, 10^3.530 magnitude...
-Compute: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220, 220, 1001]}
-Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 48,400/48,400  [ 0:00:00 < 0:00:00 , 116,211 px/s ]
-Compute: Mandelbrot: DONE, with precision 140 bits, 7.025 MiB, in 655.291 ms
+Iter:   0%|                                              | 0/4136 [00:00<?, ?it/s]
+Marker Frame 1 / 20 - depth 1001
+220 × 220 Mandelbrot, 10^3.530 magnitude, CYTHON OPTIMIZED...
+Compute: {[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220 × 220, 1001]}
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 48,400/48,400  [ 0:00:00 < 0:00:00 , 204,200 px/s ]
+Compute: Mandelbrot: DONE, with precision 140 bits, 7.768 MiB, in 561.465 ms
 
-Iter:   2%|██                                            | 200/8270 [00:00<00:30, 260.69it/s]
-Frame 2 / 40 - depth 1002
+Iter:   5%|██                                            | 200/4136 [00:00<00:13, 289.18it/s]
+Frame 2 / 20 - depth 1004
+220 × 220 Mandelbrot, 10^3.583 magnitude, CYTHON OPTIMIZED...
 [...builds frames 2–40...]
 
-Iter: 100%|█████████████████████████████████████████████| 8270/8270 [00:40<00:00, 204.32it/s]
+Iter: 100%|█████████████████████████████████████████████| 4136/4136 [00:14<00:00, 276.55it/s]
 ZOOM: Color norm: built from 2 marker frames
 
-Render: {[PNG, SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}
-Render 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40/40  [ 0:00:04 < 0:00:00 , 9 fr/s ]
+Render: <GIF*2: {[PNG*1: SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}>
+Render 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 20/20  [ 0:00:03 < 0:00:00 , 5 fr/s ]
 Render: DONE
 
-Success: GIF 'e631ffec80dd902e375e376306db5fc235f2afa7628ad227dd12e05ee3dd28ab' in 1.409 s (depth) + 33.911 s (frames) + 6.087 s (render)
-Saved GIF to 'mandel-e631ffec80dd902e375e.gif', 1.757 MiB
+Success: GIF 'd9204b9c2aec64555ca7ce48226301684737cce8b673febe86629c2e8a36ae19' in 1.498 s (depth) + 14.956 s (frames) + 4.353 s (render)
+Saved GIF to 'mandel-d9204b9c2aec64555ca7.gif', 1.724 MiB
 ```
 
-To make that an MP4, just add `--anim mp4` to the command. (The unfortunate mix of progress bar styles is inevitable for now in animations, but only the global progress will be "old-style" in the whole CLI.)
+Notice that the final animation has twice the number of frames (so twice the FPS, *frames per second*) because of the `--i-frames 1` option (note the `fps:(5)*2` in the command output). To make that an MP4, just add `--anim mp4` to the command. (The unfortunate mix of progress bar styles is inevitable for now in animations, but only the global progress will be "old-style" in the whole CLI.)
 
 #### Julia Suzana (×1)
 
@@ -911,40 +1035,41 @@ Render a "Julia Suzana" at `-s/--size` 1024, one of the possible [Julia Set](htt
 ```sh
 $ poetry run tranz --no-db --no-date --palette electric image -s 1024 julia
 
-838 x 1024 Julia, 10^0.000 magnitude...
-Compute: {[JULIA: (0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)] : [838, 1024, AUTO]}
-Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:01 < 0:00:00 , 461 px/s ]
+838 × 1024 Julia, 10^0.000 magnitude, CYTHON OPTIMIZED...
+Compute: {[JULIA: (0, 0) ± (9/5, 11/5) @ (13667/50000, 371/50000)] : [838 × 1024, AUTO]}
+Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , 1,086 px/s ]
 Picked depth 1000, histogram {2: 12, 3: 44, 4: 64, ...: 176, 364: 2, 462: 2, 1323: 2}, 274/576 set points
-Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 858,112/858,112  [ 0:00:30 < 0:00:00 , 27,505 px/s ]
-Compute: Julia: DONE, with precision 140 bits, 23.736 MiB, in 33.330 s
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 858,112/858,112  [ 0:00:12 < 0:00:00 , 67,380 px/s ]
+Compute: Julia: DONE, with precision 140 bits, 29.808 MiB, in 14.337 s
 
-Render: {[PNG, ELECTRIC, none]}
-Render: PNG: DONE, 'b97d669ec0da38ab23929cf73a3fc4a46d79f4e8ab4ef0faca8480fd551685a6' in 730.539 ms, 511.996 KiB
-Saved to 'julia-b97d669ec0da38ab2392.png', 511.996 KiB
+Render: {[PNG*1: ELECTRIC, none]}
+Render: PNG: DONE (838 × 1024), '4f30969bce49058a5fc71a52ac57b8a4793ac3555c9dcca3ccbb650ac8fe56f9' in 944.834 ms
+Saved to 'julia-4f30969bce49058a5fc7.png' ('3555102599080cc3'), 517.643 KiB
 ```
 
 #### Julia Suzana Wave (×427)
 
 ![Julia Suzana](tests/data/images/demo-julia-suzana-wave.png)
 
-Render a "Julia Suzana Wave" at `-s/--size` 1024:
+Render a "Julia Suzana Wave" at `-s/--size` 512 but increasing the resolution by 1 pixel for every computed pixel, option `--i-pixels 1`:
 
 ```sh
-$ poetry run tranz --no-db --palette electric --set max --set-palette sunset --no-date image -s 512 julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
+$ poetry run tranz --no-db --palette electric --set max --set-palette sunset --no-date image -s 512 --i-pixels 1 julia "13667/50000" "371/50000" " -313420497/429687500" "0.6567" "0.00544" "0.004"
 
-512 x 377 Julia w/ SET 'max', 10^2.630 magnitude...
-Compute: {[JULIA: (-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)] : [512, 377, AUTO] : max}
-Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:01 < 0:00:00 , 290 px/s ]
+512 × 377 Julia w/ SET 'max', 10^2.630 magnitude, CYTHON OPTIMIZED...
+Compute: {[JULIA: (-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)] : [512 × 377, AUTO] : max}
+Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , 799 px/s ]
 Picked depth 1000, histogram {43: 3, 44: 31, 45: 30, ...: 245, 425: 1, 431: 1, 1175: 1}, 264/576 set points
-Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 193,024/193,024  [ 0:00:07 < 0:00:00 , 26,532 px/s ]
-Compute: Julia: DONE, with precision 140 bits, 31.086 MiB, in 11.617 s
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 193,024/193,024  [ 0:00:02 < 0:00:00 , 64,311 px/s ]
+Compute: Julia: DONE, with precision 140 bits, 33.769 MiB, in 4.501 s
 
-Render: {[PNG, ELECTRIC, SUNSET]}
-Render: PNG: DONE, 'ea6ecb1b230c24d2af80535874744686bb7fc1f68fad8adea9e176be843829a4' in 302.506 ms, 159.979 KiB
-Saved to 'julia-ea6ecb1b230c24d2af80.png', 159.979 KiB
+Render: {[PNG*2: ELECTRIC, SUNSET]}
+Interpolating rendered frame 512 × 377 -> 1024 × 754 (*2)
+Render: PNG: DONE (1024 × 754), '95a6acd116fb1ca043f089f093fb0a8c139ffb490a6a24be068fa474c8636871' in 435.756 ms
+Saved to 'julia-95a6acd116fb1ca043f0.png' ('2f682ec344a556b1'), 554.419 KiB
 ```
 
-If the hash of this image changes, remember to change it in `src/tranzoom/cli/base.py`.
+Notice the `512 × 377 -> 1024 × 754 (*2)` showing the resolution increase. If the hash of this image changes, remember to change it in `src/tranzoom/cli/base.py`.
 
 #### Powers of 1000
 

@@ -19,7 +19,7 @@ from transcrypto.utils import base as tbase
 
 import tranzoom
 from tranzoom.cli import base
-from tranzoom.core import image
+from tranzoom.core import image, pixels
 
 
 @pytest.fixture
@@ -84,14 +84,12 @@ def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
     )
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
-    w: int
-    h: int
-    hsh: str
-    info: tbase.JSONDict
-    w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
-    assert w == h == 1024, f'Expected image dimensions 1024x1024, got {w} x {h}'
-    assert hsh == base.SEAHORSE_TAIL_HASH
-    assert info == {
+    info: pixels.ObjInfo
+    info, _ = pixels.GetBasicData(output_image.read_bytes())
+    assert info.width == info.height == 1024, f'Expected 1024x1024, got {info.width}x{info.height}'
+    assert info.data_hash == base.SEAHORSE_TAIL_HASH
+    del info.meta[image.META_APP_VERSION_KEY]  # remove the version key from comparison
+    assert info.meta == {
       'tranZoom:frame:fractal': 'mandelbrot',
       'tranZoom:frame:center_re': '-7436499/10000000',
       'tranZoom:frame:center_im': '3297051/25000000',
@@ -167,7 +165,7 @@ def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:render:mark_re': '0',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': '9ccb42f3ee157bcd52a191e532cd531b7d4fd191ad2883b232ba979c13e96a09',
+      'tranZoom:render:hash': 'a1747d5f60f817fab6bcd70db4f772813f361d9e0c75f9e700e36c0a757906d9',
     }
 
 
@@ -204,9 +202,11 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
         '0.00073801',
         '1',
         '--fps',
-        '10',
+        '5',
         '--duration',
         '4',
+        '--i-frames',
+        '1',
       ]
     )
     assert r.returncode == 0, f'tranz zoom auto failed:\n{r.stderr}'
@@ -219,14 +219,12 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
     )
     assert output_image.exists(), f'Expected output gif not found: {output_image}'
     # check the image data
-    w: int
-    h: int
-    hsh: str
-    info: tbase.JSONDict
-    w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
-    assert w == h == 220, f'Expected image dimensions 220 x 220, got {w} x {h}'
-    assert hsh == base.SEAHORSE_ANIMATED_HASH
-    assert info == {
+    info: pixels.ObjInfo
+    info, _ = pixels.GetBasicData(output_image.read_bytes())
+    assert info.width == info.height == 220, f'Expected 220x220, got {info.width}x{info.height}'
+    assert info.data_hash == base.SEAHORSE_ANIMATED_HASH
+    del info.meta[image.META_APP_VERSION_KEY]  # remove the version key from comparison
+    assert info.meta == {
       'tranZoom:frame:fractal': 'mandelbrot',
       'tranZoom:frame:center_re': '-5578776469/7500000000',
       'tranZoom:frame:center_im': '8244620127/62500000000',
@@ -283,26 +281,26 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:render:mark_re': '-5578776469/7500000000',
       'tranZoom:render:mark_im': '8244620127/62500000000',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': 'b5467479fe084f34e58ccc671216eacb5da83dfb2b1200c0f811f923590598ad',
+      'tranZoom:render:hash': '7d39836df7b681893fb77a59a3837d86e3897dbd5a70a233100d35d53aaff49e',
       'tranZoom:zoom:type': 'gif',
       'tranZoom:zoom:frame:initial:width_re': '73801/100000000',
       'tranZoom:zoom:frame:initial:height_im': '73801/100000000',
       'tranZoom:zoom:frame:magnitude': '1',
-      'tranZoom:zoom:frame:frames': '40',
-      'tranZoom:zoom:frame:i_frames': '0',
-      'tranZoom:zoom:frame:all_frames': '40',
+      'tranZoom:zoom:frame:frames': '20',
+      'tranZoom:zoom:frame:i_frames': '1',
+      'tranZoom:zoom:frame:all_frames': '39',
       'tranZoom:zoom:frame:seconds': '4',
       'tranZoom:zoom:frame:loop': '0',
-      'tranZoom:zoom:frame:fps': '10',
+      'tranZoom:zoom:frame:fps': '5',
       'tranZoom:zoom:frame:ifps': '10',
-      'tranZoom:zoom:frame:steps': '39',
-      'tranZoom:zoom:frame:magnitude_per_step': '1/39',
-      'tranZoom:zoom:frame:magnification_per_step': '4777501148913803/4503599627370496',
-      'tranZoom:zoom:marker:index': '[0, 39]',
+      'tranZoom:zoom:frame:steps': '19',
+      'tranZoom:zoom:frame:magnitude_per_step': '1/19',
+      'tranZoom:zoom:frame:magnification_per_step': '2541916954176431/2251799813685248',
+      'tranZoom:zoom:marker:index': '[0, 19]',
       'tranZoom:zoom:depth:frames': (
-        '[(0, 1000, 1001), (13, 1000, 1019), (26, 1000, 1034), (39, 1159, 1105)]'
+        '[(0, 1000, 1001), (6, 1000, 1019), (13, 1000, 1034), (19, 1159, 1105)]'
       ),
-      'tranZoom:zoom:hash': '48fce30e32850f69ec2fba3e16154878fa66d3660e504c0b31301741f7b445b5',
+      'tranZoom:zoom:hash': '8ae54d2302317afa4cb4c6cb971272ee8dea2e3f53040104397517bfc5444b93',
     }
 
 
@@ -337,6 +335,8 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
         'image',
         '-s',
         '512',
+        '--i-pixels',
+        '1',
         'julia',
         '13667/50000',
         '371/50000',
@@ -354,15 +354,13 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
     output_image: pathlib.Path = pathlib.Path(tmp_dir) / f'julia-{base.SUZANA_WAVE_HASH[:20]}.png'
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
-    w: int
-    h: int
-    hsh: str
-    info: tbase.JSONDict
-    w, h, hsh, info = image.GetBasicDataFromImage(output_image.read_bytes())
-    assert w == 512, f'Expected image dimensions 512 x 377, got {w} x {h}'
-    assert h == 377, f'Expected image dimensions 512 x 377, got {w} x {h}'
-    assert hsh == base.SUZANA_WAVE_HASH
-    assert info == {
+    info: pixels.ObjInfo
+    info, _ = pixels.GetBasicData(output_image.read_bytes())
+    assert info.width == 1024, f'Expected 1024 x 754, got {info.width} x {info.height}'
+    assert info.height == 754, f'Expected 1024 x 754, got {info.width} x {info.height}'
+    assert info.data_hash == base.SUZANA_WAVE_HASH
+    del info.meta[image.META_APP_VERSION_KEY]  # remove the version key from comparison
+    assert info.meta == {
       'tranZoom:frame:fractal': 'julia',
       'tranZoom:frame:julia_re': '13667/50000',
       'tranZoom:frame:julia_im': '371/50000',
@@ -433,10 +431,10 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
       'tranZoom:render:overlay': 'none',
       'tranZoom:render:palette': 'electric',
       'tranZoom:render:set_palette': 'sunset',
-      'tranZoom:render:i_pixels': '0',
+      'tranZoom:render:i_pixels': '1',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_re': '0',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': '1235957a8370bdc2c68b45dfa46233646b9cf8a30ad49dea7cb08f15a9ed7439',
+      'tranZoom:render:hash': 'f56145e999d631c6f6ef4dc52b0b502766047aca4b3f3f99156bac5b63a91df6',
     }

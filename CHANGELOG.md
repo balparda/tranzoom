@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
   - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
-  - [1.10.0 - 2026-06-13](#1100---2026-06-13)
+  - [2.0.0 - 2026-06-19](#200---2026-06-19)
   - [1.9.0 - 2026-06-11](#190---2026-06-11)
   - [1.8.0 - 2026-06-06](#180---2026-06-06)
   - [1.7.0 - 2026-06-04](#170---2026-06-04)
@@ -41,16 +41,31 @@ This project follows a pragmatic versioning approach:
 - Fixed
   - Placeholder for future fixes.
 
-## 1.10.0 - 2026-06-13
+## 2.0.0 - 2026-06-19
 
 - Added
-  - TBD
+  - **Image pixel interpolation** (`--i-pixels` flag, `pixels.py`, `frame.py`): new global flag `--i-pixels` adds bilinear interpolation between pixels to upscale final images; produces smoother, higher-resolution output from the same fractal computation; valid range 0–3 (0 = no interpolation, 3 = 4× resolution); effectively multiplies final image dimensions by `(i_pixels + 1)` so a 1024×1024 render with `--i-pixels 2` produces a 3072×3072 PNG; implemented via deterministic numpy-based bilinear interpolation using `PIL.Image.Resampling.BILINEAR`; metadata key `tranZoom:render:i_pixels` stores the interpolation level in PNG text chunks.
+  - **Animation frame interpolation** (`--i-frames` flag, `pixels.py`, `zoom.py`): new `tranz zoom auto` flag `--i-frames` generates interpolated frames between each real fractal-computed frame; produces smoother, higher-FPS animations from fewer fractal computations; valid range 0–7 (0 = no interpolation, 7 = 8× FPS); effectively multiplies final FPS by `(i_frames + 1)` so `--fps 10 --i-frames 2` produces 30 effective FPS; supports both linear interpolation (default for first/last frame pairs) and **quadratic interpolation** (uses curr, next, next+1 frames for smoother acceleration); `InterpolatedFrameStream()` yields real + interpolated frames in animation order; metadata key `tranZoom:zoom:frame:i_frames` stores the interpolation level.
+  - **New pixels.py module** (`pixels.py`): extracted all pixel rendering logic from `image.py` into dedicated 1440-line module; handles color palette application, histogram equalization, PNG/GIF/MP4 encoding, mark/overlay drawing, and pixel interpolation; new classes `RenderParameters` (single-image rendering), `RenderAnimationParameters` (animation rendering), `Pixels` (raw RGBA pixel array), `RenderedZoomFrame` (rendered animation frame with metadata); separates fractal computation concerns (escape-time iteration, arbitrary precision) from rendering concerns (color mapping, file I/O, interpolation).
+  - **Quadratic frame interpolation** (`zoom.py`): new `QuadraticInterpolatedFrame()` function uses three-point quadratic interpolation for smoother frame blending than linear interpolation; takes `(curr, next, next+1)` frames to compute intermediate frame with acceleration/deceleration curve; blends RGB pixel values via quadratic Lagrange polynomial; automatically falls back to linear interpolation for last frame pair or when `use_quadratic=False`; controlled by `DEFAULT_USE_QUADRATIC` constant (default True).
+  - **Interpolation validation** (`frame.py`, `pixels.py`): new `ValidateIPixels()` and `ValidateIFrames()` functions enforce interpolation parameter bounds; `MAX_INTERPOLATION_PIXELS = 3` caps pixel interpolation to prevent excessive memory use; `MAX_INTERPOLATION_FRAMES = 7` caps frame interpolation for animation stability; both raise `Error` on out-of-range values with clear diagnostic message.
+  - **Bilinear pixel blending** (`pixels.py`): new `_BilinearInterpolate()` helper performs weighted RGBA blending for sub-pixel coordinates; uses 2×2 pixel neighborhood with horizontal/vertical fractional weights; clamps output to valid 0–255 range; used by pixel interpolation to produce smooth upscaled images without aliasing artifacts.
 
 - Changed
-  - TBD
+  - **Major refactoring: image.py → pixels.py split** (`image.py`, `pixels.py`): image.py reduced by ~1746 lines (moved to pixels.py); `RenderParameters` and `RenderAnimationParameters` classes migrated entirely to pixels.py; all PNG/GIF/MP4 encoding moved to pixels.py; palette application, color normalization, and histogram equalization moved to pixels.py; image.py now focused exclusively on fractal computation (`Image`, `ComputationParameters`, `FractalStats`, `Histogram`); pixels.py handles all post-computation rendering concerns.
+  - **Render parameters refactored** (`pixels.py`, `base.py`, `imagecommand.py`, `zoomcommand.py`): `RenderParameters` now includes `i_pixels` field (default 0); `RenderAnimationParameters` now includes `i_frames` field (default 0); `FromRender()` factory method creates animation parameters from base render parameters; all CLI commands updated to pass `i_pixels`/`i_frames` from user flags; metadata serialization/deserialization updated to preserve interpolation settings.
+  - **Animation frame stream pipeline** (`zoom.py`): `InterpolatedFrameStream()` replaces old frame-by-frame rendering loop; yields `bytes` (PNG-encoded frames) in animation order from an iterable of `(curr, next)` frame pairs; automatically inserts `i_frames` interpolated frames between each real frame pair; tracks mutable hashes for all frames (real + interpolated) for metadata; supports quadratic or linear interpolation mode via `use_quadratic` parameter.
+  - **Image size calculation** (`frame.py`): `ComputationParameters.Size()` method added with optional `i_pixels` parameter; returns final disk size as `(width * (i_pixels + 1), height * (i_pixels + 1))`; replaces direct `.size` property access when interpolation is active; used in DB size estimation and CLI output.
+  - **CLI help text updated** (`base.py`): `-w/--width`, `-h/--height`, and `-s/--size` flags now include note: `NOTE: if --i-pixels is given, the effective width/height/size will be w/h/s*(i+1), so keep that in mind`; `--fps` flag includes note: `NOTE: if --i-frames is given, the effective FPS will be fps*(i+1), so keep that in mind`; clarifies relationship between computation parameters and final output dimensions/framerate.
+  - **Zoom metadata expanded** (`image.py`, `base.py`): `tranZoom:zoom:frame:i_frames` key stores frame interpolation level in animation metadata; zoom hash computation includes `i_frames` in `RenderAnimationParameters` serialization so different interpolation levels produce different hashes; `tranz image read` displays interpolation settings when reading GIF/MP4 files.
+  - **Test image hashes updated** (`base.py`): all test image hashes regenerated after pixel/frame interpolation changes; `SEAHORSE_TAIL_HASH`, `SUZANA_WAVE_HASH`, `SEAHORSE_ANIMATED_HASH`, `T_GIF_*_HASH` constants updated; `TEST_IMAGE_DATA_HASHES` dict updated with new frame counts and data hashes for test animations (seahorse: 45→31 frames, seeds300: 20→10 frames); reflects new default animation parameters and frame interpolation.
+  - **Integration test coverage** (`tests_integration/test_cython_equivalence.py`): expanded by ~670 lines to cover pixel/frame interpolation; validates interpolated images/animations produce consistent output across Python/Hybrid/Cython optimization modes; tests bilinear pixel blending, linear frame interpolation, and quadratic frame interpolation; ensures interpolation does not introduce computation artifacts.
 
 - Fixed
-  - TBD
+  - **Zoom color banding** (`zoom.py`, `pixels.py`): fixed per-frame color flickering in zoom animations by applying `ZoomColorNorm` to interpolated frames (not just real frames); interpolated frames now use the same color normalization histogram anchors as their surrounding real frames; eliminates visual discontinuities when `--i-frames > 0`.
+  - **Interpolation edge cases** (`pixels.py`, `zoom.py`): fixed last-frame interpolation handling; quadratic interpolation correctly falls back to linear for final frame pair (no next+1 available); bilinear pixel interpolation clamps output to valid RGBA range to prevent overflow/underflow artifacts on extreme color boundaries.
+  - **Memory efficiency** (`zoom.py`, `frdb.py`): removed unnecessary `prev`/`next` frame retention during interpolation; `InterpolatedFrameStream()` uses single-frame lookahead instead of buffering three frames; reduces peak memory usage during animation rendering; particularly important for high-resolution animations with `--i-pixels > 0`.
+  - **Metadata consistency** (`image.py`, `pixels.py`): ensured `i_pixels` and `i_frames` are correctly persisted in all PNG text chunks; `tranz image read` now displays interpolation metadata for both still images (`i_pixels`) and animations (`i_frames`); metadata roundtrip (render → save → read → re-render) preserves interpolation settings exactly.
 
 ## 1.9.0 - 2026-06-11
 
