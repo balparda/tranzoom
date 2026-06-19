@@ -79,6 +79,19 @@ class AnimationEncoding(enum.Enum):
   MP4 = 'mp4'
 
 
+class Resampling(enum.IntEnum):
+  """Resampling filter enum."""
+
+  # implemented in numpy locally
+  BILINEAR = 100  # there is a PILImage.Resampling.BILINEAR, but we NEED THIS TO BE DIFFERENT
+  # implemented in PIL
+  BICUBIC = PILImage.Resampling.BICUBIC
+  LANCZOS = PILImage.Resampling.LANCZOS
+
+
+DEFAULT_RESAMPLING: Resampling = Resampling.BICUBIC
+
+
 # GIF has is_animated, but we have to check for it
 DetectAnimGIF: abc.Callable[[PILImage.Image], bool] = lambda img: (  # pyright: ignore[reportUnknownLambdaType]
   hasattr(img, 'is_animated') and img.is_animated  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
@@ -720,6 +733,19 @@ class Pixels(frame.SerializingFractalObject):
     """
     return hashes.Hash256(self.clip.tobytes()).hex()
 
+  def UpdateHash(self) -> str:
+    """Update the image hash in the metadata to reflect the current pixel data.
+
+    Returns:
+      str: The updated hash of the pixel data.
+
+    """
+    hsh: str = self.data_hash
+    if META_IMAGE_HASH_KEY in self.meta:
+      # if we have a populated image hash, update it to reflect the resized pixel data
+      self.meta[META_IMAGE_HASH_KEY] = hsh
+    return hsh
+
   @property
   def json(self) -> tbase.JSONDict:
     """Get a JSON-serializable dictionary representation of the Pixels.
@@ -869,19 +895,19 @@ class Pixels(frame.SerializingFractalObject):
     bin_hash: str = hashes.Hash256(img_data).hex()
     # open as image, with PIL
     with PILImage.open(io.BytesIO(img_data)) as img:
-      px: Pixels
+      pix: Pixels
       tp: ImageEncoding
       hsh: str
-      px, tp, hsh = Pixels.FromPIL(img, allow_conversion=allow_conversion)
+      pix, tp, hsh = Pixels.FromPIL(img, allow_conversion=allow_conversion)
       return (
-        px,
+        pix,
         ObjInfo(
           img=tp,
-          width=px.width,
-          height=px.height,
+          width=pix.width,
+          height=pix.height,
           bin_hash=bin_hash,
           data_hash=hsh,
-          meta=px.meta.copy(),
+          meta=pix.meta.copy(),
         ),
       )
 
@@ -961,24 +987,58 @@ class Pixels(frame.SerializingFractalObject):
     width: int,
     height: int,
     *,
-    resample: PILImage.Resampling = PILImage.Resampling.BICUBIC,
+    resample: Resampling = DEFAULT_RESAMPLING,
   ) -> Pixels:
     """Resize Pixels to the specified dimensions by resampling. Keep metadata intact.
+
+    Optionally, uses a deterministic numpy-based bilinear interpolation (Resampling.BILINEAR).
 
     Args:
       width (int): The target width in pixels.
       height (int): The target height in pixels.
-      resample (PILImage.Resampling): The resampling filter to use for resizing; default is BICUBIC.
+      resample (Resampling): The resampling filter to use for resizing; Resampling.BILINEAR is a
+          local implementation; other options use PIL's built-in resampling methods; the
+          default is DEFAULT_RESAMPLING
 
     Returns:
       Pixels: The resized image data as a Pixels object.
 
+    Raises:
+      Error: on error
+
     """
-    with self.obj as img:
-      return Pixels(
-        data=np.asarray(img.resize((width, height), resample=resample), dtype=np.float32),
-        meta=self.meta.copy(),
-      )
+    resized: NDArray[np.float32]
+    # choose sampling method to generate the new pixels
+    if resample in {Resampling.LANCZOS, Resampling.BICUBIC}:
+      # for these resampling methods, we can use PIL directly
+      with self.obj as img:
+        resized = np.asarray(img.resize((width, height), resample=resample), dtype=np.float32)
+    elif resample == Resampling.BILINEAR:
+      # we manually implement bilinear interpolation with this option
+      old_h: int
+      old_w: int
+      old_h, old_w = self.data.shape[0], self.data.shape[1]
+      # calculate scaling factors
+      scale_x: float = (old_w - 1) / (width - 1) if width > 1 else 0.0
+      scale_y: float = (old_h - 1) / (height - 1) if height > 1 else 0.0
+      # create output array
+      resized = np.zeros((height, width, 3), dtype=np.float32)
+      # for each output pixel, compute the corresponding source coordinates and interpolate
+      for y in range(height):
+        for x in range(width):
+          # source coordinates in the original image
+          src_x: float = x * scale_x
+          src_y: float = y * scale_y
+          # bilinear interpolation
+          resized[y, x, 0], resized[y, x, 1], resized[y, x, 2] = _BilinearInterpolate(
+            self.data, src_x, src_y, old_w, old_h
+          )
+    else:
+      raise Error(f'Unsupported resampling method: {resample}')
+    # copy metadata and update the image hash to reflect the resized pixel data
+    pix: Pixels = Pixels(data=resized, meta=self.meta.copy())
+    pix.UpdateHash()
+    return pix
 
   def DrawCardinalInfoOverlay(self) -> Pixels:
     """Draw an overlay on the (512x512) image with target info for moving the zoom frame.
@@ -1040,7 +1100,9 @@ class Pixels(frame.SerializingFractalObject):
           (x - _LABEL_OFFSET, y - _LABEL_OFFSET), direction, fill=Color.GREEN.value, font=font
         )
       # done, save remembering to add metadata that this image has an overlay
-      return dataclasses.replace(Pixels.FromPIL(img)[0], meta=self.meta.copy())
+      pix: Pixels = dataclasses.replace(Pixels.FromPIL(img)[0], meta=self.meta.copy())
+      pix.UpdateHash()
+      return pix
 
   def DrawThirdsInfoOverlay(self) -> Pixels:
     """Draw an overlay on an image of any size, with target info for moving the zoom frame.
@@ -1087,7 +1149,9 @@ class Pixels(frame.SerializingFractalObject):
             anchor='mm',  # center it exactly
           )
       # done, save remembering to add metadata that this image has an overlay
-      return dataclasses.replace(Pixels.FromPIL(img)[0], meta=self.meta.copy())
+      pix: Pixels = dataclasses.replace(Pixels.FromPIL(img)[0], meta=self.meta.copy())
+      pix.UpdateHash()
+      return pix
 
   def DrawCrossOverlay(
     self,
@@ -1134,7 +1198,9 @@ class Pixels(frame.SerializingFractalObject):
     x1: int = min(w, x + half_lw + 1)
     out[y0:y1, :, :] = color
     out[:, x0:x1, :] = color
-    return Pixels(data=out, meta=self.meta.copy())
+    pix: Pixels = Pixels(data=out, meta=self.meta.copy())
+    pix.UpdateHash()
+    return pix
 
 
 def GetBasicDataFromMP4(img_bytes: bytes) -> ObjInfo:
@@ -1239,10 +1305,10 @@ def GetBasicData(img_bytes: bytes) -> tuple[ObjInfo, Pixels | None]:
     return (GetBasicDataFromMP4(img_bytes), None)
   # non-MP4: try to load as an image and extract metadata
   try:
-    px: Pixels
+    pix: Pixels
     info: ObjInfo
-    px, info = Pixels.FromBytes(img_bytes, allow_conversion=True)
-    return (info, px)
+    pix, info = Pixels.FromBytes(img_bytes, allow_conversion=True)
+    return (info, pix)
   except Error as err:
     logging.info(err)
   # Pixels failed: the only reason we'll accept for now, is that the image is an animated GIF
@@ -1263,13 +1329,20 @@ def GetBasicData(img_bytes: bytes) -> tuple[ObjInfo, Pixels | None]:
       )
     except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError, KeyError) as err:
       logging.error(f'GIF "comment" metadata is not valid, ignoring: {err}')
+    data_hash: str
+    if META_IMAGE_HASH_KEY in meta:
+      # this is the happy path: the GIF has a valid hash in its metadata, so we can trust it
+      data_hash = meta[META_IMAGE_HASH_KEY]
+    else:
+      data_hash = hashes.Hash256(img.convert('RGB').tobytes()).hex()
+      logging.error(f'GIF does not have a tranZoom image hash; DO NOT TRUST this hash: {data_hash}')
     return (
       ObjInfo(
         anim=img_format,
         width=img.width,
         height=img.height,
         bin_hash=hashes.Hash256(img_bytes).hex(),
-        data_hash=hashes.Hash256(img.convert('RGB').tobytes()).hex(),
+        data_hash=data_hash,
         meta=meta,
       ),
       None,
@@ -1303,6 +1376,45 @@ def ValidateIFrames(i_frames: int) -> None:
   """
   if not (0 <= i_frames <= MAX_INTERPOLATION_FRAMES):
     raise Error(f'Interpolation must be between 0 and {MAX_INTERPOLATION_FRAMES}, got {i_frames=}')
+
+
+def _BilinearInterpolate(
+  data: NDArray[np.float32],
+  src_x: float,
+  src_y: float,
+  old_w: int,
+  old_h: int,
+) -> tuple[float, float, float]:
+  """Perform bilinear interpolation at the given source coordinates.
+
+  Args:
+    data (NDArray[np.float32]): The source image data array.
+    src_x (float): Source x coordinate (float).
+    src_y (float): Source y coordinate (float).
+    old_w (int): Width of source image.
+    old_h (int): Height of source image.
+
+  Returns:
+    tuple[float, float, float]: Interpolated RGB values.
+
+  """
+  # get the four surrounding pixels
+  x0: int
+  y0: int
+  x0, y0 = int(np.floor(src_x)), int(np.floor(src_y))
+  x1: int = min(x0 + 1, old_w - 1)
+  y1: int = min(y0 + 1, old_h - 1)
+  # get fractional parts for interpolation
+  fx: float = src_x - x0
+  fy: float = src_y - y0
+  # bilinear interpolation for each channel
+  return tuple(
+    (
+      (data[y0, x0, c] * (1.0 - fx) + data[y0, x1, c] * fx) * (1.0 - fy)
+      + (data[y1, x0, c] * (1.0 - fx) + data[y1, x1, c] * fx) * fy
+    )
+    for c in range(3)
+  )
 
 
 def _LoadAndCheckMetadataKeys(img_m: abc.Iterable[tuple[Any, Any]]) -> dict[str, str]:

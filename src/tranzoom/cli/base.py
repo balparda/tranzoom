@@ -61,12 +61,12 @@ _MPQ_ZERO: gmpy2.mpq = gmpy2.mpq('0')
 SEAHORSE_TAIL_HASH: str = '525aaf4c4a58391f1386889a54d54dfb91f099050af5783f97322e1f33e8b275'
 SUZANA_WAVE_HASH: str = '95a6acd116fb1ca043f089f093fb0a8c139ffb490a6a24be068fa474c8636871'
 # GIF - these may change for core computation, or if the animation frame machinery changes
-SEAHORSE_ANIMATED_HASH: str = '6dba92cbdeab5286313e1b7aaa908030a8bf0317daa1fe556537fbd21822bde0'
-T_GIF_SEAHORSE_HASH: str = '400c5fa733c53be45876cc0a438f4c6bd0ea1a08352c179db2814f95c63f4e65'
-T_GIF_SEEDS_300_HASH: str = '6582790cba40597dd11dfd21aac2f0f3b910ae407e1b710da543a9a182221d84'
-T_GIF_JULIA_SUZANA_HASH: str = '383b28e4152981c8d5e3055b82178a23ac6270a042f857f1618c36c713354414'
-T_GIF_JULIA_DRAGON_HASH: str = 'f79360651f0a9bd251cab6bec524ae7f41042d64543e571a306506a7c607fcf0'
-T_GIF_JULIA_BLOB_HASH: str = 'be6afe3e3be136ad07c1839d1045167c6eb616379e73fbb81608d1d81890260b'
+SEAHORSE_ANIMATED_HASH: str = 'd9204b9c2aec64555ca7ce48226301684737cce8b673febe86629c2e8a36ae19'
+T_GIF_SEAHORSE_HASH: str = 'ae35fa4c7834bbfec989548e6bceddd09b821bf883c007b475ff306d7fa286ee'
+T_GIF_SEEDS_300_HASH: str = '1b67e38d95dd10cc5600371719c63654bf3f70c40644f3532787f5a8a915a84f'
+T_GIF_JULIA_SUZANA_HASH: str = 'cb1253e362e25c25da208473db24172b97bd5aad048cf986589d744536060531'
+T_GIF_JULIA_DRAGON_HASH: str = '8e761fe4b35f9132d04bb76a2ec5504308bd7322bb735404c6c4f10d47736f5d'
+T_GIF_JULIA_BLOB_HASH: str = 'ff42442b7928169fa68c4b814b1f43e38c9e273d143ec5a53f3b016708bc137d'
 # SHA of all the frame's data - like above: computation or animation frame machinery changes
 TEST_IMAGE_DATA_HASHES: dict[str, tuple[int, str]] = {
   # name: (number of frames, hash of all the frames)
@@ -1546,7 +1546,6 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           disable=False,  # for debugging rendering, set to True to disable the progress bar
         )
       # start try..finally for the progress bar
-      all_hash: dict[int, str] = {}
       try:
 
         def _TwoFrameRenderStream() -> abc.Iterator[
@@ -1603,8 +1602,6 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             zoom_norm=zoom_norm.ForFrame(i)[-1],
             silent=True,  # we will have a progress bar
           )
-          # save hash
-          all_hash[i] = data_hash
           # save per-frame-normalized image to disk if requested (for individual frame inspection)
           if save_frames:
             # saving frames is costly (but not too much), we do it here b/c the user asked for it
@@ -1627,9 +1624,11 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
         tmp_path: pathlib.Path = (
           pathlib.Path(tmpdir) / f'temp_video.{zoom_params.render.anim.value.lower()}'
         )
+        all_hash: list[str] = []
         frame_bytes: abc.Iterable[bytes] = zoom.InterpolatedFrameStream(  # generator! memory!
           # we must keep all of this as generators to save rendering memory
           _TwoFrameRenderStream(),  # this will yield (curr, next) tuples of rendered frames
+          all_hash,  # this will be filled with the hashes of the rendered frames
           i_frames=zoom_params.render.i_frames,
           zoom_per_step=float(zoom_params.scalar_magnification_per_step),
           use_quadratic=zoom.DEFAULT_USE_QUADRATIC,
@@ -1658,11 +1657,8 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
       finally:
         # we are done, close the progress bar, free memory
         p_bar.close()
-      # we can finally compute the hash
-      video_hash = hashes.Hash256(
-        # stable if the image data and order does not change
-        ('|'.join(all_hash[i] for i in range(zoom_params.n_frames))).encode('ascii')
-      ).hex()
+      # we can finally compute the hash, which is stable if the image data and order does not change
+      video_hash = hashes.Hash256(('|'.join(all_hash)).encode('ascii')).hex()
       # create metadata
       meta: dict[str, str] = image.MakeImageMeta(  # use destination frame (final) as reference
         _SmartImage(zoom_params.n_frames - 1), zoom_params.render, video_hash

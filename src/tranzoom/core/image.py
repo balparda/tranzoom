@@ -872,14 +872,14 @@ class Image:
       # (height, width, 3); assign the RGB tuple to the last axis
       np_pixels[*divmod(i, self._params.width)] = rgb
     # done; create Pixels object and compute hash
-    px: pixels.Pixels = pixels.Pixels(data=np_pixels, meta={})
-    hsh: str = px.data_hash
-    px.meta.update(MakeImageMeta(self, render, hsh))
+    pix: pixels.Pixels = pixels.Pixels(data=np_pixels, meta={})
+    hsh: str = pix.data_hash
+    pix.meta.update(MakeImageMeta(self, render, hsh))
     logging.debug(
       f'Image rendered {self._params.width} x {self._params.height} '
       f'{self._params.frm.fractal.value}, hash {hsh!r}'
     )
-    return px
+    return pix
 
 
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)

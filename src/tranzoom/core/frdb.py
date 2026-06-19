@@ -1287,7 +1287,7 @@ class FractalDatabase:
         else:
           raise Error(f'Unsupported overlay type: {render.overlay!r}')
       # add to DB; remember render_data could be None if use_db==False
-      img_hash = img_data.data_hash
+      img_hash = img_data.UpdateHash()
       final_path: pathlib.Path = full_path(img_hash)
       render_data = self.AddRenderToDB(params, render, ck, img_hash, str(final_path))
     # log

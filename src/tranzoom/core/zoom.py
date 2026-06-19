@@ -973,6 +973,7 @@ def QuadraticInterpolatedFrame(  # noqa: PLR0914
 
 def InterpolatedFrameStream(
   pairs: abc.Iterable[tuple[RenderedZoomFrame, RenderedZoomFrame | None]],
+  mutable_hashes: list[str],
   *,
   i_frames: int,
   zoom_per_step: float,
@@ -991,6 +992,7 @@ def InterpolatedFrameStream(
   Args:
     pairs (RenderedZoomFrame, RenderedZoomFrame | None]]): An iterable of pairs of frames
         (curr, next).
+    mutable_hashes (list[str]): A mutable empty list to store mutable hashes for each frame.
     i_frames (int): The number of interpolated frames to generate between each pair of real frames.
     zoom_per_step (float): The zoom factor per step between frames.
     use_quadratic (bool): Whether to use quadratic interpolation (True) or linear
@@ -1007,6 +1009,8 @@ def InterpolatedFrameStream(
   pixels.ValidateIFrames(i_frames)
   if not math.isfinite(zoom_per_step) or zoom_per_step <= 0.0:
     raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
+  if mutable_hashes:
+    raise Error('mutable_hashes must be an empty list')
   # create an iterator over the pairs, get the first one
   it: abc.Iterator[tuple[RenderedZoomFrame, RenderedZoomFrame | None]] = iter(pairs)
   curr_frame: RenderedZoomFrame
@@ -1025,6 +1029,7 @@ def InterpolatedFrameStream(
     except StopIteration:
       next_pending = None
     # always yield the real current frame
+    mutable_hashes.append(curr_frame.data_hash)
     yield curr_frame.data.PNG(copy_previous=False)[0]
     # no next real frame means curr is the final real frame
     if next_frame is None:
@@ -1033,21 +1038,24 @@ def InterpolatedFrameStream(
     next2: RenderedZoomFrame | None = None if next_pending is None else next_pending[1]
     for jj in range(i_frames):
       frac: float = float(jj + 1) / float(i_frames + 1)
-      if next2 is None or not use_quadratic:
-        yield LinearInterpolatedFrame(
+      pix: pixels.Pixels = (
+        LinearInterpolatedFrame(
           curr_frame,
           next_frame,
           zoom_per_step=zoom_per_step,
           frac=frac,
-        ).PNG(copy_previous=False)[0]
-      else:
-        yield QuadraticInterpolatedFrame(
+        )
+        if next2 is None or not use_quadratic
+        else QuadraticInterpolatedFrame(
           curr_frame,
           next_frame,
           next2,
           zoom_per_step=zoom_per_step,
           frac=frac,
-        ).PNG(copy_previous=False)[0]
+        )
+      )
+      mutable_hashes.append(pix.data_hash)
+      yield pix.PNG(copy_previous=False)[0]
     # if we have a next triple, advance the frames; otherwise, we are done
     if next_pending is None:
       return  # done
