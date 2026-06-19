@@ -554,9 +554,9 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
 │                                                            of pixels, etc                        │
 │                                                                                      │
 │ --resample            TEXT                                 Interpolation resampling method;      │
-│                                                            default is "bicubic"; the "bilinear"  │
-│                                                            method even if not default or the     │
-│                                                            best has guaranteed stable results ;  │
+│                                                            default is "bicubic"; "bilinear" has  │
+│                                                            the most stable results; "lanczos" is │
+│                                                            the most accurate but slowest;        │
 │                                                            available values: 'bicubic',          │
 │                                                            'bilinear', 'lanczos'                 │
 │                                                                                │
@@ -846,9 +846,9 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
 │                                                     pixels, etc                                  │
 │                                                                                      │
 │ --resample            TEXT                          Interpolation resampling method; default is  │
-│                                                     "bicubic"; the "bilinear" method even if not │
-│                                                     default or the best has guaranteed stable    │
-│                                                     results ; available values: 'bicubic',       │
+│                                                     "bicubic"; "bilinear" has the most stable    │
+│                                                     results; "lanczos" is the most accurate but  │
+│                                                     slowest; available values: 'bicubic',        │
 │                                                     'bilinear', 'lanczos'                        │
 │                                                                                │
 │ --max-steps   -n      INTEGER RANGE           Maximum number of zoom steps to run; 0 means │
