@@ -316,20 +316,23 @@ TransZoom 2.0 introduces two powerful interpolation modes that dramatically redu
 
 **Purpose:** Upscale a single rendered fractal image to higher resolution without computing additional fractal pixels.
 
-**How it works:** After the fractal escape-time computation finishes, tranZoom applies deterministic bicubic interpolation to the output image. For each interpolated pixel, a weighted RGBA blend is computed from the surrounding 2×2 neighborhood using sub-pixel fractional coordinates. This produces smooth gradients and reduces visible pixelation, particularly effective for poster-quality prints or detailed zoom views.
+**How it works:** After the fractal escape-time computation finishes, tranZoom applies deterministic interpolation to the output image using a selectable resampling method (default: bicubic). The interpolation algorithm blends RGBA pixel values from the neighborhood around each sub-pixel coordinate. This produces smooth gradients and reduces visible pixelation, particularly effective for poster-quality prints or detailed zoom views. The resampling method can be customized via `--resample` for different quality/speed trade-offs.
 
 **Usage:**
 
 ```sh
 poetry run tranz --palette electric image -s 1024 --i-pixels 2 mandel
+poetry run tranz --palette electric image -s 1024 --i-pixels 2 --resample bilinear mandel  # more stable output
 ```
 
-This computes a 1024×1024 fractal (≈1.05M pixels), then upscales it to 3072×3072 (≈9.44M pixels) via bicubic interpolation. The fractal computation takes the same time as a normal 1024×1024 render; the interpolation pass adds only ≪1 second.
+The first example computes a 1024×1024 fractal (≈1.05M pixels), then upscales it to 3072×3072 (≈9.44M pixels) via bicubic interpolation. The second uses bilinear resampling, which is natively implemented and more guaranteed to be stable.
 
 **Parameters:**
 
 - **Flag:** `--i-pixels N` (valid range: 0–3)
 - **Effect:** For `N > 0`, the final image dimensions are `(width * (N+1), height * (N+1))`
+- **Flag:** `--resample METHOD` (resampling algorithm: bilinear, bicubic, lanczos, etc.; default: bilinear)
+- **Effect:** Selects the interpolation algorithm used for pixel upscaling; bilinear is fastest and most stable, bicubic/lanczos offer smoother output
 - **Examples:**
   - `--i-pixels 0` → no interpolation (default)
   - `--i-pixels 1` → 2× upscale (1024×1024 → 2048×2048)
@@ -567,7 +570,8 @@ tranz [global flags] image [-w W] [-h H] [-s S] [--iter N] [--mark COORD] <mande
 | `-w`/`--width` | Output image width in pixels (24–16384); NOTE: if `--i-pixels` is given, effective width = `w × (i+1)` | 1024 |
 | `-h`/`--height` | Output image height in pixels (24–16384); NOTE: if `--i-pixels` is given, effective height = `h × (i+1)` | 1024 |
 | `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales the other dimension proportionally to match the frame aspect ratio; NOTE: if `--i-pixels` is given, effective size = `s × (i+1)` | None (use `-w`/`-h`) |
-| `--i-pixels` | Number of interpolated pixels to add between each computed pixel (0–3); upscales final image via bicubic interpolation; `0` = no interpolation (default), `1` = 2× size, `2` = 3× size, `3` = 4× size; see [Pixel interpolation](#pixel-interpolation---i-pixels) | `0` |
+| `--i-pixels` | Number of interpolated pixels to add between each computed pixel (0–3); upscales final image via interpolation; `0` = no interpolation (default), `1` = 2× size, `2` = 3× size, `3` = 4× size; see [Pixel interpolation](#pixel-interpolation---i-pixels) | `0` |
+| `--resample` | Interpolation resampling method for pixel upscaling; available values: `bilinear`, `bicubic`, `lanczos`, and other PIL `Resampling` methods; bilinear is fastest and most stable | `bicubic` |
 | `-i`/`--iter` | Override max iterations (depth); `1000`–4294967295 | automatic adaptive search |
 | `--mark` | Draw a crosshair at this complex coordinate, formatted as `"(re, im)"` | None |
 | `--mark-color` | Color of the crosshair; one of `black`, `white`, `red`, `green`, `blue`, `yellow`, `cyan`, `magenta` | `red` |

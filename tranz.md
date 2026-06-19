@@ -553,6 +553,13 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
 │                                                            interpolated pixel between every pair │
 │                                                            of pixels, etc                        │
 │                                                                                      │
+│ --resample            TEXT                                 Interpolation resampling method;      │
+│                                                            default is "bicubic"; the "bilinear"  │
+│                                                            method even if not default or the     │
+│                                                            best has guaranteed stable results ;  │
+│                                                            available values: 'bicubic',          │
+│                                                            'bilinear', 'lanczos'                 │
+│                                                                                │
 │ --iter        -i      INTEGER RANGE [1001<=x<=2147483647]  Maximum iterations (depth) to compute │
 │                                                            before determining escape; 1001 ≤     │
 │                                                            iter ≤ 2147483647; default is None    │
@@ -838,6 +845,12 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
 │                                                     interpolated pixel between every pair of     │
 │                                                     pixels, etc                                  │
 │                                                                                      │
+│ --resample            TEXT                          Interpolation resampling method; default is  │
+│                                                     "bicubic"; the "bilinear" method even if not │
+│                                                     default or the best has guaranteed stable    │
+│                                                     results ; available values: 'bicubic',       │
+│                                                     'bilinear', 'lanczos'                        │
+│                                                                                │
 │ --max-steps   -n      INTEGER RANGE           Maximum number of zoom steps to run; 0 means │
 │                                                     run until manually stopped (Ctrl+C); default │
 │                                                     is 0 (unlimited, run forever)                │
