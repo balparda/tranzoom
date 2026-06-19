@@ -23,6 +23,7 @@ from numpy._typing._array_like import NDArray
 from transcrypto.utils import base as tbase
 
 from tranzoom import __app__ as _app
+from tranzoom import __version__
 from tranzoom.core import frame, palette, pixels
 
 # metadata keys for PNG tEXt chunks; used to store the frame parameters and other info in the PNG;
@@ -30,6 +31,7 @@ from tranzoom.core import frame, palette, pixels
 # actual image/mathematical data;
 # keys use a "tranZoom:" (_app) namespace to avoid collisions with other metadata
 # all are converted to str for storage in PNG metadata, but the original types are indicated below
+META_APP_VERSION_KEY: str = f'{_app}:version'  # str, ex "2.0.1"
 META_FRACTAL_KEY: str = f'{_app}:frame:fractal'  # str, ex "mandelbrot", one of frame.Fractal
 META_TOP_RE_KEY: str = f'{_app}:frame:top_re'  # gmpy2.mpq -> converts to str as quotients
 META_TOP_IM_KEY: str = f'{_app}:frame:top_im'  # gmpy2.mpq
@@ -960,6 +962,7 @@ def MakeImageMeta(img: Image, render: pixels.RenderParameters, data_hash: str) -
   sz: tuple[gmpy2.mpq, gmpy2.mpq] = frm.size
   # first create a dict with all the ones that are always present, then add the optional ones
   img_meta: dict[str, str] = {
+    META_APP_VERSION_KEY: __version__,
     # image parameters
     META_IMAGE_ANIMATION_KEY: 'none',  # this is a static image for now, not an animation
     META_COMPUTATION_WIDTH_KEY: str(img.params.size[0]),

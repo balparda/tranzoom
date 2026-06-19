@@ -19,7 +19,7 @@ from transcrypto.utils import base as tbase
 
 import tranzoom
 from tranzoom.cli import base
-from tranzoom.core import pixels
+from tranzoom.core import image, pixels
 
 
 @pytest.fixture
@@ -88,6 +88,7 @@ def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
     info, _ = pixels.GetBasicData(output_image.read_bytes())
     assert info.width == info.height == 1024, f'Expected 1024x1024, got {info.width}x{info.height}'
     assert info.data_hash == base.SEAHORSE_TAIL_HASH
+    del info.meta[image.META_APP_VERSION_KEY]  # remove the version key from comparison
     assert info.meta == {
       'tranZoom:frame:fractal': 'mandelbrot',
       'tranZoom:frame:center_re': '-7436499/10000000',
@@ -222,6 +223,7 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
     info, _ = pixels.GetBasicData(output_image.read_bytes())
     assert info.width == info.height == 220, f'Expected 220x220, got {info.width}x{info.height}'
     assert info.data_hash == base.SEAHORSE_ANIMATED_HASH
+    del info.meta[image.META_APP_VERSION_KEY]  # remove the version key from comparison
     assert info.meta == {
       'tranZoom:frame:fractal': 'mandelbrot',
       'tranZoom:frame:center_re': '-5578776469/7500000000',
@@ -357,6 +359,7 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
     assert info.width == 1024, f'Expected 1024 x 754, got {info.width} x {info.height}'
     assert info.height == 754, f'Expected 1024 x 754, got {info.width} x {info.height}'
     assert info.data_hash == base.SUZANA_WAVE_HASH
+    del info.meta[image.META_APP_VERSION_KEY]  # remove the version key from comparison
     assert info.meta == {
       'tranZoom:frame:fractal': 'julia',
       'tranZoom:frame:julia_re': '13667/50000',

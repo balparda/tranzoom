@@ -19,7 +19,7 @@ from transcrypto.core import hashes
 from transcrypto.utils import base as tbase
 
 from tranzoom.cli import base
-from tranzoom.core import pixels
+from tranzoom.core import image, pixels
 
 
 @pytest.fixture
@@ -127,6 +127,7 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
     assert (info.width, info.height) == (159, 117), f'Got invalid dim {info.width} x {info.height}'
     assert info.data_hash == base.T_GIF_SEAHORSE_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'seahorse')
+    del info.meta[image.META_APP_VERSION_KEY]  # remove the version key from comparison
     assert info.meta == {
       'tranZoom:computation:color_set': 'imaginary',
       'tranZoom:computation:depth': '1001',
@@ -324,6 +325,7 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
     assert (info.width, info.height) == (124, 104), f'Got invalid dim {info.width} x {info.height}'
     assert info.data_hash == base.T_GIF_SEEDS_300_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'seeds300')
+    del info.meta[image.META_APP_VERSION_KEY]  # remove the version key from comparison
     assert info.meta == {
       'tranZoom:computation:color_set': 'none',
       'tranZoom:computation:depth': '9817',
@@ -625,6 +627,7 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
     assert (info.width, info.height) == (88, 118), f'Got invalid dim {info.width} x {info.height}'
     assert info.data_hash == base.T_GIF_JULIA_SUZANA_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'suzana')
+    del info.meta[image.META_APP_VERSION_KEY]  # remove the version key from comparison
     assert info.meta == {
       'tranZoom:computation:color_set': 'angle',
       'tranZoom:computation:depth': '1001',
@@ -800,6 +803,7 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
     assert (info.width, info.height) == (104, 134), f'Got invalid dim {info.width} x {info.height}'
     assert info.data_hash == base.T_GIF_JULIA_DRAGON_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'dragon')
+    del info.meta[image.META_APP_VERSION_KEY]  # remove the version key from comparison
     assert info.meta == {
       'tranZoom:computation:color_set': 'min',
       'tranZoom:computation:depth': '1001',
@@ -973,6 +977,7 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
     assert (info.width, info.height) == (142, 110), f'Got invalid dim {info.width} x {info.height}'
     assert info.data_hash == base.T_GIF_JULIA_BLOB_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'blob')
+    del info.meta[image.META_APP_VERSION_KEY]  # remove the version key from comparison
     assert info.meta == {
       'tranZoom:computation:color_set': 'max',
       'tranZoom:computation:depth': '1001',
