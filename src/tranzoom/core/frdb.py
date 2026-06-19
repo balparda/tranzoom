@@ -1265,7 +1265,7 @@ class FractalDatabase:
           f'{final_width} \u00d7 {final_height} '
           f'(*{render.i_pixels + 1})'
         )
-        img_data = img_data.Resize(final_width, final_height)
+        img_data = img_data.Resize(final_width, final_height, resample=render.resample)
       # draw crosshair mark if specified in render parameters
       if render.mark_color is not None:
         mark_pixel: tuple[int, int]

@@ -41,13 +41,13 @@ from tranzoom.core import frame, pixels, zoom
         '"height":512,"set_points":null,"width":512},"loop":0,"mag":"40/3","n_frames":17,'
         '"render":{"anim":"gif","i_frames":0,"render":{"escaped_pal":"sunset","i_pixels":1,'
         '"mark_color":null,"mark_im":"0","mark_re":"0","mark_width":1,"overlay":null,'
-        '"set_pal":"rgrayscale","tp":"png"}}}'
+        '"resample":3,"set_pal":"rgrayscale","tp":"png"}}}'
       ),
-      'b83f2dfefc65ae813aae7a6bf32bf76583142eefafcf35e894277c9a3d68f287',  # DO NOT "JUST FIX"
+      'd2bc1be0f00094f71250a637fd1d57113ba674f21eee100264fd69afe48a1fe9',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
       (
         '<{[MANDELBROT: (0, 0) ± 2] : [512 × 512, 9999]} -> '  # noqa: RUF001
-        '<GIF*1: {[PNG*2: SUNSET, GRAYSCALE_REVERSE]}> / '
+        '<GIF*1: {[PNG*2/Bicubic: SUNSET, GRAYSCALE_REVERSE]}> / '
         '(mag:40/3, n:17|17, d:2, fps:(17/2)*1, l:0)>'
       ),
       id='ZoomParameters-1',
@@ -66,9 +66,10 @@ from tranzoom.core import frame, pixels, zoom
         '"height":1024,"set_points":"imaginary","width":1024},"loop":0,"mag":"3/7",'
         '"n_frames":1000,"render":{"anim":"mp4","i_frames":1,"render":'
         '{"escaped_pal":"electric","i_pixels":0,"mark_color":"red","mark_im":"9/2",'
-        '"mark_re":"-11/17","mark_width":2,"overlay":"grid","set_pal":null,"tp":"png"}}}'
+        '"mark_re":"-11/17","mark_width":2,"overlay":"grid","resample":1,'
+        '"set_pal":null,"tp":"png"}}}'
       ),
-      'fff17a04368fe6a2430d0ad79d61cfee57b2a6a74f78bfef400f7a09b81b6ccc',  # DO NOT "JUST FIX"
+      '6441d20dc06c806d80a36882ed35354c8ae64f2a883f3372b7116c7a3c933f7f',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
       (
         '<{[JULIA: (0, 0) ± 2 @ (1, 1)] : [1024 × 1024, 6666] : imaginary} -> '  # noqa: RUF001
@@ -91,13 +92,13 @@ from tranzoom.core import frame, pixels, zoom
         '"height":2048,"set_points":"max","width":2048},"loop":2,"mag":"750","n_frames":100,'
         '"render":{"anim":"gif","i_frames":2,"render":{"escaped_pal":"grayscale","i_pixels":3,'
         '"mark_color":"yellow","mark_im":"-7/11","mark_re":"71/4","mark_width":3,"overlay":null,'
-        '"set_pal":"sunset","tp":"png"}}}'
+        '"resample":100,"set_pal":"sunset","tp":"png"}}}'
       ),
-      '70129081c883c6776dd560592f47e4ea8c6106f7447485d0276ef52b9eb400ed',  # DO NOT "JUST FIX"
+      '0b1aa165b88109ce7a85e3564f4cf2332367e9b2636a9f81df3aa95feab87bcc',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
       (
         '<{[JULIA: (-159/713, 64/133) ± (364/713, 366/133) @ (3/2, -11/19)] : '
-        '[2048 × 2048, 8888] : max} -> <GIF*3: {[PNG*4: GRAYSCALE, SUNSET] + '  # noqa: RUF001
+        '[2048 × 2048, 8888] : max} -> <GIF*3: {[PNG*4/Bilinear: GRAYSCALE, SUNSET] + '  # noqa: RUF001
         '[MARK: yellow/3 @ (71/4, -7/11)]}> / (mag:750, n:100|298, d:20, fps:(5)*3, l:2)>'
       ),
       id='ZoomParameters-3',

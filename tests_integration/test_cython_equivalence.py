@@ -98,6 +98,8 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
         '53',
         '--i-pixels',
         '2',
+        '--resample',
+        'bilinear',
         'auto',
         ' -0.7436499',
         '0.13188204',
@@ -185,8 +187,9 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
       'tranZoom:image:set:nu:min': '0.49376627802848816',
       'tranZoom:image:stats:imag_hi': '0.05734383622578064069611499703175854039165102',
       'tranZoom:image:stats:imag_lo': '0.05734383622578064069611499703175854039165102',
-      'tranZoom:render:hash': 'e5ed9b7875faed4f26e63f27117eb8ba8f88d58f0f6189d3b0dc55e5c895f584',
+      'tranZoom:render:hash': '47ed64f6232f9203d367251c599190ad7d668d144c11bb4f9420ec777a222ed9',
       'tranZoom:render:i_pixels': '2',
+      'tranZoom:render:resample': 'bilinear',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_re': '0',
@@ -212,7 +215,7 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
       'tranZoom:zoom:frame:magnitude': '131/43',
       'tranZoom:zoom:frame:seconds': '317/10',
       'tranZoom:zoom:frame:steps': '30',
-      'tranZoom:zoom:hash': 'f9eb196b73a9aa2706f48eb5b5d1c08283ddecd06483c34200aefb745d76af6e',
+      'tranZoom:zoom:hash': '3d079241ec8521eb9795ca0969b4bba269d61cdea876c59179fce1b33a528e19',
       'tranZoom:zoom:marker:index': '[0, 10, 20, 30]',
       'tranZoom:zoom:type': 'gif',
     }
@@ -322,6 +325,9 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
     output_image: pathlib.Path = (
       pathlib.Path(tmp_dir) / f'mandel-{base.T_GIF_SEEDS_300_HASH[:20]}.gif'
     )
+    for f in sorted(pathlib.Path(tmp_dir).glob('**/*')):
+      if f.is_file():
+        print(f'Found file: {str(f)!r}')  # noqa: T201
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     info: pixels.ObjInfo
@@ -625,6 +631,9 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
     output_image: pathlib.Path = (
       pathlib.Path(tmp_dir) / f'julia-{base.T_GIF_JULIA_SUZANA_HASH[:20]}.gif'
     )
+    for f in sorted(pathlib.Path(tmp_dir).glob('**/*')):
+      if f.is_file():
+        print(f'Found file: {str(f)!r}')  # noqa: T201
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     info: pixels.ObjInfo
@@ -802,6 +811,9 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
     output_image: pathlib.Path = (
       pathlib.Path(tmp_dir) / f'julia-{base.T_GIF_JULIA_DRAGON_HASH[:20]}.gif'
     )
+    for f in sorted(pathlib.Path(tmp_dir).glob('**/*')):
+      if f.is_file():
+        print(f'Found file: {str(f)!r}')  # noqa: T201
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     info: pixels.ObjInfo
@@ -977,6 +989,9 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
     output_image: pathlib.Path = (
       pathlib.Path(tmp_dir) / f'julia-{base.T_GIF_JULIA_BLOB_HASH[:20]}.gif'
     )
+    for f in sorted(pathlib.Path(tmp_dir).glob('**/*')):
+      if f.is_file():
+        print(f'Found file: {str(f)!r}')  # noqa: T201
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
     info: pixels.ObjInfo

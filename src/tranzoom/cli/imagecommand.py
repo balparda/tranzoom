@@ -59,6 +59,7 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
   img_height: int = base.IMAGE_HEIGHT_OPTION,  # type: ignore[assignment]
   img_size: int | None = base.IMAGE_SIZE_OPTION,  # type: ignore[assignment]
   i_pixels: int = base.IMAGE_INTERPOLATION_PIXELS_OPTION,  # type: ignore[assignment]
+  resample: str = base.IMAGE_INTERPOLATION_RESAMPLE_OPTION,  # type: ignore[assignment]
   max_iter: int | None = base.MAX_ITERATIONS_OPTION,  # type: ignore[assignment]
   mark_coords: str | None = base.MARK_COORDINATES_OPTION,  # type: ignore[assignment]
   mark_color: str = base.MARK_COLOR_OPTION,  # type: ignore[assignment]
@@ -66,6 +67,13 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
 ) -> None:
   # store this command's options in the shared config so all sub-commands can read it
   if ctx.invoked_subcommand is not None and ctx.obj is not None:
+    # check resample so it won't raise plain KeyError
+    res: str = resample.strip().upper()
+    if res not in pixels.Resampling.__members__:
+      raise base.UsageError(
+        f'Invalid interpolation resampling method {resample!r}; available methods: '
+        + ', '.join(sorted(repr(c.name.lower()) for c in pixels.Resampling))
+      )
     # check color so it won't raise plain KeyError
     col: str = mark_color.strip().upper()
     if col not in pixels.Color.__members__:
@@ -79,6 +87,7 @@ def ImageOptions(  # documentation is in help/epilog  # noqa: D103
       img_height=img_height,
       img_size=img_size,
       i_pixels=i_pixels,
+      resample=pixels.Resampling[res],
       max_iter=max_iter,
       mark_coords=mark_coords,
       mark_color=pixels.Color[col],

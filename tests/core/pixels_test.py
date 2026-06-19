@@ -15,28 +15,30 @@ from tranzoom.core import palette, pixels
 # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
 _RENDER_STR_1: str = (
   '{"escaped_pal":"sunset","i_pixels":1,"mark_color":null,"mark_im":"0","mark_re":"0",'
-  '"mark_width":1,"overlay":null,"set_pal":"rgrayscale","tp":"png"}'
+  '"mark_width":1,"overlay":null,"resample":3,"set_pal":"rgrayscale","tp":"png"}'
 )
 _RENDER_STR_2: str = (
   '{"escaped_pal":"electric","i_pixels":0,"mark_color":"red","mark_im":"9/2",'
-  '"mark_re":"-11/17","mark_width":2,"overlay":"grid","set_pal":null,"tp":"png"}'
+  '"mark_re":"-11/17","mark_width":2,"overlay":"grid","resample":1,"set_pal":null,"tp":"png"}'
 )
 _RENDER_STR_3: str = (
   '{"escaped_pal":"grayscale","i_pixels":3,"mark_color":"yellow","mark_im":"-7/11",'
-  '"mark_re":"71/4","mark_width":3,"overlay":null,"set_pal":"sunset","tp":"png"}'
+  '"mark_re":"71/4","mark_width":3,"overlay":null,"resample":100,"set_pal":"sunset","tp":"png"}'
 )
 ANIM_STR_1: str = (
   '{"anim":"gif","i_frames":0,"render":{"escaped_pal":"sunset","i_pixels":1,"mark_color":null,'
-  '"mark_im":"0","mark_re":"0","mark_width":1,"overlay":null,"set_pal":"rgrayscale","tp":"png"}}'
+  '"mark_im":"0","mark_re":"0","mark_width":1,"overlay":null,'
+  '"resample":3,"set_pal":"rgrayscale","tp":"png"}}'
 )
 ANIM_STR_2: str = (
   '{"anim":"mp4","i_frames":1,"render":{"escaped_pal":"electric","i_pixels":0,"mark_color":"red",'
-  '"mark_im":"9/2","mark_re":"-11/17","mark_width":2,"overlay":"grid","set_pal":null,"tp":"png"}}'
+  '"mark_im":"9/2","mark_re":"-11/17","mark_width":2,"overlay":"grid",'
+  '"resample":1,"set_pal":null,"tp":"png"}}'
 )
 ANIM_STR_3: str = (
   '{"anim":"gif","i_frames":2,"render":{"escaped_pal":"grayscale","i_pixels":3,'
   '"mark_color":"yellow","mark_im":"-7/11","mark_re":"71/4","mark_width":3,"overlay":null,'
-  '"set_pal":"sunset","tp":"png"}}'
+  '"resample":100,"set_pal":"sunset","tp":"png"}}'
 )
 # DO NOT "JUST FIX" THESE! If they are wrong, it means something will break in the DB!
 
@@ -48,6 +50,7 @@ ANIM_STR_3: str = (
     'e_pal',
     's_pal',
     'ip',
+    'res',
     'm_re',
     'm_im',
     'm_col',
@@ -63,6 +66,7 @@ ANIM_STR_3: str = (
       'sunset',
       'rgrayscale',
       1,
+      pixels.Resampling.BICUBIC,
       '0',
       '0',
       None,
@@ -70,9 +74,9 @@ ANIM_STR_3: str = (
       None,
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
       _RENDER_STR_1,  # re-used below (zoom) to make sure it is all tied together
-      '2103c7db59d6e6a8d29b0ee4ab190095c16596eac74293253781d3ce3c48cd2b',  # DO NOT "JUST FIX"
+      '56deab438b4453b358140917b24d12b9e3aeaec8c2d92381c1f2459e6196d207',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
-      '{[PNG*2: SUNSET, GRAYSCALE_REVERSE]}',
+      '{[PNG*2/Bicubic: SUNSET, GRAYSCALE_REVERSE]}',
       id='RenderParameters-1',
     ),
     pytest.param(
@@ -80,6 +84,7 @@ ANIM_STR_3: str = (
       'electric',
       None,
       0,
+      pixels.Resampling.LANCZOS,
       '-11/17',
       '9/2',
       'red',
@@ -87,7 +92,7 @@ ANIM_STR_3: str = (
       'grid',
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
       _RENDER_STR_2,  # re-used below (zoom) to make sure it is all tied together
-      '439d95f21fd945fee8c7f06c2b3d0d1abf9e45ace4e227093a5d95cfc4860324',  # DO NOT "JUST FIX"
+      'd751524a3d651b73433d697157aabe811d507520be83ee7c588194ccca0febfa',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
       '{[PNG*1: ELECTRIC, none] + [MARK: red/2 @ (-11/17, 9/2)] + [OVERLAY: GRID]}',
       id='RenderParameters-2',
@@ -97,6 +102,7 @@ ANIM_STR_3: str = (
       'grayscale',
       'sunset',
       3,
+      pixels.Resampling.BILINEAR,
       '71/4',
       '-7/11',
       'yellow',
@@ -104,9 +110,9 @@ ANIM_STR_3: str = (
       None,
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
       _RENDER_STR_3,  # re-used below (zoom) to make sure it is all tied together
-      '110d8105db06ef5c7bcfc4345a183b33a3d4fb4d7ce4170db2c881ee2967d00b',  # DO NOT "JUST FIX"
+      '480fe1f8d9b32faa5d287ea1fdb7c5bf7cf9c6299da1a3655af9642cf9cf2dbb',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
-      '{[PNG*4: GRAYSCALE, SUNSET] + [MARK: yellow/3 @ (71/4, -7/11)]}',
+      '{[PNG*4/Bilinear: GRAYSCALE, SUNSET] + [MARK: yellow/3 @ (71/4, -7/11)]}',
       id='RenderParameters-3',
     ),
   ],
@@ -116,6 +122,7 @@ def test_render_png_hash_stability_and_serialization_consistency(
   e_pal: str,
   s_pal: str | None,
   ip: int,
+  res: pixels.Resampling,
   m_re: str,
   m_im: str,
   m_col: str | None,
@@ -131,6 +138,7 @@ def test_render_png_hash_stability_and_serialization_consistency(
     escaped_pal=palette.Palette(e_pal),
     set_pal=palette.Palette(s_pal) if s_pal else None,
     i_pixels=ip,
+    resample=res,
     mark_re=gmpy2.mpq(m_re),
     mark_im=gmpy2.mpq(m_im),
     mark_color=pixels.Color[m_col.upper()] if m_col is not None else None,
@@ -163,9 +171,9 @@ def test_render_png_hash_stability_and_serialization_consistency(
       0,
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
       ANIM_STR_1,  # re-used below (zoom) to make sure it is all tied together
-      '58eedf88f7892580d0319cd3b4715d71c773e00a56dc06f34a45bf0c855333df',  # DO NOT "JUST FIX"
+      '971d28ec5018bb2f577105f04a9be59dbc82ba1112bd37fdc4a718d04d33b5f6',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
-      '<GIF*1: {[PNG*2: SUNSET, GRAYSCALE_REVERSE]}>',
+      '<GIF*1: {[PNG*2/Bicubic: SUNSET, GRAYSCALE_REVERSE]}>',
       id='RenderAnimationParameters-1',
     ),
     pytest.param(
@@ -174,7 +182,7 @@ def test_render_png_hash_stability_and_serialization_consistency(
       1,
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
       ANIM_STR_2,  # re-used below (zoom) to make sure it is all tied together
-      '821be148451935d2adfb016d14033077dd4283ba0d12de9812e89dfdf71653a1',  # DO NOT "JUST FIX"
+      '8cdae0435ea5195c8ea785ccd6f359df3807dde5cf408a629f1b4c2c26a8be00',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
       '<MP4*2: {[PNG*1: ELECTRIC, none] + [MARK: red/2 @ (-11/17, 9/2)] + [OVERLAY: GRID]}>',
       id='RenderAnimationParameters-2',
@@ -185,9 +193,9 @@ def test_render_png_hash_stability_and_serialization_consistency(
       2,
       # ATTENTION: if these change/break, ever, BIG PROBLEM!! b/c hashes will break in DB!!
       ANIM_STR_3,  # re-used below (zoom) to make sure it is all tied together
-      '9a999088fd67c6308133ae86766c474dcc7b4da27cc0482705ee3e9713b0f284',  # DO NOT "JUST FIX"
+      '77f58d02da3c21bd92f886949121a29abef558f356bb08d91f23a45cce88e2a3',  # DO NOT "JUST FIX"
       # DO NOT "JUST FIX" THIS HASH! If the hash is wrong, it means something will break in the DB!
-      '<GIF*3: {[PNG*4: GRAYSCALE, SUNSET] + [MARK: yellow/3 @ (71/4, -7/11)]}>',
+      '<GIF*3: {[PNG*4/Bilinear: GRAYSCALE, SUNSET] + [MARK: yellow/3 @ (71/4, -7/11)]}>',
       id='RenderAnimationParameters-3',
     ),
   ],

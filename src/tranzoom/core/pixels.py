@@ -85,11 +85,11 @@ class Resampling(enum.IntEnum):
   # implemented in numpy locally
   BILINEAR = 100  # there is a PILImage.Resampling.BILINEAR, but we NEED THIS TO BE DIFFERENT
   # implemented in PIL
-  BICUBIC = PILImage.Resampling.BICUBIC
-  LANCZOS = PILImage.Resampling.LANCZOS
+  BICUBIC = PILImage.Resampling.BICUBIC  # = 3
+  LANCZOS = PILImage.Resampling.LANCZOS  # = 1
 
 
-DEFAULT_RESAMPLING: Resampling = Resampling.BILINEAR
+DEFAULT_RESAMPLING: Resampling = Resampling.BICUBIC
 
 
 # GIF has is_animated, but we have to check for it
@@ -143,6 +143,7 @@ class RenderParameters(frame.SerializingFractalObject):
     set_pal (palette.Palette | None): Color palette for interior Set points; None means no
         Set palette (requires a non-Set computation); default is None.
     i_pixels (int): Number of pixels to interpolate between each pixel; default is 0
+    resample (Resampling): Resampling filter to use for interpolation; default is DEFAULT_RESAMPLING
     mark_re (gmpy2.mpq): Real part of the optional crosshair mark coordinate;
         default is 0; unused when mark_color is None.
     mark_im (gmpy2.mpq): Imaginary part of the optional crosshair mark coordinate;
@@ -160,13 +161,14 @@ class RenderParameters(frame.SerializingFractalObject):
   escaped_pal: palette.Palette = palette.DEFAULT_PALETTE
   set_pal: palette.Palette | None = None  # if None, this must be a non-Set-computation
   i_pixels: int = 0  # for interpolation, number of pixels to interpolate between each pixel
+  resample: Resampling = DEFAULT_RESAMPLING
   mark_re: gmpy2.mpq = _MPQ_ZERO
   mark_im: gmpy2.mpq = _MPQ_ZERO
   mark_color: Color | None = None  # if None, no mark will be drawn
   mark_width: int = DEFAULT_MARK_WIDTH
   overlay: OverlayType | None = None  # overlay is independent of mark!
 
-  def __post_init__(self) -> None:
+  def __post_init__(self) -> None:  # noqa: C901
     """Check parameters for validity.
 
     Raises:
@@ -186,6 +188,8 @@ class RenderParameters(frame.SerializingFractalObject):
       raise Error(f'Unknown set palette: {self.set_pal}')
     # check i_pixels is valid
     frame.ValidateIPixels(self.i_pixels)
+    if self.resample not in {Resampling.BILINEAR, Resampling.BICUBIC, Resampling.LANCZOS}:
+      raise Error(f'Unsupported resampling filter for rendering: {self.resample}')
     # check mark width is valid
     if not (MIN_MARK_WIDTH <= self.mark_width <= MAX_MARK_WIDTH):
       raise Error(
@@ -238,9 +242,10 @@ class RenderParameters(frame.SerializingFractalObject):
       )
     )
     overlay: str = '' if self.overlay is None else f' + [OVERLAY: {self.overlay.name}]'
+    resample: str = f'/{self.resample.name.capitalize()}' if self.i_pixels else ''
     return (
       '{'
-      f'[{self.tp.name.upper()}*{self.i_pixels + 1}: {self.escaped_pal.name}, '
+      f'[{self.tp.name.upper()}*{self.i_pixels + 1}{resample}: {self.escaped_pal.name}, '
       f'{self.set_pal.name if self.set_pal else "none"}]{mark}{overlay}'
       '}'
     )
@@ -262,6 +267,7 @@ class RenderParameters(frame.SerializingFractalObject):
       'escaped_pal': self.escaped_pal.value,
       'set_pal': self.set_pal.value if self.set_pal else None,
       'i_pixels': self.i_pixels,
+      'resample': self.resample.value,
       'mark_re': str(self.mark_re),
       'mark_im': str(self.mark_im),
       # BEWARE: we store the mark color as lowercase name, not the RGB value
@@ -293,6 +299,7 @@ class RenderParameters(frame.SerializingFractalObject):
         escaped_pal=palette.Palette(data.get('escaped_pal', palette.DEFAULT_PALETTE.value)),
         set_pal=palette.Palette(data['set_pal']) if data.get('set_pal') else None,
         i_pixels=int(str(data.get('i_pixels', '0'))),
+        resample=Resampling(int(str(data.get('resample', DEFAULT_RESAMPLING.value)))),
         mark_re=gmpy2.mpq(str(data.get('mark_re', '0'))),
         mark_im=gmpy2.mpq(str(data.get('mark_im', '0'))),
         mark_color=(  # upper -> convert by name
@@ -410,6 +417,7 @@ class RenderAnimationParameters(RenderParameters):
       set_pal=render.set_pal,
       i_frames=i_frames,
       i_pixels=render.i_pixels,
+      resample=render.resample,
       mark_re=render.mark_re,
       mark_im=render.mark_im,
       mark_color=render.mark_color,
