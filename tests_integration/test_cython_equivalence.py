@@ -61,7 +61,7 @@ def _TestAllFramesDataOrFail(db_dir: str, name: str) -> None:
 @pytest.mark.parametrize(
   'opt',
   [
-    # 'python',
+    'python',
     'cython',
   ],
 )
@@ -221,7 +221,6 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
     }
 
 
-@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -519,8 +518,9 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
       'tranZoom:image:set:n:min': '0',
       'tranZoom:image:set:nu:max': '0.0',
       'tranZoom:image:set:nu:min': '0.0',
-      'tranZoom:render:hash': '25389b1c9ca4c515a1a40711aff3bfeb638a43f0ff3152cef955c4875701324f',
+      'tranZoom:render:hash': '4ed7f8bd80f0ffc7c84fa1d8e5d535b7c7f17c7971c3d0ed00c7c742019f9876',
       'tranZoom:render:i_pixels': '3',
+      'tranZoom:render:resample': 'bicubic',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_re': '0',
@@ -554,13 +554,12 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
       'tranZoom:zoom:frame:magnitude': '43/41',
       'tranZoom:zoom:frame:seconds': '101/10',
       'tranZoom:zoom:frame:steps': '9',
-      'tranZoom:zoom:hash': 'b14e515756b728bf45b4f6c721da0324c5cd2b58b5632c2c5afd878628043910',
+      'tranZoom:zoom:hash': '6b52ebe9892ad3c2786087f4154cb908538b14eefd550c2022812e4243677905',
       'tranZoom:zoom:marker:index': '[0, 9]',
       'tranZoom:zoom:type': 'gif',
     }
 
 
-@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -708,8 +707,9 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:image:set:nu:min': '0.0',
       'tranZoom:image:stats:ang_hi': '0.73519948957591444695345637018854658157873099',
       'tranZoom:image:stats:ang_lo': '0.50658202515724162651223774275343995527044469',
-      'tranZoom:render:hash': '5b5881924bb9d30d8aaec378d3053b0484bdf141e4ccfbe6143df82d67321c0b',
+      'tranZoom:render:hash': 'd320f27c2a65bd2507e0052e125a813fb44d30671db4df21cbe7947d7d76b423',
       'tranZoom:render:i_pixels': '1',
+      'tranZoom:render:resample': 'bicubic',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_re': '0',
@@ -734,13 +734,12 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:zoom:frame:magnitude': '241/139',
       'tranZoom:zoom:frame:seconds': '107/10',
       'tranZoom:zoom:frame:steps': '20',
-      'tranZoom:zoom:hash': '621d6d2b88c7842bdc701b7e8d18533080f784d8c000f89742cdd0ee05f0f961',
+      'tranZoom:zoom:hash': 'ba8ada3e9197452e1eed4d43dc1c99d49de546afdeca0ec2048e8857a40b7d2b',
       'tranZoom:zoom:marker:index': '[0, 20]',
       'tranZoom:zoom:type': 'gif',
     }
 
 
-@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -889,8 +888,9 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:image:set:nu:min': '0.0',
       'tranZoom:image:stats:min_hi': '0.082874941584400487748646457435133671445430575',
       'tranZoom:image:stats:min_lo': '3.6863012726222845779975027843355758506749315e-05',
-      'tranZoom:render:hash': 'd692016a50498841ea7b5c2982f4cef2c3be3b2deec5b9f82cfc3a112f3c94f5',
+      'tranZoom:render:hash': 'dd3b7feb3a288e015274ea13eb061d9f3046d15179620c26af8ebc576f023232',
       'tranZoom:render:i_pixels': '1',
+      'tranZoom:render:resample': 'bicubic',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_re': '0',
@@ -912,13 +912,12 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:zoom:frame:magnitude': '37/97',
       'tranZoom:zoom:frame:seconds': '41/10',
       'tranZoom:zoom:frame:steps': '7',
-      'tranZoom:zoom:hash': '8b1eac4479ba0f194e4ab174b614cd794e2c686054c015953ed63ba3b45e67a0',
+      'tranZoom:zoom:hash': '447d7b792288e5319b94eb1be0563e93bd25973d54f047a547c4af879c3a3e40',
       'tranZoom:zoom:marker:index': '[0, 7]',
       'tranZoom:zoom:type': 'gif',
     }
 
 
-@pytest.mark.skip
 @pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.parametrize(
@@ -1068,8 +1067,9 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:image:set:nu:min': '0.0',
       'tranZoom:image:stats:max_hi': '1.9748028908146782087476064434619381192680041',
       'tranZoom:image:stats:max_lo': '0.26279710060872639895079446071425291716398127',
-      'tranZoom:render:hash': 'bdfaebb0bd66c67a5a8b3fb19316040421d9fb2b86db4037abc67ddea6eaf20b',
+      'tranZoom:render:hash': '314b580e5181d02757a8187f7f9168db5f78b2097db0a48e68ec7a2219edea48',
       'tranZoom:render:i_pixels': '1',
+      'tranZoom:render:resample': 'bicubic',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_re': '0',
@@ -1091,7 +1091,7 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:zoom:frame:magnitude': '37/97',
       'tranZoom:zoom:frame:seconds': '43/10',
       'tranZoom:zoom:frame:steps': '7',
-      'tranZoom:zoom:hash': '558e31a6c4f3ef7200e9b22b9eadb41a33a22fa15b4cf4fa8040184a619b58e5',
+      'tranZoom:zoom:hash': 'c5d9ebd5e53b98575e9590d8346dcab4a843c0e0c06a4d0824cf133320e8da30',
       'tranZoom:zoom:marker:index': '[0, 7]',
       'tranZoom:zoom:type': 'gif',
     }
