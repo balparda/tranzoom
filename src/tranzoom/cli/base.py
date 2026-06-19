@@ -1610,7 +1610,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             raw_png, file_hash, _ = img_data.PNG()  # WASTEFUL!: this will be done again later
             img_path.write_bytes(raw_png)
             config.console.print(
-              f'Saved frame {i + 1} to {str(full_path)!r} '
+              f'Saved frame {i + 1} to {str(img_path)!r} '
               f'({file_hash[:16]!r}), {human.HumanizedBytes(len(raw_png))}'
             )
           # update progress bar, return data

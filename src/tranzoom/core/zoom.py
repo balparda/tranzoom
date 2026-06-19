@@ -17,7 +17,7 @@ from typing import cast
 import gmpy2
 import imageio
 import numpy as np
-from numpy._typing._array_like import NDArray
+from numpy.typing import NDArray
 from PIL import Image as PILImage
 from PIL import ImageFilter
 from transcrypto.utils import base as tbase
@@ -72,7 +72,6 @@ class ZoomParameters(frame.SerializingFractalObject):
   ATTENTION: changing any attribute changes the object SHA-256 hash.
 
   Attributes:
-    tp (AnimationType): The animation output type ('gif' or 'mp4').
     img (frame.ComputationParameters): The initial frame computation parameters; the same
         parameters are used for all frames in the animation.
     render (pixels.RenderParameters): The render parameters applied to all frames in the animation.

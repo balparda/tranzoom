@@ -1000,7 +1000,7 @@ class FractalDatabase:
       tuple[frame.ComputationParameters, image.Image | None, pixels.Pixels, str, pathlib.Path]:
           - frame.ComputationParameters: The computation parameters used for the frame
               (with actual depth if a sentinel was used)
-          - pixels.RenderParameters: the computed fractal Image object
+          - image.Image | None: The computed fractal Image object, or None if not available
           - pixels.Pixels: the final rendered pixels
           - str: the image data hash
           - pathlib.Path: the intended save path (NOT yet written to disk; caller must save)

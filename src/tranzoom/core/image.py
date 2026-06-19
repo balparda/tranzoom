@@ -19,7 +19,7 @@ from collections import abc
 
 import gmpy2
 import numpy as np
-from numpy._typing._array_like import NDArray
+from numpy.typing import NDArray
 from transcrypto.utils import base as tbase
 
 from tranzoom import __app__ as _app

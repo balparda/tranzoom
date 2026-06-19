@@ -27,7 +27,7 @@ import gmpy2
 import imageio
 import imageio_ffmpeg  # type: ignore
 import numpy as np
-from numpy._typing._array_like import NDArray
+from numpy.typing import NDArray
 from PIL import ExifTags, ImageDraw, ImageFont, PngImagePlugin
 from PIL import Image as PILImage
 from transcrypto.core import hashes
