@@ -279,7 +279,7 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:render:mark_re': '-5578776469/7500000000',
       'tranZoom:render:mark_im': '8244620127/62500000000',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': 'b5467479fe084f34e58ccc671216eacb5da83dfb2b1200c0f811f923590598ad',
+      'tranZoom:render:hash': '7d39836df7b681893fb77a59a3837d86e3897dbd5a70a233100d35d53aaff49e',
       'tranZoom:zoom:type': 'gif',
       'tranZoom:zoom:frame:initial:width_re': '73801/100000000',
       'tranZoom:zoom:frame:initial:height_im': '73801/100000000',
@@ -298,7 +298,7 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:zoom:depth:frames': (
         '[(0, 1000, 1001), (6, 1000, 1019), (13, 1000, 1034), (19, 1159, 1105)]'
       ),
-      'tranZoom:zoom:hash': 'edef7da54fc24b114c90906ad7ab1fcaadcb234496dd1f6bcc6f2ac11ac4fda1',
+      'tranZoom:zoom:hash': '8ae54d2302317afa4cb4c6cb971272ee8dea2e3f53040104397517bfc5444b93',
     }
 
 
