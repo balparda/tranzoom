@@ -122,15 +122,12 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
     )
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
-    w: int
-    h: int
-    hsh: str
-    info: tbase.JSONDict
-    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
-    assert (w, h) == (159, 117), f'Expected image dimensions 159x117, got {w} x {h}'
-    assert hsh == base.T_GIF_SEAHORSE_HASH
+    info: pixels.ObjInfo
+    info, _ = pixels.GetBasicData(output_image.read_bytes())
+    assert (info.width, info.height) == (159, 117), f'Got invalid dim {info.width} x {info.height}'
+    assert info.data_hash == base.T_GIF_SEAHORSE_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'seahorse')
-    assert info == {
+    assert info.meta == {
       'tranZoom:computation:color_set': 'imaginary',
       'tranZoom:computation:depth': '1001',
       'tranZoom:computation:hash': (
@@ -184,7 +181,7 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
       'tranZoom:image:set:nu:min': '0.49376627802848816',
       'tranZoom:image:stats:imag_hi': '0.05734383622578064069611499703175854039165102',
       'tranZoom:image:stats:imag_lo': '0.05734383622578064069611499703175854039165102',
-      'tranZoom:render:hash': '237f2160e1d4f9fe957d9e1b0829fe3aad9ffc92833e930a83217e2bcf00c914',
+      'tranZoom:render:hash': 'e5ed9b7875faed4f26e63f27117eb8ba8f88d58f0f6189d3b0dc55e5c895f584',
       'tranZoom:render:i_pixels': '2',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
@@ -211,7 +208,7 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
       'tranZoom:zoom:frame:magnitude': '131/43',
       'tranZoom:zoom:frame:seconds': '317/10',
       'tranZoom:zoom:frame:steps': '30',
-      'tranZoom:zoom:hash': '8ade37f33cabf0b63c6b59241471832f57f35794891390dede5338f17d0ffff8',
+      'tranZoom:zoom:hash': 'f9eb196b73a9aa2706f48eb5b5d1c08283ddecd06483c34200aefb745d76af6e',
       'tranZoom:zoom:marker:index': '[0, 10, 20, 30]',
       'tranZoom:zoom:type': 'gif',
     }
@@ -322,15 +319,12 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
     )
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
-    w: int
-    h: int
-    hsh: str
-    info: tbase.JSONDict
-    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
-    assert (w, h) == (124, 104), f'Expected image dimensions 124x104, got {w} x {h}'
-    assert hsh == base.T_GIF_SEEDS_300_HASH
+    info: pixels.ObjInfo
+    info, _ = pixels.GetBasicData(output_image.read_bytes())
+    assert (info.width, info.height) == (124, 104), f'Got invalid dim {info.width} x {info.height}'
+    assert info.data_hash == base.T_GIF_SEEDS_300_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'seeds300')
-    assert info == {
+    assert info.meta == {
       'tranZoom:computation:color_set': 'none',
       'tranZoom:computation:depth': '9817',
       'tranZoom:computation:hash': (
@@ -513,7 +507,7 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
       'tranZoom:image:set:n:min': '0',
       'tranZoom:image:set:nu:max': '0.0',
       'tranZoom:image:set:nu:min': '0.0',
-      'tranZoom:render:hash': '3bab0ef86ee6ac9f7704719702633a1efef9683102dda0fd5af891bf8fd695a6',
+      'tranZoom:render:hash': '25389b1c9ca4c515a1a40711aff3bfeb638a43f0ff3152cef955c4875701324f',
       'tranZoom:render:i_pixels': '3',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
@@ -548,7 +542,7 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
       'tranZoom:zoom:frame:magnitude': '43/41',
       'tranZoom:zoom:frame:seconds': '101/10',
       'tranZoom:zoom:frame:steps': '9',
-      'tranZoom:zoom:hash': '8b07345d98be66630208ff554958ef68d830b2a0d84ad5a71217d9800d9c94e8',
+      'tranZoom:zoom:hash': 'b14e515756b728bf45b4f6c721da0324c5cd2b58b5632c2c5afd878628043910',
       'tranZoom:zoom:marker:index': '[0, 9]',
       'tranZoom:zoom:type': 'gif',
     }
@@ -626,15 +620,12 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
     )
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
-    w: int
-    h: int
-    hsh: str
-    info: tbase.JSONDict
-    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
-    assert (w, h) == (88, 118), f'Expected image dimensions 88x118, got {w} x {h}'
-    assert hsh == base.T_GIF_JULIA_SUZANA_HASH
+    info: pixels.ObjInfo
+    info, _ = pixels.GetBasicData(output_image.read_bytes())
+    assert (info.width, info.height) == (88, 118), f'Got invalid dim {info.width} x {info.height}'
+    assert info.data_hash == base.T_GIF_JULIA_SUZANA_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'suzana')
-    assert info == {
+    assert info.meta == {
       'tranZoom:computation:color_set': 'angle',
       'tranZoom:computation:depth': '1001',
       'tranZoom:computation:hash': (
@@ -700,7 +691,7 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:image:set:nu:min': '0.0',
       'tranZoom:image:stats:ang_hi': '0.73519948957591444695345637018854658157873099',
       'tranZoom:image:stats:ang_lo': '0.50658202515724162651223774275343995527044469',
-      'tranZoom:render:hash': '27c09d428a3bd0f04266b5b050eccd8bdda25b36e0d64dc02cb8e1a42880c29c',
+      'tranZoom:render:hash': '5b5881924bb9d30d8aaec378d3053b0484bdf141e4ccfbe6143df82d67321c0b',
       'tranZoom:render:i_pixels': '1',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
@@ -726,7 +717,7 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:zoom:frame:magnitude': '241/139',
       'tranZoom:zoom:frame:seconds': '107/10',
       'tranZoom:zoom:frame:steps': '20',
-      'tranZoom:zoom:hash': '71b7f422843062b86ab829b71b89cbee9df09b1234a193c7e6f1e13870ade794',
+      'tranZoom:zoom:hash': '621d6d2b88c7842bdc701b7e8d18533080f784d8c000f89742cdd0ee05f0f961',
       'tranZoom:zoom:marker:index': '[0, 20]',
       'tranZoom:zoom:type': 'gif',
     }
@@ -804,15 +795,12 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
     )
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
-    w: int
-    h: int
-    hsh: str
-    info: tbase.JSONDict
-    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
-    assert (w, h) == (104, 134), f'Expected image dimensions 104x134, got {w} x {h}'
-    assert hsh == base.T_GIF_JULIA_DRAGON_HASH
+    info: pixels.ObjInfo
+    info, _ = pixels.GetBasicData(output_image.read_bytes())
+    assert (info.width, info.height) == (104, 134), f'Got invalid dim {info.width} x {info.height}'
+    assert info.data_hash == base.T_GIF_JULIA_DRAGON_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'dragon')
-    assert info == {
+    assert info.meta == {
       'tranZoom:computation:color_set': 'min',
       'tranZoom:computation:depth': '1001',
       'tranZoom:computation:hash': (
@@ -879,7 +867,7 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:image:set:nu:min': '0.0',
       'tranZoom:image:stats:min_hi': '0.082874941584400487748646457435133671445430575',
       'tranZoom:image:stats:min_lo': '3.6863012726222845779975027843355758506749315e-05',
-      'tranZoom:render:hash': 'faf52deb846a6647624de1494fa76fc9c4b46d9bff8beda39f83e1ea418d12db',
+      'tranZoom:render:hash': 'd692016a50498841ea7b5c2982f4cef2c3be3b2deec5b9f82cfc3a112f3c94f5',
       'tranZoom:render:i_pixels': '1',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
@@ -902,7 +890,7 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:zoom:frame:magnitude': '37/97',
       'tranZoom:zoom:frame:seconds': '41/10',
       'tranZoom:zoom:frame:steps': '7',
-      'tranZoom:zoom:hash': 'ca209333a5b46797525cb07929f18ec73019f6bfbca60cd3babb75e345a9aec6',
+      'tranZoom:zoom:hash': '8b1eac4479ba0f194e4ab174b614cd794e2c686054c015953ed63ba3b45e67a0',
       'tranZoom:zoom:marker:index': '[0, 7]',
       'tranZoom:zoom:type': 'gif',
     }
@@ -980,15 +968,12 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
     )
     assert output_image.exists(), f'Expected output image not found: {output_image}'
     # check the image data
-    w: int
-    h: int
-    hsh: str
-    info: tbase.JSONDict
-    w, h, hsh, info = pixels.GetBasicDataFromImage(output_image.read_bytes())
-    assert (w, h) == (142, 110), f'Expected image dimensions 142x110, got {w} x {h}'
-    assert hsh == base.T_GIF_JULIA_BLOB_HASH
+    info: pixels.ObjInfo
+    info, _ = pixels.GetBasicData(output_image.read_bytes())
+    assert (info.width, info.height) == (142, 110), f'Got invalid dim {info.width} x {info.height}'
+    assert info.data_hash == base.T_GIF_JULIA_BLOB_HASH
     _TestAllFramesDataOrFail(tmp_dir, 'blob')
-    assert info == {
+    assert info.meta == {
       'tranZoom:computation:color_set': 'max',
       'tranZoom:computation:depth': '1001',
       'tranZoom:computation:hash': (
@@ -1056,7 +1041,7 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:image:set:nu:min': '0.0',
       'tranZoom:image:stats:max_hi': '1.9748028908146782087476064434619381192680041',
       'tranZoom:image:stats:max_lo': '0.26279710060872639895079446071425291716398127',
-      'tranZoom:render:hash': 'e9a7a559edd84221405a21678b8cb156fc10fabc7f5121648b4cc91305f7d782',
+      'tranZoom:render:hash': 'bdfaebb0bd66c67a5a8b3fb19316040421d9fb2b86db4037abc67ddea6eaf20b',
       'tranZoom:render:i_pixels': '1',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_im': '0',
@@ -1079,7 +1064,7 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
       'tranZoom:zoom:frame:magnitude': '37/97',
       'tranZoom:zoom:frame:seconds': '43/10',
       'tranZoom:zoom:frame:steps': '7',
-      'tranZoom:zoom:hash': '6ca8e14cfb6e7a3be0d4e9bd7772613337d6fa57650e82c83b321110ed3c5b0e',
+      'tranZoom:zoom:hash': '558e31a6c4f3ef7200e9b22b9eadb41a33a22fa15b4cf4fa8040184a619b58e5',
       'tranZoom:zoom:marker:index': '[0, 7]',
       'tranZoom:zoom:type': 'gif',
     }
