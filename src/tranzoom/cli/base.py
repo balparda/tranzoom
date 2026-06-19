@@ -811,7 +811,7 @@ class TranZoomConfig(clibase.CLIConfig):
     )
 
   def GetConfig(self) -> ConfigType:
-    """Get a dict of the config values from the disk config.
+    """Config values from the disk config.
 
     Returns:
       ConfigType: a dict of the config values, creates the default config if none on disk yet
@@ -1368,7 +1368,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     sorted_depth_keys: list[int] = sorted(depth_computations)
 
     def _DepthAndStatsForFrame(i: int) -> tuple[int, image.FractalStats]:
-      """Get the depth/stats for a Frame index, interpolating from depth_computations.
+      """Depth/stats for a Frame index, interpolating from depth_computations.
 
       Args:
         i (int): The index of the frame in the zoom sequence.
@@ -1501,7 +1501,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     # we should have all images either in memory or in DB; so now we we rely on _SmartImage()
 
     def _SmartImage(i: int) -> image.Image:
-      """Get the Image object for frame i, either from memory (not streaming) or DB (streaming).
+      """Image object for frame i, either from memory (not streaming) or DB (streaming).
 
       Args:
         i (int): The index of the frame in the zoom sequence.

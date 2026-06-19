@@ -247,7 +247,7 @@ class RenderParameters(frame.SerializingFractalObject):
 
   @property
   def json(self) -> tbase.JSONDict:
-    """Get a JSON-serializable dictionary representation of the RenderParameters.
+    """JSON-serializable dictionary representation of the RenderParameters.
 
     Keys: `tp`, `escaped_pal`, `set_pal`, `mark_re`, `mark_im`, `mark_color`,
     `mark_width`, `overlay`.
@@ -373,7 +373,7 @@ class RenderAnimationParameters(RenderParameters):
 
   @property
   def json(self) -> tbase.JSONDict:
-    """Get a JSON-serializable dictionary representation of the RenderAnimationParameters.
+    """JSON-serializable dictionary representation of the RenderAnimationParameters.
 
     Keys: `anim`, `i_frames`, `render`.
 
@@ -576,7 +576,7 @@ class ObjInfo(frame.SerializingFractalObject):
 
   @property
   def json(self) -> tbase.JSONDict:
-    """Get a JSON-serializable dictionary representation of the ObjInfo.
+    """JSON-serializable dictionary representation of the ObjInfo.
 
     Keys: `tp`, `escaped_pal`, `set_pal`, `mark_re`, `mark_im`, `mark_color`,
     `mark_width`, `overlay`.
@@ -682,7 +682,7 @@ class Pixels(frame.SerializingFractalObject):
 
   @property
   def width(self) -> int:
-    """Get the width of the pixel data.
+    """Width of the pixel data.
 
     Returns:
       int: The width of the pixel data.
@@ -692,7 +692,7 @@ class Pixels(frame.SerializingFractalObject):
 
   @property
   def height(self) -> int:
-    """Get the height of the pixel data.
+    """Height of the pixel data.
 
     Returns:
       int: The height of the pixel data.
@@ -715,7 +715,7 @@ class Pixels(frame.SerializingFractalObject):
 
   @property
   def obj(self) -> PILImage.Image:
-    """Get a PIL Image object from the pixel data.
+    """A PIL Image object from the pixel data.
 
     Returns:
       PILImage.Image: A PIL Image object representing the pixel data.
@@ -725,7 +725,7 @@ class Pixels(frame.SerializingFractalObject):
 
   @property
   def data_hash(self) -> str:
-    """Get a hash of the pixel data.
+    """Hash of the pixel data.
 
     Returns:
       str: A hexadecimal string representing the hash of the pixel data.
@@ -748,7 +748,7 @@ class Pixels(frame.SerializingFractalObject):
 
   @property
   def json(self) -> tbase.JSONDict:
-    """Get a JSON-serializable dictionary representation of the Pixels.
+    """JSON-serializable dictionary representation of the Pixels.
 
     Keys: `width`, `height`, `data_hash`, `meta`.
 
@@ -1204,7 +1204,7 @@ class Pixels(frame.SerializingFractalObject):
 
 
 def GetBasicDataFromMP4(img_bytes: bytes) -> ObjInfo:
-  """Get basic data from an MP4.
+  """Retrieve basic data from an MP4.
 
   Args:
     img_bytes (bytes): The image data as bytes (PNG, GIF, or MP4).
@@ -1284,7 +1284,7 @@ def GetBasicDataFromMP4(img_bytes: bytes) -> ObjInfo:
 
 
 def GetBasicData(img_bytes: bytes) -> tuple[ObjInfo, Pixels | None]:
-  """Get basic data from an image or animation (PNG, GIF, or MP4) or load, if possible.
+  """Retrieve basic data from an image or animation (PNG, GIF, or MP4) or load, if possible.
 
   Args:
     img_bytes (bytes): The image data as bytes (PNG, GIF, or MP4).

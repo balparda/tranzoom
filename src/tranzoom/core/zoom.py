@@ -162,7 +162,7 @@ class ZoomParameters(frame.SerializingFractalObject):
 
   @property
   def n_seconds(self) -> gmpy2.mpq:
-    """Get duration, in seconds. Exactly consistent, but within ~1/VIDEO_DURATION_STORE_SCALE.
+    """Video duration, in seconds. Exactly consistent, but within ~1/VIDEO_DURATION_STORE_SCALE.
 
     Returns:
       gmpy2.mpq: The video duration in seconds.
@@ -172,7 +172,7 @@ class ZoomParameters(frame.SerializingFractalObject):
 
   @property
   def fps(self) -> gmpy2.mpq:
-    """Get the frames per second for this animation, calculated from n_frames and duration. Exact.
+    """Frames per second for this animation, calculated from n_frames and duration. Exact.
 
     Returns:
       gmpy2.mpq: The frames per second for this animation.
@@ -182,7 +182,7 @@ class ZoomParameters(frame.SerializingFractalObject):
 
   @property
   def ifps(self) -> gmpy2.mpq:
-    """Get the interpolated frames per second for this animation. Exact.
+    """Interpolated frames per second for this animation. Exact.
 
     Returns:
       gmpy2.mpq: The interpolated frames per second for this animation.
@@ -192,7 +192,7 @@ class ZoomParameters(frame.SerializingFractalObject):
 
   @property
   def all_frames(self) -> int:
-    """Get the total number of frames, including interpolated frames, for this animation. Exact.
+    """Total number of frames, including interpolated frames, for this animation. Exact.
 
     For every frame, except the last one, we render i_frames interpolated frames,
     so total frames is: (n_frames - 1) * (i_frames + 1) + 1
@@ -205,7 +205,7 @@ class ZoomParameters(frame.SerializingFractalObject):
 
   @property
   def mag_per_step(self) -> gmpy2.mpq:
-    """Get the magnification per step for this animation. Exact.
+    """Magnification per step for this animation. Exact.
 
     Returns:
       gmpy2.mpq: The magnification per step for this animation.
@@ -215,7 +215,7 @@ class ZoomParameters(frame.SerializingFractalObject):
 
   @property
   def scalar_magnification(self) -> gmpy2.mpfr:
-    """Get the scalar magnification for the whole zoom. Ultra-precision, but not exact.
+    """Scalar magnification for the whole zoom. Ultra-precision, but not exact.
 
     Returns:
       gmpy2.mpfr: The scalar magnification for the whole zoom.
@@ -226,7 +226,7 @@ class ZoomParameters(frame.SerializingFractalObject):
 
   @property
   def scalar_magnification_per_step(self) -> gmpy2.mpq:
-    """Get the scalar magnification per step for this animation. Good precision, but not exact.
+    """Scalar magnification per step for this animation. Good precision, but not exact.
 
     Returns:
       gmpy2.mpq: The scalar magnification per step for this animation.
@@ -361,7 +361,7 @@ class ZoomParameters(frame.SerializingFractalObject):
 
   @property
   def json(self) -> tbase.JSONDict:
-    """Get a JSON-serializable dictionary representation of the ZoomParameters.
+    """JSON-serializable dictionary representation of the ZoomParameters.
 
     Keys: `tp`, `img`, `render`, `mag`, `n_frames`, `duration`, `i_frames`, `loop`.
 
@@ -415,7 +415,7 @@ class ZoomParameters(frame.SerializingFractalObject):
   def Frames(
     self,
   ) -> tuple[list[frame.Frame], list[tuple[int, frame.Frame]], list[tuple[int, frame.Frame]]]:
-    """Get the Frames. Could be a property, but is a method to remind this is an expensive-ish call.
+    """Anim. frames. Could be a property, but is a method to remind this is an expensive-ish call.
 
     Returns:
       tuple[list[frame.Frame], list[tuple[int, frame.Frame]], list[tuple[int, frame.Frame]]]:
@@ -528,7 +528,7 @@ class ZoomParameters(frame.SerializingFractalObject):
     mag_per_step: gmpy2.mpq,
     name: str,
   ) -> list[tuple[int, frame.Frame]]:
-    """Get a subset of frames based on the given magnification step.
+    """Subset of frames based on the given magnification step.
 
     Args:
       all_frames (list[frame.Frame]): The list of all frames generated for the zoom.

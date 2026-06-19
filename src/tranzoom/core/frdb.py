@@ -464,7 +464,7 @@ class FractalDatabase:
 
   @property
   def label(self) -> str:
-    """Get a human-readable label for the database, for logging and display purposes.
+    """Human-readable label for the database, for logging and display purposes.
 
     Returns:
       str: A human-readable label string of the form '#<N>@<tm>'.
@@ -1330,7 +1330,7 @@ def WarnUserAnimationParams(
 
 
 def _DBLabel(db: _DBType) -> str:
-  """Get a human-readable label for the database, for logging and display purposes.
+  """Human-readable label for the database, for logging and display purposes.
 
   Args:
     db (_DBType): The database object to get the label for.

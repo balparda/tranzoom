@@ -274,7 +274,7 @@ class FractalStats(frame.SerializingFractalObject):
 
   @property
   def json(self) -> tbase.JSONDict:
-    """Get a JSON-serializable dictionary representation of the FractalStats.
+    """JSON-serializable dictionary representation of the FractalStats.
 
     Keys:
 
@@ -471,7 +471,7 @@ class Image:
 
     @property
     def self_sz(self) -> int:
-      """Get the size of the object in bytes, including nested objects.
+      """Size of the object in bytes, including nested objects.
 
       Not guaranteed to be exact, but should be a good estimate for our purposes.
       Not a super cheap call, don't overuse it.
@@ -483,7 +483,7 @@ class Image:
       return frame.DeepSize(self)
 
     def BucketCumulativeBefore(self, key: int) -> float:
-      """Get the cumulative count before the given key, using binary search.
+      """Cumulative count before the given key, using binary search.
 
       Args:
         key (int): The key to find the cumulative count before.
@@ -553,7 +553,7 @@ class Image:
     alpha: float  # blend weight in [0.0, 1.0]: 0.0 = use prev only, 1.0 = use next only
 
     def InterpolateExternal(self, n: int, nu: float) -> float:
-      """Get the cross-frame-stable blended palette position for an exterior (escaped) pixel.
+      """Cross-frame-stable blended palette position for an exterior (escaped) pixel.
 
       Args:
         n (int): The escape iteration count for the pixel.
@@ -576,7 +576,7 @@ class Image:
       return clamp(t_prev + self.alpha * (t_next - t_prev))
 
     def InterpolateInternal(self, key: int, remainder: float) -> float:
-      """Get the cross-frame-stable blended palette position for an interior (Set) pixel.
+      """Cross-frame-stable blended palette position for an interior (Set) pixel.
 
       Args:
         key (int): The positive interior key (the negated stored escape value: -escaped_at).
@@ -672,7 +672,7 @@ class Image:
       return Image.ZoomColorNorm(markers=marker_list)
 
     def ForFrame(self, frame_idx: int) -> tuple[int, int, Image.FrameColorNorm]:
-      """Get the interpolated color normalization for a given frame index.
+      """Interpolated color normalization for a given frame index.
 
       Finds the two surrounding marker frames and computes the linear blend weight alpha based
       on the frame's position within the marker interval. At a marker frame exactly, alpha is
@@ -744,7 +744,7 @@ class Image:
 
   @property
   def params(self) -> frame.ComputationParameters:
-    """Get the computation parameters associated with this image.
+    """Computation parameters associated with this image.
 
     Returns:
       frame.ComputationParameters: The computation parameters associated with this image.
@@ -754,7 +754,7 @@ class Image:
 
   @property
   def self_sz(self) -> int:
-    """Get the size of the object in bytes, including nested objects.
+    """Size of the object in bytes, including nested objects.
 
     Not guaranteed to be exact, but should be a good estimate for our purposes.
     Not a super cheap call, don't overuse it.
@@ -1087,7 +1087,7 @@ def _PixelPalette(
   *,
   cycles: int = 1,
 ) -> tuple[float, float, float]:
-  """Get the RGB color for a histogram-equalized normalized palette position.
+  """RGB color for a histogram-equalized normalized palette position.
 
   Smoothly interpolates between adjacent stops in the specified palette, cycling
   `cycles` times across the [0, 1) range. Use PALETTE_CYCLES (3) for exterior palettes
@@ -1194,7 +1194,7 @@ def _BuildCumulative(values: abc.Iterable[tuple[int, float]]) -> Image.Histogram
 
 
 def _SmoothHistKey(n: int, nu: float) -> tuple[int, float]:
-  """Get a smoothed histogram key for an escaped value (n, nu).
+  """Smoothed histogram key for an escaped value (n, nu).
 
   Args:
     n (int): The integer escape value.
