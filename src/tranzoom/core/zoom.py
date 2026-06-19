@@ -1263,7 +1263,7 @@ def WriteVideoMP4(
     output_params=output_params,
   ) as writer:
     for frm in frames:
-      writer.append_data(np.asarray(image.RGBImageFromPNG(frm)))  # type: ignore[attr-defined]
+      writer.append_data(pixels.Pixels.FromBytes(frm)[0].clip)  # type: ignore[attr-defined]
       frame_count += 1
   # done, check that the frame count matches n_frames
   if frame_count != n_frames:

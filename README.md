@@ -48,6 +48,11 @@ Built with:
       - [Frame Representation](#frame-representation)
       - [Computation Parameters](#computation-parameters)
       - [Precision](#precision)
+      - [Interpolation features](#interpolation-features)
+        - [Pixel interpolation (`--i-pixels`)](#pixel-interpolation---i-pixels)
+        - [Frame interpolation (`--i-frames`)](#frame-interpolation---i-frames)
+        - [Combining both interpolation modes](#combining-both-interpolation-modes)
+        - [Implementation notes](#implementation-notes)
     - [Inputs and outputs](#inputs-and-outputs)
       - [Inputs](#inputs)
       - [Outputs](#outputs)
@@ -217,6 +222,8 @@ The tool can save all computations to a local DB. If allowed, it will use these 
 - **Manual zoom session**: The `tranz zoom manual` command runs the same iterative frame navigation but prompts the user for a direction at each step (1–9, numpad layout: 5=center, 8=N, 6=E, etc.) instead of querying an LLM. Supports both Mandelbrot and Julia Set fractals.
 - **Sector scoring**: Each sector is scored on a 0–100 scale for `fractal_score` (visual complexity / zoom promise). When targeted search is active, an additional `target_match_score` (also 0–100) is blended in with a configurable weight.
 - **Image metadata**: All tranZoom PNG images embed rich metadata (`tranZoom:*` PNG text chunks) including frame coordinates, magnification, palette (`tranZoom:render:palette`), precision, per-pixel statistics (`n:min`, `n:max`, `nu:min`, `nu:max`, histogram summaries), and (for AI/manual sessions) the full LLM evaluation, model parameters, prompts, and zoom step count.
+- **Pixel interpolation** (`--i-pixels`): Bilinear upscaling applied to the final rendered image to produce higher-resolution output without additional fractal computation. The `--i-pixels N` flag (valid range 0–3) inserts `N` interpolated pixels between each computed pixel in both dimensions, multiplying the final image size by `(N+1)`. For example, `--i-pixels 2` transforms a 1024×1024 computation into a 3072×3072 final image using deterministic bilinear interpolation. The fractal is computed once at the base resolution, then upscaled using weighted RGBA blending over 2×2 pixel neighborhoods. This produces smoother gradients and reduces visible pixelation at the cost of larger file sizes; no additional computation time beyond the interpolation pass itself (≪1 second for typical sizes). Metadata key `tranZoom:render:i_pixels` stores the interpolation level. Use this when you want poster-quality output from moderate computation cost.
+- **Frame interpolation** (`--i-frames`): Temporal interpolation applied to zoom animations to produce higher frame rates without computing additional fractal frames. The `--i-frames M` flag (valid range 0–7) inserts `M` interpolated frames between each real fractal-computed frame, multiplying the effective FPS by `(M+1)`. For example, `--fps 10 --i-frames 2` computes 10 real frames per second but outputs 30 total frames per second (10 real + 20 interpolated). Supports **linear interpolation** (weighted RGB blend between consecutive frames) and **quadratic interpolation** (three-point Lagrange curve using curr, next, next+1 frames for smoother acceleration). Quadratic mode is the default and produces more natural motion; it automatically falls back to linear for the final frame pair. This produces fluid animations from fewer expensive fractal computations; particularly effective for long zooms where computational cost dominates. The iteration depth (`max_iter`) is still computed per real frame using depth key frames, so quality remains consistent. Metadata key `tranZoom:zoom:frame:i_frames` stores the interpolation level. Use this when you want cinematic-smooth animations without the render time of computing every frame at full fractal precision.
 
 #### Frame Representation
 
@@ -300,6 +307,118 @@ The computed precision is exposed as:
 
 - `ComputationParameters.precision` → `int` bits (property; uses `params.depth`, `params.width`, `params.height`, and `params.frm`)
 - `ComputationParameters.context` → ready-to-use `gmpy2.context` (property; same inputs as `.precision`)
+
+#### Interpolation features
+
+TransZoom 2.0 introduces two powerful interpolation modes that dramatically reduce computation time while preserving visual quality: **pixel interpolation** (spatial upscaling of single images) and **frame interpolation** (temporal smoothing of animations).
+
+##### Pixel interpolation (`--i-pixels`)
+
+**Purpose:** Upscale a single rendered fractal image to higher resolution without computing additional fractal pixels.
+
+**How it works:** After the fractal escape-time computation finishes, tranZoom applies deterministic bilinear interpolation to the output image. For each interpolated pixel, a weighted RGBA blend is computed from the surrounding 2×2 neighborhood using sub-pixel fractional coordinates. This produces smooth gradients and reduces visible pixelation, particularly effective for poster-quality prints or detailed zoom views.
+
+**Usage:**
+
+```sh
+poetry run tranz --palette electric image -s 1024 --i-pixels 2 mandel
+```
+
+This computes a 1024×1024 fractal (≈1.05M pixels), then upscales it to 3072×3072 (≈9.44M pixels) via bilinear interpolation. The fractal computation takes the same time as a normal 1024×1024 render; the interpolation pass adds only ≪1 second.
+
+**Parameters:**
+
+- **Flag:** `--i-pixels N` (valid range: 0–3)
+- **Effect:** For `N > 0`, the final image dimensions are `(width * (N+1), height * (N+1))`
+- **Examples:**
+  - `--i-pixels 0` → no interpolation (default)
+  - `--i-pixels 1` → 2× upscale (1024×1024 → 2048×2048)
+  - `--i-pixels 2` → 3× upscale (1024×1024 → 3072×3072)
+  - `--i-pixels 3` → 4× upscale (1024×1024 → 4096×4096)
+
+**Trade-offs:**
+
+- ✅ Much faster than computing a larger image from scratch (e.g., computing 4096×4096 directly would take ~16× longer than 1024×1024)
+- ✅ Produces genuinely smoother output than nearest-neighbor scaling; no stair-stepping on diagonal boundaries
+- ✅ File sizes scale proportionally to pixel count (3× dimensions = 9× file size)
+- ❌ Does not add new fractal detail — interpolation cannot invent structure not present in the computed image
+- ❌ Very deep zooms may still show interpolation artifacts if the base resolution was too coarse; prefer computing at higher base resolution for maximum quality
+
+**When to use:**
+
+- You want wall-sized prints (poster/canvas quality) from moderate computation time
+- The fractal detail is well-captured at the base resolution (no severe aliasing or under-sampling)
+- You prefer faster renders over absolute sharpness of fine details
+- You want very high resolution videos to upload, even if they will be down-scaled later
+
+**Metadata:** The interpolation level is stored in the PNG text chunk `tranZoom:render:i_pixels` (integer 0–3). You can inspect it with `tranz image read <file>`.
+
+##### Frame interpolation (`--i-frames`)
+
+**Purpose:** Increase the frame rate of zoom animations without computing additional fractal frames.
+
+**How it works:** tranZoom computes `N` real fractal frames (each a full escape-time iteration at the required precision), then inserts `M` interpolated frames between each consecutive pair. Interpolated frames are generated by blending RGB pixel values from surrounding real frames using either **linear interpolation** (two-point weighted average) or **quadratic interpolation** (three-point Lagrange curve for smoother motion). The final animation has `(N-1) * (M+1) + 1` total frames. The interpolation is much better than a naïve computation because it knows the zoom factor and pre-scales each source before doing the interpolation.
+
+**Usage:**
+
+```sh
+poetry run tranz zoom -s 512 auto " -0.74364" "0.131826" "0.0007380" "1.0" --fps 10 --i-frames 2 --anim gif
+```
+
+This computes 10 real fractal frames (at geometrically increasing zoom depths), then generates 2 interpolated frames between each pair, producing a 28-frame GIF at an effective 30 FPS (10 × (2+1)). The fractal computation cost is that of 10 frames; the interpolation adds negligible time (~0.1s per interpolated frame for typical sizes).
+
+**Parameters:**
+
+- **Flag:** `--i-frames M` (valid range: 0–7)
+- **Effect:** For `M > 0`, the effective FPS becomes `fps * (M+1)` and the total frame count becomes `(n_frames - 1) * (M+1) + 1`
+- **Examples:**
+  - `--i-frames 0` → no interpolation (default)
+  - `--i-frames 1` → 2× FPS (10 real frames → 19 total frames at 20 FPS)
+  - `--i-frames 2` → 3× FPS (10 real frames → 28 total frames at 30 FPS)
+  - `--i-frames 7` → 8× FPS (10 real frames → 73 total frames at 80 FPS)
+
+**Animation depth handling:** The iteration depth (`max_iter`) is computed per real frame using depth key frames (one per ≈2× zoom step) and log-space smoothing with a 5-tap FIR filter. Interpolated frames inherit metadata from their surrounding real frames but are not used for depth estimation. Color normalization (`ZoomColorNorm`) is built from marker frames (one per ≈8.5× zoom step) and applied to all frames (real + interpolated), eliminating per-frame color flickering.
+
+**Trade-offs:**
+
+- ✅ Dramatically reduces render time for high-FPS animations (e.g., 60 FPS quadratic-interpolated from 10 real frames = 6× speedup)
+- ✅ Produces genuinely smoother motion than simply playing fewer frames; quadratic mode adds natural acceleration
+- ✅ File sizes grow proportionally to total frame count; effective for sharing cinematic zoom videos
+- ❌ Does not add new fractal detail between frames — the zoom path is still determined by the real frame spacing
+- ❌ Very fast zoom rates (large magnification jumps per real frame) may show interpolation artifacts as blended pixels cross set boundaries; prefer more real frames or slower zoom rates for maximum smoothness
+
+**When to use:**
+
+- You want fluid, cinematic zoom animations (30–60 FPS) without the computation cost of rendering every frame from scratch
+- The zoom path is well-sampled by the real frames (no abrupt jumps or discontinuities)
+- You prefer faster renders over absolute temporal sharpness of rapid transitions
+- You need high FPS for internet uploads
+
+**Metadata:** The interpolation level is stored in animation metadata under `tranZoom:zoom:frame:i_frames` (integer 0–7). You can inspect it with `tranz image read <file.gif>`.
+
+##### Combining both interpolation modes
+
+Pixel and frame interpolation are independent and can be used together:
+
+```sh
+poetry run tranz zoom -s 512 --i-pixels 1 auto " -0.74364" "0.131826" "0.0007380" "1.0" --fps 10 --i-frames 2 --anim gif
+```
+
+This produces:
+
+- 10 real fractal frames computed at 512×512 resolution
+- Each real frame upscaled to 1024×1024 via pixel interpolation (`--i-pixels 1`)
+- 2 interpolated frames inserted between each pair via quadratic frame interpolation (`--i-frames 2`)
+- Final output: 28-frame GIF at 1024×1024 resolution, effective 30 FPS
+
+The computation cost is that of 10×512×512 fractal renders; pixel interpolation adds ~0.1s per real frame; frame interpolation adds ~0.1s per interpolated frame. Total time is dominated by the 10 fractal computations, not the interpolation passes.
+
+##### Implementation notes
+
+- **Pixel interpolation:** Uses `PIL.Image.resize()` with `Resampling.BILINEAR`; deterministic and reproducible across platforms
+- **Frame interpolation:** Custom implementation in `zoom.py`; `InterpolatedFrameStream()` yields `bytes` (PNG-encoded frames) from an iterable of `(curr, next)` frame pairs; quadratic mode uses `QuadraticInterpolatedFrame()` with Lagrange polynomial blending
+- **Color consistency:** Both modes respect the `ZoomColorNorm` applied to the base computation, so interpolated pixels/frames inherit the same color mapping as surrounding real data
+- **Metadata roundtrip:** All interpolation settings are persisted in PNG text chunks and can be read back with `tranz image read`; re-rendering from a saved interpolated image will use the same settings
 
 ### Inputs and outputs
 
@@ -445,9 +564,10 @@ tranz [global flags] image [-w W] [-h H] [-s S] [--iter N] [--mark COORD] <mande
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `-w`/`--width` | Output image width in pixels (24–16384) | 1024 |
-| `-h`/`--height` | Output image height in pixels (24–16384) | 1024 |
-| `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales the other dimension proportionally to match the frame aspect ratio | None (use `-w`/`-h`) |
+| `-w`/`--width` | Output image width in pixels (24–16384); NOTE: if `--i-pixels` is given, effective width = `w × (i+1)` | 1024 |
+| `-h`/`--height` | Output image height in pixels (24–16384); NOTE: if `--i-pixels` is given, effective height = `h × (i+1)` | 1024 |
+| `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales the other dimension proportionally to match the frame aspect ratio; NOTE: if `--i-pixels` is given, effective size = `s × (i+1)` | None (use `-w`/`-h`) |
+| `--i-pixels` | Number of interpolated pixels to add between each computed pixel (0–3); upscales final image via bilinear interpolation; `0` = no interpolation (default), `1` = 2× size, `2` = 3× size, `3` = 4× size; see [Pixel interpolation](#pixel-interpolation---i-pixels) | `0` |
 | `-i`/`--iter` | Override max iterations (depth); `1000`–4294967295 | automatic adaptive search |
 | `--mark` | Draw a crosshair at this complex coordinate, formatted as `"(re, im)"` | None |
 | `--mark-color` | Color of the crosshair; one of `black`, `white`, `red`, `green`, `blue`, `yellow`, `cyan`, `magenta` | `red` |
@@ -463,9 +583,10 @@ tranz [global flags] zoom [-w W] [-h H] [-s S] [-f FRACTAL] [-n STEPS] [--julia-
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `-w`/`--width` | Output image width in pixels (24–16384) | 512 |
-| `-h`/`--height` | Output image height in pixels (24–16384) | 512 |
-| `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales proportionally | None (use `-w`/`-h`) |
+| `-w`/`--width` | Output image width in pixels (24–16384); NOTE: if `--i-pixels` is given, effective width = `w × (i+1)` | 512 |
+| `-h`/`--height` | Output image height in pixels (24–16384); NOTE: if `--i-pixels` is given, effective height = `h × (i+1)` | 512 |
+| `-s`/`--size` | Max pixel side; **overrides** `-w`/`-h` and scales proportionally; NOTE: if `--i-pixels` is given, effective size = `s × (i+1)` | None (use `-w`/`-h`) |
+| `--i-pixels` | Number of interpolated pixels to add between each computed pixel (0–3); upscales final images via bilinear interpolation; see [Pixel interpolation](#pixel-interpolation---i-pixels) | `0` |
 | `-f`/`--fractal` | Fractal type: `mandelbrot` or `julia` | `mandelbrot` |
 | `--julia-re` | Real part of the Julia Set constant `c` | `'0.27334'` |
 | `--julia-im` | Imaginary part of the Julia Set constant `c` | `'0.00742'` |
@@ -708,8 +829,9 @@ Command-level options:
 | --- | --- | --- |
 | `--anim` | Output format: `gif` or `mp4` | `gif` |
 | `--duration` | Total animation duration in seconds (0.1–45000) | None (computed) |
-| `--frames` | Number of frames (3–100000) | None (computed) |
-| `--fps` | Frames per second (0.1–30) | None (computed) |
+| `--frames` | Number of (real, fractal-computed) frames (3–100000); NOTE: if `--i-frames` is given, total frames = `(frames - 1) × (i+1) + 1` | None (computed) |
+| `--fps` | Frames per second for real frames (0.1–30); NOTE: if `--i-frames` is given, effective FPS = `fps × (i+1)` | None (computed) |
+| `--i-frames` | Number of interpolated frames to add between each pair of real frames (0–7); increases effective FPS via temporal interpolation; see [Frame interpolation](#frame-interpolation---i-frames) | `0` |
 | `--loop` | Number of GIF loops; `0` = infinite (ignored for MP4) | `0` |
 | `--save-frames/--no-save-frames` | Save each intermediate PNG frame to disk | off |
 
