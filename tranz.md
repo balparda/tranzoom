@@ -554,7 +554,7 @@ Usage: tranz image [OPTIONS] COMMAND [ARGS]...
 │                                                            of pixels, etc                        │
 │                                                                                      │
 │ --resample            TEXT                                 Interpolation resampling method;      │
-│                                                            default is "bicubic"; "bilinear" has  │
+│                                                            default is "lanczos"; "bilinear" has  │
 │                                                            the most stable results; "lanczos" is │
 │                                                            the most accurate but slowest;        │
 │                                                            available values: 'bicubic',          │
@@ -846,7 +846,7 @@ Usage: tranz zoom [OPTIONS] COMMAND [ARGS]...
 │                                                     pixels, etc                                  │
 │                                                                                      │
 │ --resample            TEXT                          Interpolation resampling method; default is  │
-│                                                     "bicubic"; "bilinear" has the most stable    │
+│                                                     "lanczos"; "bilinear" has the most stable    │
 │                                                     results; "lanczos" is the most accurate but  │
 │                                                     slowest; available values: 'bicubic',        │
 │                                                     'bilinear', 'lanczos'                        │

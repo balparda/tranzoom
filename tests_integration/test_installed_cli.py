@@ -161,12 +161,12 @@ def test_mandelbrot_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:render:palette': 'sahara',
       'tranZoom:render:set_palette': 'rgrayscale',
       'tranZoom:render:i_pixels': '0',
-      'tranZoom:render:resample': 'bicubic',
+      'tranZoom:render:resample': 'lanczos',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_re': '0',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': '602ee5212468d797e575377a8d44e2b867c1bb35e308cae041bd24c6f04e5e72',
+      'tranZoom:render:hash': '01226cc2b028d8f397f3c19e49d07476141c4ad740520136ddd5e88329fc82a8',
     }
 
 
@@ -278,12 +278,12 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:render:palette': 'sahara',
       'tranZoom:render:set_palette': 'none',
       'tranZoom:render:i_pixels': '0',
-      'tranZoom:render:resample': 'bicubic',
+      'tranZoom:render:resample': 'lanczos',
       'tranZoom:render:mark_color': 'red',
       'tranZoom:render:mark_re': '-5578776469/7500000000',
       'tranZoom:render:mark_im': '8244620127/62500000000',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': '560a695885edb9aaeaf3a2489aeedf48624eb6730dcfdb118f51c74b54de92c2',
+      'tranZoom:render:hash': 'f93b0c787429c192ac8914775512c02f47cfff5a1f5491657acded78e92f5d79',
       'tranZoom:zoom:type': 'gif',
       'tranZoom:zoom:frame:initial:width_re': '73801/100000000',
       'tranZoom:zoom:frame:initial:height_im': '73801/100000000',
@@ -302,7 +302,7 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
       'tranZoom:zoom:depth:frames': (
         '[(0, 1000, 1001), (6, 1000, 1019), (13, 1000, 1034), (19, 1159, 1105)]'
       ),
-      'tranZoom:zoom:hash': '0a1129f01b0a8b8690032ac7fc19ff6eaa12f5e21c83821b4de2d42284092053',
+      'tranZoom:zoom:hash': '550c3d1295e02795ef212b5e7429a15c62b41840b1af809a719e92f47e2d9d27',
     }
 
 
@@ -434,10 +434,10 @@ def test_julia_suzana_wave(cli: pathlib.Path) -> None:
       'tranZoom:render:palette': 'electric',
       'tranZoom:render:set_palette': 'sunset',
       'tranZoom:render:i_pixels': '1',
-      'tranZoom:render:resample': 'bicubic',
+      'tranZoom:render:resample': 'lanczos',
       'tranZoom:render:mark_color': 'none',
       'tranZoom:render:mark_re': '0',
       'tranZoom:render:mark_im': '0',
       'tranZoom:render:mark_width': '1',
-      'tranZoom:render:hash': '5fe562e1c0556c7a5ed07d7edeefdb74d57164a23f3e6149db10680ac438d12e',
+      'tranZoom:render:hash': '478b636f99b98fabde204dec8bc701b92ac9977028c749946bb23d9a2deb0f11',
     }
