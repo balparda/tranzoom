@@ -839,6 +839,7 @@ Command-level options:
 | `--i-frames` | Number of interpolated frames to add between each pair of real frames (0–7); increases effective FPS via temporal interpolation; see [Frame interpolation](#frame-interpolation---i-frames) | `0` |
 | `--loop` | Number of GIF loops; `0` = infinite (ignored for MP4) | `0` |
 | `--save-frames/--no-save-frames` | Save each intermediate PNG frame to disk | off |
+| `--inject/--no-inject` | Whether to re-save the animation after rendering to inject the final hash into metadata; MP4 uses lossless ffmpeg re-mux (fast), GIF requires re-encoding (slow); enable only if final hash in metadata is critical (e.g., for testing or verification); most users should leave off | `--no-inject` |
 
 Mark options (`--mark`, `--mark-color`, `--mark-width`) are **`tranz zoom` subgroup flags** (see [above](#tranz-zoom-subgroup-flags)) and apply to all zoom commands, including `auto`.
 
@@ -884,7 +885,7 @@ This section describes the internal pipeline that `tranz zoom auto` follows, ste
 
 8. **Render and animation assembly**: All frames are rendered (applying the color normalization from Step 7) and fed to `imageio` for assembly into the final GIF or MP4. In streaming mode, frames are loaded from disk one at a time so peak RAM equals roughly one frame rather than the whole animation.
 
-9. **Metadata embedding**: The final file receives `tranZoom:zoom:*` metadata tags: frame count, FPS, duration, zoom step, magnification per step, marker frame indices, depth frame data (pre- and post-smoothing depths), and the zoom hash. This metadata can be inspected with `tranz image read`.
+9. **Metadata embedding**: The final file receives `tranZoom:zoom:*` metadata tags: frame count, FPS, duration, zoom step, magnification per step, marker frame indices, depth frame data (pre- and post-smoothing depths), and the zoom hash. This metadata can be inspected with `tranz image read`. By default (`--no-inject`), the final hash is computed but not written back to the file to save time. If `--inject` is specified, the animation is re-processed to embed the final hash in the metadata: MP4 files are re-muxed losslessly using ffmpeg (preserving all frame data while updating the metadata container), while GIF files must be re-encoded (slower, slight quality loss). Most users should leave off (`--no-inject`) unless final hash verification is critical.
 
 10. **DB persistence**: A `ZoomData` entry is written to the DB referencing all individual frames, the marker subset, and the depth subset. Future runs with the same parameters will find the cached video file and return it immediately without repeating any computation.
 
@@ -995,12 +996,9 @@ You can easily make animations!
 ```sh
 $ poetry run tranz --no-db --no-date zoom -s 220 --mark "(-5578776469/7500000000,8244620127/62500000000)" auto " -5578776469/7500000000" "8244620127/62500000000" "0.00073801" "0.00073801" "1" --fps 5 --duration 4 --i-frames 1
 
-220 × 220 'GIF': 'sahara' 'Mandelbrot' 10^1.0000 magnitude ZOOM, 4.000 s long, at 5.00*2 FPS,
- with 20|39 frames (2 markers, 10.00%, and 4 depth frames, 20.00%), 12.8838%/step, CYTHON OPTIMIZED...
-ZOOM: <{[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] :
- [220 × 220, AUTO]} -> <GIF*2: {[PNG*1: SAHARA, none] +
- [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}> /
- (mag:1, n:20|39, d:4, fps:(5)*2, l:0)> ... [MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/1000000000]
+220 × 220 'GIF': 'sahara' 'Mandelbrot' 10^1.0000 magnitude ZOOM, 4.000 s long, at 5.00*2 FPS, with 20|39 frames (2 markers, 10.00%, and 4 depth frames, 20.00%), 12.8838%/step, CYTHON OPTIMIZED...
+ZOOM: <{[MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/100000000] : [220 × 220, AUTO]} ->
+ <GIF*2: {[PNG*1: SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}> / (mag:1, n:20|39, d:4, fps:(5)*2, l:0)> ... [MANDELBROT: (-5578776469/7500000000, 8244620127/62500000000) ± 73801/1000000000]
 
 Making 4 depth computations...
 Depth 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4/4  [ 0:00:01 < 0:00:00 , 3 fr/s ]
@@ -1023,6 +1021,7 @@ ZOOM: Color norm: built from 2 marker frames
 
 Render: <GIF*2: {[PNG*1: SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}>
 Render 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 20/20  [ 0:00:03 < 0:00:00 , 5 fr/s ]
+Move file to destination
 Render: DONE
 
 Success: GIF 'd9204b9c2aec64555ca7ce48226301684737cce8b673febe86629c2e8a36ae19' in 1.498 s (depth) + 14.956 s (frames) + 4.353 s (render)
@@ -1063,18 +1062,18 @@ $ poetry run tranz --no-db --palette electric --set max --set-palette sunset --n
 
 512 × 377 Julia w/ SET 'max', 10^2.630 magnitude, CYTHON OPTIMIZED...
 Compute: {[JULIA: (-313420497/429687500, 6567/10000) ± (17/3125, 1/250) @ (13667/50000, 371/50000)] : [512 × 377, AUTO] : max}
-Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , 799 px/s ]
+Pre 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 576/576  [ 0:00:00 < 0:00:00 , 777 px/s ]
 Picked depth 1000, histogram {43: 3, 44: 31, 45: 30, ...: 245, 425: 1, 431: 1, 1175: 1}, 264/576 set points
-Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 193,024/193,024  [ 0:00:02 < 0:00:00 , 64,311 px/s ]
-Compute: Julia: DONE, with precision 140 bits, 33.769 MiB, in 4.501 s
+Img 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 193,024/193,024  [ 0:00:02 < 0:00:00 , 67,370 px/s ]
+Compute: Julia: DONE, with precision 140 bits, 33.769 MiB, in 4.542 s
 
-Render: {[PNG*2: ELECTRIC, SUNSET]}
+Render: {[PNG*2/Lanczos: ELECTRIC, SUNSET]}
 Interpolating rendered frame 512 × 377 -> 1024 × 754 (*2)
-Render: PNG: DONE (1024 × 754), '95a6acd116fb1ca043f089f093fb0a8c139ffb490a6a24be068fa474c8636871' in 435.756 ms
-Saved to 'julia-95a6acd116fb1ca043f0.png' ('2f682ec344a556b1'), 554.419 KiB
+Render: PNG: DONE (1024 × 754), 'c748e691dbbfbec2c7008cb902f608e99f11950be2f469f0231a276bc8dbf3a2' in 407.142 ms
+Saved to 'julia-c748e691dbbfbec2c700.png' ('ae20f9d115f7940f'), 637.245 KiB
 ```
 
-Notice the `512 × 377 -> 1024 × 754 (*2)` showing the resolution increase. If the hash of this image changes, remember to change it in `src/tranzoom/cli/base.py`.
+Notice the `512 × 377 -> 1024 × 754 (*2)` showing the resolution increase and the `{[PNG*2/Lanczos: ELECTRIC, SUNSET]}` showing the method "Lanczos". If the hash of this image changes, remember to change it in `src/tranzoom/cli/base.py`.
 
 #### Powers of 1000
 

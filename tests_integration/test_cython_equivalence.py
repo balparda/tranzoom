@@ -112,6 +112,7 @@ def test_python_cython_equivalence_seahorse(cli: pathlib.Path, opt: str) -> None
         '31.7',
         '--i-frames',
         '1',
+        '--inject',
       ]
     )
     assert r.returncode == 0, f'tranz image failed:\n{r.stderr}'
@@ -314,6 +315,7 @@ def test_python_cython_equivalence_seeds300(cli: pathlib.Path, opt: str) -> None
         '10.1',
         '--i-frames',
         '1',
+        '--inject',
       ]
     )
     assert r.returncode == 0, f'tranz image failed:\n{r.stderr}'
@@ -620,6 +622,7 @@ def test_python_cython_equivalence_suzana(cli: pathlib.Path, opt: str) -> None:
         '10.7',
         '--i-frames',
         '2',
+        '--inject',
       ]
     )
     assert r.returncode == 0, f'tranz image failed:\n{r.stderr}'
@@ -800,6 +803,7 @@ def test_python_cython_equivalence_dragon(cli: pathlib.Path, opt: str) -> None:
         '4.1',
         '--i-frames',
         '3',
+        '--inject',
       ]
     )
     assert r.returncode == 0, f'tranz image failed:\n{r.stderr}'
@@ -978,6 +982,7 @@ def test_python_cython_equivalence_blob(cli: pathlib.Path, opt: str) -> None:
         '4.3',
         '--i-frames',
         '3',
+        '--inject',
       ]
     )
     assert r.returncode == 0, f'tranz image failed:\n{r.stderr}'

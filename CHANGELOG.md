@@ -5,7 +5,7 @@
 All notable changes to this project will be documented in this file.
 
 - [Changelog](#changelog)
-  - [V.V.V - 2026-06-DD - Placeholder](#vvv---2026-06-dd---placeholder)
+  - [2.1.0 - 2026-06-20](#210---2026-06-20)
   - [2.0.0 - 2026-06-19](#200---2026-06-19)
   - [1.9.0 - 2026-06-11](#190---2026-06-11)
   - [1.8.0 - 2026-06-06](#180---2026-06-06)
@@ -30,16 +30,19 @@ This project follows a pragmatic versioning approach:
 - **Minor**: new features or non-breaking changes.
 - **Major**: breaking changes (command renames, incompatible output formats).
 
-## V.V.V - 2026-06-DD - Placeholder
+## 2.1.0 - 2026-06-20
 
 - Added
-  - Placeholder for future additions.
+  - **Animation metadata hash injection control** (`--inject/--no-inject` flag, `cli/base.py`, `cli/zoomcommand.py`): new `tranz zoom auto` flag allows users to control whether the final hash is re-injected into animation metadata after rendering; `--inject` (default False) re-saves the animation file to include the final computed hash in metadata, which requires re-processing (lossless for MP4, lossy for GIF); `--no-inject` skips this step for faster completion when the final hash in metadata is not critical; useful for testing or when metadata space is constrained; both GIF and MP4 re-saving is expensive but preserves content fidelity for MP4 via ffmpeg re-mux.
 
 - Changed
-  - Placeholder for future changes.
+  - **MP4 metadata re-muxing optimization** (`core/zoom.py`): `ReWriteVideoMP4Meta()` completely rewritten to use external ffmpeg re-muxing instead of re-encoding; new implementation calls `imageio_ffmpeg.get_ffmpeg_exe()` with `copy` codec and `map_metadata` flags for lossless stream copying; dramatically reduces MP4 re-processing time from full re-encode to simple container re-mux operation; preserves all video frames and streams without quality loss; uses `subprocess.run()` to invoke ffmpeg directly with proper error handling and metadata injection support.
+  - **Test animation outputs** (`scripts/make_test_images.sh`, `tests_integration/test_cython_equivalence.py`, `tests_integration/test_installed_cli.py`): updated to account for MP4 re-muxing changes.
+  - **Example outputs in README**: updated example command outputs to show new "Copy file to destination" message when animations are saved; examples now display Lanczos resampling method in output format `{[PNG*2/Lanczos: ...]}` to indicate interpolation method being used.
 
 - Fixed
-  - Placeholder for future fixes.
+  - **MP4 video stability**: MP4 files created with metadata injection are now stable and byte-for-byte identical across multiple re-mux operations (ffmpeg re-mux with same metadata always produces identical output), whereas previous re-encoding approach introduced minor frame variations due to codec variability.
+  - **Animation rendering consistency**: animations now properly track hash values through metadata injection workflow, ensuring that multiple renders with `--inject` flag produce consistent, reproducible metadata.
 
 ## 2.0.0 - 2026-06-19
 

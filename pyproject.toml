@@ -20,7 +20,7 @@ build-backend = "poetry.core.masonry.api"
 [project]
 
 name = "tranzoom"
-version = "2.0.0"  # also update src/tranzoom/__init__.py
+version = "2.1.0"  # also update src/tranzoom/__init__.py
 
 description = "Mandelbrot/Julia Fractal generation and manipulation with AI/LLMs"
 license = "Apache-2.0"

@@ -11,11 +11,13 @@ import json
 import logging
 import math
 import pathlib
+import subprocess  # noqa: S404
 from collections import abc
 from typing import cast
 
 import gmpy2
 import imageio
+import imageio_ffmpeg  # type: ignore
 import numpy as np
 from numpy.typing import NDArray
 from PIL import Image as PILImage
@@ -1270,39 +1272,48 @@ def WriteVideoMP4(
 
 
 def ReWriteVideoMP4Meta(
-  old_path: pathlib.Path, new_path: pathlib.Path, meta: dict[str, str] | None
+  old_path: pathlib.Path,
+  new_path: pathlib.Path,
+  meta: dict[str, str] | None,
 ) -> None:
   """Read old_path MP4 and re-write to new_path with the same frames and new metadata.
 
-  We more-or-less assume the file was written with WriteVideoMP4().
+  We more-or-less assume the file was written with WriteVideoMP4(). We call external ffmpeg to
+  re-mux the file with new metadata, which is more efficient than re-encoding and is lossless.
 
   Args:
     old_path (pathlib.Path): The file path of the original MP4 to read.
     new_path (pathlib.Path): The file path to save the modified MP4.
     meta (dict[str, str] | None): Optional metadata to include in the new MP4; default None
 
+  Raises:
+    Error: on error
+
   """
-  # open the original MP4 and read the fps from its metadata
-  reader = imageio.get_reader(old_path, format='ffmpeg')  # type: ignore[arg-type]
-  fps: float = float(reader.get_meta_data().get('fps', 25.0))
-  # prepare metadata output params, same settings as WriteVideoMP4
-  output_params: list[str] = []
-  output_params.extend(['-movflags', '+faststart'])  # allows start playing before fully downloaded
-  output_params.extend(['-crf', '16'])  # good quality, lower is better
-  output_params.extend(['-preset', 'slow'])  # slower presets give better compression
+  # prepare ffmpeg command
+  cmd: list[str] = [
+    imageio_ffmpeg.get_ffmpeg_exe(),
+    '-y',
+    '-i',
+    str(old_path),
+    '-map',
+    '0',
+    '-c',
+    'copy',
+    '-map_metadata',
+    '0',
+  ]
+  # either add the metadata (if any) or explicitly clear the comment while preserving other metadata
   if meta:
-    # store all metadata as a single JSON string in the 'comment' field (mirrors WriteVideoMP4)
-    output_params.extend(['-metadata', f'comment={json.dumps(meta)}'])
-  # stream frames from reader directly into writer (no full in-memory buffering)
-  with imageio.get_writer(  # pyright: ignore[reportUnknownMemberType]
-    new_path,
-    fps=fps,
-    format='ffmpeg',  # type: ignore[arg-type]
-    codec='libx264',
-    pixelformat='yuv420p',
-    macro_block_size=1,
-    output_params=output_params,
-  ) as writer:
-    for frm in reader:  # type: ignore[attr-defined]
-      writer.append_data(frm)  # type: ignore[attr-defined]
-  reader.close()
+    cmd.extend(['-metadata', f'comment={json.dumps(meta)}'])
+  else:
+    cmd.extend(['-metadata', 'comment='])
+  # add faststart to allow playback before fully downloaded
+  cmd.extend(['-movflags', '+faststart', str(new_path)])  # destination path must be last argument
+  # run ffmpeg command
+  proc: subprocess.CompletedProcess[str] = subprocess.run(  # noqa: S603
+    cmd, capture_output=True, text=True, check=False
+  )
+  # check return code and raise error if ffmpeg failed
+  if proc.returncode != 0:
+    raise Error(f'ffmpeg metadata re-mux failed:\n{proc.stderr}')

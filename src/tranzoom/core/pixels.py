@@ -1244,7 +1244,7 @@ def GetBasicDataFromMP4(img_bytes: bytes) -> ObjInfo:
     reader.close()
     # read container tags (including our JSON comment) via ffmpeg -f ffmetadata;
     # this is the only way to access format.tags since imageio doesn't expose them
-    proc = subprocess.run(  # noqa: S603
+    proc: subprocess.CompletedProcess[str] = subprocess.run(  # noqa: S603
       [
         imageio_ffmpeg.get_ffmpeg_exe(),
         '-v',
@@ -1277,16 +1277,18 @@ def GetBasicDataFromMP4(img_bytes: bytes) -> ObjInfo:
     # try to get the data hash from the JSON metadata; if not valid JSON, log an error and ignore it
     try:
       mp4_meta = json.loads(mp4_tags['comment'])
-      data_hash = str(mp4_meta[META_IMAGE_HASH_KEY])
-    except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError, KeyError):
-      logging.error('MP4 comment metadata not valid JSON, ignoring; DO NOT trust this MP4 hash')
+      data_hash = str(mp4_meta[META_IMAGE_HASH_KEY]).strip()
+      if not data_hash:
+        raise Error(f'empty {META_IMAGE_HASH_KEY} in MP4 metadata (missing --inject flag?)')  # noqa: TRY301
+    except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError, KeyError, Error) as e:
+      logging.error(f'MP4 comment metadata not valid, ignoring; DO NOT trust this MP4 hash: {e}')
     # build the ObjInfo object
     return ObjInfo(
       anim=AnimationEncoding.MP4,
       width=width,
       height=height,
       bin_hash=bin_hash,
-      data_hash=data_hash,
+      data_hash=data_hash.strip() or bin_hash,
       meta=cast('dict[str, str]', mp4_meta),
     )
 
@@ -1338,9 +1340,9 @@ def GetBasicData(img_bytes: bytes) -> tuple[ObjInfo, Pixels | None]:
     except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError, KeyError) as err:
       logging.error(f'GIF "comment" metadata is not valid, ignoring: {err}')
     data_hash: str
-    if META_IMAGE_HASH_KEY in meta:
+    if META_IMAGE_HASH_KEY in meta and meta[META_IMAGE_HASH_KEY].strip():
       # this is the happy path: the GIF has a valid hash in its metadata, so we can trust it
-      data_hash = meta[META_IMAGE_HASH_KEY]
+      data_hash = meta[META_IMAGE_HASH_KEY].strip()
     else:
       data_hash = hashes.Hash256(img.convert('RGB').tobytes()).hex()
       logging.error(f'GIF does not have a tranZoom image hash; DO NOT TRUST this hash: {data_hash}')
