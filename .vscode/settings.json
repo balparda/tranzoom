@@ -240,6 +240,8 @@
     "msgspec",
     "MSVC",
     "musllinux",
+    "muxed",
+    "muxing",
     "mycli",
     "myconfig",
     "myprog",

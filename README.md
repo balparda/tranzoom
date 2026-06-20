@@ -839,6 +839,7 @@ Command-level options:
 | `--i-frames` | Number of interpolated frames to add between each pair of real frames (0–7); increases effective FPS via temporal interpolation; see [Frame interpolation](#frame-interpolation---i-frames) | `0` |
 | `--loop` | Number of GIF loops; `0` = infinite (ignored for MP4) | `0` |
 | `--save-frames/--no-save-frames` | Save each intermediate PNG frame to disk | off |
+| `--inject/--no-inject` | Whether to re-save the animation after rendering to inject the final hash into metadata; MP4 uses lossless ffmpeg re-mux (fast), GIF requires re-encoding (slow); enable only if final hash in metadata is critical (e.g., for testing or verification); most users should leave off | `--no-inject` |
 
 Mark options (`--mark`, `--mark-color`, `--mark-width`) are **`tranz zoom` subgroup flags** (see [above](#tranz-zoom-subgroup-flags)) and apply to all zoom commands, including `auto`.
 
@@ -884,7 +885,7 @@ This section describes the internal pipeline that `tranz zoom auto` follows, ste
 
 8. **Render and animation assembly**: All frames are rendered (applying the color normalization from Step 7) and fed to `imageio` for assembly into the final GIF or MP4. In streaming mode, frames are loaded from disk one at a time so peak RAM equals roughly one frame rather than the whole animation.
 
-9. **Metadata embedding**: The final file receives `tranZoom:zoom:*` metadata tags: frame count, FPS, duration, zoom step, magnification per step, marker frame indices, depth frame data (pre- and post-smoothing depths), and the zoom hash. This metadata can be inspected with `tranz image read`.
+9. **Metadata embedding**: The final file receives `tranZoom:zoom:*` metadata tags: frame count, FPS, duration, zoom step, magnification per step, marker frame indices, depth frame data (pre- and post-smoothing depths), and the zoom hash. This metadata can be inspected with `tranz image read`. By default (`--no-inject`), the final hash is computed but not written back to the file to save time. If `--inject` is specified, the animation is re-processed to embed the final hash in the metadata: MP4 files are re-muxed losslessly using ffmpeg (preserving all frame data while updating the metadata container), while GIF files must be re-encoded (slower, slight quality loss). Most users should leave off (`--no-inject`) unless final hash verification is critical.
 
 10. **DB persistence**: A `ZoomData` entry is written to the DB referencing all individual frames, the marker subset, and the depth subset. Future runs with the same parameters will find the cached video file and return it immediately without repeating any computation.
 

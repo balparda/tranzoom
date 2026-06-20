@@ -1070,6 +1070,23 @@ Usage: tranz zoom auto [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │                                                                    intermediate frames will not  │
 │                                                                    be saved; default is False    │
 │                                                                         │
+│ --inject         --no-inject                                       If True, will re-save the     │
+│                                                                    animation just to inject the  │
+│                                                                    final hash into the metadata; │
+│                                                                    if False, the animation       │
+│                                                                    metadata will be missing the  │
+│                                                                    final hash; default is False; │
+│                                                                    both GIF and MP4 have to be   │
+│                                                                    re-saved if the final hash    │
+│                                                                    must be present, but the      │
+│                                                                    process is expensive; MP4s    │
+│                                                                    are done losslessly while     │
+│                                                                    GIFs are lossy, so this is    │
+│                                                                    option only useful if for     │
+│                                                                    some reason (like testing)    │
+│                                                                    you really need the final     │
+│                                                                    hash in the metadata          │
+│                                                                              │
 │ --help                                                             Show this message and exit.   │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                     
