@@ -8,6 +8,7 @@ import dataclasses
 import enum
 import logging
 import pathlib
+import shutil
 import tempfile
 import warnings
 from collections import abc
@@ -667,6 +668,17 @@ ANIM_INTERPOLATION_FRAMES_OPTION: typer.models.OptionInfo = typer.Option(
     'so 0 is no interpolation, 1 means add 1 interpolated frame between every pair of frames, etc'
   ),
 )
+ANIM_INJECT_FINAL_HASH_OPTION: typer.models.OptionInfo = typer.Option(
+  False,
+  '--inject/--no-inject',
+  help=(
+    'If True, will re-save the animation just to inject the final hash into the metadata; '
+    'if False, the animation metadata will be missing the final hash; default is False; '
+    'both GIF and MP4 have to be re-saved if the final hash must be present, but the process '
+    'is expensive; MP4s are done losslessly while GIFs are lossy, so this is option only useful '
+    'if for some reason (like testing) you really need the final hash in the metadata'
+  ),
+)
 
 CONFIG_SETTABLE_KEYS: dict[str, type] = {
   # the keys you can actually read/set
@@ -1204,7 +1216,9 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
   config: TranZoomConfig,
   out: image.ImageOutputConfig,
   zoom_params: zoom.ZoomParameters,
+  *,
   save_frames: bool,
+  inject_hash: bool,
 ) -> tuple[pathlib.Path, int]:
   """Make the animation file, returning its path and size.
 
@@ -1213,6 +1227,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     out (image.ImageOutputConfig): the image output config with all options for rendering.
     zoom_params (zoom.ZoomParameters): the parameters of the zoom to render.
     save_frames (bool): whether to save the individual frames as images in the output directory.
+    inject_hash (bool): whether to inject the final hash into the animation metadata.
 
   Returns:
     tuple[pathlib.Path, int]: A tuple of the path to the saved animation file and its size in bytes.
@@ -1631,6 +1646,49 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             idx=i, data=img_data, data_hash=data_hash, img_path=img_path
           )
 
+        # create metadata; BEWARE: we don't yet have the video hash; it is impossible to have b/c
+        # (1) we stream the frames and (2) the video hash is computed from the hashes of the frames,
+        # which are only available after the video is rendered, and (3) the video saving
+        # methods PIL.save() and imageio.get_writer() consume the meta at frame 1 so no lazy object
+        # would work; for this we compute what we can and then rewrite the meta after the video
+        # is saved to disk with the final hash ONLY if the user really wants it; for MP4 it is
+        # done losslessly, for GIF it is done with some loss (PIL does not support lossless meta
+        # rewriting for GIF) so it should be avoided by default
+        meta: dict[str, str] = image.MakeImageMeta(  # use destination/final frame; empty hash!!
+          _SmartImage(zoom_params.n_frames - 1), zoom_params.render, ''
+        )
+        # add video-specific metadata
+        meta[image.META_IMAGE_ANIMATION_KEY] = zoom_params.render.anim.value.lower()
+        meta.update(
+          # the extra animation keys
+          {
+            image.META_ZOOM_TYPE_KEY: zoom_params.render.anim.value.lower(),
+            image.META_ZOOM_INITIAL_WIDTH_RE_KEY: str(all_frames[0].size[0]),
+            image.META_ZOOM_INITIAL_HEIGHT_IM_KEY: str(all_frames[0].size[1]),
+            image.META_ZOOM_MAGNITUDE_KEY: str(zoom_params.mag),
+            image.META_ZOOM_FRAMES_KEY: str(zoom_params.n_frames),
+            image.META_ZOOM_SECONDS_KEY: str(zoom_params.n_seconds),
+            image.META_ZOOM_LOOP_KEY: str(zoom_params.loop),
+            image.META_ZOOM_STEPS_KEY: str(zoom_params.n_steps),
+            image.META_ZOOM_FPS_KEY: str(zoom_params.fps),
+            image.META_ZOOM_I_FPS_KEY: str(zoom_params.ifps),
+            image.META_ZOOM_I_FRAMES_KEY: str(zoom_params.render.i_frames),
+            image.META_ZOOM_ALL_FRAMES_KEY: str(zoom_params.all_frames),
+            image.META_ZOOM_MAGNITUDE_PER_STEP_KEY: str(zoom_params.mag_per_step),
+            image.META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str(
+              zoom_params.scalar_magnification_per_step
+            ),
+            image.META_ZOOM_MARKER_INDEX_LIST_KEY: str([idx for idx, _ in all_markers]),
+            image.META_ZOOM_DEPTH_FRAMES_LIST_KEY: str(
+              # we include pre- and post-smoothing depths for all depth frames
+              [
+                (idx, depth_computations[idx][1], depth_computations[idx][2])
+                for idx in sorted_depth_keys
+              ]
+            ),
+            image.META_ZOOM_HASH_KEY: zoom_params.sha,
+          }
+        )
         # render the video to a temporary path, using the two-frame stream to interpolate frames
         tmp_path: pathlib.Path = (
           pathlib.Path(tmpdir) / f'temp_video.{zoom_params.render.anim.value.lower()}'
@@ -1652,6 +1710,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             zoom_params.img.height,
             zoom_params.all_frames,
             float(zoom_params.n_seconds),
+            meta=meta,
             loop=zoom_params.loop,
           )
         elif zoom_params.render.anim == pixels.AnimationEncoding.MP4:
@@ -1662,57 +1721,31 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             zoom_params.img.height,
             zoom_params.all_frames,
             float(zoom_params.n_seconds),
+            meta=meta,
           )
         else:
           raise UsageError(f'Unsupported animation type: {zoom_params.render.anim}')
+        del all_img_obj  # this should help free all generated images from memory
       finally:
         # we are done, close the progress bar, free memory
         p_bar.close()
       # we can finally compute the hash, which is stable if the image data and order does not change
       video_hash = hashes.Hash256(('|'.join(all_hash)).encode('ascii')).hex()
-      # create metadata
-      meta: dict[str, str] = image.MakeImageMeta(  # use destination frame (final) as reference
-        _SmartImage(zoom_params.n_frames - 1), zoom_params.render, video_hash
-      )
-      del all_img_obj  # this should help free all generated images from memory
-      # add video-specific metadata
-      meta[image.META_IMAGE_ANIMATION_KEY] = zoom_params.render.anim.value.lower()
-      meta.update(
-        # the extra animation keys
-        {
-          image.META_ZOOM_TYPE_KEY: zoom_params.render.anim.value.lower(),
-          image.META_ZOOM_INITIAL_WIDTH_RE_KEY: str(all_frames[0].size[0]),
-          image.META_ZOOM_INITIAL_HEIGHT_IM_KEY: str(all_frames[0].size[1]),
-          image.META_ZOOM_MAGNITUDE_KEY: str(zoom_params.mag),
-          image.META_ZOOM_FRAMES_KEY: str(zoom_params.n_frames),
-          image.META_ZOOM_SECONDS_KEY: str(zoom_params.n_seconds),
-          image.META_ZOOM_LOOP_KEY: str(zoom_params.loop),
-          image.META_ZOOM_STEPS_KEY: str(zoom_params.n_steps),
-          image.META_ZOOM_FPS_KEY: str(zoom_params.fps),
-          image.META_ZOOM_I_FPS_KEY: str(zoom_params.ifps),
-          image.META_ZOOM_I_FRAMES_KEY: str(zoom_params.render.i_frames),
-          image.META_ZOOM_ALL_FRAMES_KEY: str(zoom_params.all_frames),
-          image.META_ZOOM_MAGNITUDE_PER_STEP_KEY: str(zoom_params.mag_per_step),
-          image.META_ZOOM_MAGNIFICATION_PER_STEP_KEY: str(
-            zoom_params.scalar_magnification_per_step
-          ),
-          image.META_ZOOM_MARKER_INDEX_LIST_KEY: str([idx for idx, _ in all_markers]),
-          image.META_ZOOM_DEPTH_FRAMES_LIST_KEY: str(
-            # we include pre- and post-smoothing depths for all depth frames
-            [
-              (idx, depth_computations[idx][1], depth_computations[idx][2])
-              for idx in sorted_depth_keys
-            ]
-          ),
-          image.META_ZOOM_HASH_KEY: zoom_params.sha,
-        }
-      )
-      # move the file!
+      # move the file! we can compute the final path
       video_path = full_path(video_hash)
-      if zoom_params.render.anim == pixels.AnimationEncoding.GIF:
-        zoom.ReWriteAnimatedGIFMeta(tmp_path, video_path, meta)
-      elif zoom_params.render.anim == pixels.AnimationEncoding.MP4:
-        zoom.ReWriteVideoMP4Meta(tmp_path, video_path, meta)
+      if inject_hash:
+        # manually add hash to the metadata
+        meta[pixels.META_IMAGE_HASH_KEY] = video_hash
+        config.console.print(f'[red]Re-Render to inject hash {video_hash!r}[/]')
+        # move the temporary file to the final path and rewrite the metadata with the final hash
+        if zoom_params.render.anim == pixels.AnimationEncoding.GIF:
+          zoom.ReWriteAnimatedGIFMeta(tmp_path, video_path, meta)
+        elif zoom_params.render.anim == pixels.AnimationEncoding.MP4:
+          zoom.ReWriteVideoMP4Meta(tmp_path, video_path, meta)
+      else:
+        # just instantaneous move, no meta rewriting
+        config.console.print('[white]Copy file to destination[/]')
+        shutil.move(tmp_path, video_path)
     # closed temporary directory, video is saved in final destination with final metadata
     config.console.print('[yellow]Render:[/] [green]DONE[/]\n')
     # we just freed the temporary directory; add to DB

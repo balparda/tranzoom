@@ -208,6 +208,7 @@ def test_animated_seahorse_tail(cli: pathlib.Path) -> None:
         '4',
         '--i-frames',
         '1',
+        '--inject',
       ]
     )
     assert r.returncode == 0, f'tranz zoom auto failed:\n{r.stderr}'

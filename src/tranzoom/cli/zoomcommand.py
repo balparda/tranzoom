@@ -247,6 +247,7 @@ def Auto(  # documentation is help/epilog/args  # noqa: D103
   i_frames: int = base.ANIM_INTERPOLATION_FRAMES_OPTION,  # type: ignore[assignment]
   loop: int = base.ANIM_LOOP_OPTION,  # type: ignore[assignment]
   save_frames: bool = base.ANIM_SAVE_FRAMES_OPTION,  # type: ignore[assignment]
+  inject_hash: bool = base.ANIM_INJECT_FINAL_HASH_OPTION,  # type: ignore[assignment]
 ) -> None:
   # we intend passing config, so we add the options here...
   config: base.TranZoomConfig = ctx.obj
@@ -279,7 +280,9 @@ def Auto(  # documentation is help/epilog/args  # noqa: D103
   # call
   img_p: pathlib.Path
   img_sz: int
-  img_p, img_sz = base.ProduceFractalAnimation(config, out, zoom_params, save_frames)
+  img_p, img_sz = base.ProduceFractalAnimation(
+    config, out, zoom_params, save_frames=save_frames, inject_hash=inject_hash
+  )
   # log
   config.console.print(
     f'Saved {zoom_params.render.anim.value.upper()} to '
