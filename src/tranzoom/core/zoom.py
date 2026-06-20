@@ -1149,162 +1149,55 @@ def WriteAnimatedGIF(  # noqa: C901
     raise Error(f'frames generator produced {frame_count[0]} frames, expected {n_frames}')
 
 
-def _GifCommentBlock(data: bytes) -> bytes:
-  """Return a GIF Comment Extension block for data.
-
-  Args:
-    data (bytes): The comment data to include in the GIF Comment Extension block.
-
-  Returns:
-    bytes: The GIF Comment Extension block bytes.
-
-  """
-  chunks: list[bytes] = []
-  for i in range(0, len(data), 255):
-    chunk: bytes = data[i : i + 255]
-    chunks.extend((bytes([len(chunk)]), chunk))
-  return b'\x21\xfe' + b''.join(chunks) + b'\x00'
-
-
-def _SkipGifSubBlocks(data: bytes, pos: int) -> int:
-  """Return the position just after a GIF sub-block sequence.
-
-  Args:
-    data (bytes): The GIF data bytes.
-    pos (int): The starting position of the sub-block sequence.
-
-  Returns:
-    int: The position just after the sub-block sequence.
-
-  Raises:
-    Error: if the GIF is truncated.
-
-  """
-  n: int = len(data)
-  while True:
-    if pos >= n:
-      raise Error('Truncated GIF while reading sub-block size')
-    block_size: int = data[pos]
-    pos += 1
-    if block_size == 0:
-      return pos
-    if pos + block_size > n:
-      raise Error('Truncated GIF while reading sub-block data')
-    pos += block_size
-
-
-def ReWriteAnimatedGIFMeta(  # noqa: C901, PLR0912, PLR0915
+def ReWriteAnimatedGIFMeta(
   old_path: pathlib.Path,
   new_path: pathlib.Path,
   meta: dict[str, str] | None,
+  loop: int = 0,  # 0 == infinite loop
 ) -> None:
-  """Rewrite GIF comment metadata without re-encoding image data.
+  """Read old_path GIF and re-write to new_path with the same frames and new metadata.
 
   We more-or-less assume the file was written with WriteAnimatedGIF().
-  Removes existing GIF Comment Extension blocks and, if comment is not None,
-  inserts one new Comment Extension immediately before the GIF trailer.
-
-  This preserves image descriptors, compressed image data, application extensions
-  such as NETSCAPE loop metadata, graphic control extensions, palettes, and all
-  other non-comment bytes exactly.
 
   Args:
     old_path (pathlib.Path): The file path of the original GIF to read.
     new_path (pathlib.Path): The file path to save the modified GIF.
     meta (dict[str, str] | None): Optional metadata to include in the new GIF; default None
+    loop (int): The number of times to loop the GIF (0 for infinite loop). Default is 0 which
+        means infinite loop.
 
   Raises:
     Error: on error
 
   """
-  # read GIF to memory
-  data: bytes = old_path.read_bytes()
-  comment: bytes | None = json.dumps(meta).encode('utf-8') if meta is not None else None
-  # check GIF header and length
-  n: int = len(data)
-  if n < 14:  # noqa: PLR2004
-    raise Error(f'Invalid/truncated: file too short ({n} bytes)')
-  if data[:6] not in {b'GIF87a', b'GIF89a'}:
-    raise Error(f'Not a GIF file: invalid header ({data[:6]!r})')
-  # header + Logical Screen Descriptor
-  pos: int = 13
-  # Global Color Table, if present
-  packed: int = data[10]
-  if packed & 0x80:
-    gct_size: int = 3 * (1 << ((packed & 0x07) + 1))
-    if pos + gct_size > n:
-      raise Error('Truncated GIF global color table')
-    pos += gct_size
-  out = bytearray()
-  out.extend(data[:pos])
-  found_trailer = False
-  end: int
-  while pos < n:
-    introducer: int = data[pos]
-    # trailer: insert the new comment immediately before it
-    if introducer == 0x3B:  # noqa: PLR2004
-      if comment is not None:
-        out.extend(_GifCommentBlock(comment))
-      out.extend(data[pos:])
-      found_trailer = True
-      break
-    # extension block
-    if introducer == 0x21:  # noqa: PLR2004
-      if pos + 1 >= n:
-        raise Error('Truncated GIF extension introducer')
-      label: int = data[pos + 1]
-      # comment extension: 21 FE <sub-blocks> 00 - DROP
-      if label == 0xFE:  # noqa: PLR2004
-        pos = _SkipGifSubBlocks(data, pos + 2)
-        continue
-      # Graphic Control Extension: fixed 4-byte payload plus terminator:
-      # copy verbatim, but validate enough to stay in sync
-      if label == 0xF9:  # noqa: PLR2004
-        if pos + 8 > n:
-          raise Error('Truncated GIF graphic control extension')
-        if data[pos + 2] != 4 or data[pos + 7] != 0:  # noqa: PLR2004
-          raise Error('Malformed GIF graphic control extension')
-        out.extend(data[pos : pos + 8])
-        pos += 8
-        continue
-      # Plain Text Extension, Application Extension, or unknown extension:
-      # extension header is 21 <label>, then a sub-block sequence;
-      # for Application Extension, the first "sub-block" is normally the fixed
-      # 11-byte application identifier/authentication block, which this generic
-      # sub-block skipper handles correctly
-      end = _SkipGifSubBlocks(data, pos + 2)
-      out.extend(data[pos:end])
-      pos = end
-      continue
-    # image descriptor block
-    if introducer == 0x2C:  # noqa: PLR2004
-      if pos + 10 > n:
-        raise Error('Truncated GIF image descriptor')
-      descriptor_end: int = pos + 10
-      image_packed: int = data[pos + 9]
-      # Local Color Table, if present
-      if image_packed & 0x80:
-        lct_size: int = 3 * (1 << ((image_packed & 0x07) + 1))
-        descriptor_end += lct_size
-        if descriptor_end > n:
-          raise Error('Truncated GIF local color table')
-      # LZW minimum code size byte follows descriptor/palette, then image data sub-blocks
-      if descriptor_end >= n:
-        raise Error('Truncated GIF image data')
-      image_data_start: int = descriptor_end + 1
-      end = _SkipGifSubBlocks(data, image_data_start)
-      # copy the entire image descriptor block verbatim, including the LZW minimum code
-      # size byte and all sub-blocks
-      out.extend(data[pos:end])
-      pos = end
-      continue
-    # unknown introducer: we don't know how to parse it, so fail
-    raise Error(f'Malformed GIF: unexpected block introducer 0x{introducer:02x} at byte {pos}')
-  # done, check that we found the trailer
-  if not found_trailer:
-    raise Error('Malformed GIF: missing trailer')
-  # write the new GIF to disk
-  new_path.write_bytes(bytes(out))
+  # open the original GIF; keep it open so the lazy generator can seek through remaining frames
+  with PILImage.open(old_path) as img:
+    n_frames: int = getattr(img, 'n_frames', 1)
+    if n_frames < 1:
+      raise Error(f'GIF file has no frames: {old_path}')
+    # read the first frame; duration is assumed uniform since WriteAnimatedGIF() uses a single value
+    img.seek(0)
+    first_frame: PILImage.Image = img.copy()
+    frame_duration: int = int(img.info.get('duration', 100))  # ms per frame, assumed uniform
+
+    def _RemainingFrames() -> abc.Iterator[PILImage.Image]:
+      # yield frame copies one at a time so we never hold more than one extra frame in memory
+      for i in range(1, n_frames):
+        img.seek(i)
+        yield img.copy()
+
+    # re-save streaming frames lazily; PIL processes each frame before the generator advances
+    first_frame.save(
+      # https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif
+      new_path,
+      save_all=True,
+      append_images=_RemainingFrames(),
+      duration=frame_duration,  # uniform per-frame duration in milliseconds
+      loop=loop,
+      disposal=1,  # 1 == do not dispose, overwrite
+      optimize=True,
+      comment=json.dumps(meta).encode('utf-8') if meta is not None else None,
+    )
 
 
 def WriteVideoMP4(
