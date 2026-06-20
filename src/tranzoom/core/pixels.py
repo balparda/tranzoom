@@ -1244,7 +1244,7 @@ def GetBasicDataFromMP4(img_bytes: bytes) -> ObjInfo:
     reader.close()
     # read container tags (including our JSON comment) via ffmpeg -f ffmetadata;
     # this is the only way to access format.tags since imageio doesn't expose them
-    proc = subprocess.run(  # noqa: S603
+    proc: subprocess.CompletedProcess[str] = subprocess.run(  # noqa: S603
       [
         imageio_ffmpeg.get_ffmpeg_exe(),
         '-v',
