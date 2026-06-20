@@ -1021,7 +1021,7 @@ ZOOM: Color norm: built from 2 marker frames
 
 Render: <GIF*2: {[PNG*1: SAHARA, none] + [MARK: red/1 @ (-5578776469/7500000000, 8244620127/62500000000)]}>
 Render 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 20/20  [ 0:00:03 < 0:00:00 , 5 fr/s ]
-Copy file to destination
+Move file to destination
 Render: DONE
 
 Success: GIF 'd9204b9c2aec64555ca7ce48226301684737cce8b673febe86629c2e8a36ae19' in 1.498 s (depth) + 14.956 s (frames) + 4.353 s (render)

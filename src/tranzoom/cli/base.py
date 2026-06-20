@@ -675,7 +675,7 @@ ANIM_INJECT_FINAL_HASH_OPTION: typer.models.OptionInfo = typer.Option(
     'If True, will re-save the animation just to inject the final hash into the metadata; '
     'if False, the animation metadata will be missing the final hash; default is False; '
     'both GIF and MP4 have to be re-saved if the final hash must be present, but the process '
-    'is expensive; MP4s are done losslessly while GIFs are lossy, so this is option only useful '
+    'is expensive; MP4s are done losslessly while GIFs are lossy, so this option is only useful '
     'if for some reason (like testing) you really need the final hash in the metadata'
   ),
 )
@@ -1736,7 +1736,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
       if inject_hash:
         # manually add hash to the metadata
         meta[pixels.META_IMAGE_HASH_KEY] = video_hash
-        config.console.print(f'[red]Re-Render to inject hash {video_hash!r}[/]')
+        config.console.print(f'[red]Re-saving/Re-muxing to inject hash {video_hash!r}[/]')
         # move the temporary file to the final path and rewrite the metadata with the final hash
         if zoom_params.render.anim == pixels.AnimationEncoding.GIF:
           zoom.ReWriteAnimatedGIFMeta(tmp_path, video_path, meta)
@@ -1744,7 +1744,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           zoom.ReWriteVideoMP4Meta(tmp_path, video_path, meta)
       else:
         # just instantaneous move, no meta rewriting
-        config.console.print('[white]Copy file to destination[/]')
+        config.console.print('[white]Move file to destination[/]')
         shutil.move(tmp_path, video_path)
     # closed temporary directory, video is saved in final destination with final metadata
     config.console.print('[yellow]Render:[/] [green]DONE[/]\n')

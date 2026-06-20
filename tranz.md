@@ -1081,8 +1081,8 @@ Usage: tranz zoom auto [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
 │                                                                    must be present, but the      │
 │                                                                    process is expensive; MP4s    │
 │                                                                    are done losslessly while     │
-│                                                                    GIFs are lossy, so this is    │
-│                                                                    option only useful if for     │
+│                                                                    GIFs are lossy, so this       │
+│                                                                    option is only useful if for  │
 │                                                                    some reason (like testing)    │
 │                                                                    you really need the final     │
 │                                                                    hash in the metadata          │

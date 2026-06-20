@@ -37,7 +37,7 @@ This project follows a pragmatic versioning approach:
 
 - Changed
   - **MP4 metadata re-muxing optimization** (`core/zoom.py`): `ReWriteVideoMP4Meta()` completely rewritten to use external ffmpeg re-muxing instead of re-encoding; new implementation calls `imageio_ffmpeg.get_ffmpeg_exe()` with `copy` codec and `map_metadata` flags for lossless stream copying; dramatically reduces MP4 re-processing time from full re-encode to simple container re-mux operation; preserves all video frames and streams without quality loss; uses `subprocess.run()` to invoke ffmpeg directly with proper error handling and metadata injection support.
-  - **Test animation outputs** (`scripts/make_test_images.sh`, `tests_integration/test_cython_equivalence.py`, `tests_integration/test_installed_cli.py`): updated to account for MP4 re-muxing changes; test video files regenerated with new lossless re-mux process; integration tests now verify that MP4 metadata injection produces identical frame data before and after re-mux operation; added coverage for `--inject` and `--no-inject` flag combinations.
+  - **Test animation outputs** (`scripts/make_test_images.sh`, `tests_integration/test_cython_equivalence.py`, `tests_integration/test_installed_cli.py`): updated to account for MP4 re-muxing changes.
   - **Example outputs in README**: updated example command outputs to show new "Copy file to destination" message when animations are saved; examples now display Lanczos resampling method in output format `{[PNG*2/Lanczos: ...]}` to indicate interpolation method being used.
 
 - Fixed

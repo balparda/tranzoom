@@ -1309,11 +1309,7 @@ def ReWriteVideoMP4Meta(
   else:
     cmd.extend(['-metadata', 'comment='])
   # add faststart to allow playback before fully downloaded
-  cmd.extend([
-    '-movflags',
-    '+faststart',
-    str(new_path),  # destination path must be last argument
-  ])
+  cmd.extend(['-movflags', '+faststart', str(new_path)])  # destination path must be last argument
   # run ffmpeg command
   proc: subprocess.CompletedProcess[str] = subprocess.run(  # noqa: S603
     cmd, capture_output=True, text=True, check=False
