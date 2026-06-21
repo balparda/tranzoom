@@ -1086,7 +1086,7 @@ def InterpolatedFrameStream(
       ]
       # PARALLEL or SEQUENTIAL interpolation: for sequential, we just feed the jobs directly to
       # the generator expression, and for parallel, we use pool.map to distribute the jobs across
-      # the worker processes (pool.map preserves input order, which the encoder needs
+      # the worker processes (pool.map preserves input order, which the encoder needs)
       for result in (
         pool.map(InterpolateFrameWorker, jobs, chunksize=1)
         if pool
