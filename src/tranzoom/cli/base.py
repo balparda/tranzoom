@@ -1701,6 +1701,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           i_frames=zoom_params.render.i_frames,
           zoom_per_step=float(zoom_params.scalar_magnification_per_step),
           use_quadratic=zoom.DEFAULT_USE_QUADRATIC,
+          max_threads=config.max_threads,
         )
         if zoom_params.render.anim == pixels.AnimationEncoding.GIF:
           zoom.WriteAnimatedGIF(

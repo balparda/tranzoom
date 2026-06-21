@@ -13,6 +13,7 @@ import math
 import pathlib
 import subprocess  # noqa: S404
 from collections import abc
+from concurrent import futures
 from typing import cast
 
 import gmpy2
@@ -972,6 +973,27 @@ def QuadraticInterpolatedFrame(  # noqa: PLR0914
   )
 
 
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class _InterpolationJob:
+  """A job for interpolating a frame between two rendered zoom frames."""
+
+  job_index: int
+  curr_frame: RenderedZoomFrame
+  next_frame: RenderedZoomFrame
+  next2_frame: RenderedZoomFrame | None
+  i_frames: int
+  zoom_per_step: float
+  use_quadratic: bool
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class _InterpolationResult:
+  """The result of interpolating a frame between two rendered zoom frames."""
+
+  data_hash: str
+  png: bytes
+
+
 def InterpolatedFrameStream(
   pairs: abc.Iterable[tuple[RenderedZoomFrame, RenderedZoomFrame | None]],
   mutable_hashes: list[str],
@@ -979,6 +1001,7 @@ def InterpolatedFrameStream(
   i_frames: int,
   zoom_per_step: float,
   use_quadratic: bool = DEFAULT_USE_QUADRATIC,
+  max_threads: int | None = None,
 ) -> abc.Iterator[bytes]:
   """Yield real + interpolated animation frames.
 
@@ -998,6 +1021,8 @@ def InterpolatedFrameStream(
     zoom_per_step (float): The zoom factor per step between frames.
     use_quadratic (bool): Whether to use quadratic interpolation (True) or linear
         interpolation only (False); default is DEFAULT_USE_QUADRATIC
+    max_threads (int | None): The maximum number of threads to use for parallel interpolation;
+        if None, the default is to use all available CPU cores that can be used
 
   Yields:
     bytes: The PNG-encoded bytes of each frame (real and interpolated).
@@ -1012,55 +1037,96 @@ def InterpolatedFrameStream(
     raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
   if mutable_hashes:
     raise Error('mutable_hashes must be an empty list')
-  # create an iterator over the pairs, get the first one
-  it: abc.Iterator[tuple[RenderedZoomFrame, RenderedZoomFrame | None]] = iter(pairs)
+  # determine how many workers to use for parallel interpolation
+  interpolation_workers: int = frame.ConcurrenceToUse(
+    (i_frames + 1) if max_threads is None else min(max_threads, i_frames + 1)
+  )
+  use_parallelism: bool = i_frames > 0 and interpolation_workers > 1
+  # get the first pair from the iterator
   curr_frame: RenderedZoomFrame
   next_frame: RenderedZoomFrame | None
+  it: abc.Iterator[tuple[RenderedZoomFrame, RenderedZoomFrame | None]] = iter(pairs)
   try:
     curr_frame, next_frame = next(it)
   except StopIteration:
-    # no frames to yield
+    # no frames to process, just return an empty iterator
     return
-  # loop over the pairs, yielding the current frame and interpolated frames until we get the last
-  next_pending: tuple[RenderedZoomFrame, RenderedZoomFrame | None] | None
-  while True:
-    # get the next triple for lookahead
-    try:
-      next_pending = next(it)
-    except StopIteration:
-      next_pending = None
-    # always yield the real current frame
-    mutable_hashes.append(curr_frame.data_hash)
-    yield curr_frame.data.PNG(copy_previous=False)[0]
-    # no next real frame means curr is the final real frame
-    if next_frame is None:
-      return  # done
-    # for quadratic interpolation of curr_frame -> next_frame, use next2 when available.
-    next2: RenderedZoomFrame | None = None if next_pending is None else next_pending[1]
-    for jj in range(i_frames):
-      frac: float = float(jj + 1) / float(i_frames + 1)
-      pix: pixels.Pixels = (
-        LinearInterpolatedFrame(
-          curr_frame,
-          next_frame,
+  # create (only once) a process pool executor to parallelize the interpolation jobs
+  pool: futures.ProcessPoolExecutor | None = (
+    futures.ProcessPoolExecutor(max_workers=interpolation_workers) if use_parallelism else None
+  )
+  try:
+    # loop over the pairs, yielding the current frame and interpolated frames until we get the last
+    while True:
+      # get the next pair from the iterator, if any
+      try:
+        next_pending: tuple[RenderedZoomFrame, RenderedZoomFrame | None] | None = next(it)
+      except StopIteration:
+        # no more pairs, set next_pending to None
+        next_pending = None
+      # yield the current frame and its hash
+      mutable_hashes.append(curr_frame.data_hash)
+      yield curr_frame.data.PNG(copy_previous=False)[0]
+      # if there is no next frame, we are done
+      if next_frame is None:
+        return
+      next2: RenderedZoomFrame | None = None if next_pending is None else next_pending[1]
+      # create a list of interpolation jobs for the current segment
+      jobs: list[_InterpolationJob] = [
+        _InterpolationJob(
+          job_index=jj,
+          curr_frame=curr_frame,
+          next_frame=next_frame,
+          next2_frame=next2,
+          i_frames=i_frames,
           zoom_per_step=zoom_per_step,
-          frac=frac,
+          use_quadratic=use_quadratic,
         )
-        if next2 is None or not use_quadratic
-        else QuadraticInterpolatedFrame(
-          curr_frame,
-          next_frame,
-          next2,
-          zoom_per_step=zoom_per_step,
-          frac=frac,
-        )
-      )
-      mutable_hashes.append(pix.data_hash)
-      yield pix.PNG(copy_previous=False)[0]
-    # if we have a next triple, advance the frames; otherwise, we are done
-    if next_pending is None:
-      return  # done
-    curr_frame, next_frame = next_pending
+        for jj in range(i_frames)
+      ]
+      # PARALLEL or SEQUENTIAL interpolation: for sequential, we just feed the jobs directly to
+      # the generator expression, and for parallel, we use pool.map to distribute the jobs across
+      # the worker processes (pool.map preserves input order, which the encoder needs
+      for result in (
+        pool.map(InterpolateFrameWorker, jobs, chunksize=1)
+        if pool
+        else (InterpolateFrameWorker(job) for job in jobs)
+      ):
+        mutable_hashes.append(result.data_hash)  # remember the hash for this interpolated frame
+        yield result.png
+      # if there is no next pair, we are done
+      if next_pending is None:
+        return
+      curr_frame, next_frame = next_pending
+  finally:
+    if pool:
+      pool.shutdown()
+
+
+def InterpolateFrameWorker(job: _InterpolationJob) -> _InterpolationResult:
+  """Worker function to interpolate a frame between two rendered zoom frames.
+
+  Args:
+    job (_InterpolationJob): The job containing the current and next frames + parameters.
+
+  Returns:
+    _InterpolationResult: The result containing the interpolated frame's hash and PNG bytes.
+
+  """
+  # frac is the fraction of the way between curr_frame and next_frame for this interpolated frame
+  frac: float = float(job.job_index + 1) / float(job.i_frames + 1)
+  # make the pixels.Pixels based on the interpolation method (linear or quadratic)
+  pix: pixels.Pixels = (
+    LinearInterpolatedFrame(
+      job.curr_frame, job.next_frame, zoom_per_step=job.zoom_per_step, frac=frac
+    )
+    if job.next2_frame is None or not job.use_quadratic
+    else QuadraticInterpolatedFrame(
+      job.curr_frame, job.next_frame, job.next2_frame, zoom_per_step=job.zoom_per_step, frac=frac
+    )
+  )
+  # return the interpolation result
+  return _InterpolationResult(data_hash=pix.data_hash, png=pix.PNG(copy_previous=False)[0])
 
 
 def WriteAnimatedGIF(  # noqa: C901
