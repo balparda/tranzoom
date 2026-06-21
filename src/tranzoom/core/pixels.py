@@ -47,6 +47,15 @@ _LABEL_OFFSET: int = 5
 # interior points are stored as -(int(floor(scale * |z|)) + 1), with scale = RES / MAX_Z = RES / 2
 
 
+# interpolation constants; these could conceivably be made user-configurable, but for that they
+# would need to be added to the ZoomParameters dataclass and serialized in the JSON, which is
+# a bit overkill for now
+ERODE_LINEAR: int = 5
+BLUR_LINEAR: float = 16.0
+ERODE_QUADRATIC: int = 8
+BLUR_QUADRATIC: float = 32.0
+
+
 class Error(frame.Error):
   """Base image exception."""
 
@@ -1386,6 +1395,37 @@ def ValidateIFrames(i_frames: int) -> None:
   """
   if not (0 <= i_frames <= MAX_INTERPOLATION_FRAMES):
     raise Error(f'Interpolation must be between 0 and {MAX_INTERPOLATION_FRAMES}, got {i_frames=}')
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class RenderedZoomFrame:
+  """One fully-rendered base animation frame."""
+
+  idx: int
+  data: Pixels
+  data_hash: str
+  img_path: pathlib.Path
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class InterpolationJob:
+  """A job for interpolating a frame between two rendered zoom frames."""
+
+  job_index: int
+  curr_frame: RenderedZoomFrame
+  next_frame: RenderedZoomFrame
+  next2_frame: RenderedZoomFrame | None
+  i_frames: int
+  zoom_per_step: float
+  use_quadratic: bool
+
+
+@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
+class InterpolationResult:
+  """The result of interpolating a frame between two rendered zoom frames."""
+
+  data_hash: str
+  png: bytes
 
 
 def _BilinearInterpolate(

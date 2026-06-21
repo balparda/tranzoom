@@ -24,7 +24,7 @@ import logging
 from collections import abc
 from concurrent import futures
 
-from tranzoom.core import fractalfast, frame, image
+from tranzoom.core import fractalfast, frame, image, pixels
 
 # load the Python computation, which may be either the pure Python or the Hybrid (Cython-optimized)
 # version depending on `cython.compiled` which we set into `fractalfast.CYTHON`; these are the
@@ -33,6 +33,9 @@ PY_MANDELBROT_COMPUTATION: image.FractalComputation = fractalfast.MandelbrotComp
 PY_JULIA_COMPUTATION: image.FractalComputation = fractalfast.JuliaComputation
 PY_NORM_ESCAPE: abc.Callable[[int, float], tuple[int, float]] = fractalfast.NormalizeSmoothEscape
 PY_ENCODE_INT_64: abc.Callable[[int, float], int] = fractalfast.EncodeIntFloatTo64
+PY_LINEAR_INTERPOLATION_WORKER: abc.Callable[
+  [pixels.InterpolationJob], pixels.InterpolationResult
+] = fractalfast.InterpolateFrameWorker
 # and some helpers --- DO NOT use directly, call OptimizationToUse()
 _PY_OPTIMIZATION: frame.Optimization = (
   frame.Optimization.HYBRID if fractalfast.CYTHON else frame.Optimization.PYTHON
@@ -46,6 +49,9 @@ CY_MANDELBROT_COMPUTATION: image.FractalComputation | None = None
 CY_JULIA_COMPUTATION: image.FractalComputation | None = None
 CY_NORM_ESCAPE: abc.Callable[[int, float], tuple[int, float]] | None = None
 CY_ENCODE_INT_64: abc.Callable[[int, float], int] | None = None
+CY_LINEAR_INTERPOLATION_WORKER: (
+  abc.Callable[[pixels.InterpolationJob], pixels.InterpolationResult] | None
+) = fractalfast.InterpolateFrameWorker  # TODO: None
 try:
   from tranzoom.core import (  # type: ignore[attr-defined]
     fractalc,  # pyright: ignore[reportUnknownVariableType, reportAttributeAccessIssue]
@@ -56,6 +62,7 @@ try:
   CY_JULIA_COMPUTATION = fractalc.JuliaComputation  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
   CY_NORM_ESCAPE = fractalc.NormalizeSmoothEscape  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
   CY_ENCODE_INT_64 = fractalc.EncodeIntFloatTo64  # pyright: ignore[reportUnknownVariableType, reportConstantRedefinition, reportUnknownMemberType]
+  # TODO: load CY_LINEAR_INTERPOLATION_WORKER
 except ImportError:
   logging.warning(
     f'Could not import fractalc.py Cython, will be limited to {_PY_OPTIMIZATION_STR} '
@@ -195,10 +202,10 @@ def ComputeFractal(
       if params.frm.fractal == frame.Fractal.MANDELBROT
       else PY_JULIA_COMPUTATION
     )
-  # log the start of the render (not pre-computation anymore here)
+  # log the start of the actual computation (not pre-computation anymore here)
   logging.info(
     f'{params.frm.fractal.value.upper()} using {n_processes} process(es) '
-    f'for {"PRE " if is_preprocess else ""}rendering - {actual_opt_msg}'
+    f'for {"PRE " if is_preprocess else ""}computation - {actual_opt_msg}'
   )
   # create inputs
   inp: list[image.FractalTaskInput] = [

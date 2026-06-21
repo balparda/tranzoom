@@ -19,10 +19,7 @@ from typing import cast
 import gmpy2
 import imageio
 import imageio_ffmpeg  # type: ignore
-import numpy as np
-from numpy.typing import NDArray
 from PIL import Image as PILImage
-from PIL import ImageFilter
 from transcrypto.utils import base as tbase
 from transcrypto.utils import timer
 
@@ -32,10 +29,6 @@ from tranzoom.core import fractal, frame, image, pixels
 # would need to be added to the ZoomParameters dataclass and serialized in the JSON, which is
 # a bit overkill for now
 DEFAULT_USE_QUADRATIC: bool = True  # use quadratic interpolation for smoother transitions
-_ERODE_LINEAR: int = 5
-_BLUR_LINEAR: float = 16.0
-_ERODE_QUADRATIC: int = 8
-_BLUR_QUADRATIC: float = 32.0
 
 # animation constants
 
@@ -625,16 +618,6 @@ class ZoomParameters(frame.SerializingFractalObject):
     return marker_frames
 
 
-@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class RenderedZoomFrame:
-  """One fully-rendered base animation frame."""
-
-  idx: int
-  data: pixels.Pixels
-  data_hash: str
-  img_path: pathlib.Path
-
-
 def FrameEstimatedIters(d: int, s: image.FractalStats) -> int:
   """Estimate a measure for how hard the iterations will be for this frame.
 
@@ -654,354 +637,15 @@ def FrameEstimatedIters(d: int, s: image.FractalStats) -> int:
   return d // 5 + math.floor((4.0 * d * s.n_interior) / (5.0 * s.n_px))
 
 
-def CenterZoomRGB(
-  img: pixels.Pixels,
-  scale: float,
-  *,
-  return_mask: bool = False,
-  fill_color: tuple[int, int, int] | None = None,
-) -> tuple[pixels.Pixels, NDArray[np.uint8] | None]:
-  """Return img zoomed around its center.
-
-  scale > 1 zooms in.
-  scale < 1 zooms out.
-  scale == 1 returns a copy.
-
-  If return_mask is True, also return an L-mode validity mask:
-    MAX_COLOR where the transformed output samples from inside the source image.
-    0 where the transformed output is outside the source image.
-
-  Args:
-    img (pixels.Pixels): The input RGB image to be zoomed.
-    scale (float): The zoom scale factor. Must be a finite positive number.
-    return_mask (bool): Whether to return the transform validity mask; default False.
-    fill_color (tuple[int, int, int] | None): Optional RGB fill color for areas outside the
-        source image. If None, the fill color is estimated from the median of the border pixels.
-
-  Returns:
-    tuple[pixels.Pixels, NDArray[np.uint8] | None]: The zoomed image (NO META is included),
-        optionally with its validity mask.
-
-  Raises:
-    Error: on error
-
-  """
-  # check image and scale are valid
-  if not math.isfinite(scale) or scale <= 0.0:
-    raise Error(f'invalid interpolation zoom scale: {scale}')
-  if fill_color and (max(fill_color) > pixels.MAX_COLOR or min(fill_color) < 0):
-    raise Error(f'invalid fill_color: {fill_color}')
-  # if scale is effectively 1, return a copy
-  height: int
-  width: int
-  height, width, _ = img.data.shape
-  if abs(scale - 1.0) < 1e-12:  # noqa: PLR2004
-    return (
-      dataclasses.replace(img, meta={}),
-      np.full((height, width), pixels.MAX_COLOR, dtype=np.uint8) if return_mask else None,
-    )
-  # get center
-  cx: float = (width - 1) / 2.0
-  cy: float = (height - 1) / 2.0
-  # compute inverse scale for Pillow affine transform
-  inv: float = 1.0 / scale
-  affine: tuple[float, float, float, float, float, float] = (
-    inv,
-    0.0,
-    cx - cx * inv,
-    0.0,
-    inv,
-    cy - cy * inv,
-  )
-  with img.obj as pil_img:
-    out_pil: PILImage.Image = pil_img.transform(
-      pil_img.size,
-      PILImage.Transform.AFFINE,
-      affine,
-      resample=PILImage.Resampling.BICUBIC,
-      fillcolor=fill_color or BorderFillColor(img),
-    )
-    out: pixels.Pixels = pixels.Pixels(data=np.asarray(out_pil, dtype=np.float32), meta={})
-  # if the caller does not want a mask, return just the zoomed image
-  if not return_mask:
-    return (out, None)
-  # create a mask of the same size as the input image, filled with MAX_COLOR (valid)
-  mask_src: PILImage.Image = PILImage.new('L', (width, height), pixels.MAX_COLOR)
-  mask_pil: PILImage.Image = mask_src.transform(
-    (width, height),
-    PILImage.Transform.AFFINE,
-    affine,
-    resample=PILImage.Resampling.NEAREST,
-    fillcolor=0,
-  )
-  return (out, np.asarray(mask_pil, dtype=np.uint8))
-
-
-def BorderFillColor(img: pixels.Pixels) -> tuple[int, int, int]:
-  """Estimate a safer affine fill color from the median of the image border pixels.
-
-  Args:
-    img (pixels.Pixels): The input image.
-
-  Returns:
-    tuple[int, int, int]: The estimated fill color as an RGB tuple.
-
-  Raises:
-    Error: on error
-
-  """
-  # pick up only border pixels (top, bottom, left, right)
-  arr: NDArray[np.uint8] = img.clip
-  border: NDArray[np.uint8] = np.concatenate(
-    (
-      arr[0, :, :],
-      arr[-1, :, :],
-      arr[:, 0, :],
-      arr[:, -1, :],
-    ),
-    axis=0,
-  )
-  # compute the median color of the border pixels
-  color: NDArray[np.float64] = np.median(border, axis=0)
-  if color.shape != (3,):
-    raise Error(f'Unexpected border color shape: {color.shape}')
-  return tuple(int(x) for x in color)  # type: ignore[return-value]
-
-
-def FeatherValidMask(
-  mask: NDArray[np.uint8],
-  *,
-  erode_pixels: int,
-  blur_pixels: float,
-) -> NDArray[np.uint8]:
-  """Return a soft validity mask.
-
-  The valid region is first eroded, then blurred. This creates a smooth
-  alpha ramp from valid transformed pixels to invalid/out-of-bounds pixels.
-
-  Args:
-    mask (NDArray[np.uint8]): validity mask, MAX_COLOR valid and 0 invalid.
-    erode_pixels (int): Pixels to shrink the hard valid region before blur.
-    blur_pixels (float): Gaussian blur radius for the alpha ramp.
-
-  Returns:
-    NDArray[np.uint8]: validity soft mask.
-
-  Raises:
-    Error: on error
-
-  """
-  # sanity check
-  if mask.ndim != 2:  # noqa: PLR2004
-    raise Error(f'expected 2-D mask, got shape {mask.shape}')
-  if mask.dtype != np.uint8:
-    raise Error(f'expected uint8 mask, got {mask.dtype}')
-  if erode_pixels < 0:
-    raise Error(f'pixels must be >= 0, got {erode_pixels}')
-  if blur_pixels < 0.0:
-    raise Error(f'blur_pixels must be >= 0, got {blur_pixels}')
-  # erode & blur
-  with PILImage.fromarray(mask, mode='L') as mask_img:
-    soft_mask: PILImage.Image = mask_img
-    if erode_pixels:
-      soft_mask = soft_mask.filter(ImageFilter.MinFilter(erode_pixels * 2 + 1))
-    if blur_pixels:
-      soft_mask = soft_mask.filter(ImageFilter.GaussianBlur(blur_pixels))
-    soft: NDArray[np.float32] = np.asarray(soft_mask, dtype=np.float32)
-  # critical: GaussianBlur leaks white alpha into the invalid region:
-  # clamp it so invalid transformed pixels remain fully transparent
-  hard_alpha: NDArray[np.float32] = mask.astype(np.float32) / float(pixels.MAX_COLOR)
-  return cast('NDArray[np.uint8]', np.clip(soft * hard_alpha, 0, pixels.MAX_COLOR).astype(np.uint8))  # pyright: ignore[reportUnnecessaryCast]
-
-
-def MaskArray(mask: NDArray[np.uint8]) -> NDArray[np.float32]:
-  """Convert a uint8 validity mask to a float32 alpha array in [0, 1].
-
-  Args:
-    mask (NDArray[np.uint8]): validity mask, MAX_COLOR valid and 0 invalid
-
-  Returns:
-    NDArray[np.float32]: A float32 array of shape (height, width, 1) with values in [0, 1].
-
-  Raises:
-    Error: on error
-
-  """
-  # sanity check
-  if mask.ndim != 2:  # noqa: PLR2004
-    raise Error(f'expected 2-D mask, got shape {mask.shape}')
-  if mask.dtype != np.uint8:
-    raise Error(f'expected uint8 mask, got {mask.dtype}')
-  # convert to float32 array in [0, 1]
-  return mask.astype(np.float32)[:, :, None] / float(pixels.MAX_COLOR)
-
-
-def LinearInterpolatedFrame(
-  curr_img: RenderedZoomFrame,
-  next_img: RenderedZoomFrame,
-  *,
-  zoom_per_step: float,
-  frac: float,
-) -> pixels.Pixels:
-  """Interpolate between curr_img and next_img at fraction frac.
-
-  Args:
-    curr_img (_RenderedZoomFrame): The current rendered zoom frame.
-    next_img (_RenderedZoomFrame): The next rendered zoom frame.
-    zoom_per_step (float): The zoom factor per step between frames.
-    frac (float): The interpolation fraction between 0.0 and 1.0.
-
-  Returns:
-    pixels.Pixels: Data object representing the interpolated image; NO META is included
-
-  Raises:
-    Error: on error
-
-  """
-  # check params and convert images
-  if not math.isfinite(zoom_per_step) or zoom_per_step <= 0.0:
-    raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
-  if not (0.0 <= frac <= 1.0):
-    raise Error(f'Invalid interpolation fraction: {frac}')
-  # get border from "current"
-  curr_border: tuple[int, int, int] = BorderFillColor(curr_img.data)
-  # align both images to the virtual zoom depth between the two real frames
-  curr_aligned: pixels.Pixels = CenterZoomRGB(
-    curr_img.data, zoom_per_step**frac, fill_color=curr_border
-  )[0]
-  next_aligned_raw: pixels.Pixels
-  next_valid_mask: NDArray[np.uint8] | None
-  next_aligned_raw, next_valid_mask = CenterZoomRGB(
-    next_img.data, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
-  )
-  if next_valid_mask is None:
-    raise Error('next_valid_mask is None, but it should not be; bug! report')
-  # the future frames will have a black border where the zoomed-out image is outside the
-  # original image; we create a soft alpha mask to blend the current frame into the next frame
-  # to avoid harsh transitions
-  next_alpha_mask: NDArray[np.uint8] = FeatherValidMask(
-    next_valid_mask, erode_pixels=_ERODE_LINEAR, blur_pixels=_BLUR_LINEAR
-  )
-  alpha1: NDArray[np.float32] = frac * MaskArray(next_alpha_mask)
-  return pixels.Pixels(
-    data=(curr_aligned.data * (1.0 - alpha1)) + (next_aligned_raw.data * alpha1),  # pyright: ignore[reportArgumentType]
-    meta={},
-  )
-
-
-def QuadraticInterpolatedFrame(  # noqa: PLR0914
-  curr_img: RenderedZoomFrame,
-  next_img_1: RenderedZoomFrame,
-  next_img_2: RenderedZoomFrame,
-  *,
-  zoom_per_step: float,
-  frac: float,
-) -> pixels.Pixels:
-  """Quadratic interpolation using curr_img, next_img_1, next_img_2.
-
-  Points are interpreted as:
-    curr_img  at x = 0
-    next_img_1 at x = 1
-    next_img_2 at x = 2
-
-  We evaluate the quadratic at x = t, where 0 < t < 1.
-
-  Args:
-    curr_img (_RenderedZoomFrame): The current rendered zoom frame.
-    next_img_1 (_RenderedZoomFrame): The next rendered zoom frame.
-    next_img_2 (_RenderedZoomFrame): The next rendered zoom frame after next_img_1.
-    zoom_per_step (float): The zoom factor per step between frames.
-    frac (float): The interpolation fraction between 0.0 and 1.0.
-
-  Returns:
-    pixels.Pixels: Data object representing the interpolated image; NO META is included
-
-  Raises:
-    Error: on error
-
-  """
-  # check params and convert images
-  if not math.isfinite(zoom_per_step) or zoom_per_step <= 0.0:
-    raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
-  if not (0.0 <= frac <= 1.0):
-    raise Error(f'Invalid interpolation fraction: {frac}')
-  # align all three samples to the same virtual zoom depth
-  curr_border: tuple[int, int, int] = BorderFillColor(curr_img.data)
-  curr_aligned: pixels.Pixels = CenterZoomRGB(
-    curr_img.data, zoom_per_step**frac, fill_color=curr_border
-  )[0]
-  next_aligned_1_raw: pixels.Pixels
-  next_valid_mask_1: NDArray[np.uint8] | None
-  next_aligned_1_raw, next_valid_mask_1 = CenterZoomRGB(
-    next_img_1.data, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
-  )
-  next_aligned_2_raw: pixels.Pixels
-  next_valid_mask_2: NDArray[np.uint8] | None
-  next_aligned_2_raw, next_valid_mask_2 = CenterZoomRGB(
-    next_img_2.data, zoom_per_step ** (frac - 2.0), return_mask=True, fill_color=curr_border
-  )
-  if next_valid_mask_1 is None or next_valid_mask_2 is None:
-    raise Error('next_valid_mask_1|2 is None, but it should not be; bug! report')
-  # the future frames will have a black border where the zoomed-out image is outside the
-  # original image; we create a soft alpha mask to blend the current frame into the next frame
-  # to avoid harsh transitions
-  soft_mask_1: NDArray[np.uint8] = FeatherValidMask(
-    next_valid_mask_1, erode_pixels=_ERODE_LINEAR, blur_pixels=_BLUR_LINEAR
-  )
-  soft_mask_2: NDArray[np.uint8] = FeatherValidMask(
-    next_valid_mask_2, erode_pixels=_ERODE_QUADRATIC, blur_pixels=_BLUR_QUADRATIC
-  )
-  # blend using Lagrange interpolation
-  w0: float = ((frac - 1.0) * (frac - 2.0)) / 2.0
-  w1: float = -frac * (frac - 2.0)
-  w2: float = (frac * (frac - 1.0)) / 2.0
-  alpha1: NDArray[np.float32] = MaskArray(soft_mask_1)
-  alpha2: NDArray[np.float32] = MaskArray(soft_mask_2)
-  # fade future-frame contributions out near their invalid borders;
-  # important: when future weights are masked away, give the missing weight
-  # back to curr_aligned: this keeps brightness stable and avoids dark seams
-  effective_w0: NDArray[np.float32] = w0 + (w1 * (1.0 - alpha1)) + (w2 * (1.0 - alpha2))  # pyright: ignore[reportAssignmentType]
-  effective_w1: NDArray[np.float32] = w1 * alpha1
-  effective_w2: NDArray[np.float32] = w2 * alpha2
-  return pixels.Pixels(
-    data=(
-      (effective_w0 * curr_aligned.data)
-      + (effective_w1 * next_aligned_1_raw.data)
-      + (effective_w2 * next_aligned_2_raw.data)
-    ),  # pyright: ignore[reportArgumentType]
-    meta={},
-  )
-
-
-@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class _InterpolationJob:
-  """A job for interpolating a frame between two rendered zoom frames."""
-
-  job_index: int
-  curr_frame: RenderedZoomFrame
-  next_frame: RenderedZoomFrame
-  next2_frame: RenderedZoomFrame | None
-  i_frames: int
-  zoom_per_step: float
-  use_quadratic: bool
-
-
-@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class _InterpolationResult:
-  """The result of interpolating a frame between two rendered zoom frames."""
-
-  data_hash: str
-  png: bytes
-
-
-def InterpolatedFrameStream(
-  pairs: abc.Iterable[tuple[RenderedZoomFrame, RenderedZoomFrame | None]],
+def InterpolatedFrameStream(  # noqa: C901, PLR0912
+  pairs: abc.Iterable[tuple[pixels.RenderedZoomFrame, pixels.RenderedZoomFrame | None]],
   mutable_hashes: list[str],
   *,
   i_frames: int,
   zoom_per_step: float,
   use_quadratic: bool = DEFAULT_USE_QUADRATIC,
   max_threads: int | None = None,
+  optimization: frame.Optimization | None = None,
 ) -> abc.Iterator[bytes]:
   """Yield real + interpolated animation frames.
 
@@ -1014,8 +658,8 @@ def InterpolatedFrameStream(
   lookahead in this function.
 
   Args:
-    pairs (RenderedZoomFrame, RenderedZoomFrame | None]]): An iterable of pairs of frames
-        (curr, next).
+    pairs (tuple[pixels.RenderedZoomFrame, pixels.RenderedZoomFrame | None]]): An iterable of
+        pairs of frames (curr, next).
     mutable_hashes (list[str]): A mutable empty list to store mutable hashes for each frame.
     i_frames (int): The number of interpolated frames to generate between each pair of real frames.
     zoom_per_step (float): The zoom factor per step between frames.
@@ -1023,6 +667,11 @@ def InterpolatedFrameStream(
         interpolation only (False); default is DEFAULT_USE_QUADRATIC
     max_threads (int | None): The maximum number of threads to use for parallel interpolation;
         if None, the default is to use all available CPU cores that can be used
+    optimization (frame.Optimization | None, optional): The optimization level to use for
+        computation. Defaults to None, which means to use the max available optimization.
+        If given then behavior is: given CYTHON, not available will raise an Error;
+        given HYBRID, not available will give an Error; given PYTHON, but loaded HYBRID,
+        will use HYBRID (but not CYTHON)
 
   Yields:
     bytes: The PNG-encoded bytes of each frame (real and interpolated).
@@ -1042,10 +691,26 @@ def InterpolatedFrameStream(
     (i_frames + 1) if max_threads is None else min(max_threads, i_frames + 1)
   )
   use_parallelism: bool = i_frames > 0 and interpolation_workers > 1
+  # decide on the optimization level
+  actual_opt: frame.Optimization
+  actual_opt_msg: str
+  actual_opt, actual_opt_msg = fractal.OptimizationToUse(optimization)
+  # get the right computation function based on the optimization level and the fractal type
+  computation_worker: abc.Callable[[pixels.InterpolationJob], pixels.InterpolationResult]
+  if actual_opt == frame.Optimization.CYTHON:
+    if fractal.CY_LINEAR_INTERPOLATION_WORKER is None:
+      raise Error('Cython optimization should be loaded at this point; bug; report!')
+    computation_worker = fractal.CY_LINEAR_INTERPOLATION_WORKER
+  else:
+    computation_worker = fractal.PY_LINEAR_INTERPOLATION_WORKER
+  # log the start of the render
+  logging.info(
+    f'Animation render using {interpolation_workers} process(es) for rendering - {actual_opt_msg}'
+  )
   # get the first pair from the iterator
-  curr_frame: RenderedZoomFrame
-  next_frame: RenderedZoomFrame | None
-  it: abc.Iterator[tuple[RenderedZoomFrame, RenderedZoomFrame | None]] = iter(pairs)
+  curr_frame: pixels.RenderedZoomFrame
+  next_frame: pixels.RenderedZoomFrame | None
+  it: abc.Iterator[tuple[pixels.RenderedZoomFrame, pixels.RenderedZoomFrame | None]] = iter(pairs)
   try:
     curr_frame, next_frame = next(it)
   except StopIteration:
@@ -1060,7 +725,9 @@ def InterpolatedFrameStream(
     while True:
       # get the next pair from the iterator, if any
       try:
-        next_pending: tuple[RenderedZoomFrame, RenderedZoomFrame | None] | None = next(it)
+        next_pending: tuple[pixels.RenderedZoomFrame, pixels.RenderedZoomFrame | None] | None = (
+          next(it)
+        )
       except StopIteration:
         # no more pairs, set next_pending to None
         next_pending = None
@@ -1070,10 +737,10 @@ def InterpolatedFrameStream(
       # if there is no next frame, we are done
       if next_frame is None:
         return
-      next2: RenderedZoomFrame | None = None if next_pending is None else next_pending[1]
+      next2: pixels.RenderedZoomFrame | None = None if next_pending is None else next_pending[1]
       # create a list of interpolation jobs for the current segment
-      jobs: list[_InterpolationJob] = [
-        _InterpolationJob(
+      jobs: list[pixels.InterpolationJob] = [
+        pixels.InterpolationJob(
           job_index=jj,
           curr_frame=curr_frame,
           next_frame=next_frame,
@@ -1088,9 +755,9 @@ def InterpolatedFrameStream(
       # the generator expression, and for parallel, we use pool.map to distribute the jobs across
       # the worker processes (pool.map preserves input order, which the encoder needs)
       for result in (
-        pool.map(InterpolateFrameWorker, jobs, chunksize=1)
+        pool.map(computation_worker, jobs, chunksize=1)
         if pool
-        else (InterpolateFrameWorker(job) for job in jobs)
+        else (computation_worker(job) for job in jobs)
       ):
         mutable_hashes.append(result.data_hash)  # remember the hash for this interpolated frame
         yield result.png
@@ -1101,32 +768,6 @@ def InterpolatedFrameStream(
   finally:
     if pool:
       pool.shutdown()
-
-
-def InterpolateFrameWorker(job: _InterpolationJob) -> _InterpolationResult:
-  """Worker function to interpolate a frame between two rendered zoom frames.
-
-  Args:
-    job (_InterpolationJob): The job containing the current and next frames + parameters.
-
-  Returns:
-    _InterpolationResult: The result containing the interpolated frame's hash and PNG bytes.
-
-  """
-  # frac is the fraction of the way between curr_frame and next_frame for this interpolated frame
-  frac: float = float(job.job_index + 1) / float(job.i_frames + 1)
-  # make the pixels.Pixels based on the interpolation method (linear or quadratic)
-  pix: pixels.Pixels = (
-    LinearInterpolatedFrame(
-      job.curr_frame, job.next_frame, zoom_per_step=job.zoom_per_step, frac=frac
-    )
-    if job.next2_frame is None or not job.use_quadratic
-    else QuadraticInterpolatedFrame(
-      job.curr_frame, job.next_frame, job.next2_frame, zoom_per_step=job.zoom_per_step, frac=frac
-    )
-  )
-  # return the interpolation result
-  return _InterpolationResult(data_hash=pix.data_hash, png=pix.PNG(copy_previous=False)[0])
 
 
 def WriteAnimatedGIF(  # noqa: C901
