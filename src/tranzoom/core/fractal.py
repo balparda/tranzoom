@@ -35,7 +35,7 @@ PY_NORM_ESCAPE: abc.Callable[[int, float], tuple[int, float]] = fractalfast.Norm
 PY_ENCODE_INT_64: abc.Callable[[int, float], int] = fractalfast.EncodeIntFloatTo64
 PY_LINEAR_INTERPOLATION_WORKER: abc.Callable[
   [pixels.InterpolationJob], pixels.InterpolationResult
-] = fractalfast.InterpolateFrameWorker
+] = pixels.InterpolateFrameWorker
 # and some helpers --- DO NOT use directly, call OptimizationToUse()
 _PY_OPTIMIZATION: frame.Optimization = (
   frame.Optimization.HYBRID if fractalfast.CYTHON else frame.Optimization.PYTHON
@@ -51,7 +51,7 @@ CY_NORM_ESCAPE: abc.Callable[[int, float], tuple[int, float]] | None = None
 CY_ENCODE_INT_64: abc.Callable[[int, float], int] | None = None
 CY_LINEAR_INTERPOLATION_WORKER: (
   abc.Callable[[pixels.InterpolationJob], pixels.InterpolationResult] | None
-) = fractalfast.InterpolateFrameWorker  # TODO: None
+) = pixels.InterpolateFrameWorker  # TODO: None
 try:
   from tranzoom.core import (  # type: ignore[attr-defined]
     fractalc,  # pyright: ignore[reportUnknownVariableType, reportAttributeAccessIssue]
