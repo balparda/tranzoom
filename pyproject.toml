@@ -60,14 +60,14 @@ dependencies = [
   "gmpy2>=2.3",  # if you change here, also change "requires" above
   "ImageIO>=2.37",
   "imageio-ffmpeg>=0.6",
-  "numpy>=2.4",
+  "numpy>=2.5",
   "Pillow>=12.2",
   "rich>=15.0",
   "setuptools>=82.0",  # if you change here, also change "requires" above
   "tqdm>=4.68",
   "transai>=1.3.3",
   "transcrypto>=2.7",
-  "typer>=0.26.7",   # if this changes, also change: [tool.poetry.dependencies]
+  "typer>=0.26.8",   # if this changes, also change: [tool.poetry.dependencies]
 
 ]
 
@@ -125,7 +125,7 @@ script = "scripts/build_extensions.py"
 # prefer to add dependencies inside the [project.dependencies] section
 
 python = "^3.12"  # if version changes, remember to change README.md
-typer = { version = "^0.26.7", extras = ["all"] }   # if this changes, also change: dependencies
+typer = { version = "^0.26.8", extras = ["all"] }   # if this changes, also change: dependencies
 
 [tool.poetry.group.dev.dependencies]
 
@@ -138,7 +138,7 @@ pytest = "^9.1"
 pytest-cov = "^7.1"
 pytest-flakefinder = "^1.1"
 pre-commit = "^4.6"
-ruff = "^0.15.18"
+ruff = "^0.15.20"
 typeguard = "^4.5"
 
 # project-specific dev-only

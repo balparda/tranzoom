@@ -1408,8 +1408,8 @@ def ValidateIFrames(i_frames: int) -> None:
 #       the pure Python code, and the results will NOT be bit-for-bit identical (we tested);
 #
 #   (2) there are 2 ways of making a pure Cython implementation:
-#       (a) Cython off only the numpy math, but keep PIL operations in PIL: this has meager speedup
-#           and tests we did show that even that will have results that are NOT bit-for-bit identical;
+#       (a) Cython off only the numpy math, but keep PIL operations in PIL: this has meager speedup,
+#           tests we did show that even that will have results that are NOT bit-for-bit identical;
 #       (b) Cython off the entire function, including PIL operations: this reasonable, but it is
 #           a huge risk and has ZERO chance of being bit-for-bit identical to the pure Python code.
 #
