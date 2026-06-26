@@ -657,8 +657,8 @@ def InterpolatedFrameStream(
   lookahead in this function.
 
   Args:
-    pairs (tuple[pixels.RenderedZoomFrame, pixels.RenderedZoomFrame | None]]): An iterable of
-        pairs of frames (curr, next).
+    pairs (abc.Iterable[tuple[pixels.RenderedZoomFrame, pixels.RenderedZoomFrame | None]]):
+        An iterable of pairs of frames (curr, next).
     mutable_hashes (list[str]): A mutable empty list to store mutable hashes for each frame.
     i_frames (int): The number of interpolated frames to generate between each pair of real frames.
     zoom_per_step (float): The zoom factor per step between frames.
@@ -682,11 +682,11 @@ def InterpolatedFrameStream(
     raise Error('mutable_hashes must be an empty list')
   # determine how many workers to use for parallel interpolation
   interpolation_workers: int = frame.ConcurrenceToUse(
-    (i_frames + 1) if max_threads is None else min(max_threads, i_frames + 1)
+    max(1, i_frames if max_threads is None else min(max_threads, i_frames))
   )
   use_parallelism: bool = i_frames > 0 and interpolation_workers > 1
   # log the start of the render
-  logging.info(f'Animation render using {interpolation_workers} process(es) for rendering')
+  logging.info(f'Frame interpolation using {interpolation_workers} process(es) for rendering')
   # get the first pair from the iterator
   curr_frame: pixels.RenderedZoomFrame
   next_frame: pixels.RenderedZoomFrame | None

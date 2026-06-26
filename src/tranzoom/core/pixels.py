@@ -1696,7 +1696,7 @@ def _CenterZoomRGB(
     scale (float): The zoom scale factor. Must be a finite positive number.
     return_mask (bool): Whether to return the transform validity mask; default False.
     fill_color (tuple[int, int, int] | None): Optional RGB fill color for areas outside the
-        source image. If None, the fill color is estimated from the median of the border
+        source image. If None, the fill color is estimated from the median of the border pixels.
 
   Returns:
     tuple[Pixels, NDArray[np.uint8] | None]: The zoomed image (NO META is included),
