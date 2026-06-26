@@ -643,42 +643,40 @@ Usage: tranz image julia [OPTIONS] [POINT_RE] [POINT_IM] [CENTER_RE] [CENTER_IM]
  Generate a Julia image.                                                                            
                                                                                                     
 ╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
-│   point_re       [POINT_RE]   Real part of the Julia Set constant; this can be a float (ex:      │
-│                               "0.34") or a fraction of ints (rational number, ex: "123/451") and │
-│                               the number will be fed directly to multi-precision arithmetic so   │
-│                               no precision is lost; ALTERNATIVELY: you can use this to input an  │
-│                               existing PNG image path, and it will read the Julia Set constant   │
-│                               from the given image's metadata frame *CENTER*                     │
-│                               (overriding/ignoring the imaginary parameter part!); default is    │
-│                               '0.27334'                                                          │
+│          TEXT  Real part of the Julia Set constant; this can be a float (ex: "0.34")   │
+│                          or a fraction of ints (rational number, ex: "123/451") and the number   │
+│                          will be fed directly to multi-precision arithmetic so no precision is   │
+│                          lost; ALTERNATIVELY: you can use this to input an existing PNG image    │
+│                          path, and it will read the Julia Set constant from the given image's    │
+│                          metadata frame *CENTER* (overriding/ignoring the imaginary parameter    │
+│                          part!); default is '0.27334'                                            │
 │                                                                                │
-│   point_im       [POINT_IM]   Imaginary part of the Julia Set constant; this can be a float (ex: │
-│                               "0.34") or a fraction of ints (rational number, ex: "123/451") and │
-│                               the number will be fed directly to multi-precision arithmetic so   │
-│                               no precision is lost; default is '0.00742'                         │
+│          TEXT  Imaginary part of the Julia Set constant; this can be a float (ex:      │
+│                          "0.34") or a fraction of ints (rational number, ex: "123/451") and the  │
+│                          number will be fed directly to multi-precision arithmetic so no         │
+│                          precision is lost; default is '0.00742'                                 │
 │                                                                                │
-│   center_re      [CENTER_RE]  Real part of the center point; this can be a float (ex: "0.34") or │
-│                               a fraction of ints (rational number, ex: "123/451") and the number │
-│                               will be fed directly to multi-precision arithmetic so no precision │
-│                               is lost; ALTERNATIVELY: you can use this to input an existing PNG  │
-│                               image path, and it will read the frame from the given image's      │
-│                               metadata (overriding/ignoring the other CLI frame parameters!);    │
-│                               default is '0'                                                     │
+│         TEXT  Real part of the center point; this can be a float (ex: "0.34") or a    │
+│                          fraction of ints (rational number, ex: "123/451") and the number will   │
+│                          be fed directly to multi-precision arithmetic so no precision is lost;  │
+│                          ALTERNATIVELY: you can use this to input an existing PNG image path,    │
+│                          and it will read the frame from the given image's metadata              │
+│                          (overriding/ignoring the other CLI frame parameters!); default is '0'   │
 │                                                                                      │
-│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be a float (ex:       │
-│                               "0.34") or a fraction of ints (rational number, ex: "123/451") and │
-│                               the number will be fed directly to multi-precision arithmetic so   │
-│                               no precision is lost; default is '0'                               │
+│         TEXT  Imaginary part of the center point; this can be a float (ex: "0.34") or │
+│                          a fraction of ints (rational number, ex: "123/451") and the number will │
+│                          be fed directly to multi-precision arithmetic so no precision is lost;  │
+│                          default is '0'                                                          │
 │                                                                                      │
-│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be a float (ex:     │
-│                               "0.34") or a fraction of ints (rational number, ex: "123/451") and │
-│                               the number will be fed directly to multi-precision arithmetic so   │
-│                               no precision is lost; default is '1.8'                             │
+│           TEXT  Width of the frame in the real plane; this can be a float (ex: "0.34")  │
+│                          or a fraction of ints (rational number, ex: "123/451") and the number   │
+│                          will be fed directly to multi-precision arithmetic so no precision is   │
+│                          lost; default is '1.8'                                                  │
 │                                                                                    │
-│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be a float    │
-│                               (ex: "0.34") or a fraction of ints (rational number, ex:           │
-│                               "123/451") and the number will be fed directly to multi-precision  │
-│                               arithmetic so no precision is lost; default is '2.2'               │
+│          TEXT  Height of the frame in the imaginary plane; this can be a float (ex:    │
+│                          "0.34") or a fraction of ints (rational number, ex: "123/451") and the  │
+│                          number will be fed directly to multi-precision arithmetic so no         │
+│                          precision is lost; default is '2.2'                                     │
 │                                                                                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
@@ -709,29 +707,28 @@ Usage: tranz image mandel [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  Generate a Mandelbrot image.                                                                       
                                                                                                     
 ╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
-│   center_re      [CENTER_RE]  Real part of the center point; this can be a float (ex: "0.34") or │
-│                               a fraction of ints (rational number, ex: "123/451") and the number │
-│                               will be fed directly to multi-precision arithmetic so no precision │
-│                               is lost; ALTERNATIVELY: you can use this to input an existing PNG  │
-│                               image path, and it will read the frame from the given image's      │
-│                               metadata (overriding/ignoring the other CLI frame parameters!);    │
-│                               default is '-0.75'                                                 │
+│         TEXT  Real part of the center point; this can be a float (ex: "0.34") or a    │
+│                          fraction of ints (rational number, ex: "123/451") and the number will   │
+│                          be fed directly to multi-precision arithmetic so no precision is lost;  │
+│                          ALTERNATIVELY: you can use this to input an existing PNG image path,    │
+│                          and it will read the frame from the given image's metadata              │
+│                          (overriding/ignoring the other CLI frame parameters!); default is       │
+│                          '-0.75'                                                                 │
 │                                                                                  │
-│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be a float (ex:       │
-│                               "0.34") or a fraction of ints (rational number, ex: "123/451") and │
-│                               the number will be fed directly to multi-precision arithmetic so   │
-│                               no precision is lost; default is '0'                               │
+│         TEXT  Imaginary part of the center point; this can be a float (ex: "0.34") or │
+│                          a fraction of ints (rational number, ex: "123/451") and the number will │
+│                          be fed directly to multi-precision arithmetic so no precision is lost;  │
+│                          default is '0'                                                          │
 │                                                                                      │
-│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be a float (ex:     │
-│                               "0.34") or a fraction of ints (rational number, ex: "123/451") and │
-│                               the number will be fed directly to multi-precision arithmetic so   │
-│                               no precision is lost; default is '2.5'                             │
+│           TEXT  Width of the frame in the real plane; this can be a float (ex: "0.34")  │
+│                          or a fraction of ints (rational number, ex: "123/451") and the number   │
+│                          will be fed directly to multi-precision arithmetic so no precision is   │
+│                          lost; default is '2.5'                                                  │
 │                                                                                    │
-│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be a float    │
-│                               (ex: "0.34") or a fraction of ints (rational number, ex:           │
-│                               "123/451") and the number will be fed directly to multi-precision  │
-│                               arithmetic so no precision is lost; default is None, i.e, the same │
-│                               as width                                                           │
+│          TEXT  Height of the frame in the imaginary plane; this can be a float (ex:    │
+│                          "0.34") or a fraction of ints (rational number, ex: "123/451") and the  │
+│                          number will be fed directly to multi-precision arithmetic so no         │
+│                          precision is lost; default is None, i.e, the same as width              │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                                      │
@@ -909,29 +906,28 @@ Usage: tranz zoom ai [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  Use AI to search for an interest point.                                                            
                                                                                                     
 ╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
-│   center_re      [CENTER_RE]  Real part of the center point; this can be a float (ex: "0.34") or │
-│                               a fraction of ints (rational number, ex: "123/451") and the number │
-│                               will be fed directly to multi-precision arithmetic so no precision │
-│                               is lost; ALTERNATIVELY: you can use this to input an existing PNG  │
-│                               image path, and it will read the frame from the given image's      │
-│                               metadata (overriding/ignoring the other CLI frame parameters!);    │
-│                               default is '-0.75'                                                 │
+│         TEXT  Real part of the center point; this can be a float (ex: "0.34") or a    │
+│                          fraction of ints (rational number, ex: "123/451") and the number will   │
+│                          be fed directly to multi-precision arithmetic so no precision is lost;  │
+│                          ALTERNATIVELY: you can use this to input an existing PNG image path,    │
+│                          and it will read the frame from the given image's metadata              │
+│                          (overriding/ignoring the other CLI frame parameters!); default is       │
+│                          '-0.75'                                                                 │
 │                                                                                  │
-│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be a float (ex:       │
-│                               "0.34") or a fraction of ints (rational number, ex: "123/451") and │
-│                               the number will be fed directly to multi-precision arithmetic so   │
-│                               no precision is lost; default is '0'                               │
+│         TEXT  Imaginary part of the center point; this can be a float (ex: "0.34") or │
+│                          a fraction of ints (rational number, ex: "123/451") and the number will │
+│                          be fed directly to multi-precision arithmetic so no precision is lost;  │
+│                          default is '0'                                                          │
 │                                                                                      │
-│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be a float (ex:     │
-│                               "0.34") or a fraction of ints (rational number, ex: "123/451") and │
-│                               the number will be fed directly to multi-precision arithmetic so   │
-│                               no precision is lost; default is '2.5'                             │
+│           TEXT  Width of the frame in the real plane; this can be a float (ex: "0.34")  │
+│                          or a fraction of ints (rational number, ex: "123/451") and the number   │
+│                          will be fed directly to multi-precision arithmetic so no precision is   │
+│                          lost; default is '2.5'                                                  │
 │                                                                                    │
-│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be a float    │
-│                               (ex: "0.34") or a fraction of ints (rational number, ex:           │
-│                               "123/451") and the number will be fed directly to multi-precision  │
-│                               arithmetic so no precision is lost; default is None, i.e, the same │
-│                               as width                                                           │
+│          TEXT  Height of the frame in the imaginary plane; this can be a float (ex:    │
+│                          "0.34") or a fraction of ints (rational number, ex: "123/451") and the  │
+│                          number will be fed directly to multi-precision arithmetic so no         │
+│                          precision is lost; default is None, i.e, the same as width              │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
 │ --query   -q                 TEXT                      Query to be added to the default prompt;  │
@@ -978,49 +974,39 @@ Usage: tranz zoom auto [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  Create a GIF/MP4 zoom fractal animation.                                                           
                                                                                                     
 ╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
-│   center_re                  [CENTER_RE]              Real part of the center point; this can be │
-│                                                       a float (ex: "0.34") or a fraction of ints │
-│                                                       (rational number, ex: "123/451") and the   │
-│                                                       number will be fed directly to             │
-│                                                       multi-precision arithmetic so no precision │
-│                                                       is lost; ALTERNATIVELY: you can use this   │
-│                                                       to input an existing PNG image path, and   │
-│                                                       it will read the frame from the given      │
-│                                                       image's metadata (overriding/ignoring the  │
-│                                                       other CLI frame parameters!); default is   │
-│                                                       '-0.75'                                    │
+│                     TEXT  Real part of the center point; this can be a float (ex:     │
+│                                      "0.34") or a fraction of ints (rational number, ex:         │
+│                                      "123/451") and the number will be fed directly to           │
+│                                      multi-precision arithmetic so no precision is lost;         │
+│                                      ALTERNATIVELY: you can use this to input an existing PNG    │
+│                                      image path, and it will read the frame from the given       │
+│                                      image's metadata (overriding/ignoring the other CLI frame   │
+│                                      parameters!); default is '-0.75'                            │
 │                                                                                  │
-│   center_im                  [CENTER_IM]              Imaginary part of the center point; this   │
-│                                                       can be a float (ex: "0.34") or a fraction  │
-│                                                       of ints (rational number, ex: "123/451")   │
-│                                                       and the number will be fed directly to     │
-│                                                       multi-precision arithmetic so no precision │
-│                                                       is lost; default is '0'                    │
+│                     TEXT  Imaginary part of the center point; this can be a float     │
+│                                      (ex: "0.34") or a fraction of ints (rational number, ex:    │
+│                                      "123/451") and the number will be fed directly to           │
+│                                      multi-precision arithmetic so no precision is lost; default │
+│                                      is '0'                                                      │
 │                                                                                      │
-│   f_width                    [F_WIDTH]                Width of the frame in the real plane; this │
-│                                                       can be a float (ex: "0.34") or a fraction  │
-│                                                       of ints (rational number, ex: "123/451")   │
-│                                                       and the number will be fed directly to     │
-│                                                       multi-precision arithmetic so no precision │
-│                                                       is lost; default is '2.5'                  │
+│                       TEXT  Width of the frame in the real plane; this can be a float   │
+│                                      (ex: "0.34") or a fraction of ints (rational number, ex:    │
+│                                      "123/451") and the number will be fed directly to           │
+│                                      multi-precision arithmetic so no precision is lost; default │
+│                                      is '2.5'                                                    │
 │                                                                                    │
-│   f_height                   [F_HEIGHT]               Height of the frame in the imaginary       │
-│                                                       plane; this can be a float (ex: "0.34") or │
-│                                                       a fraction of ints (rational number, ex:   │
-│                                                       "123/451") and the number will be fed      │
-│                                                       directly to multi-precision arithmetic so  │
-│                                                       no precision is lost; default is None,     │
-│                                                       i.e, the same as width                     │
-│   dest_magnification_10      [DEST_MAGNIFICATION_10]  Magnification magnitude to go through in   │
-│                                                       the animation zoom; this can be a float    │
-│                                                       (ex: "0.34") or a fraction of ints         │
-│                                                       (rational number, ex: "123/451") and the   │
-│                                                       number will be fed directly to             │
-│                                                       multi-precision arithmetic so no precision │
-│                                                       is lost; -10000.0 ≤ mag ≤ 10000.0;         │
-│                                                       ATTENTION!! this is exponential 10**mag,   │
-│                                                       so a value of 2.0 means 10**2 = 100x zoom; │
-│                                                       default is 1, i.e., 10.00x zoom            │
+│                      TEXT  Height of the frame in the imaginary plane; this can be a   │
+│                                      float (ex: "0.34") or a fraction of ints (rational number,  │
+│                                      ex: "123/451") and the number will be fed directly to       │
+│                                      multi-precision arithmetic so no precision is lost; default │
+│                                      is None, i.e, the same as width                             │
+│         TEXT  Magnification magnitude to go through in the animation      │
+│                                      zoom; this can be a float (ex: "0.34") or a fraction of     │
+│                                      ints (rational number, ex: "123/451") and the number will   │
+│                                      be fed directly to multi-precision arithmetic so no         │
+│                                      precision is lost; -10000.0 ≤ mag ≤ 10000.0; ATTENTION!!    │
+│                                      this is exponential 10**mag, so a value of 2.0 means 10**2  │
+│                                      = 100x zoom; default is 1, i.e., 10.00x zoom                │
 │                                                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
@@ -1110,29 +1096,28 @@ Usage: tranz zoom manual [OPTIONS] [CENTER_RE] [CENTER_IM] [F_WIDTH] [F_HEIGHT]
  Manually navigate a Mandelbrot zoom search (no AI).                                                
                                                                                                     
 ╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
-│   center_re      [CENTER_RE]  Real part of the center point; this can be a float (ex: "0.34") or │
-│                               a fraction of ints (rational number, ex: "123/451") and the number │
-│                               will be fed directly to multi-precision arithmetic so no precision │
-│                               is lost; ALTERNATIVELY: you can use this to input an existing PNG  │
-│                               image path, and it will read the frame from the given image's      │
-│                               metadata (overriding/ignoring the other CLI frame parameters!);    │
-│                               default is '-0.75'                                                 │
+│         TEXT  Real part of the center point; this can be a float (ex: "0.34") or a    │
+│                          fraction of ints (rational number, ex: "123/451") and the number will   │
+│                          be fed directly to multi-precision arithmetic so no precision is lost;  │
+│                          ALTERNATIVELY: you can use this to input an existing PNG image path,    │
+│                          and it will read the frame from the given image's metadata              │
+│                          (overriding/ignoring the other CLI frame parameters!); default is       │
+│                          '-0.75'                                                                 │
 │                                                                                  │
-│   center_im      [CENTER_IM]  Imaginary part of the center point; this can be a float (ex:       │
-│                               "0.34") or a fraction of ints (rational number, ex: "123/451") and │
-│                               the number will be fed directly to multi-precision arithmetic so   │
-│                               no precision is lost; default is '0'                               │
+│         TEXT  Imaginary part of the center point; this can be a float (ex: "0.34") or │
+│                          a fraction of ints (rational number, ex: "123/451") and the number will │
+│                          be fed directly to multi-precision arithmetic so no precision is lost;  │
+│                          default is '0'                                                          │
 │                                                                                      │
-│   f_width        [F_WIDTH]    Width of the frame in the real plane; this can be a float (ex:     │
-│                               "0.34") or a fraction of ints (rational number, ex: "123/451") and │
-│                               the number will be fed directly to multi-precision arithmetic so   │
-│                               no precision is lost; default is '2.5'                             │
+│           TEXT  Width of the frame in the real plane; this can be a float (ex: "0.34")  │
+│                          or a fraction of ints (rational number, ex: "123/451") and the number   │
+│                          will be fed directly to multi-precision arithmetic so no precision is   │
+│                          lost; default is '2.5'                                                  │
 │                                                                                    │
-│   f_height       [F_HEIGHT]   Height of the frame in the imaginary plane; this can be a float    │
-│                               (ex: "0.34") or a fraction of ints (rational number, ex:           │
-│                               "123/451") and the number will be fed directly to multi-precision  │
-│                               arithmetic so no precision is lost; default is None, i.e, the same │
-│                               as width                                                           │
+│          TEXT  Height of the frame in the imaginary plane; this can be a float (ex:    │
+│                          "0.34") or a fraction of ints (rational number, ex: "123/451") and the  │
+│                          number will be fed directly to multi-precision arithmetic so no         │
+│                          precision is lost; default is None, i.e, the same as width              │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                                      │

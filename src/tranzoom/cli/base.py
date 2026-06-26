@@ -1575,7 +1575,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
       try:
 
         def _TwoFrameRenderStream() -> abc.Iterator[
-          tuple[zoom.RenderedZoomFrame, zoom.RenderedZoomFrame | None]
+          tuple[pixels.RenderedZoomFrame, pixels.RenderedZoomFrame | None]
         ]:
           """Render base frames with a rolling [curr, next] window.
 
@@ -1589,12 +1589,12 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             (frameN-1, None)
 
           Yields:
-            tuple[zoom.RenderedZoomFrame, zoom.RenderedZoomFrame | None]: A tuple of
+            tuple[pixels.RenderedZoomFrame, pixels.RenderedZoomFrame | None]: A tuple of
                 the current frame and the next frame (or None if at the end)
 
           """
-          curr_frame: zoom.RenderedZoomFrame = _StreamingRenderFrame(0)
-          next_frame: zoom.RenderedZoomFrame | None = _StreamingRenderFrame(1)  # (MIN_FRAMES is 3)
+          curr_frame: pixels.RenderedZoomFrame = _StreamingRenderFrame(0)
+          next_frame: pixels.RenderedZoomFrame | None = _StreamingRenderFrame(1)  # (MIN_FRAMES=3)
           for i in range(zoom_params.n_frames):
             yield (curr_frame, next_frame)
             if next_frame is None:
@@ -1602,14 +1602,14 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             curr_frame = next_frame
             next_frame = _StreamingRenderFrame(i + 2) if i + 2 < zoom_params.n_frames else None
 
-        def _StreamingRenderFrame(i: int) -> zoom.RenderedZoomFrame:
+        def _StreamingRenderFrame(i: int) -> pixels.RenderedZoomFrame:
           """Render a single frame, returning the image data. Only one in memory at a time.
 
           Args:
             i (int): The index of the frame in the zoom sequence.
 
           Returns:
-            zoom.RenderedZoomFrame: The rendered image data for the frame at index i.
+            pixels.RenderedZoomFrame: The rendered image data for the frame at index i.
 
           """
           # render the frame, get the image data and hash
@@ -1642,7 +1642,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           # update progress bar, return data
           if p_bar:
             p_bar.update(1)
-          return zoom.RenderedZoomFrame(
+          return pixels.RenderedZoomFrame(
             idx=i, data=img_data, data_hash=data_hash, img_path=img_path
           )
 
@@ -1701,6 +1701,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           i_frames=zoom_params.render.i_frames,
           zoom_per_step=float(zoom_params.scalar_magnification_per_step),
           use_quadratic=zoom.DEFAULT_USE_QUADRATIC,
+          max_threads=config.max_threads,
         )
         if zoom_params.render.anim == pixels.AnimationEncoding.GIF:
           zoom.WriteAnimatedGIF(

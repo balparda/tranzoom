@@ -195,10 +195,10 @@ def ComputeFractal(
       if params.frm.fractal == frame.Fractal.MANDELBROT
       else PY_JULIA_COMPUTATION
     )
-  # log the start of the render (not pre-computation anymore here)
+  # log the start of the actual computation (not pre-computation anymore here)
   logging.info(
     f'{params.frm.fractal.value.upper()} using {n_processes} process(es) '
-    f'for {"PRE " if is_preprocess else ""}rendering - {actual_opt_msg}'
+    f'for {"PRE " if is_preprocess else ""}computation - {actual_opt_msg}'
   )
   # create inputs
   inp: list[image.FractalTaskInput] = [
