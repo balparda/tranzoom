@@ -30,9 +30,10 @@ This project follows a pragmatic versioning approach:
 - **Minor**: new features or non-breaking changes.
 - **Major**: breaking changes (command renames, incompatible output formats).
 
-## 2.1.0 - 2026-06-20
+## 2.1.0 - 2026-06-26
 
 - Added
+  - **Multi-process frame interpolation rendering** (`core/zoom.py`, `InterpolatedFrameStream()`): frame interpolation (`--i-frames`) now uses Python's `concurrent.futures.ProcessPoolExecutor` to parallelize rendering of interpolated frames across multiple CPU cores; new `InterpolateFrameWorker()` function runs as a separate process to compute individual interpolated frames (linear or quadratic); new `_InterpolationJob` and `_InterpolationResult` dataclasses encapsulate job distribution and result collection; `InterpolatedFrameStream()` accepts optional `max_threads` parameter (default None = use all available cores) to control parallelism; executor automatically disabled when `i_frames=0` (no interpolation) or single-threaded execution is requested; dramatically speeds up animation generation for high-FPS outputs (e.g., `--fps 10 --i-frames 7` now renders 73 total frames from 10 real frames with ~7× speedup due to parallelism).
   - **Animation metadata hash injection control** (`--inject/--no-inject` flag, `cli/base.py`, `cli/zoomcommand.py`): new `tranz zoom auto` flag allows users to control whether the final hash is re-injected into animation metadata after rendering; `--inject` (default False) re-saves the animation file to include the final computed hash in metadata, which requires re-processing (lossless for MP4, lossy for GIF); `--no-inject` skips this step for faster completion when the final hash in metadata is not critical; useful for testing or when metadata space is constrained; both GIF and MP4 re-saving is expensive but preserves content fidelity for MP4 via ffmpeg re-mux.
 
 - Changed

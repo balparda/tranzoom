@@ -88,6 +88,7 @@ Built with:
     - [Modules / packages](#modules--packages)
     - [Performance characteristics](#performance-characteristics)
       - [Three-tier optimization system](#three-tier-optimization-system)
+      - [Multi-process frame interpolation](#multi-process-frame-interpolation)
   - [Development Instructions](#development-instructions)
     - [File structure](#file-structure)
     - [Development Setup](#development-setup)
@@ -1162,6 +1163,16 @@ tranZoom (≥1.7.0) provides three computation modes with progressively better p
 3. **Full Cython** (`--opt cython`): Direct gmpy2 C-API usage via `fractalc.pyx`; raw GMP/MPFR/MPC C calls with explicit `mpfr_t` manipulation; bypasses Python object overhead entirely; ~2× faster than pure Python for deep-zoom, high-precision renders; maximum performance; requires C compiler and GMP/MPFR/MPC libraries at build time.
 
 The default (`--opt` not specified) automatically uses the **best available** optimization. Starting with version 1.8.0, wheels built with `poetry build` include pre-compiled Cython extensions automatically.
+
+#### Multi-process frame interpolation
+
+Frame interpolation (`--i-frames`) uses **multi-process parallelization** to speed up animation rendering. When frame interpolation is active, interpolated frames are generated in parallel across available CPU cores:
+
+- **Architecture:** Uses Python's `concurrent.futures.ProcessPoolExecutor` to distribute interpolation jobs across separate OS processes, avoiding Python's Global Interpreter Lock (GIL)
+- **Worker function:** `InterpolateFrameWorker()` computes individual interpolated frames (supports both linear and quadratic interpolation modes) in independent processes
+- **Speedup:** Renders high-FPS animations much faster; e.g., `--fps 10 --i-frames 7` (producing 73 frames) benefits from ~7–8× speedup with all cores utilized; actual speedup depends on CPU count and per-frame workload
+- **Control:** Pass `max_threads` at the command level to cap parallelism; default uses all available cores
+- **Automatic fallback:** When `i_frames=0` (no interpolation) or on single-core systems, no process pool is created; overhead is negligible
 
 ## Development Instructions
 
