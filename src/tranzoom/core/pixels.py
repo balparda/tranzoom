@@ -1397,6 +1397,29 @@ def ValidateIFrames(i_frames: int) -> None:
     raise Error(f'Interpolation must be between 0 and {MAX_INTERPOLATION_FRAMES}, got {i_frames=}')
 
 
+####################################################################################################
+#
+#   Rendering Interpolation Code
+#
+#   The way the code is organized makes it easy to add a Cython InterpolateFrameWorker()
+#   implementation for speed, if needed. BUT BEWARE:
+#
+#   (1) if they are moved to core/fractalfast.py the compiled Hybrid code will have differences to
+#       the pure Python code, and the results will NOT be bit-for-bit identical (we tested);
+#
+#   (2) there are 2 ways of making a pure Cython implementation:
+#       (a) Cython off only the numpy math, but keep PIL operations in PIL: this has meager speedup
+#           and tests we did show that even that will have results that are NOT bit-for-bit identical;
+#       (b) Cython off the entire function, including PIL operations: this reasonable, but it is
+#           a huge risk and has ZERO chance of being bit-for-bit identical to the pure Python code.
+#
+#   So we gave up of this optimization path for now.
+#
+# TODO: revisit this if we need to speed up interpolation.
+#
+####################################################################################################
+
+
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class RenderedZoomFrame:
   """One fully-rendered base animation frame."""
@@ -1426,6 +1449,169 @@ class InterpolationResult:
 
   data_hash: str
   png: bytes
+
+
+def InterpolateFrameWorker(job: InterpolationJob) -> InterpolationResult:
+  """Worker function to interpolate a frame between two rendered zoom frames.
+
+  Args:
+    job (InterpolationJob): The job containing the current and next frames + parameters.
+
+  Returns:
+    InterpolationResult: The result containing the interpolated frame's hash and PNG bytes.
+
+  """
+  # frac is the fraction of the way between curr_frame and next_frame for this interpolated frame
+  frac: float = float(job.job_index + 1) / float(job.i_frames + 1)
+  # make the Pixels based on the interpolation method (linear or quadratic)
+  pix: Pixels = (
+    _LinearInterpolatedFrame(
+      job.curr_frame, job.next_frame, zoom_per_step=job.zoom_per_step, frac=frac
+    )
+    if job.next2_frame is None or not job.use_quadratic
+    else _QuadraticInterpolatedFrame(
+      job.curr_frame, job.next_frame, job.next2_frame, zoom_per_step=job.zoom_per_step, frac=frac
+    )
+  )
+  # return the interpolation result
+  return InterpolationResult(data_hash=pix.data_hash, png=pix.PNG(copy_previous=False)[0])
+
+
+def _LinearInterpolatedFrame(
+  curr_img: RenderedZoomFrame,
+  next_img: RenderedZoomFrame,
+  *,
+  zoom_per_step: float,
+  frac: float,
+) -> Pixels:
+  """Interpolate between curr_img and next_img at fraction frac.
+
+  Args:
+    curr_img (RenderedZoomFrame): The current rendered zoom frame.
+    next_img (RenderedZoomFrame): The next rendered zoom frame.
+    zoom_per_step (float): The zoom factor per step between frames.
+    frac (float): The interpolation fraction between 0.0 and 1.0.
+
+  Returns:
+    Pixels: Data object representing the interpolated image; NO META is included
+
+  Raises:
+    Error: on error
+
+  """
+  # check params and convert images
+  if not math.isfinite(zoom_per_step) or zoom_per_step <= 0.0:
+    raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
+  if not (0.0 <= frac <= 1.0):
+    raise Error(f'Invalid interpolation fraction: {frac}')
+  # get border from "current"
+  curr_border: tuple[int, int, int] = _BorderFillColor(curr_img.data)
+  # align both images to the virtual zoom depth between the two real frames
+  curr_aligned: Pixels = _CenterZoomRGB(curr_img.data, zoom_per_step**frac, fill_color=curr_border)[
+    0
+  ]
+  next_aligned_raw: Pixels
+  next_valid_mask: NDArray[np.uint8] | None
+  next_aligned_raw, next_valid_mask = _CenterZoomRGB(
+    next_img.data, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
+  )
+  if next_valid_mask is None:
+    raise Error('next_valid_mask is None, but it should not be; bug! report')
+  # the future frames will have a black border where the zoomed-out image is outside the
+  # original image; we create a soft alpha mask to blend the current frame into the next frame
+  # to avoid harsh transitions
+  next_alpha_mask: NDArray[np.uint8] = _FeatherValidMask(
+    next_valid_mask, erode_pixels=ERODE_LINEAR, blur_pixels=BLUR_LINEAR
+  )
+  alpha1: NDArray[np.float32] = frac * _MaskArray(next_alpha_mask)
+  return Pixels(
+    data=(curr_aligned.data * (1.0 - alpha1)) + (next_aligned_raw.data * alpha1),  # pyright: ignore[reportArgumentType]
+    meta={},
+  )
+
+
+def _QuadraticInterpolatedFrame(  # noqa: PLR0914
+  curr_img: RenderedZoomFrame,
+  next_img_1: RenderedZoomFrame,
+  next_img_2: RenderedZoomFrame,
+  *,
+  zoom_per_step: float,
+  frac: float,
+) -> Pixels:
+  """Quadratic interpolation using curr_img, next_img_1, next_img_2.
+
+  Points are interpreted as:
+    curr_img  at x = 0
+    next_img_1 at x = 1
+    next_img_2 at x = 2
+
+  We evaluate the quadratic at x = t, where 0 < t < 1.
+
+  Args:
+    curr_img (RenderedZoomFrame): The current rendered zoom frame.
+    next_img_1 (RenderedZoomFrame): The next rendered zoom frame.
+    next_img_2 (RenderedZoomFrame): The next rendered zoom frame after next_img_1.
+    zoom_per_step (float): The zoom factor per step between frames.
+    frac (float): The interpolation fraction between 0.0 and 1.0.
+
+  Returns:
+    Pixels: Data object representing the interpolated image; NO META is included
+
+  Raises:
+    Error: on error
+
+  """
+  # check params and convert images
+  if not math.isfinite(zoom_per_step) or zoom_per_step <= 0.0:
+    raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
+  if not (0.0 <= frac <= 1.0):
+    raise Error(f'Invalid interpolation fraction: {frac}')
+  # align all three samples to the same virtual zoom depth
+  curr_border: tuple[int, int, int] = _BorderFillColor(curr_img.data)
+  curr_aligned: Pixels = _CenterZoomRGB(curr_img.data, zoom_per_step**frac, fill_color=curr_border)[
+    0
+  ]
+  next_aligned_1_raw: Pixels
+  next_valid_mask_1: NDArray[np.uint8] | None
+  next_aligned_1_raw, next_valid_mask_1 = _CenterZoomRGB(
+    next_img_1.data, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
+  )
+  next_aligned_2_raw: Pixels
+  next_valid_mask_2: NDArray[np.uint8] | None
+  next_aligned_2_raw, next_valid_mask_2 = _CenterZoomRGB(
+    next_img_2.data, zoom_per_step ** (frac - 2.0), return_mask=True, fill_color=curr_border
+  )
+  if next_valid_mask_1 is None or next_valid_mask_2 is None:
+    raise Error('next_valid_mask_1|2 is None, but it should not be; bug! report')
+  # the future frames will have a black border where the zoomed-out image is outside the
+  # original image; we create a soft alpha mask to blend the current frame into the next frame
+  # to avoid harsh transitions
+  soft_mask_1: NDArray[np.uint8] = _FeatherValidMask(
+    next_valid_mask_1, erode_pixels=ERODE_LINEAR, blur_pixels=BLUR_LINEAR
+  )
+  soft_mask_2: NDArray[np.uint8] = _FeatherValidMask(
+    next_valid_mask_2, erode_pixels=ERODE_QUADRATIC, blur_pixels=BLUR_QUADRATIC
+  )
+  # blend using Lagrange interpolation
+  w0: float = ((frac - 1.0) * (frac - 2.0)) / 2.0
+  w1: float = -frac * (frac - 2.0)
+  w2: float = (frac * (frac - 1.0)) / 2.0
+  alpha1: NDArray[np.float32] = _MaskArray(soft_mask_1)
+  alpha2: NDArray[np.float32] = _MaskArray(soft_mask_2)
+  # fade future-frame contributions out near their invalid borders;
+  # important: when future weights are masked away, give the missing weight
+  # back to curr_aligned: this keeps brightness stable and avoids dark seams
+  effective_w0: NDArray[np.float32] = w0 + (w1 * (1.0 - alpha1)) + (w2 * (1.0 - alpha2))  # pyright: ignore[reportAssignmentType]
+  effective_w1: NDArray[np.float32] = w1 * alpha1
+  effective_w2: NDArray[np.float32] = w2 * alpha2
+  return Pixels(
+    data=(
+      (effective_w0 * curr_aligned.data)
+      + (effective_w1 * next_aligned_1_raw.data)
+      + (effective_w2 * next_aligned_2_raw.data)
+    ),  # pyright: ignore[reportArgumentType]
+    meta={},
+  )
 
 
 def _BilinearInterpolate(
@@ -1670,164 +1856,6 @@ def _MaskArray(mask: NDArray[np.uint8]) -> NDArray[np.float32]:
   return mask.astype(np.float32)[:, :, None] / float(MAX_COLOR)
 
 
-def _LinearInterpolatedFrame(
-  curr_img: RenderedZoomFrame,
-  next_img: RenderedZoomFrame,
-  *,
-  zoom_per_step: float,
-  frac: float,
-) -> Pixels:
-  """Interpolate between curr_img and next_img at fraction frac.
-
-  Args:
-    curr_img (RenderedZoomFrame): The current rendered zoom frame.
-    next_img (RenderedZoomFrame): The next rendered zoom frame.
-    zoom_per_step (float): The zoom factor per step between frames.
-    frac (float): The interpolation fraction between 0.0 and 1.0.
-
-  Returns:
-    Pixels: Data object representing the interpolated image; NO META is included
-
-  Raises:
-    Error: on error
-
-  """
-  # check params and convert images
-  if not math.isfinite(zoom_per_step) or zoom_per_step <= 0.0:
-    raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
-  if not (0.0 <= frac <= 1.0):
-    raise Error(f'Invalid interpolation fraction: {frac}')
-  # get border from "current"
-  curr_border: tuple[int, int, int] = _BorderFillColor(curr_img.data)
-  # align both images to the virtual zoom depth between the two real frames
-  curr_aligned: Pixels = _CenterZoomRGB(curr_img.data, zoom_per_step**frac, fill_color=curr_border)[
-    0
-  ]
-  next_aligned_raw: Pixels
-  next_valid_mask: NDArray[np.uint8] | None
-  next_aligned_raw, next_valid_mask = _CenterZoomRGB(
-    next_img.data, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
-  )
-  if next_valid_mask is None:
-    raise Error('next_valid_mask is None, but it should not be; bug! report')
-  # the future frames will have a black border where the zoomed-out image is outside the
-  # original image; we create a soft alpha mask to blend the current frame into the next frame
-  # to avoid harsh transitions
-  next_alpha_mask: NDArray[np.uint8] = _FeatherValidMask(
-    next_valid_mask, erode_pixels=ERODE_LINEAR, blur_pixels=BLUR_LINEAR
-  )
-  alpha1: NDArray[np.float32] = frac * _MaskArray(next_alpha_mask)
-  return Pixels(
-    data=(curr_aligned.data * (1.0 - alpha1)) + (next_aligned_raw.data * alpha1),  # pyright: ignore[reportArgumentType]
-    meta={},
-  )
-
-
-def _QuadraticInterpolatedFrame(  # noqa: PLR0914
-  curr_img: RenderedZoomFrame,
-  next_img_1: RenderedZoomFrame,
-  next_img_2: RenderedZoomFrame,
-  *,
-  zoom_per_step: float,
-  frac: float,
-) -> Pixels:
-  """Quadratic interpolation using curr_img, next_img_1, next_img_2.
-
-  Points are interpreted as:
-    curr_img  at x = 0
-    next_img_1 at x = 1
-    next_img_2 at x = 2
-
-  We evaluate the quadratic at x = t, where 0 < t < 1.
-
-  Args:
-    curr_img (RenderedZoomFrame): The current rendered zoom frame.
-    next_img_1 (RenderedZoomFrame): The next rendered zoom frame.
-    next_img_2 (RenderedZoomFrame): The next rendered zoom frame after next_img_1.
-    zoom_per_step (float): The zoom factor per step between frames.
-    frac (float): The interpolation fraction between 0.0 and 1.0.
-
-  Returns:
-    Pixels: Data object representing the interpolated image; NO META is included
-
-  Raises:
-    Error: on error
-
-  """
-  # check params and convert images
-  if not math.isfinite(zoom_per_step) or zoom_per_step <= 0.0:
-    raise Error(f'Invalid zoom_per_step: {zoom_per_step}')
-  if not (0.0 <= frac <= 1.0):
-    raise Error(f'Invalid interpolation fraction: {frac}')
-  # align all three samples to the same virtual zoom depth
-  curr_border: tuple[int, int, int] = _BorderFillColor(curr_img.data)
-  curr_aligned: Pixels = _CenterZoomRGB(curr_img.data, zoom_per_step**frac, fill_color=curr_border)[
-    0
-  ]
-  next_aligned_1_raw: Pixels
-  next_valid_mask_1: NDArray[np.uint8] | None
-  next_aligned_1_raw, next_valid_mask_1 = _CenterZoomRGB(
-    next_img_1.data, zoom_per_step ** (frac - 1.0), return_mask=True, fill_color=curr_border
-  )
-  next_aligned_2_raw: Pixels
-  next_valid_mask_2: NDArray[np.uint8] | None
-  next_aligned_2_raw, next_valid_mask_2 = _CenterZoomRGB(
-    next_img_2.data, zoom_per_step ** (frac - 2.0), return_mask=True, fill_color=curr_border
-  )
-  if next_valid_mask_1 is None or next_valid_mask_2 is None:
-    raise Error('next_valid_mask_1|2 is None, but it should not be; bug! report')
-  # the future frames will have a black border where the zoomed-out image is outside the
-  # original image; we create a soft alpha mask to blend the current frame into the next frame
-  # to avoid harsh transitions
-  soft_mask_1: NDArray[np.uint8] = _FeatherValidMask(
-    next_valid_mask_1, erode_pixels=ERODE_LINEAR, blur_pixels=BLUR_LINEAR
-  )
-  soft_mask_2: NDArray[np.uint8] = _FeatherValidMask(
-    next_valid_mask_2, erode_pixels=ERODE_QUADRATIC, blur_pixels=BLUR_QUADRATIC
-  )
-  # blend using Lagrange interpolation
-  w0: float = ((frac - 1.0) * (frac - 2.0)) / 2.0
-  w1: float = -frac * (frac - 2.0)
-  w2: float = (frac * (frac - 1.0)) / 2.0
-  alpha1: NDArray[np.float32] = _MaskArray(soft_mask_1)
-  alpha2: NDArray[np.float32] = _MaskArray(soft_mask_2)
-  # fade future-frame contributions out near their invalid borders;
-  # important: when future weights are masked away, give the missing weight
-  # back to curr_aligned: this keeps brightness stable and avoids dark seams
-  effective_w0: NDArray[np.float32] = w0 + (w1 * (1.0 - alpha1)) + (w2 * (1.0 - alpha2))  # pyright: ignore[reportAssignmentType]
-  effective_w1: NDArray[np.float32] = w1 * alpha1
-  effective_w2: NDArray[np.float32] = w2 * alpha2
-  return Pixels(
-    data=(
-      (effective_w0 * curr_aligned.data)
-      + (effective_w1 * next_aligned_1_raw.data)
-      + (effective_w2 * next_aligned_2_raw.data)
-    ),  # pyright: ignore[reportArgumentType]
-    meta={},
-  )
-
-
-def InterpolateFrameWorker(job: InterpolationJob) -> InterpolationResult:
-  """Worker function to interpolate a frame between two rendered zoom frames.
-
-  Args:
-    job (InterpolationJob): The job containing the current and next frames + parameters.
-
-  Returns:
-    InterpolationResult: The result containing the interpolated frame's hash and PNG bytes.
-
-  """
-  # frac is the fraction of the way between curr_frame and next_frame for this interpolated frame
-  frac: float = float(job.job_index + 1) / float(job.i_frames + 1)
-  # make the Pixels based on the interpolation method (linear or quadratic)
-  pix: Pixels = (
-    _LinearInterpolatedFrame(
-      job.curr_frame, job.next_frame, zoom_per_step=job.zoom_per_step, frac=frac
-    )
-    if job.next2_frame is None or not job.use_quadratic
-    else _QuadraticInterpolatedFrame(
-      job.curr_frame, job.next_frame, job.next2_frame, zoom_per_step=job.zoom_per_step, frac=frac
-    )
-  )
-  # return the interpolation result
-  return InterpolationResult(data_hash=pix.data_hash, png=pix.PNG(copy_previous=False)[0])
+####################################################################################################
+# end of Rendering Interpolation Code
+####################################################################################################
