@@ -637,7 +637,7 @@ def FrameEstimatedIters(d: int, s: image.FractalStats) -> int:
   return d // 5 + math.floor((4.0 * d * s.n_interior) / (5.0 * s.n_px))
 
 
-def InterpolatedFrameStream(  # noqa: C901, PLR0912
+def InterpolatedFrameStream(
   pairs: abc.Iterable[tuple[pixels.RenderedZoomFrame, pixels.RenderedZoomFrame | None]],
   mutable_hashes: list[str],
   *,
@@ -645,7 +645,6 @@ def InterpolatedFrameStream(  # noqa: C901, PLR0912
   zoom_per_step: float,
   use_quadratic: bool = DEFAULT_USE_QUADRATIC,
   max_threads: int | None = None,
-  optimization: frame.Optimization | None = None,
 ) -> abc.Iterator[bytes]:
   """Yield real + interpolated animation frames.
 
@@ -667,11 +666,6 @@ def InterpolatedFrameStream(  # noqa: C901, PLR0912
         interpolation only (False); default is DEFAULT_USE_QUADRATIC
     max_threads (int | None): The maximum number of threads to use for parallel interpolation;
         if None, the default is to use all available CPU cores that can be used
-    optimization (frame.Optimization | None, optional): The optimization level to use for
-        computation. Defaults to None, which means to use the max available optimization.
-        If given then behavior is: given CYTHON, not available will raise an Error;
-        given HYBRID, not available will give an Error; given PYTHON, but loaded HYBRID,
-        will use HYBRID (but not CYTHON)
 
   Yields:
     bytes: The PNG-encoded bytes of each frame (real and interpolated).
@@ -691,22 +685,8 @@ def InterpolatedFrameStream(  # noqa: C901, PLR0912
     (i_frames + 1) if max_threads is None else min(max_threads, i_frames + 1)
   )
   use_parallelism: bool = i_frames > 0 and interpolation_workers > 1
-  # decide on the optimization level
-  actual_opt: frame.Optimization
-  actual_opt_msg: str
-  actual_opt, actual_opt_msg = fractal.OptimizationToUse(optimization)
-  # get the right computation function based on the optimization level and the fractal type
-  computation_worker: abc.Callable[[pixels.InterpolationJob], pixels.InterpolationResult]
-  if actual_opt == frame.Optimization.CYTHON:
-    if fractal.CY_LINEAR_INTERPOLATION_WORKER is None:
-      raise Error('Cython optimization should be loaded at this point; bug; report!')
-    computation_worker = fractal.CY_LINEAR_INTERPOLATION_WORKER
-  else:
-    computation_worker = fractal.PY_LINEAR_INTERPOLATION_WORKER
   # log the start of the render
-  logging.info(
-    f'Animation render using {interpolation_workers} process(es) for rendering - {actual_opt_msg}'
-  )
+  logging.info(f'Animation render using {interpolation_workers} process(es) for rendering')
   # get the first pair from the iterator
   curr_frame: pixels.RenderedZoomFrame
   next_frame: pixels.RenderedZoomFrame | None
@@ -755,9 +735,9 @@ def InterpolatedFrameStream(  # noqa: C901, PLR0912
       # the generator expression, and for parallel, we use pool.map to distribute the jobs across
       # the worker processes (pool.map preserves input order, which the encoder needs)
       for result in (
-        pool.map(computation_worker, jobs, chunksize=1)
+        pool.map(pixels.InterpolateFrameWorker, jobs, chunksize=1)
         if pool
-        else (computation_worker(job) for job in jobs)
+        else (pixels.InterpolateFrameWorker(job) for job in jobs)
       ):
         mutable_hashes.append(result.data_hash)  # remember the hash for this interpolated frame
         yield result.png
