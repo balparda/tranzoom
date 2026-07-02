@@ -60,7 +60,7 @@ AVAILABLE_CPU: int = int(getattr(os, 'process_cpu_count', os.cpu_count)() or 1)
 MAX_CONCURRENCE: int = 12  # for the main rendering step, we limit the concurrency
 
 # gmpy2.mpfr constants
-_MPFR_MIN_PRECISION: int = 140  # about 42 decimal digits
+MPFR_MIN_PRECISION: int = 140  # about 42 decimal digits
 _MPFR_BIG_PRECISION: int = 30_000  # ±10k decimal digits
 _MPFR_MAX_PRECISION: int = 300_000  # ±100k decimal digits
 _MPFR_MIN_GUARD_BITS: int = 88  # extra bits beyond the minimum needed to distinguish pixels
@@ -1108,7 +1108,7 @@ class ComputationParameters(SerializingFractalObject):
       iter_guard: int = 2 * int(gmpy2.ceil(gmpy2.log2(self.depth + 1)))
       base_bits: int = int(gmpy2.ceil(gmpy2.log2(magnitude_to_pixel_ratio)))
     # join it all; check for precision cap and return
-    n_precision: int = max(_MPFR_MIN_PRECISION, base_bits + iter_guard + _MPFR_MIN_GUARD_BITS)
+    n_precision: int = max(MPFR_MIN_PRECISION, base_bits + iter_guard + _MPFR_MIN_GUARD_BITS)
     if n_precision > _MPFR_MAX_PRECISION:
       raise Error(f'Frame too small: estimated {n_precision} bits; max is {_MPFR_MAX_PRECISION}')
     return n_precision

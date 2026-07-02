@@ -618,23 +618,26 @@ class ZoomParameters(frame.SerializingFractalObject):
     return marker_frames
 
 
-def FrameEstimatedIters(d: int, s: image.FractalStats) -> int:
-  """Estimate a measure for how hard the iterations will be for this frame.
+def FrameEstimatedIters(d: int, s: image.FractalStats, p: int) -> int:
+  """Estimate a measure for how hard the computation will be for this frame.
 
   We will use the following approximation:
     - 1/5 of depth, plus
     - 4/5 of depth allocated as percentage of estimated set points (s.n_interior / s.n_px)
+    - scaled by the square of the precision factor (p / MPFR_MIN_PRECISION)^2
 
   Args:
     d (int): estimated depth for frame
     s (image.FractalStats):  estimated stats for image
+    p (int): precision for frame
 
   Returns:
-    int: estimated iteration count for frame, used for progress bar estimation;
-        (d // 5) <= estimate <= d
+    int: estimated "computation" count for frame, >=1; used for progress bar estimation
 
   """
-  return d // 5 + math.floor((4.0 * d * s.n_interior) / (5.0 * s.n_px))
+  prec_factor: float = p / frame.MPFR_MIN_PRECISION
+  iters: int = d // 5 + math.floor((4.0 * d * s.n_interior) / (5.0 * s.n_px))
+  return max(1, round(iters * (prec_factor * prec_factor)))  # scale by precision factor^2
 
 
 def InterpolatedFrameStream(

@@ -171,6 +171,7 @@ class DepthFrameData(KeyFrameData):
     orig_depth (int): this is the computed depth
     smooth_depth (int): this is the smoothed depth
     stats (tbase.JSONDict): image.FractalStats.json: the computed stats
+    precision (int): precision for the frame computation
 
   Should be suitable for JSON and pickle serialization, so no complex types or custom classes.
   Don't use sets. Tuples are also bad, they get converted to lists, then comparison fails.
@@ -180,6 +181,7 @@ class DepthFrameData(KeyFrameData):
   orig_depth: int  # this is the computed depth
   smooth_depth: int  # this is the smoothed depth
   stats: tbase.JSONDict  # image.FractalStats.json: the computed stats
+  precision: int  # precision for the frame computation
 
 
 class ZoomData(TypedDict):
@@ -877,7 +879,7 @@ class FractalDatabase:
     path: str | None,
     all_frames: list[frame.Frame],
     markers: list[tuple[int, frame.Frame]],
-    depths: list[tuple[int, frame.Frame, int, int, image.FractalStats]],
+    depths: list[tuple[int, frame.Frame, int, int, image.FractalStats, int]],
   ) -> None:
     """Add a zoom (video/GIF) to the DB.
 
@@ -892,8 +894,8 @@ class FractalDatabase:
           magnification ascending (video order)
       markers (list[tuple[int, frame.Frame]]): the marker frames that compose the video, a
           subset of all_frames
-      depths (list[tuple[int, frame.Frame, int, int, image.FractalStats]]): the depth frames that
-          compose the video, a subset of all_frames, with their associated stats
+      depths (list[tuple[int, frame.Frame, int, int, image.FractalStats, int]]): the depth frames
+          that compose the video, a subset of all_frames, with their associated stats
 
     Raises:
       Error: on error, mostly inconsistent DB, not missing data
@@ -925,8 +927,10 @@ class FractalDatabase:
         frames=[f.sha for f in all_frames],
         markers=[KeyFrameData(idx=j, frm=f.sha) for j, f in markers],
         depths=[
-          DepthFrameData(idx=j, frm=f.sha, orig_depth=od, smooth_depth=sd, stats=s.json)
-          for j, f, od, sd, s in depths
+          DepthFrameData(
+            idx=j, frm=f.sha, orig_depth=od, smooth_depth=sd, stats=s.json, precision=p
+          )
+          for j, f, od, sd, s, p in depths
         ],
       )
       if missing_frames := [k for k in zd['frames'] if k not in self._db['frames']]:

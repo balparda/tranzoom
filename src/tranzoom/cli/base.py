@@ -1316,11 +1316,14 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
         )
         return (video_path, video_path.stat().st_size)
     # produce the depth computations for all the depth frames: this will save us a lot of trouble
+    # depth_computations are: {idx: (frame, orig_depth, smooth_depth, stats, precision)}
+    depth_computations: dict[int, tuple[frame.Frame, int, int, image.FractalStats, int]] = {}
+    frm: frame.Frame
+    precision: int
     max_iter: int
     idx: int
     jj: int
     stats: image.FractalStats
-    depth_computations: dict[int, tuple[frame.Frame, int, int, image.FractalStats]] = {}
     params: frame.ComputationParameters = zoom_params.img  # starting value, to replace frm & depth
     if zoom_data is None or not streaming:
       n_threads: int = frame.ConcurrenceToUse(config.max_threads)
@@ -1346,16 +1349,29 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
             optimization=config.python_optimization,
             print_comm=config.console.print,
           )
-          depth_computations[idx] = (frm, max_iter, max_iter, stats)
+          # store the depth computation for this frame, smoothed/precision are placeholders
+          depth_computations[idx] = (frm, max_iter, -1, stats, -1)
         # we have them, now we can smooth them and replace them into the dict of proposed depths
         jagged_depths: list[int] = [depth_computations[idx][1] for idx, _ in all_depth]
         logging.debug(f'Raw depths for depth frames: {jagged_depths}')
         smoothed_depths: list[int] = frame.SmoothDepths(jagged_depths)
         del jagged_depths
-        logging.debug(f'Smoothed depths for depth frames: {smoothed_depths}')
+        config.console.print(f'Smoothed depths for depth frames: {smoothed_depths}')
         for jj, (idx, _) in enumerate(all_depth):
-          frm, max_iter, _, stats = depth_computations[idx]
-          depth_computations[idx] = (frm, max_iter, smoothed_depths[jj], stats)
+          frm, max_iter, _, stats, _ = depth_computations[idx]
+          smooth_depth: int = smoothed_depths[jj]
+          depth_computations[idx] = (
+            frm,
+            max_iter,
+            smooth_depth,
+            stats,
+            frame.ComputationParameters(  # create temp computation just to get the final precision
+              frm=frm,
+              width=zoom_params.img.width,
+              height=zoom_params.img.height,
+              depth=smooth_depth,
+            ).precision,
+          )
         del smoothed_depths
         # this is our first milestone; add to DB; commit
         if streaming:
@@ -1382,6 +1398,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           dfd['orig_depth'],
           dfd['smooth_depth'],
           image.FractalStats.FromJson(dfd['stats']),
+          dfd['precision'],
         )
       # depth computations loaded, sanity check and log
       if set(depth_computations) != (depth_set := {idx for idx, _ in all_depth}):
@@ -1393,19 +1410,19 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     # from DB or computed, now we have the depths
     sorted_depth_keys: list[int] = sorted(depth_computations)
 
-    def _DepthAndStatsForFrame(i: int) -> tuple[int, image.FractalStats]:
+    def _DepthAndStatsForFrame(i: int) -> tuple[int, image.FractalStats, int]:
       """Depth/stats for a Frame index, interpolating from depth_computations.
 
       Args:
         i (int): The index of the frame in the zoom sequence.
 
       Returns:
-        tuple[int, image.FractalStats]: A tuple containing the interpolated max iteration depth and
-            fractal statistics for the frame at index i.
+        tuple[int, image.FractalStats, int]: A tuple containing the interpolated max iteration
+            depth, fractal statistics, and precision for the frame at index i.
 
       """
       if i in depth_computations:
-        return (depth_computations[i][2], depth_computations[i][3])
+        return (depth_computations[i][2], depth_computations[i][3], depth_computations[i][4])
       # interpolate: find the two bracketing keys in depth_computations
       lo_idx: int = sorted_depth_keys[0]
       hi_idx: int = sorted_depth_keys[-1]
@@ -1418,15 +1435,21 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
       # linearly interpolate max_iter between the two bracketing depths
       lo_depth: int = depth_computations[lo_idx][2]
       hi_depth: int = depth_computations[hi_idx][2]
-      t: float = (i - lo_idx) / (hi_idx - lo_idx) if hi_idx != lo_idx else 0.0
-      interpolated_depth: int = round(lo_depth + t * (hi_depth - lo_depth))
+      factor: float = (i - lo_idx) / (hi_idx - lo_idx) if hi_idx != lo_idx else 0.0
+      interpolated_depth: int = round(lo_depth + factor * (hi_depth - lo_depth))
+      # linearly interpolate precision between the two bracketing precisions
+      lo_prec: int = depth_computations[lo_idx][4]
+      hi_prec: int = depth_computations[hi_idx][4]
+      interpolated_precision: int = round(lo_prec + factor * (hi_prec - lo_prec))
       # interpolate each FractalStats field independently; if either endpoint is None, result None
       lo_stats: image.FractalStats = depth_computations[lo_idx][3]
       hi_stats: image.FractalStats = depth_computations[hi_idx][3]
-      t_mpfr: gmpy2.mpfr = gmpy2.mpfr(t)
+      t_mpfr: gmpy2.mpfr = gmpy2.mpfr(factor)
       interpolated_stats: image.FractalStats = image.FractalStats(
-        n_px=round(lo_stats.n_px + t * (hi_stats.n_px - lo_stats.n_px)),
-        n_interior=round(lo_stats.n_interior + t * (hi_stats.n_interior - lo_stats.n_interior)),
+        n_px=round(lo_stats.n_px + factor * (hi_stats.n_px - lo_stats.n_px)),
+        n_interior=round(
+          lo_stats.n_interior + factor * (hi_stats.n_interior - lo_stats.n_interior)
+        ),
         max_lo=(lo_stats.max_lo + t_mpfr * (hi_stats.max_lo - lo_stats.max_lo))
         if lo_stats.max_lo is not None and hi_stats.max_lo is not None
         else None,
@@ -1452,7 +1475,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
         if lo_stats.imag_hi is not None and hi_stats.imag_hi is not None
         else None,
       )
-      return (interpolated_depth, interpolated_stats)
+      return (interpolated_depth, interpolated_stats, interpolated_precision)
 
     # produce the frames
     n_frames_actually_computed: int = 0
@@ -1473,7 +1496,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
     with timer.Timer(emit_log=False) as frames_tmr:
       d_all_markers: dict[int, frame.Frame] = dict(all_markers)  # for quick lookup
       for idx, frm in enumerate(all_frames):
-        max_iter, stats = _DepthAndStatsForFrame(idx)
+        max_iter, stats, precision = _DepthAndStatsForFrame(idx)
         params = dataclasses.replace(params, frm=frm, depth=max_iter)
         # log
         log_color: str = (
@@ -1490,7 +1513,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           if cp and cp['raw_data_path']:
             all_params[idx] = params
             config.console.print('Computation in DB cache\n')
-            cmp_bar.update(zoom.FrameEstimatedIters(max_iter, stats))  # update progress bar
+            cmp_bar.update(zoom.FrameEstimatedIters(max_iter, stats, precision))  # update bar
             continue
         # we really need to compute: feed frame to the producer
         img: image.Image
@@ -1517,7 +1540,7 @@ def ProduceFractalAnimation(  # noqa: C901, PLR0912, PLR0914, PLR0915
           db.Save()  # commit to disk every N computations
         # write a space and update the bar, and we're done with this frame
         config.console.print()
-        cmp_bar.update(zoom.FrameEstimatedIters(max_iter, stats))  # update progress bar
+        cmp_bar.update(zoom.FrameEstimatedIters(max_iter, stats, precision))  # update progress bar
       del d_all_markers
     # we have all frames; if we're using DB and have done computations, make sure it is all saved
     cmp_bar.close()
