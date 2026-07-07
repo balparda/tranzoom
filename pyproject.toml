@@ -12,7 +12,7 @@ requires = [
   # required for Cython compilation of fractalc.pyx at build time
   "Cython>=3.2",  # if you change here, also change "dependencies" below
   "gmpy2>=2.3",  # if you change here, also change "dependencies" below
-  "setuptools>=82.0",  # if you change here, also change "dependencies" below
+  "setuptools>=83.0.0",  # if you change here, also change "dependencies" below
 ]
 build-backend = "poetry.core.masonry.api"
 
