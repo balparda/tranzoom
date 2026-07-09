@@ -621,23 +621,51 @@ class ZoomParameters(frame.SerializingFractalObject):
 def FrameEstimatedIters(d: int, s: image.FractalStats, p: int) -> int:
   """Estimate a measure for how hard the computation will be for this frame.
 
-  We will use the following approximation:
-    - 1/5 of depth, plus
-    - 4/5 of depth allocated as percentage of estimated set points (s.n_interior / s.n_px)
-    - scaled by the square of the precision factor (p / MPFR_MIN_PRECISION)^2
+  The computation cost scales with three main factors:
+
+  1. Precision (p): MPFR operations scale roughly linearly with precision in bits for
+     typical zoom depths (140-5000 bits). Cost factor: p / MPFR_MIN_PRECISION.
+
+  2. Depth (d) and point type:
+     - Exterior (escaped) points: escape early, averaging ~d/3 iterations (points far from
+       the set escape in 1-2 iterations, boundary points take close to d iterations).
+     - Interior (set) points: always run ALL d iterations with no early exit.
+
+  3. Set algorithm overhead: When set_points highlighting is enabled (detected by checking
+     if any of max_lo, min_lo, ang_lo, or imag_lo are non-None), interior points perform
+     additional expensive operations:
+     - MIN/MAX: cheap comparisons per iteration
+     - ANGLE: expensive atan2 + divisions at end
+     - IMAGINARY: division every iteration + final work
+     - Average overhead: ~35% (interior_penalty = 1.35)
+
+  Formula:
+    n_exterior = n_px - n_interior
+    interior_penalty = 1.35 if has_set_algorithm else 1.0
+    base_cost = (n_exterior * d / 3) + (n_interior * d * interior_penalty)
+    return max(1, round(base_cost * (p / MPFR_MIN_PRECISION)))
 
   Args:
     d (int): estimated depth for frame
-    s (image.FractalStats):  estimated stats for image
+    s (image.FractalStats): estimated stats for image
     p (int): precision for frame
 
   Returns:
     int: estimated "computation" count for frame, >=1; used for progress bar estimation
 
   """
-  prec_factor: float = p / frame.MPFR_MIN_PRECISION
-  iters: int = d // 5 + math.floor((4.0 * d * s.n_interior) / (5.0 * s.n_px))
-  return max(1, round(iters * (prec_factor * prec_factor)))  # scale by precision factor^2
+  n_exterior: int = s.n_px - s.n_interior
+  # detect if any set_points algorithm is active by checking optional stats fields
+  has_set_algorithm: bool = (
+    s.max_lo is not None or s.min_lo is not None or s.ang_lo is not None or s.imag_lo is not None
+  )
+  # interior points with set algorithms incur ~35% overhead due to expensive operations
+  interior_penalty: float = 1.35 if has_set_algorithm else 1.0
+  # exterior points average d/3 iterations (early escape), interior points do d * penalty
+  base_cost: float = (n_exterior * d / 3.0) + (s.n_interior * d * interior_penalty)
+  # linear precision scaling (MPFR operations scale ~O(p) for typical precision range)
+  prec_scaling: float = p / frame.MPFR_MIN_PRECISION
+  return max(1, round(base_cost * prec_scaling))
 
 
 def InterpolatedFrameStream(
