@@ -40,7 +40,7 @@ MAX_UINT32: int = 0xFFFFFFFF
 
 N_BYTES_UINT: int = 8  # we use array of uint64 to store pixel data / array.array('Q') / unsigned 64
 MIN_ITER: int = 1000  # minimum, but also a mark that we want to automatically calculate the depth
-HIGH_ITERS: list[int] = [100_000, 1_000_000, 10_000_000]  # these are very high iteration counts
+HIGH_ITERS: list[int] = [100_000, 1_000_000, 11_000_000]  # these are very high iteration counts
 MAX_ITER: int = BIT_31 - 1  # ± 2_147_483_647, max for signed array('i'), sint32
 SET_INTERIOR_INT_MAX: int = MAX_ITER  # could be BIT_31, but lets keep abs() <= MAX_ITER
 SMOOTH_EXTRA_ITERS: int = 5  # iterations AFTER |z| > 2 to compute: eliminates color banding errors

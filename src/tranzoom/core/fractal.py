@@ -80,6 +80,7 @@ _CY_OPTIMIZATION_STR: str = (
 # iter constants
 _ITER_OUTLIER_SKIP: int = 3  # skip up to this many extreme-outlier pixels in the probe
 _ITER_SAFETY_FACTOR: float = 1.5  # we multiply the estimated iter by this to be safe
+_ITER_SAFETY_ROOF: float = 0.9  # we should not be getting within 10% of the high_iter limit
 
 
 class Error(image.Error):
@@ -338,7 +339,7 @@ def FractalAdaptiveIterations(
       remaining_to_skip -= count
     # apply safety factor and clamp
     max_iter = min(frame.MAX_ITER, max(frame.MIN_ITER, int(max_iter * _ITER_SAFETY_FACTOR)))
-    if max_iter < high_iter:
+    if max_iter < round(high_iter * _ITER_SAFETY_ROOF):
       # we found a winner! print and stop
       if progress_bar:
         print_comm(
